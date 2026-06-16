@@ -1,5 +1,8 @@
 # Dependencies
 node_modules/
+apps/*/node_modules/
+services/*/node_modules/
+packages/*/node_modules/
 .pnp
 .pnp.js
 
@@ -7,6 +10,9 @@ node_modules/
 dist/
 dist-ssr/
 build/
+apps/*/dist/
+services/*/dist/
+packages/*/dist/
 
 # Environment variables
 .env
@@ -14,6 +20,10 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+apps/*/.env
+apps/*/.env.local
+services/*/.env
+services/*/.env.local
 
 # Vite
 .vite/
