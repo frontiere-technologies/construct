@@ -1,0 +1,18 @@
+@import "tailwindcss";
+@source "../**/*.{ts,tsx,js,jsx}";
+
+:root {
+  --theme-primary: #2563eb;
+  --theme-sidebar-bg: #ffffff;
+  --theme-sidebar-text: #4b5563;
+  --theme-active-bg: #f3f4f6;
+  --theme-active-text: #111827;
+}
+
+@theme {
+  --color-primary: var(--theme-primary);
+  --color-sidebar-bg: var(--theme-sidebar-bg);
+  --color-sidebar-text: var(--theme-sidebar-text);
+  --color-sidebar-active-bg: var(--theme-active-bg);
+  --color-sidebar-active-text: var(--theme-active-text);
+}

@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "Skill(run)",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__execute_sql"
+    ]
+  },
   "enabledMcpjsonServers": [
     "supabase",
     "github"
