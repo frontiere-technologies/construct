@@ -1,4 +1,16 @@
 @import "tailwindcss";
+@source "../components/**/*.{ts,tsx}";
+@source "../context/**/*.{ts,tsx}";
+@source "../lib/**/*.{ts,tsx}";
+@source "../app/**/*.{ts,tsx}";
+
+:root {
+  --theme-primary: #2563eb;
+  --theme-sidebar-bg: #ffffff;
+  --theme-sidebar-text: #4b5563;
+  --theme-active-bg: #f3f4f6;
+  --theme-active-text: #111827;
+}
 
 @theme {
   --color-primary: var(--theme-primary);
