@@ -14,18 +14,23 @@ interface UIContextType {
 const UIContext = createContext<UIContextType | undefined>(undefined)
 
 export function UIProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    if (typeof window === 'undefined') return defaultSettings
-    const saved = localStorage.getItem('appSettings')
-    const parsed = (() => { try { return saved ? JSON.parse(saved) : null } catch { return null } })()
-    return {
-      language: parsed?.language || 'en',
-      theme: parsed?.theme || 'light',
-      themeConfig: parsed?.themeConfig || defaultThemeConfig,
-    }
-  })
-
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings)
   const [isCollapsed, setIsCollapsed] = useState(false)
+
+  // Load from localStorage after mount to avoid SSR hydration mismatch
+  useEffect(() => {
+    const saved = localStorage.getItem('appSettings')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        setSettings({
+          language: parsed?.language || 'en',
+          theme: parsed?.theme || 'light',
+          themeConfig: parsed?.themeConfig || defaultThemeConfig,
+        })
+      } catch {}
+    }
+  }, [])
 
   useEffect(() => {
     localStorage.setItem('appSettings', JSON.stringify(settings))

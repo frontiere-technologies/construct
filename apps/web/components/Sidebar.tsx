@@ -145,9 +145,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   const [selectedL1Id, setSelectedL1Id] = useState<string | null>(null)
   const [selectedL2Id, setSelectedL2Id] = useState<string | null>(null)
 
-  const [col1Collapsed, setCol1Collapsed] = useState<boolean>(() => readCollapse('col1', true))
-  const [col2Collapsed, setCol2Collapsed] = useState<boolean>(() => readCollapse('col2', false))
-  const [col3Collapsed, setCol3Collapsed] = useState<boolean>(() => readCollapse('col3', false))
+  const [col1Collapsed, setCol1Collapsed] = useState<boolean>(true)
+  const [col2Collapsed, setCol2Collapsed] = useState<boolean>(false)
+  const [col3Collapsed, setCol3Collapsed] = useState<boolean>(false)
+
+  // Load from localStorage after mount to avoid SSR hydration mismatch
+  useEffect(() => {
+    setCol1Collapsed(readCollapse('col1', true))
+    setCol2Collapsed(readCollapse('col2', false))
+    setCol3Collapsed(readCollapse('col3', false))
+  }, [])
 
   useEffect(() => {
     try {
