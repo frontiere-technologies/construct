@@ -2,19 +2,41 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Repository Structure
+
+```
+construct/
+├── apps/web/       ← React/Vite frontend
+├── services/       ← backend microservices (empty, ready)
+├── packages/       ← shared code between apps and services
+├── deploy/
+│   ├── k8s/        ← Kubernetes manifests (Kustomize)
+│   └── supabase/   ← database schema
+├── scripts/        ← utility scripts
+└── docs/           ← documentation and specs
+```
+
 ## Commands
 
 ```bash
-npm install        # Install dependencies
-npm run dev        # Start dev server on port 3000 (0.0.0.0)
-npm run build      # Production build
-npm run lint       # Type-check with tsc --noEmit
-npm run clean      # Remove dist/
+# From repo root (convenience scripts)
+npm run web:dev      # Start web dev server on port 3000
+npm run web:build    # Production build
+npm run web:lint     # Type-check
+npm run install:all  # Install all dependencies
+
+# From apps/web/ directly
+cd apps/web
+npm install          # Install dependencies
+npm run dev          # Start dev server on port 3000 (0.0.0.0)
+npm run build        # Production build
+npm run lint         # Type-check with tsc --noEmit
+npm run clean        # Remove dist/
 ```
 
 ## Environment Setup
 
-Create a `.env.local` file with:
+Create `apps/web/.env.local` with:
 ```
 VITE_SUPABASE_URL=...
 VITE_SUPABASE_ANON_KEY=...
@@ -25,7 +47,7 @@ GEMINI_API_KEY=...   # Optional, for Gemini AI features
 
 **Stack:** React 19 + TypeScript + Vite + Tailwind CSS v4 + Supabase + React Router v7
 
-**Two context providers wrap the entire app** (`App.tsx`):
+**Two context providers wrap the entire app** (`apps/web/src/App.tsx`):
 - `AuthContext` — Supabase auth session state; exposes `session`, `user`, `loading`, `signOut`
 - `MenuContext` — Menu items loaded from Supabase `menu_items` table; also owns `AppSettings` (theme, themeConfig) persisted to `localStorage`, and sidebar collapse state
 
@@ -41,6 +63,13 @@ GEMINI_API_KEY=...   # Optional, for Gemini AI features
 
 **Theming:** CSS custom properties (`--theme-primary`, `--theme-sidebar-bg`, etc.) are set dynamically by `MenuContext` on every `settings` change. Dark mode uses the `dark` class on `<html>`. Tailwind utility classes reference these vars via `bg-sidebar-bg`, `text-sidebar-text`, `text-primary`, etc.
 
-**Supabase schema:** `supabase_schema.sql` contains the full DDL. The `menu_items` table uses `text` PKs, a self-referential `parent_id`, and RLS policies (public read, authenticated write).
+**Supabase schema:** `deploy/supabase/schema.sql` contains the full DDL. The `menu_items` table uses `text` PKs, a self-referential `parent_id`, and RLS policies (public read, authenticated write).
 
 **Icon system:** Icons are Lucide React icons referenced by string name. `IconRenderer` does a dynamic lookup; `IconPicker` in the Admin UI provides a searchable picker.
+
+## Adding a New Service
+
+1. Create `services/<name>/` with its own `package.json` (name: `@construct/<name>`)
+2. Add a `Dockerfile` in `services/<name>/`
+3. Add Kubernetes manifests in `deploy/k8s/base/<name>/`
+4. Add convenience scripts to the root `package.json`
