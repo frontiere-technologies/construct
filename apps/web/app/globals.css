@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: var(--theme-primary);
+  --color-sidebar-bg: var(--theme-sidebar-bg);
+  --color-sidebar-text: var(--theme-sidebar-text);
+  --color-sidebar-active-bg: var(--theme-active-bg);
+  --color-sidebar-active-text: var(--theme-active-text);
+}
