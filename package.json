@@ -1,0 +1,11 @@
+{
+  "name": "construct",
+  "private": true,
+  "scripts": {
+    "web:dev": "cd apps/web && npm run dev",
+    "web:build": "cd apps/web && npm run build",
+    "web:lint": "cd apps/web && npm run lint",
+    "web:clean": "cd apps/web && npm run clean",
+    "install:all": "cd apps/web && npm install"
+  }
+}
