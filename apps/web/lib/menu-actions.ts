@@ -1,3 +1,5 @@
+'use client'
+
 import { createClient } from '@/lib/supabase-browser'
 import { mapToDb } from '@/lib/menu-utils'
 import type { MenuItem } from '@/types/menu'
