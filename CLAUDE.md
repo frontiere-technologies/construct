@@ -40,7 +40,6 @@ Create `apps/web/.env.local` with:
 ```
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-GEMINI_API_KEY=...   # Optional, for Gemini AI features (server-only)
 ```
 
 ## Architecture

@@ -27,10 +27,6 @@ apps/*/.env.local
 services/*/.env
 services/*/.env.local
 
-# Vite (legacy)
-.vite/
-*.local
-
 # Logs
 logs/
 *.log
