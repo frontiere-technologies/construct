@@ -1,5 +1,5 @@
 -- ============================================================
--- vibe-construct — Supabase Schema
+-- construct — Supabase Schema
 -- Aggiornato per riflettere lo stato reale del database
 -- ============================================================
 
