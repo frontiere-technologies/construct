@@ -1,8 +1,5 @@
 @import "tailwindcss";
-@source "../components/**/*.{ts,tsx}";
-@source "../context/**/*.{ts,tsx}";
-@source "../lib/**/*.{ts,tsx}";
-@source "../app/**/*.{ts,tsx}";
+@source "../**/*.{ts,tsx,js,jsx}";
 
 :root {
   --theme-primary: #2563eb;
