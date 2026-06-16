@@ -1,4 +1,22 @@
 {
+  "permissions": {
+    "allow": [
+      "Skill(run)",
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__execute_sql",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git diff-tree *)",
+      "Bash(git mv *)",
+      "Bash(awk '{print $NF}')",
+      "Bash(git reset *)",
+      "Bash(grep -v \"^\\\\.\\\\.$\")",
+      "Bash(git check-ignore *)",
+      "Bash(git ls-tree *)"
+    ]
+  },
   "enabledMcpjsonServers": [
     "supabase",
     "github"
