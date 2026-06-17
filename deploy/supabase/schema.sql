@@ -117,3 +117,7 @@ create policy "users: read own"
 create policy "users: update own"
   on users for update
   using (auth.uid() = id);
+
+create policy "users: insert own"
+  on users for insert
+  with check (auth.uid() = id);
