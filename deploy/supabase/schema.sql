@@ -11,7 +11,7 @@ create table if not exists menu_items (
   label            text      not null,
   icon             text,
   route            text,
-  type             text      not null check (type in ('link', 'container', 'action', 'separator')),
+  type             text      not null check (type in ('link', 'container')),
   parent_id        text      references menu_items(id) on delete cascade,
   "order"          integer   not null default 0,
   visible          boolean   not null default true,
@@ -97,6 +97,10 @@ create table if not exists users (
   email      text,
   avatar     text,
   role       text        not null default 'user',
+  first_name text,
+  last_name  text,
+  username   text,
+  phone      text,
   created_at timestamptz          default now(),
   updated_at timestamptz          default now()
 );
