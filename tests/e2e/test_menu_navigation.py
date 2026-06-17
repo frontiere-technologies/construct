@@ -75,7 +75,7 @@ def run_tests() -> None:
         sys.exit(1)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         ctx = browser.new_context(viewport={"width": 1440, "height": 900})
         page = ctx.new_page()
 
