@@ -21,7 +21,7 @@ export async function saveProfile(profile: UserProfile): Promise<{ error: string
     username: profile.username,
     phone: profile.phone,
     updated_at: new Date().toISOString(),
-  })
+  }, { onConflict: 'id' })
 
   return { error: error?.message ?? null }
 }
