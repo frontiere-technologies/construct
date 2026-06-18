@@ -10,7 +10,6 @@
     "clean": "rm -rf .next"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.99.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.546.0",

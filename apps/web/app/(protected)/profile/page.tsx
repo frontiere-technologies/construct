@@ -1,22 +1,24 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase-server'
+import { auth } from '@/lib/auth'
+import { createAdminClient } from '@/lib/supabase-server'
 import ProfileForm from '@/components/ProfileForm'
 import type { UserProfile } from '@/lib/profile-actions'
 
 export default async function ProfilePage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const session = await auth()
+  if (!session?.user?.id) redirect('/login')
+
+  const supabase = createAdminClient()
 
   // Lazy-init: create the users row if it doesn't exist yet
   await supabase
     .from('users')
-    .upsert({ id: user.id, email: user.email }, { ignoreDuplicates: true })
+    .upsert({ id: session.user.id, email: session.user.email }, { ignoreDuplicates: true })
 
   const { data: profile } = await supabase
     .from('users')
     .select('first_name, last_name, username, phone')
-    .eq('id', user.id)
+    .eq('id', session.user.id)
     .single()
 
   const initialProfile: UserProfile = {
@@ -28,8 +30,8 @@ export default async function ProfilePage() {
 
   return (
     <ProfileForm
-      email={user.email ?? ''}
-      avatarUrl={user.user_metadata?.avatar_url ?? null}
+      email={session.user.email ?? ''}
+      avatarUrl={session.user.image ?? null}
       initialProfile={initialProfile}
     />
   )
