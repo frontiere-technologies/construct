@@ -2,13 +2,11 @@
 
 import React, { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { saveMenuItems } from '@/lib/menu-actions'
+import { upsertMenuItem, deleteMenuItem, updateMenuItemOrders } from '@/lib/menu-actions'
 import type { MenuItem, MenuPosition, MenuItemType } from '@/types/menu'
 import { Plus, Trash2, Edit2, ArrowUp, ArrowDown, Save } from 'lucide-react'
 import { IconRenderer } from './IconRenderer'
 import { IconPicker } from './IconPicker'
-
-const PROTECTED_IDS = new Set(['14', '16', '17', '18'])
 
 interface AdminMenuBuilderProps {
   initialMenuItems: MenuItem[]
@@ -17,38 +15,57 @@ interface AdminMenuBuilderProps {
 export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuItems }) => {
   const router = useRouter()
   const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenuItems)
-  const [committedItems, setCommittedItems] = useState<MenuItem[]>(initialMenuItems)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [opError, setOpError] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
-  const handleSaveMenuItems = async (newItems: MenuItem[]) => {
-    await saveMenuItems(committedItems, newItems)
-    setCommittedItems(newItems)
-    setMenuItems(newItems)
-    router.refresh()
+  const showSuccess = (msg: string) => {
+    setSuccessMsg(msg)
+    setTimeout(() => setSuccessMsg(null), 3000)
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingItem) return
-    const newItems = menuItems.find(i => i.id === editingItem.id)
+    setSaving(true)
+    setOpError(null)
+    const updated = menuItems.find(i => i.id === editingItem.id)
       ? menuItems.map(i => i.id === editingItem.id ? editingItem : i)
       : [...menuItems, editingItem]
-    await handleSaveMenuItems(newItems)
+    setMenuItems(updated)
     setEditingItem(null)
+    try {
+      await upsertMenuItem(editingItem)
+      router.refresh()
+      showSuccess('Item saved.')
+    } catch (err) {
+      setMenuItems(initialMenuItems)
+      setOpError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this item and all its children?')) {
-      const idsToDelete = [id]
-      const findChildren = (parentId: string) => {
-        const children = menuItems.filter(i => i.parentId === parentId)
-        children.forEach(c => {
-          idsToDelete.push(c.id)
-          findChildren(c.id)
-        })
-      }
-      findChildren(id)
-      await handleSaveMenuItems(menuItems.filter(i => !idsToDelete.includes(i.id)))
+    if (!window.confirm('Are you sure you want to delete this item and all its children?')) return
+    const idsToRemove = new Set([id])
+    const collect = (parentId: string) => {
+      menuItems.filter(i => i.parentId === parentId).forEach(c => {
+        idsToRemove.add(c.id)
+        collect(c.id)
+      })
+    }
+    collect(id)
+    setMenuItems(prev => prev.filter(i => !idsToRemove.has(i.id)))
+    setOpError(null)
+    try {
+      await deleteMenuItem(id)
+      router.refresh()
+      showSuccess('Item deleted.')
+    } catch (err) {
+      setMenuItems(initialMenuItems)
+      setOpError(err instanceof Error ? err.message : 'Delete failed')
     }
   }
 
@@ -61,18 +78,27 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
       .sort((a, b) => a.order - b.order)
 
     const index = siblings.findIndex(i => i.id === id)
-    const newSiblings = [...siblings]
+    const neighbor =
+      direction === 'up' ? siblings[index - 1] :
+      direction === 'down' ? siblings[index + 1] : undefined
 
-    if (direction === 'up' && index > 0) {
-      [newSiblings[index - 1], newSiblings[index]] = [newSiblings[index], newSiblings[index - 1]]
-    } else if (direction === 'down' && index < siblings.length - 1) {
-      [newSiblings[index], newSiblings[index + 1]] = [newSiblings[index + 1], newSiblings[index]]
-    } else {
-      return
+    if (!neighbor) return
+
+    const orders = [
+      { id: item.id, order: neighbor.order },
+      { id: neighbor.id, order: item.order },
+    ]
+    setMenuItems(prev => prev.map(i => {
+      const upd = orders.find(u => u.id === i.id)
+      return upd ? { ...i, order: upd.order } : i
+    }))
+    try {
+      await updateMenuItemOrders(orders)
+      router.refresh()
+    } catch (err) {
+      setMenuItems(initialMenuItems)
+      setOpError(err instanceof Error ? err.message : 'Reorder failed')
     }
-
-    const orderMap = new Map(newSiblings.map((s, i) => [s.id, i]))
-    await handleSaveMenuItems(menuItems.map(i => orderMap.has(i.id) ? { ...i, order: orderMap.get(i.id)! } : i))
   }
 
   const getItemPath = (itemId: string): string => {
@@ -102,7 +128,7 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
       visible: true,
       active: true,
       roles: ['admin', 'user'],
-      position: 'main'
+      position: 'main',
     }
     setEditingItem(newItem)
   }
@@ -114,7 +140,7 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
 
     return items.map((item, idx) => (
       <div key={item.id} className="mb-2">
-        <div className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm" style={{ marginLeft: `${level * 24}px` }}>
+        <div data-testid="menu-item-row" className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm" style={{ marginLeft: `${level * 24}px` }}>
           <div className="flex items-center space-x-3">
             <IconRenderer name={item.icon} className="text-gray-500" />
             <div>
@@ -124,15 +150,12 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            {!PROTECTED_IDS.has(item.id) && <>
-              {idx > 0 && <button onClick={() => moveItem(item.id, 'up')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><ArrowUp size={16} /></button>}
-              {idx < items.length - 1 && <button onClick={() => moveItem(item.id, 'down')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><ArrowDown size={16} /></button>}
-              <button onClick={() => setEditingItem(item)} className="p-1 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 rounded"><Edit2 size={16} /></button>
-              <button onClick={() => handleDelete(item.id)} className="p-1 hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 rounded"><Trash2 size={16} /></button>
+            {!item.system && <>
+              {idx > 0 && <button data-testid="move-up-btn" onClick={() => moveItem(item.id, 'up')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><ArrowUp size={16} /></button>}
+              {idx < items.length - 1 && <button data-testid="move-down-btn" onClick={() => moveItem(item.id, 'down')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><ArrowDown size={16} /></button>}
+              <button data-testid="edit-item-btn" onClick={() => setEditingItem(item)} className="p-1 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 rounded"><Edit2 size={16} /></button>
+              <button data-testid="delete-item-btn" onClick={() => handleDelete(item.id)} className="p-1 hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 rounded"><Trash2 size={16} /></button>
             </>}
-            {PROTECTED_IDS.has(item.id) && (
-              <button onClick={() => setEditingItem(item)} className="p-1 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 rounded"><Edit2 size={16} /></button>
-            )}
           </div>
         </div>
         <div className="mt-2">{renderTree(item.id, level + 1)}</div>
@@ -155,6 +178,17 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
           <span>Add Item</span>
         </button>
       </div>
+
+      {opError && (
+        <div className="mb-4 px-4 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+          {opError}
+        </div>
+      )}
+      {successMsg && !editingItem && (
+        <div className="mb-4 px-4 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400 text-sm">
+          {successMsg}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
@@ -218,15 +252,17 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Route / URL</label>
-                  <input
-                    type="text"
-                    value={editingItem.route || ''}
-                    onChange={e => setEditingItem({ ...editingItem, route: e.target.value })}
-                    className="w-full p-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700"
-                  />
-                </div>
+                {editingItem.type === 'link' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Route / URL</label>
+                    <input
+                      type="text"
+                      value={editingItem.route || ''}
+                      onChange={e => setEditingItem({ ...editingItem, route: e.target.value })}
+                      className="w-full p-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium mb-1">Icon (Lucide)</label>
@@ -257,7 +293,43 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                   </select>
                 </div>
 
-                <div className="flex space-x-4 py-2 border-y dark:border-gray-700">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Roles</label>
+                  <div className="flex gap-4">
+                    {(['admin', 'user'] as const).map(role => (
+                      <label key={role} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editingItem.roles.includes(role)}
+                          onChange={e => {
+                            const roles = e.target.checked
+                              ? [...editingItem.roles, role]
+                              : editingItem.roles.filter(r => r !== role)
+                            setEditingItem({ ...editingItem, roles })
+                          }}
+                          className="rounded"
+                        />
+                        <span className="text-sm capitalize">{role}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {editingItem.type === 'link' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Open In</label>
+                    <select
+                      value={editingItem.target ?? '_self'}
+                      onChange={e => setEditingItem({ ...editingItem, target: e.target.value as '_blank' | '_self' })}
+                      className="w-full p-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700"
+                    >
+                      <option value="_self">Same tab</option>
+                      <option value="_blank">New tab</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-4 py-2 border-y dark:border-gray-700">
                   <label className="flex items-center space-x-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -266,6 +338,16 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                       className="rounded"
                     />
                     <span className="text-sm">Visible</span>
+                  </label>
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editingItem.active}
+                      onChange={e => setEditingItem({ ...editingItem, active: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Active</span>
                   </label>
 
                   {editingItem.type === 'container' && (
@@ -279,12 +361,27 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                       <span className="text-sm">Collapsible</span>
                     </label>
                   )}
+
+                  {editingItem.type === 'container' && editingItem.collapsible && (
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editingItem.defaultExpanded || false}
+                        onChange={e => setEditingItem({ ...editingItem, defaultExpanded: e.target.checked })}
+                        className="rounded"
+                      />
+                      <span className="text-sm">Default Expanded</span>
+                    </label>
+                  )}
                 </div>
 
+                {opError && <p className="text-red-500 text-sm">{opError}</p>}
+                {successMsg && <p className="text-green-600 dark:text-green-400 text-sm">{successMsg}</p>}
+
                 <div className="flex space-x-3 pt-4">
-                  <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg flex items-center justify-center space-x-2">
+                  <button type="submit" disabled={saving} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2 rounded-lg flex items-center justify-center space-x-2">
                     <Save size={18} />
-                    <span>Save Changes</span>
+                    <span>{saving ? 'Saving…' : 'Save Changes'}</span>
                   </button>
                   <button type="button" onClick={() => setEditingItem(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
                     Cancel

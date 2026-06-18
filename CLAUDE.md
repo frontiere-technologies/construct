@@ -36,7 +36,7 @@ React 19 + TypeScript + Next.js 15 (App Router) + Tailwind CSS v4 + Supabase (@s
 
 **Auth:** `middleware.ts` handles route protection via `@supabase/ssr` cookie sessions. There is no `ProtectedRoute` component — do not add one.
 
-**Menu data flow:** `app/(protected)/layout.tsx` (Server Component) fetches `menu_items` from Supabase and seeds defaults if empty. `saveMenuItems()` in `lib/menu-actions.ts` is the only write path.
+**Menu data flow:** `app/(protected)/layout.tsx` (Server Component) fetches `menu_items` from Supabase via `getMenuItems()` in `lib/menu-service.ts` — read-only, no runtime seeding. Default items are seeded once via `deploy/supabase/schema.sql` (`INSERT … ON CONFLICT DO NOTHING`). The write path for menu mutations is `lib/menu-actions.ts` (client-side Supabase).
 
 **Context / SSR:** `UIContext` and `AuthContext` read `localStorage` only inside `useEffect` — never at module level or during render — to avoid SSR hydration mismatches.
 

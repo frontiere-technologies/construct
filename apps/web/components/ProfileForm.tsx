@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import Image from 'next/image'
 import { CircleUser } from 'lucide-react'
 import { saveProfile, type UserProfile } from '@/lib/profile-actions'
 
@@ -33,15 +34,17 @@ export default function ProfileForm({ email, avatarUrl, initialProfile }: Profil
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+    <div className="flex items-center justify-center h-full">
       <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-md w-full max-w-sm">
 
         {/* Avatar */}
         <div className="flex justify-center mb-6">
           {avatarUrl ? (
-            <img
+            <Image
               src={avatarUrl}
               alt="avatar"
+              width={64}
+              height={64}
               className="w-16 h-16 rounded-full ring-2 ring-primary/30"
             />
           ) : (

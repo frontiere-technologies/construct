@@ -16,6 +16,7 @@ export interface MenuItem {
   position: MenuPosition;
   collapsible?: boolean;
   defaultExpanded?: boolean;
+  system?: boolean;
 }
 
 export interface ThemeConfig {

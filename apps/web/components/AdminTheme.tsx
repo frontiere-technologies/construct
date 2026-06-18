@@ -1,8 +1,9 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { useUI } from '@/context/UIContext'
 import { defaultThemeConfig } from '@/lib/menu-utils'
+import { saveThemeConfig } from '@/lib/theme-actions'
 import type { ThemeConfig } from '@/types/menu'
 
 interface ColorPickerProps {
@@ -28,6 +29,8 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange }) => 
 
 export const AdminTheme: React.FC = () => {
   const { settings, setSettings } = useUI()
+  const [saving, setSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
   const updateTheme = (key: keyof ThemeConfig, value: string) => {
     setSettings({
@@ -73,13 +76,37 @@ export const AdminTheme: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-8 pt-4 border-t dark:border-gray-700 flex justify-end">
-          <button
-            onClick={() => setSettings({ ...settings, themeConfig: defaultThemeConfig })}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg"
-          >
-            Reset to Defaults
-          </button>
+        <div className="mt-8 pt-4 border-t dark:border-gray-700 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {saveStatus === 'success' && (
+              <span className="text-sm text-green-600 dark:text-green-400">Theme saved.</span>
+            )}
+            {saveStatus === 'error' && (
+              <span className="text-sm text-red-600 dark:text-red-400">Save failed. Please try again.</span>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setSettings({ ...settings, themeConfig: defaultThemeConfig })}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg"
+            >
+              Reset to Defaults
+            </button>
+            <button
+              onClick={async () => {
+                setSaving(true)
+                setSaveStatus('idle')
+                const { error } = await saveThemeConfig(settings.themeConfig)
+                setSaving(false)
+                setSaveStatus(error ? 'error' : 'success')
+                setTimeout(() => setSaveStatus('idle'), 3000)
+              }}
+              disabled={saving}
+              className="px-4 py-2 text-sm text-white bg-[var(--theme-primary)] hover:opacity-90 disabled:opacity-50 rounded-lg transition-opacity"
+            >
+              {saving ? 'Saving…' : 'Save Theme'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
