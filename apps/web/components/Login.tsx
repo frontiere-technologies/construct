@@ -26,9 +26,9 @@ export function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-sm">
-        <h1 className="text-2xl font-bold mb-6 text-center">Accedi</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-md w-full max-w-sm">
+        <h1 className="text-2xl font-bold mb-6 text-center">Sign In</h1>
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <input
             type="email"
@@ -52,7 +52,7 @@ export function Login() {
             disabled={loading}
             className="bg-blue-600 text-white rounded-lg py-2 font-semibold hover:bg-blue-700 disabled:opacity-50 transition"
           >
-            {loading ? 'Accesso in corso...' : 'Accedi'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
       </div>

@@ -1,5 +1,5 @@
 export type MenuPosition = 'top' | 'main' | 'bottom';
-export type MenuItemType = 'link' | 'container' | 'action' | 'separator';
+export type MenuItemType = 'link' | 'container';
 
 export interface MenuItem {
   id: string;
@@ -16,14 +16,6 @@ export interface MenuItem {
   position: MenuPosition;
   collapsible?: boolean;
   defaultExpanded?: boolean;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatar: string;
-  role: string;
 }
 
 export interface ThemeConfig {

@@ -8,31 +8,31 @@
 
 | ID | Severity | Status | Fix applied |
 |----|----------|--------|-------------|
-| CRIT-1 | Critical | ❌ Open | Authorization / RLS — requires schema + middleware changes |
+| CRIT-1 | Critical | ✅ Fixed | `is_admin()` SQL function + RLS admin-only; middleware guard `/admin/*`; menu filtrato server-side per ruolo |
 | CRIT-2 | Critical | ✅ Fixed | `/profile` page created (`profile/page.tsx` + `ProfileForm.tsx` + `profile-actions.ts`); DB migration + INSERT RLS policy applied; E2E test 14 added (branch `feature/small-fixes`, commit `41dc188`) |
-| HIGH-1 | High | ❌ Open | Missing ESLint config |
+| HIGH-1 | High | ✅ Fixed | `eslint.config.mjs` con `next/core-web-vitals` + `next/typescript`; script lint aggiornato; bug reale in `AdminTheme.tsx` risolto (`ColorPicker` fuori dal render) |
 | HIGH-2 | High | ✅ Fixed | `SidebarItem.tsx` deleted; `tailwind-merge` removed from `package.json` |
 | HIGH-3 | High | ✅ Fixed | `@google/genai` and `motion` removed from `package.json` |
-| HIGH-4 | High | ❌ Open | Seed race condition + silent error swallowing |
+| HIGH-4 | High | ✅ Fixed | `insert` → `upsert` con `ignoreDuplicates: true`; SELECT error ora lancia invece di swallowing |
 | HIGH-5 | High | ✅ Fixed | `@ts-ignore` replaced with typed `LucideIcon` cast in `IconRenderer.tsx` |
-| MED-1 | Medium | ❌ Open | `mapFromDb` unsafe casts without runtime validation |
-| MED-2 | Medium | ❌ Open | `<img>` avatar — no `onError` fallback |
-| MED-3 | Medium | ❌ Open | `app_settings` unused; theme localStorage-only |
-| MED-4 | Medium | ❌ Open | `saveMenuItems` non-atomic (delete + upsert) |
+| MED-1 | Medium | ✅ Fixed | Zod schema added to `menu-utils.ts`; `mapFromDb` uses `MenuItemRowSchema.parse()` — no more `as` casts |
+| MED-2 | Medium | ✅ Fixed | `avatarError` state + `onError={() => setAvatarError(true)}` on `<img>` in `Sidebar.tsx` |
+| MED-3 | Medium | ✅ Fixed | `app_settings` table removed from `schema.sql`; theme remains localStorage-only (`UIContext.tsx`) |
+| MED-4 | Medium | ✅ Fixed | Upsert moved before delete in `menu-actions.ts` — data loss risk on partial failure eliminated |
 | MED-5 | Medium | ✅ Fixed | CSS variable values validated with hex regex before `setProperty` |
-| MED-6 | Medium | ❌ Open | O(n²) `getDescendantIds` in `AdminMenuBuilder` |
-| MED-7 | Medium | ❌ Open | `active` field unused in rendering |
-| LOW-1 | Low | ❌ Open | Italian strings in `Login.tsx` |
+| MED-6 | Medium | ✅ Fixed | `getDescendantIds` replaced with `useMemo` + `Set` in `AdminMenuBuilder.tsx`; filter uses `Set.has()` O(1) |
+| MED-7 | Medium | ✅ Fixed | `&& i.active` added to all sidebar filters (`topItems`, `mainItems`, `bottomItems`, `l1Children`, `l2Children`, `hasChildren`) |
+| LOW-1 | Low | ✅ Fixed | "Accedi" → "Sign In", "Accesso in corso..." → "Signing in..." in `Login.tsx` |
 | LOW-2 | Low | ✅ Fixed | `Login.tsx` outer/card bg now has `dark:` variants |
 | LOW-3 | Low | ✅ Fixed | Unused `User` interface removed from `types/menu.ts` |
 | LOW-4 | Low | ✅ Fixed | `handleUserClick` wrapped in `useCallback` in `Sidebar.tsx` |
 | LOW-5 | Low | ✅ Fixed | `activeRouteId`, `topItems`, `mainItems`, `bottomItems`, `l1Children`, `l2Children` wrapped in `useMemo` in `Sidebar.tsx` |
-| LOW-6 | Low | ❌ Open | `signOut` does not redirect or clear state explicitly |
+| LOW-6 | Low | ✅ Fixed | `router.push('/login')` added after `supabase.auth.signOut()` in `AuthContext.tsx` |
 | LOW-7 | Low | ✅ Fixed | Floating `getUser()` promise now has `.catch(() => setLoading(false))` |
 | LOW-8 | Low | ✅ Fixed | `Date.now().toString()` replaced with `crypto.randomUUID()` in `AdminMenuBuilder.tsx` |
-| LOW-9 | Low | ❌ Open | Default color mismatch between `schema.sql` and `menu-utils.ts` |
+| LOW-9 | Low | ✅ Fixed | Already aligned: both `schema.sql` and `menu-utils.ts` use `#6366f1` |
 
-**Fixed: 10 / 23 — Remaining open: 13**
+**Fixed: 22 / 23 — Remaining open: 1**
 
 ---
 
@@ -151,41 +151,41 @@ The issues below are **not fixed** in this session. They require more design wor
 
 ### ❌ Critical — still blocking production
 
-**[CRIT-1]** Authorization gap (any authenticated user = admin) — requires:
-1. RBAC tables added to `schema.sql`
-2. RLS policies rewritten to check admin claim
-3. `/admin/*` server-side guard in `middleware.ts` or `admin/layout.tsx`
-4. Sidebar role-based item filtering
+~~**[CRIT-1]**~~ ✅ Fixed:
+1. `is_admin()` SQL function (`security definer`) in `schema.sql` + migrazione applicata al DB
+2. RLS `menu_items` write policies riscritte: `authenticated` → `is_admin()`
+3. Guard `/admin/*` in `middleware.ts` — query `users.role`, redirect a `/` se non admin
+4. `getUserRole()` in `layout.tsx` — menu filtrato server-side, utenti non-admin non ricevono mai le voci admin
 
 ~~**[CRIT-2]**~~ ✅ Fixed — `app/(protected)/profile/page.tsx` created (Server Component + `ProfileForm.tsx` client component + `profile-actions.ts` helper). DB migration adds `first_name`, `last_name`, `username`, `phone` to `users` table; INSERT RLS policy added. E2E test 14 verifies navigation, form fields, save, and persistence. Commits `1e65dea`–`27974bc` on `feature/small-fixes`.
 
 ### ❌ High
 
-**[HIGH-1]** No ESLint config — add `eslint.config.mjs` extending `next/core-web-vitals` and wire into CI.
+~~**[HIGH-1]**~~ ✅ Fixed — `eslint.config.mjs` (flat config, `next/core-web-vitals` + `next/typescript`); script lint aggiornato a `eslint .`; `ColorPicker` spostato fuori dal render in `AdminTheme.tsx` (bug scoperto dal linter).
 
-**[HIGH-4]** Seed race condition in `app/(protected)/layout.tsx` — switch to `upsert` with `ignoreDuplicates: true`; stop swallowing read errors.
+~~**[HIGH-4]**~~ ✅ Fixed — `upsert` con `ignoreDuplicates: true`; SELECT error ora fa `throw` invece di ritornare silenziosamente il default.
 
 ### ❌ Medium
 
-**[MED-1]** `mapFromDb` unchecked `as` casts — add Zod schema at DB boundary.
+~~**[MED-1]**~~ ✅ Fixed — Zod schema + `MenuItemRowSchema.parse()` in `mapFromDb`.
 
-**[MED-2]** `<img>` avatar without `onError` fallback in `Sidebar.tsx:316` — add `onError` to fall back to `CircleUser`.
+~~**[MED-2]**~~ ✅ Fixed — `avatarError` state + `onError` fallback to `CircleUser` in `Sidebar.tsx`.
 
-**[MED-3]** `app_settings` table unused; theme is localStorage-only — decide source of truth and either wire up or drop the table.
+~~**[MED-3]**~~ ✅ Fixed — `app_settings` table removed from `schema.sql`; theme stays localStorage-only.
 
-**[MED-4]** `saveMenuItems` non-atomic — wrap in Postgres RPC or restructure as Server Action with compensation.
+~~**[MED-4]**~~ ✅ Fixed — upsert before delete in `menu-actions.ts`.
 
-**[MED-6]** O(n²) `getDescendantIds` in `AdminMenuBuilder.tsx:244` — precompute with `useMemo` before the filter.
+~~**[MED-6]**~~ ✅ Fixed — `descendantIds` computed once with `useMemo` returning a `Set`; filter uses `Set.has()`.
 
-**[MED-7]** `active` field stored but never checked in sidebar rendering — either use it or remove it.
+~~**[MED-7]**~~ ✅ Fixed — `&& i.active` added to all sidebar filters.
 
 ### ❌ Low
 
-**[LOW-1]** Italian UI strings in `Login.tsx` ("Accedi", "Accesso in corso...") — needs i18n decision first.
+~~**[LOW-1]**~~ ✅ Fixed — "Sign In" / "Signing in..." in `Login.tsx`.
 
-**[LOW-6]** `signOut` does not redirect to `/login` — add `router.push('/login')` after `supabase.auth.signOut()`.
+~~**[LOW-6]**~~ ✅ Fixed — `router.push('/login')` added to `signOut` in `AuthContext.tsx`.
 
-**[LOW-9]** Default color mismatch: `schema.sql` defaults to `#6366f1` (indigo), `menu-utils.ts` defaults to `#2563eb` (blue) — align to one value.
+~~**[LOW-9]**~~ ✅ Already aligned — both files use `#6366f1`.
 
 ---
 
