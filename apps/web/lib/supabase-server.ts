@@ -33,12 +33,3 @@ export function createAdminClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 }
-
-// Anon client — used as a fallback when the service role key is absent (e.g. local dev).
-// Safe to use for reads on tables where RLS is disabled.
-export function createAnonClient() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}

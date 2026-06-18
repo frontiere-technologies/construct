@@ -50,11 +50,6 @@ function buildProviders() {
         },
         async authorize(credentials) {
           if (!credentials?.email || typeof credentials.email !== 'string') return null
-          // When no Supabase service role key is configured (e.g. local dev without a real project),
-          // return a synthetic user so the test flow still works end-to-end.
-          if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-            return { id: 'test-user-id', email: credentials.email, name: credentials.email }
-          }
           const supabase = createAdminClient()
           const { data } = await supabase
             .from('users')
