@@ -181,7 +181,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   const [col1Collapsed, setCol1Collapsed] = useState<boolean>(true)
   const [col2Collapsed, setCol2Collapsed] = useState<boolean>(false)
   const [col3Collapsed, setCol3Collapsed] = useState<boolean>(false)
-  const [avatarError, setAvatarError] = useState(false)
 
   // Load from localStorage after mount to avoid SSR hydration mismatch
   useEffect(() => {
@@ -371,9 +370,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                 : 'text-sidebar-text hover:text-sidebar-active-text'
             )}
           >
-            {authUser?.user_metadata?.avatar_url && !avatarError
-              ? <Image src={authUser.user_metadata.avatar_url} alt="avatar" width={28} height={28} onError={() => setAvatarError(true)} className={clsx('w-7 h-7 rounded-full flex-shrink-0 ring-2 transition-colors', userPanelOpen ? 'ring-primary' : 'ring-transparent')} />
-              : <CircleUser size={26} className={clsx('flex-shrink-0 transition-colors', userPanelOpen ? 'text-primary' : 'opacity-60')} />}
+            <CircleUser size={26} className={clsx('flex-shrink-0 transition-colors', userPanelOpen ? 'text-primary' : 'opacity-60')} />
             {!col1Collapsed && (
               <div className="flex flex-col min-w-0 flex-1 text-left">
                 <span className="text-xs font-medium truncate">
