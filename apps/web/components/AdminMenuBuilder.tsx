@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveMenuItems } from '@/lib/menu-actions'
 import type { MenuItem, MenuPosition, MenuItemType } from '@/types/menu'
@@ -8,7 +8,7 @@ import { Plus, Trash2, Edit2, ArrowUp, ArrowDown, Save } from 'lucide-react'
 import { IconRenderer } from './IconRenderer'
 import { IconPicker } from './IconPicker'
 
-const PROTECTED_IDS = new Set(['14', '15', '16', '17', '18'])
+const PROTECTED_IDS = new Set(['14', '16', '17', '18'])
 
 interface AdminMenuBuilderProps {
   initialMenuItems: MenuItem[]
@@ -82,14 +82,19 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
     return `${getItemPath(item.parentId)} > ${item.label}`
   }
 
-  const getDescendantIds = (itemId: string): string[] => {
-    const children = menuItems.filter(i => i.parentId === itemId)
-    return children.reduce<string[]>((acc, c) => [...acc, c.id, ...getDescendantIds(c.id)], [])
-  }
+  const descendantIds = useMemo((): Set<string> => {
+    if (!editingItem) return new Set()
+    const collect = (itemId: string): string[] => {
+      const children = menuItems.filter(i => i.parentId === itemId)
+      return children.reduce<string[]>((acc, c) => [...acc, c.id, ...collect(c.id)], [])
+    }
+    return new Set(collect(editingItem.id))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuItems, editingItem?.id])
 
   const createNewItem = () => {
     const newItem: MenuItem = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       label: 'New Item',
       type: 'link',
       parentId: null,
@@ -197,14 +202,13 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                     >
                       <option value="link">Link</option>
                       <option value="container">Container</option>
-                      <option value="action">Action</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Position</label>
                     <select
                       value={editingItem.position}
-                      onChange={e => setEditingItem({ ...editingItem, position: e.target.value as MenuPosition })}
+                      onChange={e => setEditingItem({ ...editingItem, position: e.target.value as MenuPosition, parentId: null })}
                       className="w-full p-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700"
                     >
                       <option value="top">Top</option>
@@ -241,7 +245,11 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                   >
                     <option value="">None (Root level)</option>
                     {menuItems
-                      .filter(i => i.id !== editingItem.id && !getDescendantIds(editingItem.id).includes(i.id))
+                      .filter(i =>
+                        i.id !== editingItem.id &&
+                        i.position === editingItem.position &&
+                        !descendantIds.has(i.id)
+                      )
                       .map(i => (
                         <option key={i.id} value={i.id}>{getItemPath(i.id)}</option>
                       ))

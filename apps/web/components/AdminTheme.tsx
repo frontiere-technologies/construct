@@ -5,6 +5,27 @@ import { useUI } from '@/context/UIContext'
 import { defaultThemeConfig } from '@/lib/menu-utils'
 import type { ThemeConfig } from '@/types/menu'
 
+interface ColorPickerProps {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}
+
+const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange }) => (
+  <div className="flex items-center justify-between">
+    <label className="text-sm text-gray-700 dark:text-gray-300">{label}</label>
+    <div className="flex items-center space-x-2">
+      <span className="text-xs text-gray-500 font-mono uppercase w-16 text-right">{value}</span>
+      <input
+        type="color"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent"
+      />
+    </div>
+  </div>
+)
+
 export const AdminTheme: React.FC = () => {
   const { settings, setSettings } = useUI()
 
@@ -14,21 +35,6 @@ export const AdminTheme: React.FC = () => {
       themeConfig: { ...settings.themeConfig, [key]: value }
     })
   }
-
-  const ColorPicker = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
-    <div className="flex items-center justify-between">
-      <label className="text-sm text-gray-700 dark:text-gray-300">{label}</label>
-      <div className="flex items-center space-x-2">
-        <span className="text-xs text-gray-500 font-mono uppercase w-16 text-right">{value}</span>
-        <input
-          type="color"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent"
-        />
-      </div>
-    </div>
-  )
 
   return (
     <div className="max-w-6xl mx-auto">

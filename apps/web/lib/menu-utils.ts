@@ -1,16 +1,33 @@
+import { z } from 'zod'
 import type { MenuItem, ThemeConfig, AppSettings } from '@/types/menu'
+
+const MenuItemRowSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  icon: z.string().nullable().optional(),
+  route: z.string().nullable().optional(),
+  type: z.enum(['link', 'container']),
+  parent_id: z.string().nullable(),
+  order: z.number(),
+  visible: z.boolean(),
+  active: z.boolean(),
+  roles: z.array(z.string()),
+  target: z.enum(['_blank', '_self']).nullable().optional(),
+  position: z.enum(['top', 'main', 'bottom']),
+  collapsible: z.boolean().nullable().optional(),
+  default_expanded: z.boolean().nullable().optional(),
+})
 
 export const defaultMenu: MenuItem[] = [
   { id: '13', label: 'Documentation', icon: 'FileText', route: '/docs', type: 'link', parentId: null, order: 0, visible: true, active: true, roles: ['admin', 'user'], position: 'bottom' },
   { id: '14', label: 'Support', icon: 'Headphones', route: '/support', type: 'link', parentId: null, order: 1, visible: true, active: true, roles: ['admin', 'user'], position: 'bottom' },
-  { id: '15', label: 'Settings', icon: 'Settings', route: '/settings', type: 'link', parentId: null, order: 2, visible: true, active: true, roles: ['admin', 'user'], position: 'bottom' },
-  { id: '16', label: 'Admin', icon: 'Shield', type: 'container', parentId: null, order: 3, visible: true, active: true, roles: ['admin'], position: 'bottom', collapsible: true, defaultExpanded: false },
+  { id: '16', label: 'Admin', icon: 'Shield', type: 'container', parentId: null, order: 2, visible: true, active: true, roles: ['admin'], position: 'bottom', collapsible: true, defaultExpanded: false },
   { id: '17', label: 'Menu Builder', icon: 'LayoutList', route: '/admin/menu-builder', type: 'link', parentId: '16', order: 0, visible: true, active: true, roles: ['admin'], position: 'bottom' },
   { id: '18', label: 'Theme & Styles', icon: 'Palette', route: '/admin/theme', type: 'link', parentId: '16', order: 1, visible: true, active: true, roles: ['admin'], position: 'bottom' },
 ]
 
 export const defaultThemeConfig: ThemeConfig = {
-  primaryColor: '#2563eb',
+primaryColor: '#6366f1',
   sidebarBgLight: '#ffffff',
   sidebarBgDark: '#111827',
   sidebarTextLight: '#4b5563',
@@ -44,19 +61,22 @@ export const mapToDb = (item: MenuItem) => ({
   default_expanded: item.defaultExpanded ?? null,
 })
 
-export const mapFromDb = (row: Record<string, unknown>): MenuItem => ({
-  id: row.id as string,
-  label: row.label as string,
-  icon: (row.icon as string | null) ?? undefined,
-  route: (row.route as string | null) ?? undefined,
-  type: row.type as MenuItem['type'],
-  parentId: (row.parent_id as string | null) ?? null,
-  order: row.order as number,
-  visible: row.visible as boolean,
-  active: row.active as boolean,
-  roles: row.roles as string[],
-  target: (row.target as MenuItem['target'] | null) ?? undefined,
-  position: row.position as MenuItem['position'],
-  collapsible: (row.collapsible as boolean | null) ?? undefined,
-  defaultExpanded: (row.default_expanded as boolean | null) ?? undefined,
-})
+export const mapFromDb = (row: Record<string, unknown>): MenuItem => {
+  const r = MenuItemRowSchema.parse(row)
+  return {
+    id: r.id,
+    label: r.label,
+    icon: r.icon ?? undefined,
+    route: r.route ?? undefined,
+    type: r.type,
+    parentId: r.parent_id,
+    order: r.order,
+    visible: r.visible,
+    active: r.active,
+    roles: r.roles,
+    target: r.target ?? undefined,
+    position: r.position,
+    collapsible: r.collapsible ?? undefined,
+    defaultExpanded: r.default_expanded ?? undefined,
+  }
+}

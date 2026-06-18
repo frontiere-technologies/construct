@@ -42,11 +42,14 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
     }
     const root = document.documentElement
     const tc = settings.themeConfig || defaultThemeConfig
-    root.style.setProperty('--theme-primary', tc.primaryColor)
-    root.style.setProperty('--theme-sidebar-bg', isDark ? tc.sidebarBgDark : tc.sidebarBgLight)
-    root.style.setProperty('--theme-sidebar-text', isDark ? tc.sidebarTextDark : tc.sidebarTextLight)
-    root.style.setProperty('--theme-active-bg', isDark ? tc.activeItemBgDark : tc.activeItemBgLight)
-    root.style.setProperty('--theme-active-text', isDark ? tc.activeItemTextDark : tc.activeItemTextLight)
+    const dtc = defaultThemeConfig
+    const isHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v)
+    const safeColor = (v: string, fb: string) => isHex(v) ? v : fb
+    root.style.setProperty('--theme-primary', safeColor(tc.primaryColor, dtc.primaryColor))
+    root.style.setProperty('--theme-sidebar-bg', safeColor(isDark ? tc.sidebarBgDark : tc.sidebarBgLight, isDark ? dtc.sidebarBgDark : dtc.sidebarBgLight))
+    root.style.setProperty('--theme-sidebar-text', safeColor(isDark ? tc.sidebarTextDark : tc.sidebarTextLight, isDark ? dtc.sidebarTextDark : dtc.sidebarTextLight))
+    root.style.setProperty('--theme-active-bg', safeColor(isDark ? tc.activeItemBgDark : tc.activeItemBgLight, isDark ? dtc.activeItemBgDark : dtc.activeItemBgLight))
+    root.style.setProperty('--theme-active-text', safeColor(isDark ? tc.activeItemTextDark : tc.activeItemTextLight, isDark ? dtc.activeItemTextDark : dtc.activeItemTextLight))
   }, [settings])
 
   return (
