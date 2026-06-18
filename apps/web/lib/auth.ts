@@ -71,6 +71,7 @@ function buildProviders() {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: buildProviders(),
+  session: { strategy: 'jwt' as const },
   callbacks: {
     async jwt({ token, user, account }) {
       if (account && user) {
