@@ -1,6 +1,7 @@
-'use client'
+'use server'
 
-import { createClient } from '@/lib/supabase-browser'
+import { auth } from '@/lib/auth'
+import { createAdminClient } from '@/lib/supabase-server'
 
 export interface UserProfile {
   first_name: string | null
@@ -10,12 +11,12 @@ export interface UserProfile {
 }
 
 export async function saveProfile(profile: UserProfile): Promise<{ error: string | null }> {
-  const supabase = createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return { error: authError?.message ?? 'Not authenticated' }
+  const session = await auth()
+  if (!session?.user?.id) return { error: 'Not authenticated' }
 
+  const supabase = createAdminClient()
   const { error } = await supabase.from('users').upsert({
-    id: user.id,
+    id: session.user.id,
     first_name: profile.first_name,
     last_name: profile.last_name,
     username: profile.username,

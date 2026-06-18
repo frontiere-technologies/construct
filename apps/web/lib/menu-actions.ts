@@ -1,11 +1,11 @@
-'use client'
+'use server'
 
-import { createClient } from '@/lib/supabase-browser'
+import { createAdminClient } from '@/lib/supabase-server'
 import { mapToDb } from '@/lib/menu-utils'
 import type { MenuItem } from '@/types/menu'
 
 export async function upsertMenuItem(item: MenuItem): Promise<void> {
-  const supabase = createClient()
+  const supabase = createAdminClient()
   const { error } = await supabase
     .from('menu_items')
     .upsert(mapToDb(item), { onConflict: 'id' })
@@ -13,7 +13,7 @@ export async function upsertMenuItem(item: MenuItem): Promise<void> {
 }
 
 export async function deleteMenuItem(id: string): Promise<void> {
-  const supabase = createClient()
+  const supabase = createAdminClient()
   const { error } = await supabase
     .from('menu_items')
     .delete()
@@ -24,7 +24,7 @@ export async function deleteMenuItem(id: string): Promise<void> {
 export async function updateMenuItemOrders(
   updates: Array<{ id: string; order: number }>
 ): Promise<void> {
-  const supabase = createClient()
+  const supabase = createAdminClient()
   const { error } = await supabase.rpc('update_menu_orders', { updates })
   if (error) throw new Error(error.message)
 }
