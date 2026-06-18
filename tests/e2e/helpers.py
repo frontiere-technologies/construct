@@ -3,7 +3,10 @@ def ensure_l1_expanded(page, l1) -> None:
     box = l1.bounding_box()
     if box and box["width"] < 100:
         l1.locator("button").first.click()
-        page.wait_for_timeout(400)
+        page.wait_for_function(
+            "() => document.querySelector('aside').getBoundingClientRect().width >= 100",
+            timeout=5_000,
+        )
 
 
 def ensure_l1_collapsed(page, l1) -> None:
@@ -11,7 +14,10 @@ def ensure_l1_collapsed(page, l1) -> None:
     box = l1.bounding_box()
     if box and box["width"] >= 100:
         l1.locator("button").first.click()
-        page.wait_for_timeout(400)
+        page.wait_for_function(
+            "() => document.querySelector('aside').getBoundingClientRect().width < 100",
+            timeout=5_000,
+        )
 
 
 def l1_btn(l1, label: str):

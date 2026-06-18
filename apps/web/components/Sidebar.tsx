@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight } from 'lucide-react'
 import clsx from 'clsx'
 import { useUI } from '@/context/UIContext'
@@ -35,34 +36,53 @@ interface L1ItemProps {
   isSelected: boolean
   isActive: boolean
   isCollapsed: boolean
+  hasChildren: boolean
   onShowTooltip: (e: React.MouseEvent, text: string) => void
   onHideTooltip: () => void
   onClick: () => void
 }
 
 const L1Item: React.FC<L1ItemProps> = ({
-  item, isSelected, isActive, isCollapsed, onShowTooltip, onHideTooltip, onClick,
-}) => (
-  <button
-    onClick={onClick}
-    onMouseEnter={isCollapsed ? e => onShowTooltip(e, item.label) : undefined}
-    onMouseLeave={isCollapsed ? onHideTooltip : undefined}
-    className={clsx(
-      'w-full flex items-center rounded-lg py-2 px-3 transition-colors duration-200',
-      isCollapsed ? 'justify-center' : 'gap-3',
-      isActive
-        ? 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70'
-        : isSelected
-          ? 'bg-sidebar-active-bg/50 text-sidebar-active-text'
-          : 'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
-    )}
-  >
-    {item.icon && (
-      <IconRenderer name={item.icon} size={20} className={isActive ? 'text-primary' : ''} />
-    )}
-    {!isCollapsed && <span className="text-sm truncate">{item.label}</span>}
-  </button>
-)
+  item, isSelected, isActive, isCollapsed, hasChildren, onShowTooltip, onHideTooltip, onClick,
+}) => {
+  const cls = clsx(
+    'w-full flex items-center rounded-lg py-2 px-3 transition-colors duration-200',
+    isCollapsed ? 'justify-center' : 'gap-3',
+    isActive
+      ? 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70'
+      : isSelected
+        ? 'bg-sidebar-active-bg/50 text-sidebar-active-text'
+        : 'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
+  )
+  const tooltipEnter = isCollapsed ? (e: React.MouseEvent) => onShowTooltip(e, item.label) : undefined
+  const tooltipLeave = isCollapsed ? onHideTooltip : undefined
+  const content = (
+    <>
+      {item.icon && <IconRenderer name={item.icon} size={20} className={isActive ? 'text-primary' : ''} />}
+      {!isCollapsed && <span className="text-sm truncate">{item.label}</span>}
+    </>
+  )
+  if (!hasChildren && item.route) {
+    return (
+      <Link
+        href={item.route}
+        onClick={onClick}
+        target={item.target}
+        rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
+        onMouseEnter={tooltipEnter}
+        onMouseLeave={tooltipLeave}
+        className={cls}
+      >
+        {content}
+      </Link>
+    )
+  }
+  return (
+    <button onClick={onClick} onMouseEnter={tooltipEnter} onMouseLeave={tooltipLeave} className={cls}>
+      {content}
+    </button>
+  )
+}
 
 interface SubItemProps {
   item: MenuItem
@@ -107,7 +127,14 @@ const SubItem: React.FC<SubItemProps> = ({
 
   if (item.route) {
     return (
-      <Link href={item.route} onMouseEnter={tooltipEnter} onMouseLeave={tooltipLeave} className={cls}>
+      <Link
+        href={item.route}
+        target={item.target}
+        rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
+        onMouseEnter={tooltipEnter}
+        onMouseLeave={tooltipLeave}
+        className={cls}
+      >
         {icon}{label}
       </Link>
     )
@@ -139,9 +166,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   const { settings, setSettings } = useUI()
   const { user: authUser, signOut } = useAuth()
   const pathname = usePathname()
-  const router = useRouter()
 
-  const [selectedL1Id, setSelectedL1Id] = useState<string | null>(null)
+  const [selectedL1Id, setSelectedL1Id] = useState<string | null>(() =>
+    menuItems.find(i =>
+      i.parentId === null &&
+      i.type === 'container' &&
+      i.defaultExpanded === true &&
+      menuItems.some(c => c.parentId === i.id && c.visible && c.active)
+    )?.id ?? null
+  )
   const [selectedL2Id, setSelectedL2Id] = useState<string | null>(null)
   const [userPanelOpen, setUserPanelOpen] = useState(false)
 
@@ -210,6 +243,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     return grandparent?.id ?? null
   }, [activeRouteId, menuItems])
 
+  const itemsWithChildren = useMemo(
+    () => new Set(menuItems.filter(i => i.visible && i.active && i.parentId !== null).map(i => i.parentId!)),
+    [menuItems]
+  )
+
   const topItems = useMemo(
     () => menuItems.filter(i => i.parentId === null && i.visible && i.active && i.position === 'top').sort((a, b) => a.order - b.order),
     [menuItems]
@@ -237,23 +275,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     setUserPanelOpen(false)
     const hasChildren = menuItems.some(i => i.parentId === item.id && i.visible && i.active)
     if (hasChildren) {
-      if (selectedL1Id === item.id) { setSelectedL1Id(null); setSelectedL2Id(null) }
-      else { setSelectedL1Id(item.id); setSelectedL2Id(null) }
-    } else if (item.route) {
-      setSelectedL1Id(null)
-      setSelectedL2Id(null)
-      router.push(item.route)
+      if (selectedL1Id === item.id) {
+        if (item.collapsible !== false) { setSelectedL1Id(null); setSelectedL2Id(null) }
+      } else {
+        setSelectedL1Id(item.id); setSelectedL2Id(null)
+      }
     }
-  }, [menuItems, selectedL1Id, router])
+    // link items: <Link> handles navigation; pathname effect resets selectedL1Id/selectedL2Id
+  }, [menuItems, selectedL1Id])
 
   const handleL2Click = useCallback((item: MenuItem) => {
     const hasChildren = menuItems.some(i => i.parentId === item.id && i.visible && i.active)
     if (hasChildren) {
       setSelectedL2Id(prev => prev === item.id ? null : item.id)
-    } else if (item.route) {
-      router.push(item.route)
     }
-  }, [menuItems, router])
+    // link items: SubItem renders <Link> directly; this callback is only invoked for containers
+  }, [menuItems])
 
   const handleUserClick = useCallback(() => {
     setSelectedL1Id(null)
@@ -295,7 +332,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             {topItems.map(item => (
               <L1Item key={item.id} item={item} isSelected={selectedL1Id === item.id}
                 isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
-                isCollapsed={col1Collapsed}
+                isCollapsed={col1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
                 onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
                 onClick={() => handleL1Click(item)} />
             ))}
@@ -306,7 +343,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           {mainItems.map(item => (
             <L1Item key={item.id} item={item} isSelected={selectedL1Id === item.id}
               isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
-              isCollapsed={col1Collapsed}
+              isCollapsed={col1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
               onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
               onClick={() => handleL1Click(item)} />
           ))}
@@ -316,7 +353,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           {bottomItems.map(item => (
             <L1Item key={item.id} item={item} isSelected={selectedL1Id === item.id}
               isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
-              isCollapsed={col1Collapsed}
+              isCollapsed={col1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
               onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
               onClick={() => handleL1Click(item)} />
           ))}
@@ -335,7 +372,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             )}
           >
             {authUser?.user_metadata?.avatar_url && !avatarError
-              ? <img src={authUser.user_metadata.avatar_url} alt="avatar" onError={() => setAvatarError(true)} className={clsx('w-7 h-7 rounded-full flex-shrink-0 ring-2 transition-colors', userPanelOpen ? 'ring-primary' : 'ring-transparent')} />
+              ? <Image src={authUser.user_metadata.avatar_url} alt="avatar" width={28} height={28} onError={() => setAvatarError(true)} className={clsx('w-7 h-7 rounded-full flex-shrink-0 ring-2 transition-colors', userPanelOpen ? 'ring-primary' : 'ring-transparent')} />
               : <CircleUser size={26} className={clsx('flex-shrink-0 transition-colors', userPanelOpen ? 'text-primary' : 'opacity-60')} />}
             {!col1Collapsed && (
               <div className="flex flex-col min-w-0 flex-1 text-left">

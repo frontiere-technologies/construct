@@ -32,6 +32,7 @@ export function Login() {
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <input
             type="email"
+            autoComplete="email"
             placeholder="Email"
             value={email}
             onChange={e => setEmail(e.target.value)}
@@ -40,6 +41,7 @@ export function Login() {
           />
           <input
             type="password"
+            autoComplete="current-password"
             placeholder="Password"
             value={password}
             onChange={e => setPassword(e.target.value)}

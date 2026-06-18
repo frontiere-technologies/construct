@@ -1,16 +1,12 @@
 'use client'
 
-import React, { useState, useMemo } from 'react';
-import * as Icons from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { IconRenderer } from './IconRenderer';
 
-const ALL_ICON_NAMES: string[] = Object.keys(Icons).filter(key => {
-  if (!/^[A-Z]/.test(key)) return false;
-  const val = (Icons as Record<string, unknown>)[key];
-  if (typeof val !== 'object' || val === null) return false;
-  const v = val as Record<string, unknown>;
-  return typeof v['displayName'] === 'string' && v['displayName'] === key;
-});
+const ALL_ICON_NAMES: string[] = Object.keys(dynamicIconImports).map(
+  kebab => kebab.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('')
+);
 
 class IconItemBoundary extends React.Component<
   { children: React.ReactNode },
@@ -29,6 +25,19 @@ interface IconPickerProps {
 export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [open]);
 
   const filtered = useMemo(
     () => ALL_ICON_NAMES.filter(n => n.toLowerCase().includes(search.toLowerCase())),
@@ -36,7 +45,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
   );
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}

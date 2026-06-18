@@ -4,20 +4,20 @@
 
 | ID | Severità | Status | Priorità | Area | Problema | Riferimento |
 |----|----------|--------|----------|------|----------|-------------|
-| CRIT-1 | CRITICO | ❌ Open | P0 | Security | Autorizzazione `/admin/*` solo nel middleware, nessun gate Server Component | `middleware.ts:42-53`, `admin/*/page.tsx` |
-| HIGH-1 | ALTO | ❌ Open | P0 | Data | `saveMenuItems` non transazionale (upsert + delete separati) | `menu-actions.ts:10-22` |
-| HIGH-2 | ALTO | ❌ Open | P1 | Data/Perf | Riscrittura intero menu a ogni operazione | `AdminMenuBuilder.tsx:75`, `menu-actions.ts:13` |
-| HIGH-3 | ALTO | ❌ Open | P0 | Data | Seed a runtime fallisce per primo utente non-admin (RLS) | `layout.tsx:15-21` |
-| MED-1 | MEDIO | ❌ Open | P1 | Data | Riga `users` creata lazy → ruolo dipende dalla visita a `/profile`; nessun trigger su auth | `profile/page.tsx:12-15`, `schema.sql:67` |
-| MED-2 | MEDIO | ❌ Open | P1 | Maintainability | `PROTECTED_IDS` magic strings accoppiate al seed | `AdminMenuBuilder.tsx:11` |
-| MED-3 | MEDIO | ❌ Open | P1 | Perf | `import * as Icons` da lucide-react gonfia il bundle | `IconRenderer.tsx:2` |
-| MED-4 | MEDIO | ❌ Open | P2 | State | `themeConfig` da localStorage non merge-ato con i default | `UIContext.tsx:29` |
-| MED-5 | MEDIO | ❌ Open | P2 | Testing | Timeout fissi + selettori CSS fragili; nessun test RBAC | `test_*.py` |
-| LOW-1 | BASSO | ❌ Open | P2 | Security | SELECT pubblico su `menu_items` espone route admin | `schema.sql:47-49` |
-| LOW-2 | BASSO | ❌ Open | P2 | Data | `updated_at` non aggiornato su update (no trigger) | `schema.sql:39,78` |
-| LOW-3 | BASSO | ❌ Open | P2 | UX | Nessun `error.tsx`/`loading.tsx`; catch-all maschera 404 | `app/(protected)/` |
-| LOW-4 | BASSO | ❌ Open | P2 | Maintainability | `getMenuItems` duplicato con comportamento errori divergente | `layout.tsx`, `menu-builder/page.tsx` |
-| LOW-5 | BASSO | ❌ Open | P2 | Dead code | `isCollapsed` in UIContext apparentemente inutilizzato | `UIContext.tsx:18` |
+| CRIT-1 | CRITICO | ✅ Fixed | P0 | Security | Autorizzazione `/admin/*` solo nel middleware, nessun gate Server Component | `middleware.ts:42-53`, `admin/*/page.tsx` |
+| HIGH-1 | ALTO | ✅ Fixed | P0 | Data | `saveMenuItems` non transazionale (upsert + delete separati) | `menu-actions.ts:10-22` |
+| HIGH-2 | ALTO | ✅ Fixed | P1 | Data/Perf | Riscrittura intero menu a ogni operazione | `AdminMenuBuilder.tsx:75`, `menu-actions.ts:13` |
+| HIGH-3 | ALTO | ✅ Fixed | P0 | Data | Seed a runtime fallisce per primo utente non-admin (RLS) | `layout.tsx:15-21` |
+| MED-1 | MEDIO | ✅ Fixed | P1 | Data | Riga `users` creata lazy → ruolo dipende dalla visita a `/profile`; nessun trigger su auth | `profile/page.tsx:12-15`, `schema.sql:67` |
+| MED-2 | MEDIO | ✅ Fixed | P1 | Maintainability | `PROTECTED_IDS` magic strings accoppiate al seed | `AdminMenuBuilder.tsx:11` |
+| MED-3 | MEDIO | ✅ Fixed | P1 | Perf | `import * as Icons` da lucide-react gonfia il bundle | `IconRenderer.tsx:2` |
+| MED-4 | MEDIO | ✅ Fixed | P2 | State | `themeConfig` da localStorage non merge-ato con i default | `UIContext.tsx:29` |
+| MED-5 | MEDIO | ✅ Fixed | P2 | Testing | Timeout fissi + selettori CSS fragili; nessun test RBAC | `test_*.py` |
+| LOW-1 | BASSO | ✅ Fixed | P2 | Security | SELECT pubblico su `menu_items` espone route admin | `schema.sql:47-49` |
+| LOW-2 | BASSO | ✅ Fixed | P2 | Data | `updated_at` non aggiornato su update (no trigger) | `schema.sql:39,78` |
+| LOW-3 | BASSO | ✅ Fixed | P2 | UX | Nessun `error.tsx`/`loading.tsx`; catch-all maschera 404 | `app/(protected)/` |
+| LOW-4 | BASSO | ✅ Fixed | P2 | Maintainability | `getMenuItems` duplicato con comportamento errori divergente | `layout.tsx`, `menu-builder/page.tsx` |
+| LOW-5 | BASSO | ✅ Fixed | P2 | Dead code | `isCollapsed` in UIContext apparentemente inutilizzato | `UIContext.tsx:18` |
 
 ### Note su race condition
 

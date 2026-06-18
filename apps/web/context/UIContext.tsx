@@ -3,33 +3,39 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import type { AppSettings } from '@/types/menu'
 import { defaultSettings, defaultThemeConfig } from '@/lib/menu-utils'
+import { loadThemeConfig } from '@/lib/theme-actions'
 
 interface UIContextType {
   settings: AppSettings
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>
-  isCollapsed: boolean
-  setIsCollapsed: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined)
 
 export function UIProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings)
-  const [isCollapsed, setIsCollapsed] = useState(false)
 
-  // Load from localStorage after mount to avoid SSR hydration mismatch
+  // Load from localStorage immediately, then overlay with DB-saved theme config
   useEffect(() => {
+    let base = defaultSettings
     const saved = localStorage.getItem('appSettings')
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
-        setSettings({
+        base = {
           language: parsed?.language || 'en',
           theme: parsed?.theme || 'light',
-          themeConfig: parsed?.themeConfig || defaultThemeConfig,
-        })
+          themeConfig: { ...defaultThemeConfig, ...parsed?.themeConfig },
+        }
       } catch {}
     }
+    setSettings(base)
+
+    loadThemeConfig().then(serverConfig => {
+      if (serverConfig) {
+        setSettings(prev => ({ ...prev, themeConfig: serverConfig }))
+      }
+    }).catch(() => {/* ignore — localStorage values remain */})
   }, [])
 
   useEffect(() => {
@@ -53,7 +59,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
   }, [settings])
 
   return (
-    <UIContext.Provider value={{ settings, setSettings, isCollapsed, setIsCollapsed }}>
+    <UIContext.Provider value={{ settings, setSettings }}>
       {children}
     </UIContext.Provider>
   )

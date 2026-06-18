@@ -1,21 +1,40 @@
-import React from 'react';
-import * as Icons from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+'use client'
 
-interface IconRendererProps {
-  name?: string;
-  className?: string;
-  size?: number;
+import React, { lazy, Suspense, useMemo, memo } from 'react'
+import type { ComponentType } from 'react'
+import type { LucideProps } from 'lucide-react'
+import { HelpCircle } from 'lucide-react'
+
+type LucideComponent = ComponentType<LucideProps>
+
+// Cache lazy wrappers so the same icon name never re-creates the lazy component
+const iconCache = new Map<string, React.LazyExoticComponent<LucideComponent>>()
+
+function getLazyIcon(name: string): React.LazyExoticComponent<LucideComponent> {
+  if (!iconCache.has(name)) {
+    iconCache.set(name, lazy(() =>
+      import('lucide-react').then(mod => {
+        const icon = (mod as unknown as Record<string, LucideComponent | undefined>)[name]
+        return { default: icon ?? HelpCircle }
+      })
+    ))
+  }
+  return iconCache.get(name)!
 }
 
-export const IconRenderer: React.FC<IconRendererProps> = ({ name, className, size = 20 }) => {
-  if (!name) return null;
+interface IconRendererProps {
+  name?: string
+  className?: string
+  size?: number
+}
 
-  const IconComponent = (Icons as unknown as Record<string, LucideIcon | undefined>)[name];
-
-  if (!IconComponent) {
-    return <Icons.HelpCircle className={className} size={size} />;
-  }
-
-  return <IconComponent className={className} size={size} />;
-};
+export const IconRenderer: React.FC<IconRendererProps> = memo(({ name, className, size = 20 }) => {
+  const LazyIcon = useMemo(() => name ? getLazyIcon(name) : null, [name])
+  if (!name || !LazyIcon) return null
+  return (
+    <Suspense fallback={<HelpCircle className={className} size={size} />}>
+      <LazyIcon className={className} size={size} />
+    </Suspense>
+  )
+})
+IconRenderer.displayName = 'IconRenderer'

@@ -3,14 +3,19 @@
 import React from 'react'
 import { usePathname } from 'next/navigation'
 
+const toTitle = (path: string): string =>
+  path === '/'
+    ? 'Dashboard'
+    : path.substring(1).split('/').map(seg =>
+        seg.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+      ).join(' — ')
+
 export const Home: React.FC = () => {
   const pathname = usePathname()
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6 capitalize">
-        {pathname === '/' ? 'Dashboard' : pathname.substring(1).replace('/', ' - ')}
-      </h1>
+      <h1 className="text-3xl font-bold mb-6">{toTitle(pathname)}</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">

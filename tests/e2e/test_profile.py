@@ -7,9 +7,9 @@ def test_profile_navigation_from_sidebar(logged_in_page, credentials):
     ensure_l1_expanded(page, l1)
 
     l1.locator(f"button:has-text('{credentials['email']}')").click()
-    page.wait_for_timeout(400)
+    page.locator("aside").nth(1).wait_for(state="visible", timeout=5_000)
     page.locator("aside").nth(1).get_by_text("Profile").click()
-    page.wait_for_url("**/profile", timeout=5_000)
+    page.wait_for_url("**/profile", timeout=10_000)
     assert "/profile" in page.url
 
 
@@ -39,7 +39,7 @@ def test_profile_save_and_persist(logged_in_page, base_url):
     first_name_input = page.locator('input[type="text"]').first
     first_name_input.fill("E2E Test User")
     page.get_by_role("button", name="Save Profile").click()
-    page.wait_for_timeout(1_000)
+    page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
     assert page.locator("text=Profile saved.").is_visible(), "Save confirmation not shown"
 
     page.reload()
@@ -50,4 +50,4 @@ def test_profile_save_and_persist(logged_in_page, base_url):
     # Cleanup
     page.locator('input[type="text"]').first.fill("")
     page.get_by_role("button", name="Save Profile").click()
-    page.wait_for_timeout(1_000)
+    page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)

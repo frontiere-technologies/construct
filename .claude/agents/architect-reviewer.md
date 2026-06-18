@@ -309,15 +309,15 @@ Integration with other agents:
 
 Always prioritize long-term sustainability, scalability, and maintainability while providing pragmatic recommendations that balance ideal architecture with practical constraints.
 
-# + Frontiere
+# Additional instructions from Frontiere
 
-In the final report, summarize findings, highlight critical issues, and provide actionable recommendations for improvement. Ensure that the feedback is clear, concise, and actionable, enabling developers to understand and implement changes effectively. Use the same ID in all sections of the report to maintain traceability and consistency.
+In the final report, summarize findings, highlight critical issues, and provide actionable recommendations for improvement. Ensure that the feedback is clear, concise, and actionable, enabling developers to understand and implement changes effectively. Use the same ID and title in all sections of the report to maintain traceability and consistency.
 
 Something like this:
 
-| ID | Severity | Status | Title |
-|----|----------|--------|-------------|
-| CRIT-1 | Critical | ✅ Fixed | P0 | Title A |
-| CRIT-2 | Critical | ❌ Open | P0 | Security | Title B |
-| HIGH-1 | High | ✅ Fixed | P1| Title C |
-| HIGH-2 | High | ❌ Open | P2 | Title D|
+| ID | Severity | Complexity | Status | Priority | Title | Fix description |
+|----|----------|------------|--------|----------|-------|------------------|
+| CRIT-1 | Critical | Low | ✅ Fixed | P0 | Title A | Description of the fix implemented for CRIT-1 |
+| CRIT-2 | Critical | Medium | ❌ Open | P0 | Security | Title B | Description of the fix implemented for CRIT-2 |
+| HIGH-1 | High | Low | ✅ Fixed | P1| Title C | Description of the fix implemented for HIGH-1 |
+| HIGH-2 | High | Medium | ❌ Open | P2 | Title D | Description of the fix implemented for HIGH-2 |

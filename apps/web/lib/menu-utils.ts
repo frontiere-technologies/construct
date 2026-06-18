@@ -16,18 +16,20 @@ const MenuItemRowSchema = z.object({
   position: z.enum(['top', 'main', 'bottom']),
   collapsible: z.boolean().nullable().optional(),
   default_expanded: z.boolean().nullable().optional(),
+  system: z.boolean().optional(),
 })
 
 export const defaultMenu: MenuItem[] = [
+  { id: '10', label: 'Dashboard', icon: 'LayoutDashboard', route: '/', type: 'link', parentId: null, order: 0, visible: true, active: true, roles: ['admin', 'user'], position: 'main' },
   { id: '13', label: 'Documentation', icon: 'FileText', route: '/docs', type: 'link', parentId: null, order: 0, visible: true, active: true, roles: ['admin', 'user'], position: 'bottom' },
-  { id: '14', label: 'Support', icon: 'Headphones', route: '/support', type: 'link', parentId: null, order: 1, visible: true, active: true, roles: ['admin', 'user'], position: 'bottom' },
-  { id: '16', label: 'Admin', icon: 'Shield', type: 'container', parentId: null, order: 2, visible: true, active: true, roles: ['admin'], position: 'bottom', collapsible: true, defaultExpanded: false },
-  { id: '17', label: 'Menu Builder', icon: 'LayoutList', route: '/admin/menu-builder', type: 'link', parentId: '16', order: 0, visible: true, active: true, roles: ['admin'], position: 'bottom' },
-  { id: '18', label: 'Theme & Styles', icon: 'Palette', route: '/admin/theme', type: 'link', parentId: '16', order: 1, visible: true, active: true, roles: ['admin'], position: 'bottom' },
+  { id: '14', label: 'Support', icon: 'Headphones', route: '/support', type: 'link', parentId: null, order: 1, visible: true, active: true, roles: ['admin', 'user'], position: 'bottom', system: true },
+  { id: '16', label: 'Admin', icon: 'Shield', type: 'container', parentId: null, order: 2, visible: true, active: true, roles: ['admin'], position: 'bottom', collapsible: true, defaultExpanded: false, system: true },
+  { id: '17', label: 'Menu Builder', icon: 'LayoutList', route: '/admin/menu-builder', type: 'link', parentId: '16', order: 0, visible: true, active: true, roles: ['admin'], position: 'bottom', system: true },
+  { id: '18', label: 'Theme & Styles', icon: 'Palette', route: '/admin/theme', type: 'link', parentId: '16', order: 1, visible: true, active: true, roles: ['admin'], position: 'bottom', system: true },
 ]
 
 export const defaultThemeConfig: ThemeConfig = {
-primaryColor: '#6366f1',
+  primaryColor: '#6366f1',
   sidebarBgLight: '#ffffff',
   sidebarBgDark: '#111827',
   sidebarTextLight: '#4b5563',
@@ -59,6 +61,7 @@ export const mapToDb = (item: MenuItem) => ({
   position: item.position,
   collapsible: item.collapsible ?? null,
   default_expanded: item.defaultExpanded ?? null,
+  system: item.system ?? false,
 })
 
 export const mapFromDb = (row: Record<string, unknown>): MenuItem => {
@@ -78,5 +81,6 @@ export const mapFromDb = (row: Record<string, unknown>): MenuItem => {
     position: r.position,
     collapsible: r.collapsible ?? undefined,
     defaultExpanded: r.default_expanded ?? undefined,
+    system: r.system ?? false,
   }
 }
