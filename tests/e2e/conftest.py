@@ -18,12 +18,11 @@ def base_url():
 
 
 @pytest.fixture(scope="session")
-def credentials():
+def test_email():
     email = os.getenv("TEST_EMAIL", "")
-    password = os.getenv("TEST_PASSWORD", "")
-    if not email or not password:
-        pytest.exit("Set TEST_EMAIL and TEST_PASSWORD in tests/e2e/.env.test")
-    return {"email": email, "password": password}
+    if not email:
+        pytest.exit("Set TEST_EMAIL in tests/e2e/.env.test")
+    return email
 
 
 @pytest.fixture(scope="session")
@@ -43,12 +42,12 @@ def page(browser):
 
 
 @pytest.fixture
-def logged_in_page(page, base_url, credentials):
+def logged_in_page(page, base_url, test_email):
+    """Authenticate via the test credentials form (requires AUTH_TEST_CREDENTIALS=true on server)."""
     page.goto(f"{base_url}/login")
     page.wait_for_load_state("networkidle")
-    page.fill('input[type="email"]', credentials["email"])
-    page.fill('input[type="password"]', credentials["password"])
-    page.click('button[type="submit"]')
-    page.wait_for_url(f"{base_url}/", timeout=10_000)
+    page.fill('input[placeholder="Test email"]', test_email)
+    page.click('button:has-text("Test Login")')
+    page.wait_for_url(f"{base_url}/", timeout=15_000)
     page.wait_for_load_state("networkidle")
     yield page

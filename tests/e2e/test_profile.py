@@ -1,12 +1,12 @@
 from helpers import ensure_l1_expanded
 
 
-def test_profile_navigation_from_sidebar(logged_in_page, credentials):
+def test_profile_navigation_from_sidebar(logged_in_page, test_email):
     page = logged_in_page
     l1 = page.locator("aside").first
     ensure_l1_expanded(page, l1)
 
-    l1.locator(f"button:has-text('{credentials['email']}')").click()
+    l1.locator(f"button:has-text('{test_email}')").click()
     page.locator("aside").nth(1).wait_for(state="visible", timeout=5_000)
     page.locator("aside").nth(1).get_by_text("Profile").click()
     page.wait_for_url("**/profile", timeout=10_000)
