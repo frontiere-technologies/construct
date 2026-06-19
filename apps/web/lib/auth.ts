@@ -1,9 +1,26 @@
-import NextAuth from 'next-auth'
+import NextAuth, { CredentialsSignin } from 'next-auth'
 import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id'
 import Google from 'next-auth/providers/google'
 import Keycloak from 'next-auth/providers/keycloak'
 import Credentials from 'next-auth/providers/credentials'
+import bcrypt from 'bcryptjs'
 import { createAdminClient } from '@/lib/supabase-server'
+
+// In-memory cache for allowed domains (60s TTL)
+let domainCache: { domains: string[]; expiresAt: number } | null = null
+
+async function getAllowedDomains(): Promise<string[]> {
+  const now = Date.now()
+  if (domainCache && domainCache.expiresAt > now) return domainCache.domains
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('allowed_domains')
+    .select('domain')
+    .eq('active', true)
+  const domains = (data ?? []).map((r: { domain: string }) => r.domain)
+  domainCache = { domains, expiresAt: now + 60_000 }
+  return domains
+}
 
 function buildProviders() {
   const providers = []
@@ -39,6 +56,50 @@ function buildProviders() {
     )
   }
 
+  // Production credentials provider — email + bcrypt password
+  providers.push(
+    Credentials({
+      id: 'credentials',
+      name: 'Email e password',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (
+          !credentials?.email ||
+          !credentials?.password ||
+          typeof credentials.email !== 'string' ||
+          typeof credentials.password !== 'string'
+        ) return null
+
+        const supabase = createAdminClient()
+        const { data: user } = await supabase
+          .from('users')
+          .select('id, email, name, role, password_hash')
+          .eq('email', credentials.email)
+          .single()
+
+        if (!user) {
+          // Prevent timing-based user enumeration
+          await bcrypt.compare('dummy', '$2b$10$dummyhashfortimingggggggggggggggggggggg')
+          return null
+        }
+
+        if (!user.password_hash) {
+          const err = new CredentialsSignin('Password not set')
+          err.code = 'PasswordNotSet'
+          throw err
+        }
+
+        const valid = await bcrypt.compare(credentials.password, user.password_hash)
+        if (!valid) return null
+
+        return { id: user.id, email: user.email, name: user.name ?? user.email }
+      },
+    })
+  )
+
   // Test-only credentials provider — gated by env var, never enabled in production
   if (process.env.AUTH_TEST_CREDENTIALS === 'true') {
     providers.push(
@@ -51,7 +112,6 @@ function buildProviders() {
         async authorize(credentials) {
           if (!credentials?.email || typeof credentials.email !== 'string') return null
           const supabase = createAdminClient()
-          // Insert only if the user doesn't exist yet — preserves existing role (e.g. admin)
           await supabase
             .from('users')
             .upsert(
@@ -77,9 +137,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: buildProviders(),
   session: { strategy: 'jwt' as const },
   callbacks: {
+    async signIn({ account, profile }) {
+      // Domain restriction for Google OAuth
+      if (account?.provider === 'google') {
+        const email = profile?.email ?? ''
+        const domain = email.split('@')[1] ?? ''
+        const allowed = await getAllowedDomains()
+        if (!allowed.includes(domain)) return false
+      }
+      return true
+    },
     async jwt({ token, user, account }) {
       if (account && user) {
-        // First login: provision user in Supabase
         try {
           const supabase = createAdminClient()
           const { data } = await supabase

@@ -5,7 +5,7 @@ export default auth((req) => {
   const { pathname } = req.nextUrl
   const session = req.auth
 
-  if (!session && pathname !== '/login') {
+  if (!session && pathname !== '/login' && !pathname.startsWith('/set-password')) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
   if (session && pathname === '/login') {
