@@ -157,7 +157,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               {
                 email: user.email,
                 name: user.name,
-                avatar: user.image,
+                ...(user.image ? { avatar: user.image } : {}),
               },
               { onConflict: 'email', ignoreDuplicates: false }
             )
@@ -167,8 +167,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = (data?.role as string) ?? 'user'
         } catch (err) {
           console.error('[auth] Failed to provision user in Supabase:', err)
-          token.userId = ''
-          token.role = 'user'
+          throw err
         }
       }
       return token

@@ -40,9 +40,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Errore interno.' }, { status: 500 })
   }
 
-  const host = req.headers.get('host') ?? 'localhost:3000'
-  const protocol = host.startsWith('localhost') ? 'http' : 'https'
-  const setPasswordUrl = `${protocol}://${host}/set-password?token=${token}`
+  const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL
+  if (!baseUrl) {
+    console.error('[send-invite] AUTH_URL / NEXTAUTH_URL not set')
+    return NextResponse.json({ error: 'Errore di configurazione del server.' }, { status: 500 })
+  }
+  const setPasswordUrl = `${baseUrl.replace(/\/$/, '')}/set-password?token=${token}`
 
   const resend = new Resend(process.env.RESEND_API_KEY)
   const { error: emailErr } = await resend.emails.send({

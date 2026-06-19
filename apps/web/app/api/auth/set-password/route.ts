@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     .update({ used_at: new Date().toISOString() })
     .eq('id', tokenRow.id)
     .is('used_at', null)
+    .gt('expires_at', new Date().toISOString())
     .select('id')
     .single()
 
