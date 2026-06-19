@@ -7,6 +7,7 @@ import type { MenuItem, MenuPosition, MenuItemType } from '@/types/menu'
 import { Plus, Trash2, Edit2, ArrowUp, ArrowDown, Save } from 'lucide-react'
 import { IconRenderer } from './IconRenderer'
 import { IconPicker } from './IconPicker'
+import { Card } from '@/components/Card'
 
 interface AdminMenuBuilderProps {
   initialMenuItems: MenuItem[]
@@ -208,7 +209,7 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
 
         <div>
           {editingItem ? (
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm sticky top-8">
+            <Card className="sticky top-8">
               <h2 className="text-lg font-semibold mb-4 flex items-center">
                 <Edit2 size={18} className="mr-2" />
                 {menuItems.find(i => i.id === editingItem.id) ? 'Edit Item' : 'New Item'}
@@ -388,7 +389,7 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                   </button>
                 </div>
               </form>
-            </div>
+            </Card>
           ) : (
             <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 text-center text-gray-500">
               Select an item to edit or create a new one.

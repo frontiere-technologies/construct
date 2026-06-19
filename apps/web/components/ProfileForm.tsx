@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import Image from 'next/image'
 import { CircleUser } from 'lucide-react'
 import { saveProfile, type UserProfile } from '@/lib/profile-actions'
+import { Card } from '@/components/Card'
 
 interface ProfileFormProps {
   email: string
@@ -35,7 +36,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile }: Profil
 
   return (
     <div className="flex items-center justify-center h-full">
-      <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-md w-full max-w-sm">
+      <Card className="w-full max-w-sm">
 
         {/* Avatar */}
         <div className="flex justify-center mb-6">
@@ -140,7 +141,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile }: Profil
           </p>
         )}
 
-      </div>
+      </Card>
     </div>
   )
 }
