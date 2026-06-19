@@ -46,8 +46,9 @@ def logged_in_page(page, base_url, test_email):
     """Authenticate via the test credentials form (requires AUTH_TEST_CREDENTIALS=true on server)."""
     page.goto(f"{base_url}/login")
     page.wait_for_load_state("networkidle")
-    page.fill('input[placeholder="Test email"]', test_email)
-    page.click('button:has-text("Test Login")')
+    page.click('button:has-text("Accesso test")')
+    page.fill('input[placeholder="Email di test"]', test_email)
+    page.click('button:has-text("Entra (test)")')
     page.wait_for_url(f"{base_url}/", timeout=15_000)
     page.wait_for_load_state("networkidle")
     yield page
