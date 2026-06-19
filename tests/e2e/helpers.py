@@ -21,4 +21,7 @@ def ensure_l1_collapsed(page, l1) -> None:
 
 
 def l1_btn(l1, label: str):
-    return l1.get_by_role("button", name=label, exact=True)
+    # Sidebar items with routes render as <Link> (role=link); containers render as <button>
+    return l1.get_by_role("button", name=label, exact=True).or_(
+        l1.get_by_role("link", name=label, exact=True)
+    )

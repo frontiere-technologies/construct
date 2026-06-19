@@ -51,13 +51,17 @@ function buildProviders() {
         async authorize(credentials) {
           if (!credentials?.email || typeof credentials.email !== 'string') return null
           const supabase = createAdminClient()
-          const { data } = await supabase
+          // Insert only if the user doesn't exist yet — preserves existing role (e.g. admin)
+          await supabase
             .from('users')
             .upsert(
               { email: credentials.email, role: 'user' },
-              { onConflict: 'email', ignoreDuplicates: false }
+              { onConflict: 'email', ignoreDuplicates: true }
             )
+          const { data } = await supabase
+            .from('users')
             .select('id, email, role, name')
+            .eq('email', credentials.email)
             .single()
           if (!data) return null
           return { id: data.id, email: data.email, name: data.name ?? data.email }
