@@ -82,7 +82,7 @@ function buildProviders() {
 
         if (!user) {
           // Prevent timing-based user enumeration
-          await bcrypt.compare('dummy', '$2b$10$dummyhashfortimingggggggggggggggggggggg')
+          await bcrypt.compare('dummy', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW')
           return null
         }
 
