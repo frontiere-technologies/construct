@@ -32,6 +32,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Link scaduto. Chiedi un nuovo invito.' }, { status: 410 })
   }
 
+  // Atomically claim the token — only succeeds if still unused (races lose here)
+  const { data: claimed } = await supabase
+    .from('password_set_tokens')
+    .update({ used_at: new Date().toISOString() })
+    .eq('id', tokenRow.id)
+    .is('used_at', null)
+    .select('id')
+    .single()
+
+  if (!claimed) {
+    return NextResponse.json({ error: 'Link già utilizzato.' }, { status: 410 })
+  }
+
   const hash = await bcrypt.hash(password, 10)
 
   const { error: updateErr } = await supabase
@@ -43,11 +56,6 @@ export async function POST(req: NextRequest) {
     console.error('[set-password] Failed to update password_hash:', updateErr)
     return NextResponse.json({ error: 'Errore interno. Riprova.' }, { status: 500 })
   }
-
-  await supabase
-    .from('password_set_tokens')
-    .update({ used_at: new Date().toISOString() })
-    .eq('id', tokenRow.id)
 
   return NextResponse.json({ ok: true })
 }
