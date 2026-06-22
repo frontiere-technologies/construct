@@ -5,14 +5,16 @@ import Image from 'next/image'
 import { CircleUser } from 'lucide-react'
 import { saveProfile, type UserProfile } from '@/lib/profile-actions'
 import { Card } from '@/components/Card'
+import { ChangePasswordForm } from '@/components/ChangePasswordForm'
 
 interface ProfileFormProps {
   email: string
   avatarUrl: string | null
   initialProfile: UserProfile
+  provider: string
 }
 
-export default function ProfileForm({ email, avatarUrl, initialProfile }: ProfileFormProps) {
+export default function ProfileForm({ email, avatarUrl, initialProfile, provider }: ProfileFormProps) {
   const [profile, setProfile] = useState<UserProfile>(initialProfile)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -36,6 +38,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile }: Profil
 
   return (
     <div className="flex items-center justify-center h-full">
+      <div className="flex flex-col items-center">
       <Card className="w-full max-w-sm">
 
         {/* Avatar */}
@@ -142,6 +145,8 @@ export default function ProfileForm({ email, avatarUrl, initialProfile }: Profil
         )}
 
       </Card>
+      {provider === 'credentials' && <ChangePasswordForm />}
+      </div>
     </div>
   )
 }

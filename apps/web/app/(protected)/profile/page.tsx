@@ -33,6 +33,7 @@ export default async function ProfilePage() {
       email={session.user.email ?? ''}
       avatarUrl={session.user.image ?? null}
       initialProfile={initialProfile}
+      provider={session.user.provider ?? ''}
     />
   )
 }
