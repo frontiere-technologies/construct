@@ -41,6 +41,9 @@ function LoginForm() {
   const [testEmail, setTestEmail] = useState('')
   const [testExpanded, setTestExpanded] = useState(false)
   const [testLoading, setTestLoading] = useState(false)
+  const [forgotMode, setForgotMode] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotStatus, setForgotStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 
   const handleCredentialsLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,15 +58,30 @@ function LoginForm() {
     await signIn('test-credentials', { email: testEmail, callbackUrl: '/' })
   }
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setForgotStatus('sending')
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      })
+      setForgotStatus(res.ok ? 'sent' : 'error')
+    } catch {
+      setForgotStatus('error')
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="w-full max-w-md rounded-xl shadow-lg overflow-hidden">
 
         {/* Header */}
-        <div className="px-8 py-8 text-center" style={{ backgroundColor: '#0f2336' }}>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Construct</h1>
-          <p className="mt-1 text-sm" style={{ color: '#7fa8c4' }}>
-            Piattaforma — Frontiere Technologies
+        <div className="px-8 py-5 text-center" style={{ backgroundColor: '#0f2336' }}>
+          <img src="/logo.svg" alt="Construct" className="mx-auto" style={{ width: 140, height: 140 }} />
+          <p className="mt-6 text-xs" style={{ color: '#7fa8c4' }}>
+            Construct the Frontiere technology foundations
           </p>
         </div>
 
@@ -115,6 +133,17 @@ function LoginForm() {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+            </div>
+
+            <div className="text-right -mt-2">
+              <button
+                type="button"
+                onClick={() => { setForgotMode(true); setForgotEmail(email); setForgotStatus('idle') }}
+                className="text-xs hover:underline"
+                style={{ color: '#0f5a8a' }}
+              >
+                Password dimenticata?
+              </button>
             </div>
 
             {errorMessage && (
@@ -178,6 +207,48 @@ function LoginForm() {
               Registrati
             </a>
           </p>
+
+          {forgotMode && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              {forgotStatus === 'sent' ? (
+                <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  Se l&apos;email è registrata riceverai un link per reimpostare la password.
+                </p>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="flex flex-col gap-2">
+                  <p className="text-xs text-gray-500 text-left">Inserisci la tua email per ricevere un link di reset.</p>
+                  <input
+                    type="email"
+                    placeholder="nome@esempio.it"
+                    value={forgotEmail}
+                    onChange={e => setForgotEmail(e.target.value)}
+                    required
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
+                  />
+                  {forgotStatus === 'error' && (
+                    <p className="text-xs text-red-600">Errore. Riprova tra qualche istante.</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={forgotStatus === 'sending'}
+                      className="flex-1 rounded-lg py-2 text-xs font-semibold text-white disabled:opacity-50 transition"
+                      style={{ backgroundColor: '#0f5a8a' }}
+                    >
+                      {forgotStatus === 'sending' ? 'Invio…' : 'Invia link'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForgotMode(false)}
+                      className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700 rounded-lg border border-gray-200 hover:bg-gray-100 transition"
+                    >
+                      Annulla
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
 
           {isTestMode && (
             <div className="mt-3">
