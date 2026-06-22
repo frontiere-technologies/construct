@@ -165,6 +165,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             .single()
           token.userId = (data?.id as string) ?? ''
           token.role = (data?.role as string) ?? 'user'
+          token.provider = account.provider
         } catch (err) {
           console.error('[auth] Failed to provision user in Supabase:', err)
           throw err
@@ -175,6 +176,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       session.user.id = token.userId as string
       session.user.role = token.role as string
+      session.user.provider = token.provider as string
       return session
     },
   },
