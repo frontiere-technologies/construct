@@ -184,23 +184,23 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
         </div>
       )}
 
-      <div className="flex gap-8 items-start">
+      <div className="flex flex-col gap-8 items-stretch xl:flex-row xl:items-start">
         <div className="flex-1 min-w-0 space-y-8">
           <section>
-            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800">Top Section</h2>
+            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800 whitespace-nowrap">Top Section</h2>
             {renderTree(null, 0, 'top')}
           </section>
           <section>
-            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800">Main Navigation</h2>
+            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800 whitespace-nowrap">Main Navigation</h2>
             {renderTree(null, 0, 'main')}
           </section>
           <section>
-            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800">Bottom Section</h2>
+            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800 whitespace-nowrap">Bottom Section</h2>
             {renderTree(null, 0, 'bottom')}
           </section>
         </div>
 
-        <div className="w-72 flex-shrink-0">
+        <div className="w-full xl:w-72 xl:flex-shrink-0">
           <Card className="sticky top-8">
               <h2 className="text-lg font-semibold mb-4 flex items-center">
                 <Edit2 size={18} className="mr-2" />

@@ -1,6 +1,6 @@
 # Profile Page Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
 
 **Goal:** Create a `/profile` page where authenticated users can view and edit first name, last name, username, and phone, with avatar and email displayed read-only from the IdP.
 
@@ -41,7 +41,7 @@
 **Interfaces:**
 - Produces: `users` table with columns `first_name text`, `last_name text`, `username text`, `phone text`
 
-- [ ] **Step 1: Update `schema.sql`**
+- [✅] **Step 1: Update `schema.sql`**
 
   Replace the `users` table definition (find it by the `-- Tabella: users` comment):
 
@@ -61,7 +61,7 @@
   );
   ```
 
-- [ ] **Step 2: Run migration on live DB via Supabase MCP**
+- [✅] **Step 2: Run migration on live DB via Supabase MCP**
 
   Use the `mcp__supabase__execute_sql` tool with this query:
 
@@ -73,7 +73,7 @@
     ADD COLUMN IF NOT EXISTS phone      text;
   ```
 
-- [ ] **Step 3: Verify columns exist**
+- [✅] **Step 3: Verify columns exist**
 
   Use `mcp__supabase__execute_sql`:
 
@@ -86,7 +86,7 @@
 
   Expected output includes rows for `first_name`, `last_name`, `username`, `phone` with `data_type = 'text'`.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
   ```bash
   git add deploy/supabase/schema.sql
@@ -105,7 +105,7 @@
   - `UserProfile` — exported interface with `first_name`, `last_name`, `username`, `phone` (all `string | null`)
   - `saveProfile(profile: UserProfile): Promise<{ error: string | null }>` — exported async function
 
-- [ ] **Step 1: Create `apps/web/lib/profile-actions.ts`**
+- [✅] **Step 1: Create `apps/web/lib/profile-actions.ts`**
 
   ```typescript
   'use client'
@@ -137,7 +137,7 @@
   }
   ```
 
-- [ ] **Step 2: TypeScript check**
+- [✅] **Step 2: TypeScript check**
 
   ```bash
   cd apps/web && npx tsc --noEmit
@@ -145,7 +145,7 @@
 
   Expected: 0 errors.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
   ```bash
   git add apps/web/lib/profile-actions.ts
@@ -167,7 +167,7 @@
   - Default export `ProfileForm` — React Client Component
   - Props: `{ email: string; avatarUrl: string | null; initialProfile: UserProfile }`
 
-- [ ] **Step 1: Create `apps/web/components/ProfileForm.tsx`**
+- [✅] **Step 1: Create `apps/web/components/ProfileForm.tsx`**
 
   ```typescript
   'use client'
@@ -315,7 +315,7 @@
   }
   ```
 
-- [ ] **Step 2: TypeScript check**
+- [✅] **Step 2: TypeScript check**
 
   ```bash
   cd apps/web && npx tsc --noEmit
@@ -323,7 +323,7 @@
 
   Expected: 0 errors.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
   ```bash
   git add apps/web/components/ProfileForm.tsx
@@ -344,7 +344,7 @@
   - `UserProfile` from `@/lib/profile-actions`
 - Produces: Next.js page at route `/profile`, accessible to authenticated users
 
-- [ ] **Step 1: Create `apps/web/app/(protected)/profile/page.tsx`**
+- [✅] **Step 1: Create `apps/web/app/(protected)/profile/page.tsx`**
 
   ```typescript
   import { redirect } from 'next/navigation'
@@ -385,7 +385,7 @@
   }
   ```
 
-- [ ] **Step 2: TypeScript check**
+- [✅] **Step 2: TypeScript check**
 
   ```bash
   cd apps/web && npx tsc --noEmit
@@ -393,7 +393,7 @@
 
   Expected: 0 errors.
 
-- [ ] **Step 3: Start dev server and verify in browser**
+- [✅] **Step 3: Start dev server and verify in browser**
 
   ```bash
   npm run web:dev
@@ -404,7 +404,7 @@
   - Fill in "First name", click Save — verify "✓ Profile saved." appears
   - Reload page — verify the value persists
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
   ```bash
   git add apps/web/app/\(protected\)/profile/page.tsx
@@ -422,7 +422,7 @@
 - Consumes: running dev server at `BASE_URL`, authenticated session, `/profile` route from Task 4
 - Produces: 8 new assertions (tests 14.1–14.8) in the existing test runner
 
-- [ ] **Step 1: Add test 14 to `test_menu_navigation.py`**
+- [✅] **Step 1: Add test 14 to `test_menu_navigation.py`**
 
   Insert the following block immediately before `browser.close()`:
 
@@ -488,7 +488,7 @@
                page.locator("text=Profile saved.").is_visible())
   ```
 
-- [ ] **Step 2: Run the full E2E suite**
+- [✅] **Step 2: Run the full E2E suite**
 
   ```bash
   python3 .claude/skills/webapp-testing/scripts/with_server.py \
@@ -498,7 +498,7 @@
 
   Expected: all tests pass, including the 8 new assertions in section 14. Final line: `32/32 test superati` (or higher if earlier sections already had more).
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
   ```bash
   git add tests/e2e/test_menu_navigation.py

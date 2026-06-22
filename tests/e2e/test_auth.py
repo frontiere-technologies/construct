@@ -21,7 +21,6 @@ def test_test_login_redirects_to_home(page, base_url, test_email):
     page.fill('input[placeholder="Email di test"]', test_email)
     page.click('button:has-text("Entra (test)")')
     page.wait_for_url(f"{base_url}/", timeout=15_000)
-    assert page.url == f"{base_url}/", f"Expected {base_url}/, got {page.url}"
 
 
 def test_authenticated_login_redirects_to_home(logged_in_page, base_url):

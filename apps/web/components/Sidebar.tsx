@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -12,6 +12,29 @@ import { useAuth } from '@/context/AuthContext'
 import type { MenuItem } from '@/types/menu'
 import { IconRenderer } from './IconRenderer'
 
+interface TruncatedSpanProps {
+  text: string
+  className?: string
+  onShowTooltip: (e: React.MouseEvent, text: string) => void
+  onHideTooltip: () => void
+}
+
+const TruncatedSpan: React.FC<TruncatedSpanProps> = ({ text, className, onShowTooltip, onHideTooltip }) => {
+  const ref = useRef<HTMLSpanElement>(null)
+  return (
+    <span
+      ref={ref}
+      className={className}
+      onMouseEnter={e => {
+        if (ref.current && ref.current.scrollWidth > ref.current.offsetWidth) onShowTooltip(e, text)
+      }}
+      onMouseLeave={onHideTooltip}
+    >
+      {text}
+    </span>
+  )
+}
+
 const ICON_COL_W = 'w-16'
 const TEXT_COL_W = 'w-52'
 const ICON_SUB_W = 'w-14'
@@ -22,6 +45,7 @@ interface TooltipState { text: string; top: number; left: number }
 
 const ColToggle: React.FC<{ collapsed: boolean; onToggle: () => void }> = ({ collapsed, onToggle }) => (
   <button
+    data-testid="sidebar-toggle"
     onClick={onToggle}
     className="absolute -right-3 bottom-4 bg-sidebar-bg border border-sidebar-text/10 rounded-full p-1 shadow-sm hover:bg-sidebar-active-bg z-10"
   >
@@ -58,8 +82,13 @@ const L1Item: React.FC<L1ItemProps> = ({
   const tooltipLeave = isCollapsed ? onHideTooltip : undefined
   const content = (
     <>
-      {item.icon && <IconRenderer name={item.icon} size={20} className={isActive ? 'text-primary' : ''} />}
-      {!isCollapsed && <span className="text-sm truncate">{item.label}</span>}
+      {item.icon
+        ? <IconRenderer name={item.icon} size={20} className={clsx('flex-shrink-0', isActive && 'text-primary')} />
+        : isCollapsed
+          ? <span className="text-xs font-semibold opacity-60">{item.label.charAt(0).toUpperCase()}</span>
+          : null
+      }
+      {!isCollapsed && <TruncatedSpan text={item.label} className="text-sm truncate" onShowTooltip={onShowTooltip} onHideTooltip={onHideTooltip} />}
     </>
   )
   if (!hasChildren && item.route) {
@@ -112,10 +141,12 @@ const SubItem: React.FC<SubItemProps> = ({
   const tooltipEnter = isCollapsed ? (e: React.MouseEvent) => onShowTooltip(e, item.label) : undefined
   const tooltipLeave = isCollapsed ? onHideTooltip : undefined
 
-  const icon = item.icon && (
-    <IconRenderer name={item.icon} size={16} className={highlight ? 'text-primary' : ''} />
-  )
-  const label = !isCollapsed && <span className="truncate">{item.label}</span>
+  const icon = item.icon
+    ? <IconRenderer name={item.icon} size={16} className={clsx('flex-shrink-0', highlight && 'text-primary')} />
+    : isCollapsed
+      ? <span className="text-xs font-semibold opacity-60">{item.label.charAt(0).toUpperCase()}</span>
+      : null
+  const label = !isCollapsed && <TruncatedSpan text={item.label} className="truncate" onShowTooltip={onShowTooltip} onHideTooltip={onHideTooltip} />
 
   if (hasChildren) {
     return (
@@ -373,10 +404,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             <CircleUser size={26} className={clsx('flex-shrink-0 transition-colors', userPanelOpen ? 'text-primary' : 'opacity-60')} />
             {!col1Collapsed && (
               <div className="flex flex-col min-w-0 flex-1 text-left">
-                <span className="text-xs font-medium truncate">
-                  {authUser?.email?.split('@')[0] ?? ''}
-                </span>
-                <span className="text-xs opacity-50 truncate">{authUser?.email ?? ''}</span>
+                <TruncatedSpan text={authUser?.email?.split('@')[0] ?? ''} className="text-xs font-medium truncate" onShowTooltip={showTooltip} onHideTooltip={hideTooltip} />
+                <TruncatedSpan text={authUser?.email ?? ''} className="text-xs opacity-50 truncate" onShowTooltip={showTooltip} onHideTooltip={hideTooltip} />
               </div>
             )}
           </button>
@@ -390,12 +419,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         )}>
           <ColToggle collapsed={col2Collapsed} onToggle={() => setCol2Collapsed(c => !c)} />
           {!col2Collapsed && (
-            <div className="px-4 py-3 border-b border-sidebar-text/10">
-              <span className="text-xs font-semibold uppercase tracking-wider opacity-50">
-                {userPanelOpen
-                  ? (authUser?.email?.split('@')[0] ?? 'Account')
-                  : menuItems.find(i => i.id === selectedL1Id)?.label}
-              </span>
+            <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
+              <TruncatedSpan
+                text={userPanelOpen ? (authUser?.email?.split('@')[0] ?? 'Account') : (menuItems.find(i => i.id === selectedL1Id)?.label ?? '')}
+                className="block truncate text-xs font-semibold uppercase tracking-wider opacity-50"
+                onShowTooltip={showTooltip}
+                onHideTooltip={hideTooltip}
+              />
             </div>
           )}
 
@@ -476,10 +506,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         )}>
           <ColToggle collapsed={col3Collapsed} onToggle={() => setCol3Collapsed(c => !c)} />
           {!col3Collapsed && (
-            <div className="px-4 py-3 border-b border-sidebar-text/10">
-              <span className="text-xs font-semibold uppercase tracking-wider opacity-50">
-                {menuItems.find(i => i.id === selectedL2Id)?.label}
-              </span>
+            <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
+              <TruncatedSpan
+                text={menuItems.find(i => i.id === selectedL2Id)?.label ?? ''}
+                className="block truncate text-xs font-semibold uppercase tracking-wider opacity-50"
+                onShowTooltip={showTooltip}
+                onHideTooltip={hideTooltip}
+              />
             </div>
           )}
           <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1 scrollbar-hide">

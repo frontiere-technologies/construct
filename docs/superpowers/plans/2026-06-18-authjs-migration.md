@@ -1,6 +1,6 @@
 # Auth.js Migration Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
 
 **Goal:** Replace Supabase Auth with Auth.js v5 (NextAuth) to support configurable OIDC providers (Microsoft Entra ID, Google, Keycloak) while keeping Supabase as the PostgreSQL database.
 
@@ -57,7 +57,7 @@
 **Interfaces:**
 - Produces: `next-auth` available as a dependency; `AUTH_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` in env
 
-- [ ] **Step 1: Install next-auth@5 and remove @supabase/ssr**
+- [✅] **Step 1: Install next-auth@5 and remove @supabase/ssr**
 
 Run from `apps/web/`:
 ```bash
@@ -67,7 +67,7 @@ npm install next-auth@5
 
 Expected: `package.json` now contains `"next-auth": "^5.x.x"`. Do **not** remove `@supabase/ssr` yet — it is still used by `lib/supabase-server.ts` until Task 11 cleans it up.
 
-- [ ] **Step 2: Generate AUTH_SECRET**
+- [✅] **Step 2: Generate AUTH_SECRET**
 
 ```bash
 openssl rand -base64 33
@@ -75,7 +75,7 @@ openssl rand -base64 33
 
 Copy the output — you will use it in the next step.
 
-- [ ] **Step 3: Add environment variables to .env.local**
+- [✅] **Step 3: Add environment variables to .env.local**
 
 Open `apps/web/.env.local` and add these lines (keep existing `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`):
 
@@ -105,7 +105,7 @@ AUTH_TEST_CREDENTIALS=true
 NEXT_PUBLIC_AUTH_TEST_MODE=true
 ```
 
-- [ ] **Step 4: Verify the dev server starts**
+- [✅] **Step 4: Verify the dev server starts**
 
 ```bash
 cd apps/web
@@ -114,7 +114,7 @@ npm run dev
 
 Expected: server starts on port 3000 without import errors. The app will break at runtime (login won't work yet) — that is expected. Stop the server with Ctrl+C.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add apps/web/package.json apps/web/package-lock.json
@@ -131,7 +131,7 @@ git commit -m "chore: install next-auth@5"
 **Interfaces:**
 - Produces: `Session` has `user.id: string` and `user.role: string`; `JWT` has `userId: string` and `role: string` — used in Tasks 4, 6, 7, 8
 
-- [ ] **Step 1: Create the type augmentation file**
+- [✅] **Step 1: Create the type augmentation file**
 
 Create `apps/web/types/next-auth.d.ts`:
 
@@ -155,7 +155,7 @@ declare module 'next-auth/jwt' {
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript accepts the augmentation**
+- [✅] **Step 2: Verify TypeScript accepts the augmentation**
 
 ```bash
 cd apps/web
@@ -164,7 +164,7 @@ npx tsc --noEmit 2>&1 | head -20
 
 Expected: no errors related to `next-auth` types (there will be other errors from files not yet migrated — that is fine at this stage).
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add apps/web/types/next-auth.d.ts
@@ -183,7 +183,7 @@ git commit -m "feat: add next-auth TypeScript type augmentation"
 - Produces: `createAdminClient(): SupabaseClient` — uses `SUPABASE_SERVICE_ROLE_KEY`, bypasses RLS — consumed by Tasks 4, 8
 - Keeps: `createClient(): Promise<SupabaseClient>` — used by existing server components until Task 8 migrates them
 
-- [ ] **Step 1: Add createAdminClient() to supabase-server.ts**
+- [✅] **Step 1: Add createAdminClient() to supabase-server.ts**
 
 Replace the full contents of `apps/web/lib/supabase-server.ts` with:
 
@@ -225,13 +225,13 @@ export function createAdminClient() {
 }
 ```
 
-- [ ] **Step 2: Delete the browser client**
+- [✅] **Step 2: Delete the browser client**
 
 ```bash
 rm apps/web/lib/supabase-browser.ts
 ```
 
-- [ ] **Step 3: Verify TypeScript**
+- [✅] **Step 3: Verify TypeScript**
 
 ```bash
 cd apps/web
@@ -240,7 +240,7 @@ npx tsc --noEmit 2>&1 | grep "supabase-browser" | head -10
 
 Expected: errors about `supabase-browser` not found — these will be fixed in Tasks 4 and 8. No new errors from `supabase-server.ts` itself.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add apps/web/lib/supabase-server.ts
@@ -263,7 +263,7 @@ git commit -m "feat: add createAdminClient() with service role key, remove brows
   - `signOut({ callbackUrl })`: clears session, redirects
 - Consumed by: Tasks 5, 6, 7, 8
 
-- [ ] **Step 1: Rewrite lib/auth.ts**
+- [✅] **Step 1: Rewrite lib/auth.ts**
 
 Replace the full contents of `apps/web/lib/auth.ts` with:
 
@@ -377,7 +377,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 })
 ```
 
-- [ ] **Step 2: Create the route handler**
+- [✅] **Step 2: Create the route handler**
 
 Create directory and file `apps/web/app/api/auth/[...nextauth]/route.ts`:
 
@@ -393,7 +393,7 @@ import { handlers } from '@/lib/auth'
 export const { GET, POST } = handlers
 ```
 
-- [ ] **Step 3: Verify TypeScript**
+- [✅] **Step 3: Verify TypeScript**
 
 ```bash
 cd apps/web
@@ -402,7 +402,7 @@ npx tsc --noEmit 2>&1 | grep -E "lib/auth|api/auth" | head -10
 
 Expected: no errors in these two files.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add apps/web/lib/auth.ts apps/web/app/api/auth
@@ -420,7 +420,7 @@ git commit -m "feat: add Auth.js v5 config with OIDC providers and user provisio
 - Consumes: `auth` from `@/lib/auth` (Task 4)
 - Produces: route protection and RBAC enforcement for all non-static routes
 
-- [ ] **Step 1: Rewrite middleware.ts**
+- [✅] **Step 1: Rewrite middleware.ts**
 
 Replace the full contents of `apps/web/middleware.ts` with:
 
@@ -450,7 +450,7 @@ export const config = {
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript**
+- [✅] **Step 2: Verify TypeScript**
 
 ```bash
 cd apps/web
@@ -459,7 +459,7 @@ npx tsc --noEmit 2>&1 | grep "middleware" | head -10
 
 Expected: no errors from `middleware.ts`.
 
-- [ ] **Step 3: Start dev server and verify redirect**
+- [✅] **Step 3: Start dev server and verify redirect**
 
 ```bash
 cd apps/web && npm run dev &
@@ -471,7 +471,7 @@ Expected: `307 http://localhost:3000/login` (unauthenticated redirect to /login)
 
 Kill dev server: `kill %1`
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add apps/web/middleware.ts
@@ -490,7 +490,7 @@ git commit -m "feat: replace Supabase middleware with Auth.js middleware"
 - Produces: `useAuth()` hook returning `{ user: { id, name, email, role } | null, loading: boolean, signOut: () => Promise<void> }`
 - Consumed by: `components/Sidebar.tsx` (already uses `useAuth`)
 
-- [ ] **Step 1: Rewrite AuthContext.tsx**
+- [✅] **Step 1: Rewrite AuthContext.tsx**
 
 Replace the full contents of `apps/web/context/AuthContext.tsx` with:
 
@@ -532,7 +532,7 @@ export function useAuth(): AuthContextType {
 }
 ```
 
-- [ ] **Step 2: Update app/providers.tsx**
+- [✅] **Step 2: Update app/providers.tsx**
 
 Replace the full contents of `apps/web/app/providers.tsx` with:
 
@@ -553,7 +553,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 ```
 
-- [ ] **Step 3: Verify TypeScript**
+- [✅] **Step 3: Verify TypeScript**
 
 ```bash
 cd apps/web
@@ -562,7 +562,7 @@ npx tsc --noEmit 2>&1 | grep -E "AuthContext|providers" | head -10
 
 Expected: no errors in these files. `Sidebar.tsx` should continue to work since `useAuth()` still returns the same interface.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add apps/web/context/AuthContext.tsx apps/web/app/providers.tsx
@@ -580,7 +580,7 @@ git commit -m "feat: migrate AuthContext to next-auth useSession, replace AuthPr
 - Consumes: `signIn` from `next-auth/react`; `NEXT_PUBLIC_AUTH_TEST_MODE` env var
 - Produces: login page with OIDC buttons and (in test mode) a test email form
 
-- [ ] **Step 1: Rewrite Login.tsx**
+- [✅] **Step 1: Rewrite Login.tsx**
 
 Replace the full contents of `apps/web/components/Login.tsx` with:
 
@@ -671,7 +671,7 @@ export function Login() {
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript**
+- [✅] **Step 2: Verify TypeScript**
 
 ```bash
 cd apps/web
@@ -680,7 +680,7 @@ npx tsc --noEmit 2>&1 | grep "Login" | head -10
 
 Expected: no errors from `Login.tsx`.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add apps/web/components/Login.tsx
@@ -700,7 +700,7 @@ git commit -m "feat: rewrite Login component with OIDC buttons and test-mode cre
 - Consumes: `auth` from `@/lib/auth` (Task 4); `createAdminClient()` from `@/lib/supabase-server` (Task 3)
 - `menu-actions.ts` becomes a Server Action module — client components import and call these functions directly; Next.js proxies the call to the server automatically
 
-- [ ] **Step 1: Update app/(protected)/layout.tsx**
+- [✅] **Step 1: Update app/(protected)/layout.tsx**
 
 Replace the full contents of `apps/web/app/(protected)/layout.tsx` with:
 
@@ -721,7 +721,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 }
 ```
 
-- [ ] **Step 2: Update lib/menu-service.ts**
+- [✅] **Step 2: Update lib/menu-service.ts**
 
 Replace the full contents of `apps/web/lib/menu-service.ts` with:
 
@@ -743,7 +743,7 @@ export const getMenuItems = cache(async (): Promise<MenuItem[]> => {
 })
 ```
 
-- [ ] **Step 3: Rewrite lib/menu-actions.ts as a Server Action**
+- [✅] **Step 3: Rewrite lib/menu-actions.ts as a Server Action**
 
 Replace the full contents of `apps/web/lib/menu-actions.ts` with:
 
@@ -780,7 +780,7 @@ export async function updateMenuItemOrders(
 }
 ```
 
-- [ ] **Step 4: Full TypeScript check**
+- [✅] **Step 4: Full TypeScript check**
 
 ```bash
 cd apps/web
@@ -789,7 +789,7 @@ npx tsc --noEmit 2>&1 | head -30
 
 Expected: zero TypeScript errors. If there are errors, fix them before committing.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add apps/web/app/\(protected\)/layout.tsx apps/web/lib/menu-service.ts apps/web/lib/menu-actions.ts
@@ -806,7 +806,7 @@ git commit -m "feat: migrate layout and menu services to Auth.js session and adm
 **Interfaces:**
 - Produces: `users` table with no FK to `auth.users`, UUID default PK, unique email constraint; RLS disabled on `users` and `menu_items`
 
-- [ ] **Step 1: Apply migration via Supabase dashboard or CLI**
+- [✅] **Step 1: Apply migration via Supabase dashboard or CLI**
 
 Open the Supabase SQL editor for your project and run:
 
@@ -840,7 +840,7 @@ DROP POLICY IF EXISTS "menu_items_delete_admin" ON menu_items;
 
 Expected: all statements complete without error.
 
-- [ ] **Step 2: Update deploy/supabase/schema.sql to reflect new state**
+- [✅] **Step 2: Update deploy/supabase/schema.sql to reflect new state**
 
 In `deploy/supabase/schema.sql`:
 
@@ -867,7 +867,7 @@ In `deploy/supabase/schema.sql`:
 
 6. The `is_admin()` function can be removed since it referenced `auth.uid()` and is no longer used.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add deploy/supabase/schema.sql
@@ -887,7 +887,7 @@ git commit -m "feat: remove Supabase auth FK, disable RLS, drop auth-dependent p
 - Consumes: test credentials form rendered by `Login.tsx` when `NEXT_PUBLIC_AUTH_TEST_MODE=true` (Task 7)
 - Produces: `logged_in_page` fixture that authenticates via the test credentials form instead of email/password
 
-- [ ] **Step 1: Update .env.test**
+- [✅] **Step 1: Update .env.test**
 
 Replace the contents of `tests/e2e/.env.test` with:
 
@@ -898,7 +898,7 @@ BASE_URL=http://localhost:3000
 
 Note: `TEST_PASSWORD` is removed — the test credentials provider accepts any email without a password. The app must be running with `AUTH_TEST_CREDENTIALS=true` and `NEXT_PUBLIC_AUTH_TEST_MODE=true` set (already in `apps/web/.env.local`).
 
-- [ ] **Step 2: Update conftest.py**
+- [✅] **Step 2: Update conftest.py**
 
 Replace the full contents of `tests/e2e/conftest.py` with:
 
@@ -958,7 +958,7 @@ def logged_in_page(page, base_url, test_email):
     yield page
 ```
 
-- [ ] **Step 3: Update test_auth.py**
+- [✅] **Step 3: Update test_auth.py**
 
 Replace the full contents of `tests/e2e/test_auth.py` with:
 
@@ -994,7 +994,7 @@ def test_authenticated_login_redirects_to_home(logged_in_page, base_url):
     assert logged_in_page.url == f"{base_url}/", f"Expected {base_url}/, got {logged_in_page.url}"
 ```
 
-- [ ] **Step 4: Run E2E tests (with dev server running)**
+- [✅] **Step 4: Run E2E tests (with dev server running)**
 
 In one terminal, start the dev server:
 ```bash
@@ -1014,7 +1014,7 @@ PASSED tests/e2e/test_auth.py::test_test_login_redirects_to_home
 PASSED tests/e2e/test_auth.py::test_authenticated_login_redirects_to_home
 ```
 
-- [ ] **Step 5: Run the full E2E suite**
+- [✅] **Step 5: Run the full E2E suite**
 
 ```bash
 uv run pytest tests/e2e/ -v
@@ -1022,7 +1022,7 @@ uv run pytest tests/e2e/ -v
 
 Expected: all tests pass. If any test uses the old `credentials` fixture (which no longer exists), update it to use `test_email` and the new login flow.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add tests/e2e/.env.test tests/e2e/conftest.py tests/e2e/test_auth.py
@@ -1037,7 +1037,7 @@ git commit -m "test: update E2E tests for Auth.js test credentials flow"
 - Modify: `apps/web/lib/supabase-server.ts` — remove `createClient()` and `@supabase/ssr` import
 - Modify: `apps/web/package.json` — remove `@supabase/ssr`
 
-- [ ] **Step 1: Remove createClient() and @supabase/ssr from supabase-server.ts**
+- [✅] **Step 1: Remove createClient() and @supabase/ssr from supabase-server.ts**
 
 Replace the full contents of `apps/web/lib/supabase-server.ts` with the final, clean version:
 
@@ -1053,7 +1053,7 @@ export function createAdminClient() {
 }
 ```
 
-- [ ] **Step 2: Uninstall @supabase/ssr**
+- [✅] **Step 2: Uninstall @supabase/ssr**
 
 ```bash
 cd apps/web && npm uninstall @supabase/ssr
@@ -1061,7 +1061,7 @@ cd apps/web && npm uninstall @supabase/ssr
 
 Expected: `package.json` no longer contains `@supabase/ssr`.
 
-- [ ] **Step 3: Full TypeScript check**
+- [✅] **Step 3: Full TypeScript check**
 
 ```bash
 cd apps/web && npx tsc --noEmit
@@ -1069,7 +1069,7 @@ cd apps/web && npx tsc --noEmit
 
 Expected: zero errors.
 
-- [ ] **Step 4: Lint**
+- [✅] **Step 4: Lint**
 
 ```bash
 cd apps/web && npm run lint
@@ -1077,7 +1077,7 @@ cd apps/web && npm run lint
 
 Expected: no lint errors.
 
-- [ ] **Step 5: Full E2E suite**
+- [✅] **Step 5: Full E2E suite**
 
 With dev server running (`npm run web:dev`):
 
@@ -1087,7 +1087,7 @@ uv run pytest tests/e2e/ -v
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Manual smoke test**
+- [✅] **Step 6: Manual smoke test**
 
 1. Open `http://localhost:3000` — verify redirect to `/login`
 2. On `/login`, verify OIDC buttons are visible
@@ -1096,7 +1096,7 @@ Expected: all tests pass.
 5. Click sign out — verify redirect to `/login`
 6. Visit `/admin/menu-builder` as a `user` role — verify redirect to `/`
 
-- [ ] **Step 7: Final commit**
+- [✅] **Step 7: Final commit**
 
 ```bash
 git add apps/web/lib/supabase-server.ts apps/web/package.json apps/web/package-lock.json

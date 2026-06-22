@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+Read also the ./README.md file.
+
 ## Commands
 
 ```bash
@@ -20,4 +22,4 @@ apps/web/ - React 19 + TypeScript + Next.js 15 (App Router) + Tailwind CSS v4 + 
 
 ## Superpowers Plans
 
-When executing a Superpowers plan (files in `docs/superpowers/plans/`), update each checkbox in the plan `.md` file from `- [ ]` to `- [✅]` as soon as the task is completed and its review passes. The `subagent-driven-development` skill does not do this automatically.
+When executing a Superpowers plan (files in `docs/superpowers/plans/`), update each checkbox in the original plan `.md` file from `- [ ]` to `- [✅]` as soon as the implementation is completed. The `subagent-driven-development` skill does not do this automatically.

@@ -6,9 +6,6 @@ def test_add_and_delete_item(logged_in_page, base_url):
     page.goto(f"{base_url}/admin/menu-builder")
     page.wait_for_load_state("networkidle")
 
-    page.get_by_role("button", name="Add Item").click()
-    page.locator('form input[type="text"]').first.wait_for(state="visible", timeout=5_000)
-
     page.locator('form input[type="text"]').first.fill(label)
     page.locator('form select').nth(1).select_option("main")
     page.locator('form input[type="text"]').nth(1).fill("/test-item")

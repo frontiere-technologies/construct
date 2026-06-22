@@ -70,6 +70,15 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
             />
           </div>
           <div className="grid grid-cols-6 gap-1 p-2 max-h-64 overflow-y-auto">
+            <button
+              type="button"
+              title="Nessuna icona"
+              onClick={() => { onChange(''); setOpen(false); setSearch(''); }}
+              className={`flex flex-col items-center justify-center p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 gap-1 ${!value ? 'bg-blue-100 dark:bg-blue-900/50' : ''}`}
+            >
+              <div className="w-[18px] h-[18px] flex items-center justify-center border border-dashed border-gray-400 rounded-sm text-gray-400 text-[10px] leading-none">—</div>
+              <span className="text-[9px] text-gray-500 truncate w-full text-center leading-tight">Vuoto</span>
+            </button>
             {filtered.map(name => (
               <IconItemBoundary key={name}>
                 <button
