@@ -77,7 +77,7 @@ function buildProviders() {
         const { data: user } = await supabase
           .from('users')
           .select('id, email, name, role, password_hash')
-          .eq('email', credentials.email)
+          .eq('email', (credentials.email as string).toLowerCase().trim())
           .single()
 
         if (!user) {
@@ -138,8 +138,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: 'jwt' as const },
   callbacks: {
     async signIn({ account, profile }) {
-      // Domain restriction for Google OAuth
-      if (account?.provider === 'google') {
+      // Domain restriction for all OIDC providers
+      const oidcProviders = ['google', 'microsoft-entra-id', 'keycloak']
+      if (account?.provider && oidcProviders.includes(account.provider)) {
         const email = profile?.email ?? ''
         const domain = email.split('@')[1] ?? ''
         const allowed = await getAllowedDomains()
@@ -148,6 +149,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true
     },
     async jwt({ token, user, account }) {
+      // Always persist provider when account is present (first sign-in and token updates)
+      if (account) {
+        token.provider = account.provider
+      }
       if (account && user) {
         try {
           const supabase = createAdminClient()
@@ -165,7 +170,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             .single()
           token.userId = (data?.id as string) ?? ''
           token.role = (data?.role as string) ?? 'user'
-          token.provider = account.provider
         } catch (err) {
           console.error('[auth] Failed to provision user in Supabase:', err)
           throw err

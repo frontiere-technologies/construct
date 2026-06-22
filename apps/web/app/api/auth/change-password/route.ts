@@ -53,5 +53,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Errore interno. Riprova.' }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, requiresReauth: true })
 }

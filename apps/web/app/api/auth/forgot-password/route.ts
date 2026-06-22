@@ -14,12 +14,13 @@ export async function POST(req: NextRequest) {
 
   const { data: user } = await supabase
     .from('users')
-    .select('id, email')
+    .select('id, email, password_hash')
     .eq('email', email.toLowerCase().trim())
     .single()
 
   // Always return 200 — do not leak whether the email exists
-  if (!user?.id) return NextResponse.json({ ok: true })
+  // Only issue reset tokens for credentials users (those with a password_hash)
+  if (!user?.id || !user.password_hash) return NextResponse.json({ ok: true })
 
   const token = crypto.randomUUID()
   const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() // 2 hours

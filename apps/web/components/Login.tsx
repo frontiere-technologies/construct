@@ -32,7 +32,10 @@ function LoginForm() {
   const errorCode = searchParams.get('error')
   const message = searchParams.get('message')
   const errorMessage = errorCode ? (ERROR_MESSAGES[errorCode] ?? ERROR_MESSAGES.Default) : null
-  const successMessage = message === 'password-set' ? 'Password impostata con successo. Puoi accedere.' : null
+  const successMessage =
+    message === 'password-set' ? 'Password impostata con successo. Puoi accedere.' :
+    message === 'password-changed' ? 'Password aggiornata. Accedi con la nuova password.' :
+    null
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

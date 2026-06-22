@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Link già utilizzato.' }, { status: 410 })
   }
 
-  const hash = await bcrypt.hash(password, 10)
+  const hash = await bcrypt.hash(password, 12)
 
   const { error: updateErr } = await supabase
     .from('users')

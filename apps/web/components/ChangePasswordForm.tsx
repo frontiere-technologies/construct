@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { signOut } from 'next-auth/react'
 import { Card } from '@/components/Card'
 
 export function ChangePasswordForm() {
@@ -28,11 +29,11 @@ export function ChangePasswordForm() {
       if (!res.ok) {
         setStatus({ type: 'error', message: data.error ?? 'Errore. Riprova.' })
       } else {
-        setStatus({ type: 'success', message: 'Password aggiornata.' })
+        setStatus({ type: 'success', message: 'Password aggiornata. Stai per essere disconnesso…' })
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')
-        setTimeout(() => setStatus(null), 3000)
+        setTimeout(() => signOut({ callbackUrl: '/login?message=password-changed' }), 2000)
       }
     } catch {
       setStatus({ type: 'error', message: 'Errore di rete. Riprova.' })
