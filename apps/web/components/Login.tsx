@@ -265,7 +265,7 @@ function LoginForm() {
           )}
 
           {registerMode && (
-            <div className="mt-3 pt-3 border-t border-gray-200">
+            <div data-testid="register-form" className="mt-3 pt-3 border-t border-gray-200">
               {registerStatus === 'sent' ? (
                 <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
                   Se l&apos;email è autorizzata riceverai un link per completare la registrazione.
