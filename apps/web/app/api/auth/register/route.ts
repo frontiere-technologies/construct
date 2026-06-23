@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     .from('users')
     .select('id')
     .eq('email', normalizedEmail)
-    .single()
+    .maybeSingle()
   if (existing?.id) {
     return NextResponse.json({ ok: true })
   }
@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
     .insert({ user_id: newUser.id, token, expires_at: expiresAt })
   if (tokenError) {
     console.error('[register] Failed to create token:', tokenError)
+    await supabase.from('users').delete().eq('id', newUser.id)
     return NextResponse.json({ ok: true })
   }
 
