@@ -39,8 +39,13 @@ def test_register_unauthorized_domain_shows_confirmation(page, base_url):
     page.click('text=Registrati')
     page.wait_for_selector('text=Inserisci la tua email per ricevere un link di registrazione.')
 
-    page.fill('input[placeholder="nome@esempio.it"]', 'hacker@notallowed.xyz')
-    page.click('button[type="submit"]:has-text("Registrati")')
+    # Target the registration form email input specifically (use .last to get the registration form's input, not the main login one)
+    register_section = page.locator('text=Inserisci la tua email per ricevere un link di registrazione.').locator('..')
+    email_input = register_section.locator('input[type="email"]')
+    email_input.fill('hacker@notallowed.xyz')
+
+    # Click the last "Registrati" button (the one in the registration form, not the main login)
+    page.locator('button[type="submit"]:has-text("Registrati")').last.click()
 
     page.wait_for_selector('text=Se l\'email è autorizzata riceverai un link per completare la registrazione.', timeout=5000)
     assert page.locator('text=Se l\'email è autorizzata riceverai un link per completare la registrazione.').is_visible()
@@ -56,8 +61,14 @@ def test_register_authorized_domain_shows_confirmation(page, base_url):
     # Use a unique email to avoid duplicate-user conflicts across test runs
     import time
     unique_email = f"register-test-{int(time.time())}@frontiere.io"
-    page.fill('input[placeholder="nome@esempio.it"]', unique_email)
-    page.click('button[type="submit"]:has-text("Registrati")')
+
+    # Target the registration form email input specifically
+    register_section = page.locator('text=Inserisci la tua email per ricevere un link di registrazione.').locator('..')
+    email_input = register_section.locator('input[type="email"]')
+    email_input.fill(unique_email)
+
+    # Click the last "Registrati" button (the one in the registration form)
+    page.locator('button[type="submit"]:has-text("Registrati")').last.click()
 
     page.wait_for_selector('text=Se l\'email è autorizzata riceverai un link per completare la registrazione.', timeout=5000)
     assert page.locator('text=Se l\'email è autorizzata riceverai un link per completare la registrazione.').is_visible()
