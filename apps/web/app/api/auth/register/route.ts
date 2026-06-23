@@ -16,12 +16,13 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient()
 
   // Domain allow-list check
-  const { data: domainRows } = await supabase
+  const { data: domainRow } = await supabase
     .from('allowed_domains')
-    .select('domain')
+    .select('id')
+    .eq('domain', domain)
     .eq('active', true)
-  const allowedDomains = (domainRows ?? []).map((r: { domain: string }) => r.domain)
-  if (!allowedDomains.includes(domain)) {
+    .maybeSingle()
+  if (!domainRow) {
     return NextResponse.json({ ok: true })
   }
 
