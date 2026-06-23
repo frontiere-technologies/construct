@@ -6,6 +6,7 @@ interface AuthUser {
   id: string
   name?: string | null
   email?: string | null
+  image?: string | null
   role: string
 }
 
@@ -23,6 +24,7 @@ export function useAuth(): AuthContextType {
         id: session.user.id,
         name: session.user.name,
         email: session.user.email,
+        image: session.user.image,
         role: session.user.role,
       }
     : null

@@ -92,8 +92,7 @@ export function SetPasswordForm({ token }: { token: string }) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50"
-        style={{ borderColor: '#0f5a8a', color: '#0f5a8a' }}
+        className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
       >
         {loading ? 'Salvataggio…' : 'Imposta password'}
       </button>

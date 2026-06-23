@@ -2,13 +2,14 @@
 -- construct — Supabase Schema
 -- Auth: Auth.js v5 (NextAuth) handles authentication.
 --       Supabase is used as PostgreSQL database only.
---       RLS is disabled — authorization is enforced server-side
---       by the Next.js Auth.js middleware.
+--       RLS is enabled on all tables — all client access is
+--       blocked by default. Server-side code uses createAdminClient()
+--       (service_role key) which bypasses RLS entirely.
 -- ============================================================
 
 -- ============================================================
 -- Tabella: menu_items
--- RLS disabled — access controlled via Auth.js middleware
+-- RLS enabled — all access via createAdminClient() (service_role)
 -- ============================================================
 create table if not exists menu_items (
   id               text      primary key,
@@ -30,14 +31,14 @@ create table if not exists menu_items (
   updated_at       timestamptz        default now()
 );
 
-alter table menu_items disable row level security;
+alter table menu_items enable row level security;
 
 -- ============================================================
 -- Tabella: users
 -- Profili utente provisionati da Auth.js al primo login OIDC.
 -- PK: UUID generato dall'app (non collegato a auth.users).
 -- Lookup per upsert: email (unique constraint).
--- RLS disabled — access controlled via Auth.js middleware.
+-- RLS enabled — all access via createAdminClient() (service_role)
 -- ============================================================
 create table if not exists users (
   id           uuid        primary key default gen_random_uuid(),
@@ -54,13 +55,16 @@ create table if not exists users (
   updated_at   timestamptz          default now()
 );
 
-alter table users disable row level security;
+alter table users enable row level security;
 
 -- Migration: add theme_config for existing deployments
 alter table users add column if not exists theme_config jsonb;
 
 -- Migration: add password_hash for email+password login
 alter table users add column if not exists password_hash text;
+
+-- Migration: track how the user authenticates (google, microsoft-entra-id, keycloak, credentials, test)
+alter table users add column if not exists auth_provider text;
 
 -- ============================================================
 -- Tabella: password_set_tokens
@@ -75,7 +79,7 @@ create table if not exists password_set_tokens (
   created_at  timestamptz default now()
 );
 
-alter table password_set_tokens disable row level security;
+alter table password_set_tokens enable row level security;
 
 -- ============================================================
 -- Tabella: allowed_domains
@@ -88,7 +92,7 @@ create table if not exists allowed_domains (
   created_at  timestamptz default now()
 );
 
-alter table allowed_domains disable row level security;
+alter table allowed_domains enable row level security;
 
 -- Seed: frontiere.io as the first allowed domain
 insert into allowed_domains (domain, active)

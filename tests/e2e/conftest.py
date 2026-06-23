@@ -28,7 +28,8 @@ def test_email():
 @pytest.fixture(scope="session")
 def browser():
     with sync_playwright() as p:
-        b = p.chromium.launch(headless=False, slow_mo=50)
+        headless = os.getenv("HEADLESS", "true").lower() == "true"
+        b = p.chromium.launch(headless=headless, slow_mo=50)
         yield b
         b.close()
 

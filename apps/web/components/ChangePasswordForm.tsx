@@ -46,7 +46,7 @@ export function ChangePasswordForm() {
   const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'
 
   return (
-    <Card className="w-full max-w-sm mt-4">
+    <Card className="w-full">
       <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
         Cambia password
       </h2>

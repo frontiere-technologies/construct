@@ -10,11 +10,6 @@ export default async function ProfilePage() {
 
   const supabase = createAdminClient()
 
-  // Lazy-init: create the users row if it doesn't exist yet
-  await supabase
-    .from('users')
-    .upsert({ id: session.user.id, email: session.user.email }, { ignoreDuplicates: true })
-
   const { data: profile } = await supabase
     .from('users')
     .select('first_name, last_name, username, phone')

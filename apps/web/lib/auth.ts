@@ -13,10 +13,14 @@ async function getAllowedDomains(): Promise<string[]> {
   const now = Date.now()
   if (domainCache && domainCache.expiresAt > now) return domainCache.domains
   const supabase = createAdminClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('allowed_domains')
     .select('domain')
     .eq('active', true)
+  if (error) {
+    console.error('[auth] Failed to retrieve allowed domains:', error)
+    return domainCache?.domains ?? []
+  }
   const domains = (data ?? []).map((r: { domain: string }) => r.domain)
   domainCache = { domains, expiresAt: now + 60_000 }
   return domains
@@ -95,7 +99,12 @@ function buildProviders() {
         const valid = await bcrypt.compare(credentials.password, user.password_hash)
         if (!valid) return null
 
-        return { id: user.id, email: user.email, name: user.name ?? user.email }
+        await supabase
+          .from('users')
+          .update({ auth_provider: 'credentials' })
+          .eq('id', user.id)
+
+        return { id: user.id, email: user.email, name: user.name ?? user.email, role: user.role }
       },
     })
   )
@@ -115,7 +124,7 @@ function buildProviders() {
           await supabase
             .from('users')
             .upsert(
-              { email: credentials.email, role: 'user' },
+              { email: credentials.email, role: 'user', auth_provider: 'test' },
               { onConflict: 'email', ignoreDuplicates: true }
             )
           const { data } = await supabase
@@ -154,25 +163,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.provider = account.provider
       }
       if (account && user) {
-        try {
-          const supabase = createAdminClient()
-          const { data } = await supabase
-            .from('users')
-            .upsert(
-              {
-                email: user.email,
-                name: user.name,
-                ...(user.image ? { avatar: user.image } : {}),
-              },
-              { onConflict: 'email', ignoreDuplicates: false }
-            )
-            .select('id, role')
-            .single()
-          token.userId = (data?.id as string) ?? ''
-          token.role = (data?.role as string) ?? 'user'
-        } catch (err) {
-          console.error('[auth] Failed to provision user in Supabase:', err)
-          throw err
+        if (account.provider === 'credentials') {
+          token.userId = user.id as string
+          token.role = (user as { role?: string }).role ?? 'user'
+        } else {
+          try {
+            const supabase = createAdminClient()
+            const { data } = await supabase
+              .from('users')
+              .upsert(
+                {
+                  email: user.email,
+                  name: user.name,
+                  auth_provider: account.provider,
+                  ...(user.image ? { avatar: user.image } : {}),
+                },
+                { onConflict: 'email', ignoreDuplicates: false }
+              )
+              .select('id, role')
+              .single()
+            token.userId = (data?.id as string) ?? ''
+            token.role = (data?.role as string) ?? 'user'
+          } catch (err) {
+            console.error('[auth] Failed to provision user in Supabase:', err)
+            throw err
+          }
         }
       }
       return token

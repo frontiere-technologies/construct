@@ -401,7 +401,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                 : 'text-sidebar-text hover:text-sidebar-active-text'
             )}
           >
-            <CircleUser size={26} className={clsx('flex-shrink-0 transition-colors', userPanelOpen ? 'text-primary' : 'opacity-60')} />
+            {authUser?.image
+              ? <Image src={authUser.image} alt="" width={26} height={26} className="rounded-full flex-shrink-0" />
+              : <CircleUser size={26} className={clsx('flex-shrink-0 transition-colors', userPanelOpen ? 'text-primary' : 'opacity-60')} />
+            }
             {!col1Collapsed && (
               <div className="flex flex-col min-w-0 flex-1 text-left">
                 <TruncatedSpan text={authUser?.email?.split('@')[0] ?? ''} className="text-xs font-medium truncate" onShowTooltip={showTooltip} onHideTooltip={hideTooltip} />
@@ -474,17 +477,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                     </button>
                   </div>
                 )}
-
-                {/* Logout */}
-                <button
-                  onClick={signOut}
-                  onMouseEnter={col2Collapsed ? e => showTooltip(e, 'Logout') : undefined}
-                  onMouseLeave={col2Collapsed ? hideTooltip : undefined}
-                  className={userPanelItemCls}
-                >
-                  <LogOut size={16} />
-                  {!col2Collapsed && <span>Logout</span>}
-                </button>
               </>
             ) : (
               l1Children.map(item => (
@@ -496,6 +488,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               ))
             )}
           </div>
+
+          {/* Logout — pinned to bottom, aligned with the user row in col1 */}
+          {userPanelOpen && (
+            <div className="p-2 border-t border-sidebar-text/10">
+              <button
+                onClick={signOut}
+                onMouseEnter={col2Collapsed ? e => showTooltip(e, 'Logout') : undefined}
+                onMouseLeave={col2Collapsed ? hideTooltip : undefined}
+                className={userPanelItemCls}
+              >
+                <LogOut size={16} />
+                {!col2Collapsed && <span>Logout</span>}
+              </button>
+            </div>
+          )}
         </aside>
       )}
 
