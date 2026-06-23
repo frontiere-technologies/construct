@@ -47,6 +47,9 @@ function LoginForm() {
   const [forgotMode, setForgotMode] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotStatus, setForgotStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [registerMode, setRegisterMode] = useState(false)
+  const [registerEmail, setRegisterEmail] = useState('')
+  const [registerStatus, setRegisterStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 
   const handleCredentialsLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -76,6 +79,21 @@ function LoginForm() {
     }
   }
 
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setRegisterStatus('sending')
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: registerEmail }),
+      })
+      setRegisterStatus(res.ok ? 'sent' : 'error')
+    } catch {
+      setRegisterStatus('error')
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="w-full max-w-md rounded-xl shadow-lg overflow-hidden">
@@ -84,7 +102,7 @@ function LoginForm() {
         <div className="px-8 py-5 text-center" style={{ backgroundColor: '#0f2336' }}>
           <img src="/logo.svg" alt="Construct" className="mx-auto" style={{ width: 140, height: 140 }} />
           <p className="mt-6 text-xs" style={{ color: '#7fa8c4' }}>
-            Construct the Frontiere technology foundations
+            Construct: the Frontiere technology foundations
           </p>
         </div>
 
@@ -141,9 +159,8 @@ function LoginForm() {
             <div className="text-right -mt-2">
               <button
                 type="button"
-                onClick={() => { setForgotMode(true); setForgotEmail(email); setForgotStatus('idle') }}
-                className="text-xs hover:underline"
-                style={{ color: '#0f5a8a' }}
+                onClick={() => { setForgotMode(true); setForgotEmail(email); setForgotStatus('idle'); setRegisterMode(false) }}
+                className="text-xs hover:underline text-brand-blue"
               >
                 Password dimenticata?
               </button>
@@ -156,20 +173,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50"
-              style={{ borderColor: '#0f5a8a', color: '#0f5a8a' }}
-              onMouseEnter={e => {
-                if (!loading) {
-                  const btn = e.currentTarget
-                  btn.style.backgroundColor = '#0f5a8a'
-                  btn.style.color = 'white'
-                }
-              }}
-              onMouseLeave={e => {
-                const btn = e.currentTarget
-                btn.style.backgroundColor = ''
-                btn.style.color = '#0f5a8a'
-              }}
+              className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
             >
               {loading ? 'Accesso in corso…' : 'Accedi'}
             </button>
@@ -203,7 +207,14 @@ function LoginForm() {
             Non hai un account?{' '}
             <a
               href="#"
-              onClick={e => e.preventDefault()}
+              onClick={e => {
+                e.preventDefault()
+                setRegisterMode(true)
+                setForgotMode(false)
+                setForgotStatus('idle')
+                setRegisterEmail('')
+                setRegisterStatus('idle')
+              }}
               className="font-semibold"
               style={{ color: '#0f5a8a' }}
             >
@@ -243,6 +254,48 @@ function LoginForm() {
                     <button
                       type="button"
                       onClick={() => setForgotMode(false)}
+                      className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700 rounded-lg border border-gray-200 hover:bg-gray-100 transition"
+                    >
+                      Annulla
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {registerMode && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              {registerStatus === 'sent' ? (
+                <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  Se l&apos;email è autorizzata riceverai un link per completare la registrazione.
+                </p>
+              ) : (
+                <form onSubmit={handleRegister} className="flex flex-col gap-2">
+                  <p className="text-xs text-gray-500 text-left">Inserisci la tua email per ricevere un link di registrazione.</p>
+                  <input
+                    type="email"
+                    placeholder="nome@esempio.it"
+                    value={registerEmail}
+                    onChange={e => setRegisterEmail(e.target.value)}
+                    required
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
+                  />
+                  {registerStatus === 'error' && (
+                    <p className="text-xs text-red-600">Errore. Riprova tra qualche istante.</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={registerStatus === 'sending'}
+                      className="flex-1 rounded-lg py-2 text-xs font-semibold text-white disabled:opacity-50 transition"
+                      style={{ backgroundColor: '#0f5a8a' }}
+                    >
+                      {registerStatus === 'sending' ? 'Invio…' : 'Registrati'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRegisterMode(false)}
                       className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700 rounded-lg border border-gray-200 hover:bg-gray-100 transition"
                     >
                       Annulla
