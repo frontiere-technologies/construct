@@ -1,17 +1,203 @@
-import { cache } from 'react'
-import { createClient } from '@/lib/supabase-server'
+import NextAuth, { CredentialsSignin } from 'next-auth'
+import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id'
+import Google from 'next-auth/providers/google'
+import Keycloak from 'next-auth/providers/keycloak'
+import Credentials from 'next-auth/providers/credentials'
+import bcrypt from 'bcryptjs'
+import { createAdminClient } from '@/lib/supabase-server'
 
-// cache() deduplicates calls within the same request render tree (layout + page).
-// getSession() reads the JWT from the cookie without a network round-trip to the
-// Supabase Auth server — the middleware already handles session refresh.
-export const getUserRole = cache(async (): Promise<string> => {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) return 'user'
-  const { data } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', session.user.id)
-    .single()
-  return data?.role ?? 'user'
+// In-memory cache for allowed domains (60s TTL)
+let domainCache: { domains: string[]; expiresAt: number } | null = null
+
+async function getAllowedDomains(): Promise<string[]> {
+  const now = Date.now()
+  if (domainCache && domainCache.expiresAt > now) return domainCache.domains
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('allowed_domains')
+    .select('domain')
+    .eq('active', true)
+  if (error) {
+    console.error('[auth] Failed to retrieve allowed domains:', error)
+    return domainCache?.domains ?? []
+  }
+  const domains = (data ?? []).map((r: { domain: string }) => r.domain)
+  domainCache = { domains, expiresAt: now + 60_000 }
+  return domains
+}
+
+function buildProviders() {
+  const providers = []
+
+  if (process.env.AUTH_MICROSOFT_ENTRA_ID_ID) {
+    providers.push(
+      MicrosoftEntraID({
+        clientId: process.env.AUTH_MICROSOFT_ENTRA_ID_ID,
+        clientSecret: process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET!,
+        issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID
+          ? `https://login.microsoftonline.com/${process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID}/v2.0/`
+          : undefined,
+      })
+    )
+  }
+
+  if (process.env.AUTH_GOOGLE_ID) {
+    providers.push(
+      Google({
+        clientId: process.env.AUTH_GOOGLE_ID,
+        clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+      })
+    )
+  }
+
+  if (process.env.AUTH_KEYCLOAK_ID) {
+    providers.push(
+      Keycloak({
+        clientId: process.env.AUTH_KEYCLOAK_ID,
+        clientSecret: process.env.AUTH_KEYCLOAK_SECRET!,
+        issuer: process.env.AUTH_KEYCLOAK_ISSUER!,
+      })
+    )
+  }
+
+  // Production credentials provider — email + bcrypt password
+  providers.push(
+    Credentials({
+      id: 'credentials',
+      name: 'Email e password',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (
+          !credentials?.email ||
+          !credentials?.password ||
+          typeof credentials.email !== 'string' ||
+          typeof credentials.password !== 'string'
+        ) return null
+
+        const supabase = createAdminClient()
+        const { data: user } = await supabase
+          .from('users')
+          .select('id, email, name, role, password_hash')
+          .eq('email', (credentials.email as string).toLowerCase().trim())
+          .single()
+
+        if (!user) {
+          // Prevent timing-based user enumeration
+          await bcrypt.compare('dummy', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW')
+          return null
+        }
+
+        if (!user.password_hash) {
+          const err = new CredentialsSignin('Password not set')
+          err.code = 'PasswordNotSet'
+          throw err
+        }
+
+        const valid = await bcrypt.compare(credentials.password, user.password_hash)
+        if (!valid) return null
+
+        await supabase
+          .from('users')
+          .update({ auth_provider: 'credentials' })
+          .eq('id', user.id)
+
+        return { id: user.id, email: user.email, name: user.name ?? user.email, role: user.role }
+      },
+    })
+  )
+
+  // Test-only credentials provider — gated by env var, never enabled in production
+  if (process.env.AUTH_TEST_CREDENTIALS === 'true') {
+    providers.push(
+      Credentials({
+        id: 'test-credentials',
+        name: 'Test Credentials',
+        credentials: {
+          email: { label: 'Email', type: 'email' },
+        },
+        async authorize(credentials) {
+          if (!credentials?.email || typeof credentials.email !== 'string') return null
+          const supabase = createAdminClient()
+          await supabase
+            .from('users')
+            .upsert(
+              { email: credentials.email, role: 'user', auth_provider: 'test' },
+              { onConflict: 'email', ignoreDuplicates: true }
+            )
+          const { data } = await supabase
+            .from('users')
+            .select('id, email, role, name')
+            .eq('email', credentials.email)
+            .single()
+          if (!data) return null
+          return { id: data.id, email: data.email, name: data.name ?? data.email }
+        },
+      })
+    )
+  }
+
+  return providers
+}
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  providers: buildProviders(),
+  session: { strategy: 'jwt' as const },
+  callbacks: {
+    async signIn({ account, profile }) {
+      // Domain restriction for all OIDC providers
+      const oidcProviders = ['google', 'microsoft-entra-id', 'keycloak']
+      if (account?.provider && oidcProviders.includes(account.provider)) {
+        const email = profile?.email ?? ''
+        const domain = email.split('@')[1] ?? ''
+        const allowed = await getAllowedDomains()
+        if (!allowed.includes(domain)) return false
+      }
+      return true
+    },
+    async jwt({ token, user, account }) {
+      // Always persist provider when account is present (first sign-in and token updates)
+      if (account) {
+        token.provider = account.provider
+      }
+      if (account && user) {
+        if (account.provider === 'credentials') {
+          token.userId = user.id as string
+          token.role = (user as { role?: string }).role ?? 'user'
+        } else {
+          try {
+            const supabase = createAdminClient()
+            const { data } = await supabase
+              .from('users')
+              .upsert(
+                {
+                  email: user.email,
+                  name: user.name,
+                  auth_provider: account.provider,
+                  ...(user.image ? { avatar: user.image } : {}),
+                },
+                { onConflict: 'email', ignoreDuplicates: false }
+              )
+              .select('id, role')
+              .single()
+            token.userId = (data?.id as string) ?? ''
+            token.role = (data?.role as string) ?? 'user'
+          } catch (err) {
+            console.error('[auth] Failed to provision user in Supabase:', err)
+            throw err
+          }
+        }
+      }
+      return token
+    },
+    async session({ session, token }) {
+      session.user.id = token.userId as string
+      session.user.role = token.role as string
+      session.user.provider = token.provider as string
+      return session
+    },
+  },
+  pages: { signIn: '/login' },
 })

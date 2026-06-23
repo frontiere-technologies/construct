@@ -4,18 +4,31 @@ import React, { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { upsertMenuItem, deleteMenuItem, updateMenuItemOrders } from '@/lib/menu-actions'
 import type { MenuItem, MenuPosition, MenuItemType } from '@/types/menu'
-import { Plus, Trash2, Edit2, ArrowUp, ArrowDown, Save } from 'lucide-react'
+import { Trash2, Edit2, ArrowUp, ArrowDown, Save } from 'lucide-react'
 import { IconRenderer } from './IconRenderer'
 import { IconPicker } from './IconPicker'
+import { Card } from '@/components/Card'
 
 interface AdminMenuBuilderProps {
   initialMenuItems: MenuItem[]
 }
 
+const makeNewItem = (order: number): MenuItem => ({
+  id: crypto.randomUUID(),
+  label: '',
+  type: 'link',
+  parentId: null,
+  order,
+  visible: true,
+  active: true,
+  roles: ['admin', 'user'],
+  position: 'main',
+})
+
 export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuItems }) => {
   const router = useRouter()
   const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenuItems)
-  const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
+  const [editingItem, setEditingItem] = useState<MenuItem>(() => makeNewItem(initialMenuItems.length))
   const [saving, setSaving] = useState(false)
   const [opError, setOpError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -23,6 +36,11 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
   const showSuccess = (msg: string) => {
     setSuccessMsg(msg)
     setTimeout(() => setSuccessMsg(null), 3000)
+  }
+
+  const showError = (msg: string) => {
+    setOpError(msg)
+    setTimeout(() => setOpError(null), 4000)
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -34,14 +52,14 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
       ? menuItems.map(i => i.id === editingItem.id ? editingItem : i)
       : [...menuItems, editingItem]
     setMenuItems(updated)
-    setEditingItem(null)
+    setEditingItem(makeNewItem(updated.length))
     try {
       await upsertMenuItem(editingItem)
       router.refresh()
       showSuccess('Item saved.')
     } catch (err) {
       setMenuItems(initialMenuItems)
-      setOpError(err instanceof Error ? err.message : 'Save failed')
+      showError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setSaving(false)
     }
@@ -65,7 +83,7 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
       showSuccess('Item deleted.')
     } catch (err) {
       setMenuItems(initialMenuItems)
-      setOpError(err instanceof Error ? err.message : 'Delete failed')
+      showError(err instanceof Error ? err.message : 'Delete failed')
     }
   }
 
@@ -97,7 +115,7 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
       router.refresh()
     } catch (err) {
       setMenuItems(initialMenuItems)
-      setOpError(err instanceof Error ? err.message : 'Reorder failed')
+      showError(err instanceof Error ? err.message : 'Reorder failed')
     }
   }
 
@@ -118,21 +136,6 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menuItems, editingItem?.id])
 
-  const createNewItem = () => {
-    const newItem: MenuItem = {
-      id: crypto.randomUUID(),
-      label: 'New Item',
-      type: 'link',
-      parentId: null,
-      order: menuItems.length,
-      visible: true,
-      active: true,
-      roles: ['admin', 'user'],
-      position: 'main',
-    }
-    setEditingItem(newItem)
-  }
-
   const renderTree = (parentId: string | null = null, level: number = 0, position?: MenuPosition) => {
     let items = menuItems.filter(i => i.parentId === parentId)
     if (position) items = items.filter(i => i.position === position)
@@ -141,15 +144,15 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
     return items.map((item, idx) => (
       <div key={item.id} className="mb-2">
         <div data-testid="menu-item-row" className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm" style={{ marginLeft: `${level * 24}px` }}>
-          <div className="flex items-center space-x-3">
-            <IconRenderer name={item.icon} className="text-gray-500" />
-            <div>
-              <span className="font-medium">{item.label}</span>
-              <span className="ml-2 text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">{item.type}</span>
-              {!item.visible && <span className="ml-2 text-xs text-red-500 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded">Hidden</span>}
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <IconRenderer name={item.icon} className="text-gray-500 flex-shrink-0" />
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-medium truncate">{item.label}</span>
+              <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded flex-shrink-0">{item.type}</span>
+              {!item.visible && <span className="text-xs text-red-500 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded flex-shrink-0">Hidden</span>}
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 flex-shrink-0 ml-3">
             {!item.system && <>
               {idx > 0 && <button data-testid="move-up-btn" onClick={() => moveItem(item.id, 'up')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><ArrowUp size={16} /></button>}
               {idx < items.length - 1 && <button data-testid="move-down-btn" onClick={() => moveItem(item.id, 'down')} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><ArrowDown size={16} /></button>}
@@ -165,18 +168,9 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-2xl font-bold">Menu Builder</h1>
-          <p className="text-gray-500 dark:text-gray-400">Manage your application navigation structure</p>
-        </div>
-        <button
-          onClick={createNewItem}
-          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={20} />
-          <span>Add Item</span>
-        </button>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold">Menu Builder</h1>
+        <p className="text-gray-500 dark:text-gray-400">Manage your application navigation structure</p>
       </div>
 
       {opError && (
@@ -184,31 +178,30 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
           {opError}
         </div>
       )}
-      {successMsg && !editingItem && (
+      {successMsg && (
         <div className="mb-4 px-4 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400 text-sm">
           {successMsg}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
+      <div className="flex flex-col gap-8 items-stretch xl:flex-row xl:items-start">
+        <div className="flex-1 min-w-0 space-y-8">
           <section>
-            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800">Top Section</h2>
+            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800 whitespace-nowrap">Top Section</h2>
             {renderTree(null, 0, 'top')}
           </section>
           <section>
-            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800">Main Navigation</h2>
+            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800 whitespace-nowrap">Main Navigation</h2>
             {renderTree(null, 0, 'main')}
           </section>
           <section>
-            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800">Bottom Section</h2>
+            <h2 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-800 whitespace-nowrap">Bottom Section</h2>
             {renderTree(null, 0, 'bottom')}
           </section>
         </div>
 
-        <div>
-          {editingItem ? (
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm sticky top-8">
+        <div className="w-full xl:w-72 xl:flex-shrink-0">
+          <Card className="sticky top-8">
               <h2 className="text-lg font-semibold mb-4 flex items-center">
                 <Edit2 size={18} className="mr-2" />
                 {menuItems.find(i => i.id === editingItem.id) ? 'Edit Item' : 'New Item'}
@@ -252,17 +245,15 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                   </div>
                 </div>
 
-                {editingItem.type === 'link' && (
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Route / URL</label>
-                    <input
-                      type="text"
-                      value={editingItem.route || ''}
-                      onChange={e => setEditingItem({ ...editingItem, route: e.target.value })}
-                      className="w-full p-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium mb-1">Route / URL</label>
+                  <input
+                    type="text"
+                    value={editingItem.route || ''}
+                    onChange={e => setEditingItem({ ...editingItem, route: e.target.value })}
+                    className="w-full p-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700"
+                  />
+                </div>
 
                 <div>
                   <label className="block text-sm font-medium mb-1">Icon (Lucide)</label>
@@ -315,19 +306,17 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                   </div>
                 </div>
 
-                {editingItem.type === 'link' && (
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Open In</label>
-                    <select
-                      value={editingItem.target ?? '_self'}
-                      onChange={e => setEditingItem({ ...editingItem, target: e.target.value as '_blank' | '_self' })}
-                      className="w-full p-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700"
-                    >
-                      <option value="_self">Same tab</option>
-                      <option value="_blank">New tab</option>
-                    </select>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium mb-1">Open In</label>
+                  <select
+                    value={editingItem.target ?? '_self'}
+                    onChange={e => setEditingItem({ ...editingItem, target: e.target.value as '_blank' | '_self' })}
+                    className="w-full p-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700"
+                  >
+                    <option value="_self">Same tab</option>
+                    <option value="_blank">New tab</option>
+                  </select>
+                </div>
 
                 <div className="flex flex-wrap gap-4 py-2 border-y dark:border-gray-700">
                   <label className="flex items-center space-x-2 cursor-pointer">
@@ -383,17 +372,12 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                     <Save size={18} />
                     <span>{saving ? 'Saving…' : 'Save Changes'}</span>
                   </button>
-                  <button type="button" onClick={() => setEditingItem(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-                    Cancel
+                  <button type="button" onClick={() => setEditingItem(makeNewItem(menuItems.length))} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+                    Clear
                   </button>
                 </div>
               </form>
-            </div>
-          ) : (
-            <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 text-center text-gray-500">
-              Select an item to edit or create a new one.
-            </div>
-          )}
+            </Card>
         </div>
       </div>
     </div>

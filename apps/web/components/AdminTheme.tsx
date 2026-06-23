@@ -5,6 +5,7 @@ import { useUI } from '@/context/UIContext'
 import { defaultThemeConfig } from '@/lib/menu-utils'
 import { saveThemeConfig } from '@/lib/theme-actions'
 import type { ThemeConfig } from '@/types/menu'
+import { Card } from '@/components/Card'
 
 interface ColorPickerProps {
   label: string
@@ -46,7 +47,7 @@ export const AdminTheme: React.FC = () => {
         <p className="text-gray-500 dark:text-gray-400">Customize your application appearance</p>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+      <Card>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
           <div className="space-y-4">
             <h3 className="font-medium text-gray-900 dark:text-white border-b pb-2 dark:border-gray-700">Global</h3>
@@ -108,7 +109,7 @@ export const AdminTheme: React.FC = () => {
             </button>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   )
 }

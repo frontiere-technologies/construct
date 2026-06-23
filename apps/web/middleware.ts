@@ -1,62 +1,23 @@
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { auth } from '@/lib/auth'
+import { NextResponse } from 'next/server'
 
-export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
+export default auth((req) => {
+  const { pathname } = req.nextUrl
+  const session = req.auth
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => request.cookies.getAll(),
-        setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const pathname = request.nextUrl.pathname
-  const isLoginPage = pathname === '/login'
-  const isAuthCallback = pathname.startsWith('/auth/')
-
-  if (!user && !isLoginPage && !isAuthCallback) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+  if (!session && pathname !== '/login' && !pathname.startsWith('/set-password')) {
+    return NextResponse.redirect(new URL('/login', req.url))
   }
-
-  if (user && isLoginPage) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/'
-    return NextResponse.redirect(url)
+  if (session && pathname === '/login') {
+    return NextResponse.redirect(new URL('/', req.url))
   }
-
-  if (user && pathname.startsWith('/admin')) {
-    const { data: profile } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-    if (profile?.role !== 'admin') {
-      const url = request.nextUrl.clone()
-      url.pathname = '/'
-      return NextResponse.redirect(url)
-    }
+  if (session && pathname.startsWith('/admin') && session.user.role !== 'admin') {
+    return NextResponse.redirect(new URL('/', req.url))
   }
-
-  return supabaseResponse
-}
+})
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

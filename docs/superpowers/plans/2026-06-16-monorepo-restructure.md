@@ -1,6 +1,6 @@
 # Monorepo Restructure Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
 
 **Goal:** Restructure the repository from a flat single-app layout into a monorepo with `apps/`, `services/`, `packages/`, `deploy/`, and `scripts/` top-level directories, moving the existing React/Vite app to `apps/web/`.
 
@@ -25,7 +25,7 @@
 - Create: `scripts/.gitkeep`
 - Create: `.github/workflows/.gitkeep`
 
-- [ ] **Step 1: Create all new directories with .gitkeep files**
+- [✅] **Step 1: Create all new directories with .gitkeep files**
 
 ```bash
 mkdir -p apps/web
@@ -40,7 +40,7 @@ mkdir -p scripts && touch scripts/.gitkeep
 mkdir -p .github/workflows && touch .github/workflows/.gitkeep
 ```
 
-- [ ] **Step 2: Verify directories exist**
+- [✅] **Step 2: Verify directories exist**
 
 ```bash
 find . -name ".gitkeep" | sort
@@ -59,7 +59,7 @@ Expected output includes:
 ./.github/workflows/.gitkeep
 ```
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add apps/ services/ packages/ deploy/ scripts/ .github/
@@ -79,7 +79,7 @@ git commit -m "chore: create monorepo directory skeleton"
 - Move: `package-lock.json` → `apps/web/package-lock.json`
 - Move: `metadata.json` → `apps/web/metadata.json`
 
-- [ ] **Step 1: Move source and config files**
+- [✅] **Step 1: Move source and config files**
 
 ```bash
 git mv src apps/web/src
@@ -91,14 +91,14 @@ git mv package-lock.json apps/web/package-lock.json
 git mv metadata.json apps/web/metadata.json
 ```
 
-- [ ] **Step 2: Move env files**
+- [✅] **Step 2: Move env files**
 
 ```bash
 git mv .env apps/web/.env
 git mv .env.template apps/web/.env.template
 ```
 
-- [ ] **Step 3: Verify the files are in the right place**
+- [✅] **Step 3: Verify the files are in the right place**
 
 ```bash
 ls apps/web/
@@ -109,7 +109,7 @@ Expected:
 index.html  metadata.json  package-lock.json  package.json  src/  tsconfig.json  vite.config.ts  .env  .env.template
 ```
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add -A
@@ -125,27 +125,27 @@ git commit -m "chore: move app source files to apps/web/"
 - Move: `python_tests/` → `scripts/python/`
 - Move: `todo/` → `docs/todo/`
 
-- [ ] **Step 1: Move Supabase schema**
+- [✅] **Step 1: Move Supabase schema**
 
 ```bash
 git mv supabase_schema.sql deploy/supabase/schema.sql
 rm deploy/supabase/.gitkeep
 ```
 
-- [ ] **Step 2: Move python tests**
+- [✅] **Step 2: Move python tests**
 
 ```bash
 git mv python_tests scripts/python
 rm scripts/.gitkeep
 ```
 
-- [ ] **Step 3: Move todo folder**
+- [✅] **Step 3: Move todo folder**
 
 ```bash
 git mv todo docs/todo
 ```
 
-- [ ] **Step 4: Verify**
+- [✅] **Step 4: Verify**
 
 ```bash
 ls deploy/supabase/
@@ -158,7 +158,7 @@ Expected:
 - `scripts/python/` contains `chatgpt_chat.py`
 - `docs/todo/` contains `universal-browser-error-capture-system.md`
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -172,7 +172,7 @@ git commit -m "chore: move infra and docs files to their new locations"
 **Files:**
 - Create: `package.json` (root — new file, replaces the one moved to `apps/web/`)
 
-- [ ] **Step 1: Create root package.json**
+- [✅] **Step 1: Create root package.json**
 
 Create the file `/package.json` at the repo root with this exact content:
 
@@ -190,7 +190,7 @@ Create the file `/package.json` at the repo root with this exact content:
 }
 ```
 
-- [ ] **Step 2: Verify it parses correctly**
+- [✅] **Step 2: Verify it parses correctly**
 
 ```bash
 node -e "const p = require('./package.json'); console.log(p.name, Object.keys(p.scripts).join(', '))"
@@ -201,7 +201,7 @@ Expected:
 construct web:dev, web:build, web:lint, web:clean, install:all
 ```
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add package.json
@@ -215,7 +215,7 @@ git commit -m "chore: add root package.json with convenience scripts"
 **Files:**
 - Modify: `.gitignore`
 
-- [ ] **Step 1: Replace the existing `.gitignore` content**
+- [✅] **Step 1: Replace the existing `.gitignore` content**
 
 The current `.gitignore` has `node_modules/` which now needs to match nested paths too. Replace the entire file with:
 
@@ -275,7 +275,7 @@ coverage/
 .mcp.json
 ```
 
-- [ ] **Step 2: Verify git still tracks the right files**
+- [✅] **Step 2: Verify git still tracks the right files**
 
 ```bash
 git status
@@ -283,7 +283,7 @@ git status
 
 Confirm that `apps/web/.env` is not shown as tracked (it should be ignored). If it appears, the gitignore pattern worked.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add .gitignore
@@ -297,7 +297,7 @@ git commit -m "chore: update .gitignore for monorepo nested paths"
 **Files:**
 - Modify: `CLAUDE.md`
 
-- [ ] **Step 1: Make these targeted changes to CLAUDE.md**
+- [✅] **Step 1: Make these targeted changes to CLAUDE.md**
 
 **a) Add a Repository Structure section** immediately after the first `# CLAUDE.md` heading:
 
@@ -359,7 +359,7 @@ git commit -m "chore: update .gitignore for monorepo nested paths"
     3. Add Kubernetes manifests in `deploy/k8s/base/<name>/`
     4. Add convenience scripts to the root `package.json`
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add CLAUDE.md
@@ -372,13 +372,13 @@ git commit -m "chore: update CLAUDE.md for monorepo structure"
 
 This task has no code changes — it verifies the migration didn't break anything.
 
-- [ ] **Step 1: Remove old node_modules from root (if still present)**
+- [✅] **Step 1: Remove old node_modules from root (if still present)**
 
 ```bash
 rm -rf node_modules
 ```
 
-- [ ] **Step 2: Install dependencies in apps/web/**
+- [✅] **Step 2: Install dependencies in apps/web/**
 
 ```bash
 cd apps/web && npm install
@@ -386,7 +386,7 @@ cd apps/web && npm install
 
 Expected: installs without errors, produces `apps/web/node_modules/`
 
-- [ ] **Step 3: Run type-check**
+- [✅] **Step 3: Run type-check**
 
 ```bash
 cd apps/web && npm run lint
@@ -394,7 +394,7 @@ cd apps/web && npm run lint
 
 Expected: no TypeScript errors
 
-- [ ] **Step 4: Run build**
+- [✅] **Step 4: Run build**
 
 ```bash
 cd apps/web && npm run build
@@ -402,7 +402,7 @@ cd apps/web && npm run build
 
 Expected: `apps/web/dist/` created, build completes without errors
 
-- [ ] **Step 5: Verify dev server starts**
+- [✅] **Step 5: Verify dev server starts**
 
 ```bash
 cd apps/web && npm run dev &
@@ -413,7 +413,7 @@ kill %1
 
 Expected: `200`
 
-- [ ] **Step 6: Commit clean state**
+- [✅] **Step 6: Commit clean state**
 
 ```bash
 cd ..
@@ -433,13 +433,13 @@ git commit -m "chore: verify app works from apps/web/ after monorepo restructure
 
 After all moves, some `.gitkeep` files may remain in directories that now have real content.
 
-- [ ] **Step 1: Check which .gitkeep files remain**
+- [✅] **Step 1: Check which .gitkeep files remain**
 
 ```bash
 find . -name ".gitkeep" -not -path "*/.git/*" | sort
 ```
 
-- [ ] **Step 2: Remove .gitkeep from directories that now have real content**
+- [✅] **Step 2: Remove .gitkeep from directories that now have real content**
 
 For each `.gitkeep` in a directory that contains other files:
 
@@ -455,14 +455,14 @@ find . -name ".gitkeep" -not -path "*/.git/*" | while read f; do
 done
 ```
 
-- [ ] **Step 3: Keep .gitkeep only in truly empty directories**
+- [✅] **Step 3: Keep .gitkeep only in truly empty directories**
 
 Directories that should stay with `.gitkeep` (empty, reserved for future use):
 - `services/`
 - `packages/`
 - `.github/workflows/`
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add -A

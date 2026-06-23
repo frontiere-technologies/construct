@@ -1,24 +1,15 @@
 -- ============================================================
 -- construct — Supabase Schema
--- Aggiornato per riflettere lo stato reale del database
+-- Auth: Auth.js v5 (NextAuth) handles authentication.
+--       Supabase is used as PostgreSQL database only.
+--       RLS is enabled on all tables — all client access is
+--       blocked by default. Server-side code uses createAdminClient()
+--       (service_role key) which bypasses RLS entirely.
 -- ============================================================
-
--- ============================================================
--- Helper: admin role check (used in RLS policies)
--- ============================================================
-create or replace function is_admin()
-returns boolean
-language sql
-security definer
-stable
-as $$
-  select exists (
-    select 1 from users where id = auth.uid() and role = 'admin'
-  )
-$$;
 
 -- ============================================================
 -- Tabella: menu_items
+-- RLS enabled — all access via createAdminClient() (service_role)
 -- ============================================================
 create table if not exists menu_items (
   id               text      primary key,
@@ -40,35 +31,19 @@ create table if not exists menu_items (
   updated_at       timestamptz        default now()
 );
 
--- ============================================================
--- Row Level Security: menu_items
--- ============================================================
 alter table menu_items enable row level security;
-
-create policy "menu_items_select_authenticated"
-  on menu_items for select
-  using (auth.uid() is not null);
-
-create policy "menu_items_insert_admin"
-  on menu_items for insert
-  with check (is_admin());
-
-create policy "menu_items_update_admin"
-  on menu_items for update
-  using (is_admin());
-
-create policy "menu_items_delete_admin"
-  on menu_items for delete
-  using (is_admin());
 
 -- ============================================================
 -- Tabella: users
--- Profili utente collegati a auth.users (Supabase Auth)
+-- Profili utente provisionati da Auth.js al primo login OIDC.
+-- PK: UUID generato dall'app (non collegato a auth.users).
+-- Lookup per upsert: email (unique constraint).
+-- RLS enabled — all access via createAdminClient() (service_role)
 -- ============================================================
 create table if not exists users (
-  id           uuid        primary key references auth.users(id),
+  id           uuid        primary key default gen_random_uuid(),
   name         text,
-  email        text,
+  email        text        constraint users_email_unique unique,
   avatar       text,
   role         text        not null default 'user',
   first_name   text,
@@ -80,45 +55,49 @@ create table if not exists users (
   updated_at   timestamptz          default now()
 );
 
+alter table users enable row level security;
+
 -- Migration: add theme_config for existing deployments
 alter table users add column if not exists theme_config jsonb;
 
--- ============================================================
--- Row Level Security: users
--- ============================================================
-alter table users enable row level security;
+-- Migration: add password_hash for email+password login
+alter table users add column if not exists password_hash text;
 
-create policy "users: read own"
-  on users for select
-  using (auth.uid() = id);
-
-create policy "users: update own"
-  on users for update
-  using (auth.uid() = id);
-
-create policy "users: insert own"
-  on users for insert
-  with check (auth.uid() = id);
+-- Migration: track how the user authenticates (google, microsoft-entra-id, keycloak, credentials, test)
+alter table users add column if not exists auth_provider text;
 
 -- ============================================================
--- Trigger: create users row on new auth signup (MED-1)
+-- Tabella: password_set_tokens
+-- One-time tokens for the "set password" invite flow.
 -- ============================================================
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer set search_path = public
-as $$
-begin
-  insert into public.users (id, email, role)
-  values (new.id, new.email, 'user')
-  on conflict (id) do nothing;
-  return new;
-end;
-$$;
+create table if not exists password_set_tokens (
+  id          uuid        primary key default gen_random_uuid(),
+  user_id     uuid        not null references users(id) on delete cascade,
+  token       text        not null unique,
+  expires_at  timestamptz not null,
+  used_at     timestamptz,
+  created_at  timestamptz default now()
+);
 
-create or replace trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
+alter table password_set_tokens enable row level security;
+
+-- ============================================================
+-- Tabella: allowed_domains
+-- Domains permitted for Google OAuth sign-in.
+-- ============================================================
+create table if not exists allowed_domains (
+  id          uuid        primary key default gen_random_uuid(),
+  domain      text        not null unique,
+  active      boolean     not null default true,
+  created_at  timestamptz default now()
+);
+
+alter table allowed_domains enable row level security;
+
+-- Seed: frontiere.io as the first allowed domain
+insert into allowed_domains (domain, active)
+values ('frontiere.io', true)
+on conflict (domain) do nothing;
 
 -- ============================================================
 -- Trigger: auto-update updated_at on row modification
@@ -142,8 +121,8 @@ create or replace trigger users_updated_at
   for each row execute function set_updated_at();
 
 -- ============================================================
--- RPC: atomic order swap for menu items (HIGH-1)
--- Runs as SECURITY INVOKER so RLS (menu_items_update_admin) applies.
+-- RPC: atomic order swap for menu items
+-- Called server-side via createAdminClient() (service role).
 -- ============================================================
 create or replace function public.update_menu_orders(updates jsonb)
 returns void
@@ -160,8 +139,6 @@ begin
   end loop;
 end;
 $$;
-
-grant execute on function public.update_menu_orders(jsonb) to authenticated;
 
 -- ============================================================
 -- Seed: default menu items (HIGH-3 — do not seed at runtime)

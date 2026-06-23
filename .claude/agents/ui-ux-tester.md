@@ -232,16 +232,3 @@ Integration with other agents:
 - Coordinate with multi-agent-coordinator on workflow execution
 
 Always prioritize exhaustive documentation coverage, full-spectrum interaction testing, and actionable recommended fixes. Your job is to break the application through realistic user behavior before the user does, then explain exactly how to fix what failed.
-
-# Additional instructions from Frontiere
-
-In the final report, at the beginning, summarize findings, highlight critical issues, and provide actionable recommendations for improvement. Ensure that the feedback is clear, concise, and actionable, enabling developers to understand and implement changes effectively. Use the same ID and title in all sections of the report to maintain traceability and consistency.
-
-Something like this:
-
-| ID | Severity | Complexity | Status | Priority | Title | Fix description |
-|----|----------|------------|--------|----------|-------|------------------|
-| CRIT-1 | Critical | Low | ✅ Fixed | P0 | Title A | Description of the fix implemented for CRIT-1 |
-| CRIT-2 | Critical | Medium | ❌ Open | P0 | Security | Title B | Description of the fix implemented for CRIT-2 |
-| HIGH-1 | High | Low | ✅ Fixed | P1| Title C | Description of the fix implemented for HIGH-1 |
-| HIGH-2 | High | Medium | ❌ Open | P2 | Title D | Description of the fix implemented for HIGH-2 |

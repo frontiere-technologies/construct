@@ -1,14 +1,10 @@
 # CLAUDE.md
 
+Read also the ./README.md file.
+
 ## Commands
 
 ```bash
-# From repo root
-npm run web:dev      # Start web dev server on port 3000
-npm run web:build    # Production build
-npm run web:lint     # Lint
-npm run install:all  # Install all dependencies
-
 # From apps/web/
 npm run dev
 npm run build
@@ -17,36 +13,23 @@ npm run clean        # Remove .next/
 
 # E2E tests (Python — use uv, never python/python3 directly)
 uv run pytest                              # tutti i test
-uv run pytest tests/e2e/test_sidebar.py   # singolo gruppo
-```
-
-## Environment Setup
-
-Create `apps/web/.env.local`:
-```
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+uv run pytest tests/e2e/test_sidebar.py    # singolo gruppo
 ```
 
 ## Stack
 
-React 19 + TypeScript + Next.js 15 (App Router) + Tailwind CSS v4 + Supabase (@supabase/ssr) + Lucide React
+apps/web/ - React 19 + TypeScript + Next.js 15 (App Router) + Tailwind CSS v4 + NextAuth v5 + Supabase (@supabase/supabase-js) + Lucide React
 
-## Key Architectural Decisions
+## Tasks as checkboxes
 
-**Auth:** `middleware.ts` handles route protection via `@supabase/ssr` cookie sessions. There is no `ProtectedRoute` component — do not add one.
+When generating any markdown file that contains actions, tasks, or items to address (like reports, plans, review files, etc.), always include unchecked checkboxes (`- [ ]`) for each actionable item. If not already included in the final report, at the beginning, summarize findings, highlight critical issues, and provide actionable recommendations for improvement. Ensure that the summary is clear, concise, and actionable, enabling developers to understand and implement changes effectively. Use the same ID and title in all sections of the report to maintain traceability and consistency. Something like this:
 
-**Menu data flow:** `app/(protected)/layout.tsx` (Server Component) fetches `menu_items` from Supabase via `getMenuItems()` in `lib/menu-service.ts` — read-only, no runtime seeding. Default items are seeded once via `deploy/supabase/schema.sql` (`INSERT … ON CONFLICT DO NOTHING`). The write path for menu mutations is `lib/menu-actions.ts` (client-side Supabase).
+- [ ] ID=CRIT-1, Severity=Critical, Complexity=Low, Priority=P0, Title=Title A, Fix description=Description of the fix to be implemented for CRIT-1, updated as tasks are completed.
+- [ ] ID=CRIT-2, Severity=Critical, Complexity=Medium, Priority=P0, Title=Security, Fix description=Description of the fix to be implemented for CRIT-2, updated as tasks are completed.
+- [ ] ID=HIGH-1, Severity=High, Complexity=Low, Priority=P1, Title=Title C, Fix description=Description of the fix to be implemented for HIGH-1, updated as tasks are completed.
+- [ ] ID=HIGH-2, Severity=High, Complexity=Medium, Priority=P2, Title=Title D, Fix description=Description of the fix to be implemented for HIGH-2, updated as tasks are completed.
 
-**Context / SSR:** `UIContext` and `AuthContext` read `localStorage` only inside `useEffect` — never at module level or during render — to avoid SSR hydration mismatches.
+## Mark checkboxes as completed when done
 
-**PostCSS config must be `.mjs`:** `postcss.config.mjs` (not `.ts`) — changing the extension breaks the build.
+When an implementation is performed and the request originated from a markdown file that contains checkboxes (`- [ ]`), update each checkbox to `- [✅]` as soon as the corresponding implementation task is completed — only for tasks actually performed. This applies to any markdown file used as the source of the request (Superpowers plans in `docs/superpowers/plans/`, review files, or any other `.md` file with task lists).
 
-**Supabase schema:** `deploy/supabase/schema.sql` — `menu_items` uses `text` PKs, self-referential `parent_id`, RLS (public read, authenticated write).
-
-## Adding a New Service
-
-1. Create `services/<name>/` with `package.json` (`name: "@construct/<name>"`)
-2. Add `Dockerfile` in `services/<name>/`
-3. Add Kubernetes manifests in `deploy/k8s/base/<name>/`
-4. Add convenience scripts to the root `package.json`

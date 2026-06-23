@@ -1,6 +1,6 @@
 # Next.js Migration Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
 
 **Goal:** Replace the Vite + React Router SPA in `apps/web/` with a Next.js 15 App Router application using `@supabase/ssr` for cookie-based auth, server-side menu fetching, and a clean split between Server and Client Components.
 
@@ -60,7 +60,7 @@
 **Files:**
 - Modify: `apps/web/package.json`
 
-- [ ] **Step 1: Replace the full contents of `apps/web/package.json`**
+- [✅] **Step 1: Replace the full contents of `apps/web/package.json`**
 
 ```json
 {
@@ -98,7 +98,7 @@
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add apps/web/package.json
@@ -113,7 +113,7 @@ git commit -m "chore: update package.json for Next.js migration"
 - Create: `apps/web/next.config.ts`
 - Create: `apps/web/postcss.config.ts`
 
-- [ ] **Step 1: Create `apps/web/next.config.ts`**
+- [✅] **Step 1: Create `apps/web/next.config.ts`**
 
 ```ts
 import type { NextConfig } from 'next'
@@ -127,7 +127,7 @@ const nextConfig: NextConfig = {
 export default nextConfig
 ```
 
-- [ ] **Step 2: Create `apps/web/postcss.config.ts`**
+- [✅] **Step 2: Create `apps/web/postcss.config.ts`**
 
 ```ts
 const config = {
@@ -139,7 +139,7 @@ const config = {
 export default config
 ```
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add apps/web/next.config.ts apps/web/postcss.config.ts
@@ -153,7 +153,7 @@ git commit -m "chore: add Next.js and PostCSS config files"
 **Files:**
 - Modify: `apps/web/tsconfig.json`
 
-- [ ] **Step 1: Replace the full contents of `apps/web/tsconfig.json`**
+- [✅] **Step 1: Replace the full contents of `apps/web/tsconfig.json`**
 
 ```json
 {
@@ -181,7 +181,7 @@ git commit -m "chore: add Next.js and PostCSS config files"
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add apps/web/tsconfig.json
@@ -196,7 +196,7 @@ git commit -m "chore: update tsconfig.json for Next.js App Router"
 - Modify: `apps/web/.env.local`
 - Modify: `apps/web/.env.template`
 
-- [ ] **Step 1: Update `apps/web/.env.local` — rename the VITE_ prefixes**
+- [✅] **Step 1: Update `apps/web/.env.local` — rename the VITE_ prefixes**
 
 Replace:
 ```
@@ -211,7 +211,7 @@ GEMINI_API_KEY=<your-gemini-key>
 ```
 Keep `GEMINI_API_KEY` as-is (no prefix — server-only, injected by next.config.ts).
 
-- [ ] **Step 2: Replace `apps/web/.env.template` with**
+- [✅] **Step 2: Replace `apps/web/.env.template` with**
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=
@@ -219,7 +219,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 GEMINI_API_KEY=
 ```
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add apps/web/.env.template
@@ -236,7 +236,7 @@ Note: `.env.local` is gitignored, so update it manually but don't commit it.
 - Create: `apps/web/lib/supabase-server.ts`
 - Create: `apps/web/lib/supabase-browser.ts`
 
-- [ ] **Step 1: Create `apps/web/lib/supabase-server.ts`**
+- [✅] **Step 1: Create `apps/web/lib/supabase-server.ts`**
 
 ```ts
 import { createServerClient } from '@supabase/ssr'
@@ -266,7 +266,7 @@ export async function createClient() {
 }
 ```
 
-- [ ] **Step 2: Create `apps/web/lib/supabase-browser.ts`**
+- [✅] **Step 2: Create `apps/web/lib/supabase-browser.ts`**
 
 ```ts
 import { createBrowserClient } from '@supabase/ssr'
@@ -279,7 +279,7 @@ export function createClient() {
 }
 ```
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add apps/web/lib/
@@ -295,7 +295,7 @@ git commit -m "feat: add Supabase server and browser clients (@supabase/ssr)"
 
 This file contains the default data, mappers, and constants extracted from the old `MenuContext.tsx`. Used by both server-side layout (for seeding) and client-side admin.
 
-- [ ] **Step 1: Create `apps/web/lib/menu-utils.ts`**
+- [✅] **Step 1: Create `apps/web/lib/menu-utils.ts`**
 
 ```ts
 import type { MenuItem, ThemeConfig, AppSettings } from '@/types/menu'
@@ -362,7 +362,7 @@ export const mapFromDb = (row: Record<string, unknown>): MenuItem => ({
 })
 ```
 
-- [ ] **Step 2: Copy `apps/web/src/types/menu.ts` → `apps/web/types/menu.ts`**
+- [✅] **Step 2: Copy `apps/web/src/types/menu.ts` → `apps/web/types/menu.ts`**
 
 Create `apps/web/types/menu.ts` with this content (identical to current `src/types/menu.ts`):
 
@@ -414,7 +414,7 @@ export interface AppSettings {
 }
 ```
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add apps/web/lib/menu-utils.ts apps/web/types/menu.ts
@@ -428,7 +428,7 @@ git commit -m "feat: add menu utilities and types (extracted from MenuContext)"
 **Files:**
 - Create: `apps/web/lib/menu-actions.ts`
 
-- [ ] **Step 1: Create `apps/web/lib/menu-actions.ts`**
+- [✅] **Step 1: Create `apps/web/lib/menu-actions.ts`**
 
 ```ts
 import { createClient } from '@/lib/supabase-browser'
@@ -455,7 +455,7 @@ export async function saveMenuItems(previousItems: MenuItem[], newItems: MenuIte
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add apps/web/lib/menu-actions.ts
@@ -469,7 +469,7 @@ git commit -m "feat: add saveMenuItems client-side utility"
 **Files:**
 - Create: `apps/web/middleware.ts`
 
-- [ ] **Step 1: Create `apps/web/middleware.ts`**
+- [✅] **Step 1: Create `apps/web/middleware.ts`**
 
 ```ts
 import { createServerClient } from '@supabase/ssr'
@@ -521,7 +521,7 @@ export const config = {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add apps/web/middleware.ts
@@ -535,7 +535,7 @@ git commit -m "feat: add Next.js middleware for route protection (replaces Prote
 **Files:**
 - Create: `apps/web/context/UIContext.tsx`
 
-- [ ] **Step 1: Create `apps/web/context/UIContext.tsx`**
+- [✅] **Step 1: Create `apps/web/context/UIContext.tsx`**
 
 ```tsx
 'use client'
@@ -598,7 +598,7 @@ export function useUI() {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add apps/web/context/UIContext.tsx
@@ -612,7 +612,7 @@ git commit -m "feat: add UIContext (theme + sidebar collapse state)"
 **Files:**
 - Create: `apps/web/context/AuthContext.tsx`
 
-- [ ] **Step 1: Create `apps/web/context/AuthContext.tsx`**
+- [✅] **Step 1: Create `apps/web/context/AuthContext.tsx`**
 
 ```tsx
 'use client'
@@ -667,7 +667,7 @@ export function useAuth() {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add apps/web/context/AuthContext.tsx
@@ -683,7 +683,7 @@ git commit -m "feat: add minimal AuthContext using @supabase/ssr browser client"
 - Create: `apps/web/app/layout.tsx`
 - Create: `apps/web/app/providers.tsx`
 
-- [ ] **Step 1: Create `apps/web/app/globals.css`**
+- [✅] **Step 1: Create `apps/web/app/globals.css`**
 
 ```css
 @import "tailwindcss";
@@ -697,7 +697,7 @@ git commit -m "feat: add minimal AuthContext using @supabase/ssr browser client"
 }
 ```
 
-- [ ] **Step 2: Create `apps/web/app/providers.tsx`**
+- [✅] **Step 2: Create `apps/web/app/providers.tsx`**
 
 ```tsx
 'use client'
@@ -716,7 +716,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 ```
 
-- [ ] **Step 3: Create `apps/web/app/layout.tsx`**
+- [✅] **Step 3: Create `apps/web/app/layout.tsx`**
 
 ```tsx
 import type { Metadata } from 'next'
@@ -741,7 +741,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add apps/web/app/
@@ -755,7 +755,7 @@ git commit -m "feat: add app root layout, providers, and global CSS"
 **Files:**
 - Create: `apps/web/app/(protected)/layout.tsx`
 
-- [ ] **Step 1: Create `apps/web/app/(protected)/layout.tsx`**
+- [✅] **Step 1: Create `apps/web/app/(protected)/layout.tsx`**
 
 ```tsx
 import { createClient } from '@/lib/supabase-server'
@@ -787,7 +787,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add "apps/web/app/(protected)/"
@@ -806,7 +806,7 @@ git commit -m "feat: add protected layout with server-side menu fetch"
 
 These are thin wrappers that import and render the actual components.
 
-- [ ] **Step 1: Create `apps/web/app/login/page.tsx`**
+- [✅] **Step 1: Create `apps/web/app/login/page.tsx`**
 
 ```tsx
 import { Login } from '@/components/Login'
@@ -816,7 +816,7 @@ export default function LoginPage() {
 }
 ```
 
-- [ ] **Step 2: Create `apps/web/app/(protected)/page.tsx`**
+- [✅] **Step 2: Create `apps/web/app/(protected)/page.tsx`**
 
 ```tsx
 import { Home } from '@/components/Home'
@@ -826,7 +826,7 @@ export default function HomePage() {
 }
 ```
 
-- [ ] **Step 3: Create `apps/web/app/(protected)/admin/menu-builder/page.tsx`**
+- [✅] **Step 3: Create `apps/web/app/(protected)/admin/menu-builder/page.tsx`**
 
 The protected layout already handles seeding — this page just fetches.
 
@@ -849,7 +849,7 @@ export default async function MenuBuilderPage() {
 }
 ```
 
-- [ ] **Step 4: Create `apps/web/app/(protected)/admin/theme/page.tsx`**
+- [✅] **Step 4: Create `apps/web/app/(protected)/admin/theme/page.tsx`**
 
 ```tsx
 import { AdminTheme } from '@/components/AdminTheme'
@@ -859,7 +859,7 @@ export default function ThemePage() {
 }
 ```
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add apps/web/app/login/ "apps/web/app/(protected)/page.tsx" "apps/web/app/(protected)/admin/"
@@ -874,7 +874,7 @@ git commit -m "feat: add Next.js route page files"
 - Create: `apps/web/components/IconRenderer.tsx`
 - Create: `apps/web/components/IconPicker.tsx`
 
-- [ ] **Step 1: Create `apps/web/components/IconRenderer.tsx`**
+- [✅] **Step 1: Create `apps/web/components/IconRenderer.tsx`**
 
 Identical to current `src/components/IconRenderer.tsx`:
 
@@ -902,7 +902,7 @@ export const IconRenderer: React.FC<IconRendererProps> = ({ name, className, siz
 };
 ```
 
-- [ ] **Step 2: Create `apps/web/components/IconPicker.tsx`**
+- [✅] **Step 2: Create `apps/web/components/IconPicker.tsx`**
 
 Add `'use client'` at the top; rest is identical to `src/components/IconPicker.tsx`:
 
@@ -994,7 +994,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
 };
 ```
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add apps/web/components/IconRenderer.tsx apps/web/components/IconPicker.tsx
@@ -1010,7 +1010,7 @@ git commit -m "feat: add IconRenderer and IconPicker components"
 
 Replaces `src/components/Layout.tsx`. Removes `<Outlet />`, adds `children` prop and `menuItems` prop for Sidebar. Client component because it renders Sidebar (which uses hooks).
 
-- [ ] **Step 1: Create `apps/web/components/Layout.tsx`**
+- [✅] **Step 1: Create `apps/web/components/Layout.tsx`**
 
 ```tsx
 'use client'
@@ -1036,7 +1036,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, menuItems }) => {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add apps/web/components/Layout.tsx
@@ -1059,7 +1059,7 @@ Key changes from `src/components/Sidebar.tsx`:
 - `NavLink` → `Link` from `next/link`
 - Remove `menuLoading` and loading skeleton
 
-- [ ] **Step 1: Create `apps/web/components/Sidebar.tsx`**
+- [✅] **Step 1: Create `apps/web/components/Sidebar.tsx`**
 
 ```tsx
 'use client'
@@ -1419,7 +1419,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add apps/web/components/Sidebar.tsx
@@ -1435,7 +1435,7 @@ git commit -m "feat: migrate Sidebar to Next.js (usePathname, useRouter, Link, U
 
 Key changes: `'use client'`, `useMenu` → `useUI`, `useLocation` → `usePathname`, `NavLink` → `Link`.
 
-- [ ] **Step 1: Create `apps/web/components/SidebarItem.tsx`**
+- [✅] **Step 1: Create `apps/web/components/SidebarItem.tsx`**
 
 ```tsx
 'use client'
@@ -1552,7 +1552,7 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({ item, level, childrenI
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add apps/web/components/SidebarItem.tsx
@@ -1569,7 +1569,7 @@ git commit -m "feat: migrate SidebarItem to Next.js (usePathname, Link, UIContex
 - Create: `apps/web/components/AdminMenuBuilder.tsx`
 - Create: `apps/web/components/AdminTheme.tsx`
 
-- [ ] **Step 1: Create `apps/web/components/Home.tsx`**
+- [✅] **Step 1: Create `apps/web/components/Home.tsx`**
 
 Key change: `useLocation()` → `usePathname()`.
 
@@ -1618,7 +1618,7 @@ export const Home: React.FC = () => {
 }
 ```
 
-- [ ] **Step 2: Create `apps/web/components/Login.tsx`**
+- [✅] **Step 2: Create `apps/web/components/Login.tsx`**
 
 Key changes: remove `Navigate`, use `useRouter` for redirect after login, `createClient` from supabase-browser.
 
@@ -1686,7 +1686,7 @@ export function Login() {
 }
 ```
 
-- [ ] **Step 3: Create `apps/web/components/AdminTheme.tsx`**
+- [✅] **Step 3: Create `apps/web/components/AdminTheme.tsx`**
 
 Key changes: `'use client'`, `useMenu` → `useUI`, import `defaultThemeConfig` from `menu-utils`.
 
@@ -1774,7 +1774,7 @@ export const AdminTheme: React.FC = () => {
 }
 ```
 
-- [ ] **Step 4: Create `apps/web/components/AdminMenuBuilder.tsx`**
+- [✅] **Step 4: Create `apps/web/components/AdminMenuBuilder.tsx`**
 
 Key changes: `'use client'`, receive `initialMenuItems` as prop, use `saveMenuItems` from `menu-actions`, call `router.refresh()` after save.
 
@@ -2077,7 +2077,7 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
 }
 ```
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add apps/web/components/Home.tsx apps/web/components/Login.tsx apps/web/components/AdminMenuBuilder.tsx apps/web/components/AdminTheme.tsx
@@ -2091,7 +2091,7 @@ git commit -m "feat: migrate page components to Next.js (usePathname, useRouter,
 **Files:**
 - Modify: Root `package.json`
 
-- [ ] **Step 1: Replace the full contents of the root `package.json`**
+- [✅] **Step 1: Replace the full contents of the root `package.json`**
 
 The current root `package.json` has scripts using `cd apps/web && npm run X`. These remain valid for Next.js since the scripts in `apps/web/package.json` now use `next` commands. No changes needed to the root `package.json` — skip this task.
 
@@ -2101,7 +2101,7 @@ npm run web:dev
 ```
 From the repo root. It should start `next dev --port 3000`.
 
-- [ ] **Step 2: Commit**
+- [✅] **Step 2: Commit**
 
 ```bash
 git add package.json
@@ -2117,7 +2117,7 @@ git commit -m "chore: update root scripts for Next.js (dev/build commands)"
 - Delete: `apps/web/vite.config.ts`
 - Delete: `apps/web/index.html`
 
-- [ ] **Step 1: Install new dependencies**
+- [✅] **Step 1: Install new dependencies**
 
 ```bash
 cd apps/web && npm install
@@ -2125,7 +2125,7 @@ cd apps/web && npm install
 
 Expected: npm installs Next.js, @supabase/ssr, @tailwindcss/postcss, postcss. Should complete without errors.
 
-- [ ] **Step 2: Delete old files**
+- [✅] **Step 2: Delete old files**
 
 ```bash
 rm -rf apps/web/src
@@ -2133,7 +2133,7 @@ rm apps/web/vite.config.ts
 rm apps/web/index.html
 ```
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add -A
@@ -2144,7 +2144,7 @@ git commit -m "chore: remove Vite, React Router, and old src/ directory"
 
 ## Task 21: Build verification
 
-- [ ] **Step 1: Run TypeScript check**
+- [✅] **Step 1: Run TypeScript check**
 
 ```bash
 cd apps/web && npx tsc --noEmit
@@ -2152,7 +2152,7 @@ cd apps/web && npx tsc --noEmit
 
 Expected: no errors. If there are import errors, check that all `@/` aliases resolve correctly (paths in `tsconfig.json` must point to `./*`).
 
-- [ ] **Step 2: Run Next.js build**
+- [✅] **Step 2: Run Next.js build**
 
 ```bash
 cd apps/web && npm run build
@@ -2163,7 +2163,7 @@ Expected: build succeeds, outputs route manifest. If it fails:
 - `Cannot find module '@/...'` → check `tsconfig.json` paths
 - `cookies() was called outside of a Server Component` → ensure `createClient` in `supabase-server.ts` is only imported from Server Components and middleware
 
-- [ ] **Step 3: Start dev server and verify in browser**
+- [✅] **Step 3: Start dev server and verify in browser**
 
 ```bash
 cd apps/web && npm run dev
@@ -2178,7 +2178,7 @@ Open `http://localhost:3000` in browser. Verify:
 6. Theme toggle (sun/moon icon in sidebar) persists across page refresh ✓
 7. Logout button works → redirected to `/login` ✓
 
-- [ ] **Step 4: Final commit**
+- [✅] **Step 4: Final commit**
 
 ```bash
 git add -A
