@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { createAdminClient } from '@/lib/supabase-server'
+import { createLogger } from '@/lib/logger'
+import { passwordSchema } from '@/lib/validations'
+
+const log = createLogger('auth:set-password')
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
@@ -10,8 +14,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Parametri mancanti.' }, { status: 400 })
   }
 
-  if (password.length < 8) {
-    return NextResponse.json({ error: 'La password deve essere di almeno 8 caratteri.' }, { status: 400 })
+  const parsed = passwordSchema.safeParse(password)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
   const supabase = createAdminClient()
@@ -41,7 +46,7 @@ export async function POST(req: NextRequest) {
     .eq('id', tokenRow.user_id)
 
   if (updateErr) {
-    console.error('[set-password] Failed to update password_hash:', updateErr)
+    log.error({ err: updateErr }, 'failed to update password_hash')
     return NextResponse.json({ error: 'Errore interno. Riprova.' }, { status: 500 })
   }
 
@@ -57,7 +62,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (!claimed) {
-    console.warn('[set-password] Token already consumed by concurrent request, user:', tokenRow.user_id)
+    log.warn({ userId: tokenRow.user_id }, 'token already consumed by concurrent request')
   }
 
   return NextResponse.json({ ok: true })

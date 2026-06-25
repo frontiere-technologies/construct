@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { auth } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase-server'
+import { createLogger } from '@/lib/logger'
+import { passwordSchema } from '@/lib/validations'
+
+const log = createLogger('auth:change-password')
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -22,8 +26,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Dati mancanti.' }, { status: 400 })
   }
 
-  if (newPassword.length < 8) {
-    return NextResponse.json({ error: 'La nuova password deve contenere almeno 8 caratteri.' }, { status: 400 })
+  const parsed = passwordSchema.safeParse(newPassword)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
   const supabase = createAdminClient()
@@ -49,7 +54,7 @@ export async function POST(req: NextRequest) {
     .eq('id', session.user.id)
 
   if (updateErr) {
-    console.error('[change-password] Failed to update hash:', updateErr)
+    log.error({ err: updateErr }, 'failed to update password hash')
     return NextResponse.json({ error: 'Errore interno. Riprova.' }, { status: 500 })
   }
 
