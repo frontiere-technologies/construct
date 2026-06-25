@@ -40,7 +40,7 @@ Read also the ./CLAUDE.md file.
 
 ```
 construct/
-- apps/web/                       # Next.js 15 application
+- sources/microservices/web-construct/  # Next.js 15 application
     - app/
         - login/                  # Login page (OIDC + test credentials)
         - api/auth/               # Auth.js route handler
@@ -136,7 +136,7 @@ psql $DATABASE_URL -f deploy/db/schema.sql
 ### 3. Configure environment variables
 
 ```bash
-cp apps/web/.env.template apps/web/.env.local
+cp sources/microservices/web-construct/.env.template sources/microservices/web-construct/.env.local
 ```
 
 Edit `.env.local`:
@@ -170,7 +170,7 @@ AUTH_TEST_CREDENTIALS=true
 ### 4. Run
 
 ```bash
-cd apps/web
+cd sources/microservices/web-construct
 npm run dev
 ```
 
@@ -201,7 +201,7 @@ uv run pytest tests/e2e/test_sidebar.py
 
 ## Adding New Pages
 
-1. Create a new file under `apps/web/app/(protected)/your-page/page.tsx` — it is automatically protected by the middleware.
+1. Create a new file under `sources/microservices/web-construct/app/(protected)/your-page/page.tsx` — it is automatically protected by the middleware.
 2. Add a corresponding menu item via the Admin → Menu Builder UI (or directly in the DB).
 3. Optionally restrict it to `admin` role by setting `roles: ['admin']` in the menu item.
 
