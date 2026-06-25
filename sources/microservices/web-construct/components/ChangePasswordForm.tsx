@@ -13,6 +13,18 @@ export function ChangePasswordForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (newPassword.length < 8) {
+      setStatus({ type: 'error', message: 'La password deve contenere almeno 8 caratteri.' })
+      return
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      setStatus({ type: 'error', message: 'La password deve contenere almeno una lettera maiuscola.' })
+      return
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      setStatus({ type: 'error', message: 'La password deve contenere almeno un numero.' })
+      return
+    }
     if (newPassword !== confirmPassword) {
       setStatus({ type: 'error', message: 'Le nuove password non coincidono.' })
       return
@@ -71,7 +83,7 @@ export function ChangePasswordForm() {
             minLength={8}
             className={inputCls}
           />
-          <p className="text-xs text-gray-400 mt-1">Minimo 8 caratteri.</p>
+          <p className="text-xs text-gray-400 mt-1">Min. 8 caratteri, una maiuscola, un numero.</p>
         </div>
         <div>
           <label className={labelCls}>Conferma nuova password</label>

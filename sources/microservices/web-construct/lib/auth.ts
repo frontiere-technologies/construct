@@ -6,6 +6,7 @@ import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { createAdminClient } from '@/lib/supabase-server'
 import { createLogger } from '@/lib/logger'
+import { authConfig } from '@/lib/auth.config'
 
 const log = createLogger('auth')
 
@@ -146,6 +147,7 @@ function buildProviders() {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers: buildProviders(),
   session: { strategy: 'jwt' as const },
   callbacks: {
