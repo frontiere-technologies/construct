@@ -58,7 +58,7 @@ construct/
 - deploy/
     - db/schema.sql               # Database schema (users + menu_items)
     - k8s/                        # Kubernetes manifests (base + dev/staging/prod overlays)
-- tests/e2e/                      # Playwright E2E test suite
+- sources/tests/e2e/              # Playwright E2E test suite
 ```
 
 ### Authentication Flow
@@ -187,7 +187,7 @@ Tests use Python + Playwright via `uv`:
 uv run pytest
 
 # Run a specific suite
-uv run pytest tests/e2e/test_sidebar.py
+uv run pytest sources/tests/e2e/test_sidebar.py
 
 # Coverage includes:
 # - Authentication flow (redirect, provider buttons, test login)

@@ -13,7 +13,7 @@ npm run clean        # Remove .next/
 
 # E2E tests (Python — use uv, never python/python3 directly)
 uv run pytest                              # tutti i test
-uv run pytest tests/e2e/test_sidebar.py    # singolo gruppo
+uv run pytest sources/tests/e2e/test_sidebar.py    # singolo gruppo
 ```
 
 ## Stack

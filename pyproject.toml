@@ -8,7 +8,7 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/e2e"]
+testpaths = ["sources/tests/e2e"]
 addopts = "-v"
 
 [dependency-groups]
