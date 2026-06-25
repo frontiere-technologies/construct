@@ -55,7 +55,7 @@ construct/
     - lib/                        # Server actions, services, Supabase client, Auth.js config
     - types/                      # TypeScript types
     - middleware.ts               # Route protection + admin RBAC enforcement
-- deploy/
+- devops/
     - db/schema.sql               # Database schema (users + menu_items)
     - k8s/                        # Kubernetes manifests (base + dev/staging/prod overlays)
 - sources/tests/e2e/              # Playwright E2E test suite
@@ -127,10 +127,10 @@ Apply the schema to your database:
 
 ```bash
 # Using Supabase CLI (local)
-supabase db push --file deploy/db/schema.sql
+supabase db push --file devops/db/schema.sql
 
 # Or run the SQL directly in the Supabase dashboard / psql
-psql $DATABASE_URL -f deploy/db/schema.sql
+psql $DATABASE_URL -f devops/db/schema.sql
 ```
 
 ### 3. Configure environment variables
@@ -211,10 +211,10 @@ No changes to middleware, layout, or navigation code required.
 
 ## Deployment
 
-Kubernetes manifests are in `deploy/k8s/` with base configuration and environment overlays:
+Kubernetes manifests are in `devops/k8s/` with base configuration and environment overlays:
 
 ```
-deploy/k8s/
+devops/k8s/
 - base/web/       # Base K8s manifests
 - overlays/
     - dev/
@@ -225,7 +225,7 @@ deploy/k8s/
 Apply with:
 
 ```bash
-kubectl apply -k deploy/k8s/overlays/prod
+kubectl apply -k devops/k8s/overlays/prod
 ```
 
 ---
