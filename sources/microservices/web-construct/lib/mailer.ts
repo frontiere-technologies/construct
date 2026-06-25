@@ -12,6 +12,8 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions): 
   const provider = process.env.MAIL_PROVIDER ?? 'resend'
 
   if (provider === 'smtp') {
+    const from = process.env.SMTP_FROM ?? process.env.RESEND_FROM ?? 'noreply@frontiere.io'
+    console.log(`[mailer] smtp -> to=${to} from=${from} subject="${subject}"`)
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT ?? 587),
@@ -21,24 +23,19 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions): 
         pass: process.env.SMTP_PASSWORD,
       },
     })
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM ?? process.env.RESEND_FROM ?? 'noreply@frontiere.io',
-      to,
-      subject,
-      html,
-      text,
-    })
+    const info = await transporter.sendMail({ from, to, subject, html, text })
+    console.log(`[mailer] smtp OK messageId=${info.messageId}`)
     return
   }
 
   // Default: Resend
+  const from = process.env.RESEND_FROM ?? 'noreply@frontiere.io'
+  console.log(`[mailer] resend -> to=${to} from=${from} subject="${subject}"`)
   const resend = new Resend(process.env.RESEND_API_KEY)
-  const { error } = await resend.emails.send({
-    from: process.env.RESEND_FROM ?? 'noreply@frontiere.io',
-    to,
-    subject,
-    html,
-    text,
-  })
-  if (error) throw new Error(`Resend error: ${error.message}`)
+  const { data, error } = await resend.emails.send({ from, to, subject, html, text })
+  if (error) {
+    console.error(`[mailer] resend ERROR: ${JSON.stringify(error)}`)
+    throw new Error(`Resend error: ${error.message}`)
+  }
+  console.log(`[mailer] resend OK id=${data?.id}`)
 }
