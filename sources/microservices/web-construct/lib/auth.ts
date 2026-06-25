@@ -5,6 +5,9 @@ import Keycloak from 'next-auth/providers/keycloak'
 import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { createAdminClient } from '@/lib/supabase-server'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('auth')
 
 // In-memory cache for allowed domains (60s TTL)
 let domainCache: { domains: string[]; expiresAt: number } | null = null
@@ -18,7 +21,7 @@ async function getAllowedDomains(): Promise<string[]> {
     .select('domain')
     .eq('active', true)
   if (error) {
-    console.error('[auth] Failed to retrieve allowed domains:', error)
+    log.error({ err: error }, 'failed to retrieve allowed domains')
     return domainCache?.domains ?? []
   }
   const domains = (data ?? []).map((r: { domain: string }) => r.domain)
@@ -185,7 +188,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.userId = (data?.id as string) ?? ''
             token.role = (data?.role as string) ?? 'user'
           } catch (err) {
-            console.error('[auth] Failed to provision user in Supabase:', err)
+            log.error({ err }, 'failed to provision user in Supabase')
             throw err
           }
         }
