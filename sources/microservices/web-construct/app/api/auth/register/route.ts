@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { sendEmail } from '@/lib/mailer'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('auth:register')
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
@@ -43,7 +46,7 @@ export async function POST(req: NextRequest) {
     .select('id')
     .single()
   if (insertError || !newUser?.id) {
-    console.error('[register] Failed to create user:', insertError)
+    log.error({ err: insertError }, 'failed to create user')
     return NextResponse.json({ ok: true })
   }
 
@@ -54,14 +57,14 @@ export async function POST(req: NextRequest) {
     .from('password_set_tokens')
     .insert({ user_id: newUser.id, token, expires_at: expiresAt })
   if (tokenError) {
-    console.error('[register] Failed to create token:', tokenError)
+    log.error({ err: tokenError }, 'failed to create password token')
     await supabase.from('users').delete().eq('id', newUser.id)
     return NextResponse.json({ ok: true })
   }
 
   const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL
   if (!baseUrl) {
-    console.error('[register] AUTH_URL / NEXTAUTH_URL not set')
+    log.error('AUTH_URL / NEXTAUTH_URL not set')
     return NextResponse.json({ ok: true })
   }
 
@@ -90,7 +93,7 @@ export async function POST(req: NextRequest) {
       text: `Benvenuto in Construct.\n\nImposta la tua password al seguente link (valido 48 ore):\n${setPasswordUrl}\n\nSe non ti aspettavi questa email, ignorala.`,
     })
   } catch (emailErr) {
-    console.error('[register] Failed to send email:', emailErr)
+    log.error({ err: emailErr }, 'failed to send welcome email')
   }
 
   return NextResponse.json({ ok: true })

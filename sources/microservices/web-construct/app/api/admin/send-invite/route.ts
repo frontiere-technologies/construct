@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase-server'
 import { sendEmail } from '@/lib/mailer'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('admin:send-invite')
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -36,13 +39,13 @@ export async function POST(req: NextRequest) {
     .insert({ user_id: user.id, token, expires_at: expiresAt })
 
   if (insertErr) {
-    console.error('[send-invite] Failed to create token:', insertErr)
+    log.error({ err: insertErr }, 'failed to create invite token')
     return NextResponse.json({ error: 'Errore interno.' }, { status: 500 })
   }
 
   const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL
   if (!baseUrl) {
-    console.error('[send-invite] AUTH_URL / NEXTAUTH_URL not set')
+    log.error('AUTH_URL / NEXTAUTH_URL not set')
     return NextResponse.json({ error: 'Errore di configurazione del server.' }, { status: 500 })
   }
   const setPasswordUrl = `${baseUrl.replace(/\/$/, '')}/set-password?token=${token}`
@@ -70,7 +73,7 @@ export async function POST(req: NextRequest) {
       text: `Benvenuto in Construct.\n\nImposta la tua password al seguente link (valido 48 ore):\n${setPasswordUrl}\n\nSe non ti aspettavi questa email, ignorala.`,
     })
   } catch (emailErr) {
-    console.error('[send-invite] Failed to send email:', emailErr)
+    log.error({ err: emailErr }, 'failed to send invite email')
     return NextResponse.json({ error: 'Errore invio email.' }, { status: 500 })
   }
 
