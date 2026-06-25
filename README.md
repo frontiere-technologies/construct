@@ -40,7 +40,7 @@ Read also the ./CLAUDE.md file.
 
 ```
 construct/
-- apps/web/                       # Next.js 15 application
+- sources/microservices/web-construct/  # Next.js 15 application
     - app/
         - login/                  # Login page (OIDC + test credentials)
         - api/auth/               # Auth.js route handler
@@ -55,10 +55,10 @@ construct/
     - lib/                        # Server actions, services, Supabase client, Auth.js config
     - types/                      # TypeScript types
     - middleware.ts               # Route protection + admin RBAC enforcement
-- deploy/
+- devops/
     - db/schema.sql               # Database schema (users + menu_items)
     - k8s/                        # Kubernetes manifests (base + dev/staging/prod overlays)
-- tests/e2e/                      # Playwright E2E test suite
+- sources/tests/e2e/              # Playwright E2E test suite
 ```
 
 ### Authentication Flow
@@ -127,16 +127,16 @@ Apply the schema to your database:
 
 ```bash
 # Using Supabase CLI (local)
-supabase db push --file deploy/db/schema.sql
+supabase db push --file devops/db/schema.sql
 
 # Or run the SQL directly in the Supabase dashboard / psql
-psql $DATABASE_URL -f deploy/db/schema.sql
+psql $DATABASE_URL -f devops/db/schema.sql
 ```
 
 ### 3. Configure environment variables
 
 ```bash
-cp apps/web/.env.template apps/web/.env.local
+cp sources/microservices/web-construct/.env.template sources/microservices/web-construct/.env.local
 ```
 
 Edit `.env.local`:
@@ -170,7 +170,7 @@ AUTH_TEST_CREDENTIALS=true
 ### 4. Run
 
 ```bash
-cd apps/web
+cd sources/microservices/web-construct
 npm run dev
 ```
 
@@ -187,7 +187,7 @@ Tests use Python + Playwright via `uv`:
 uv run pytest
 
 # Run a specific suite
-uv run pytest tests/e2e/test_sidebar.py
+uv run pytest sources/tests/e2e/test_sidebar.py
 
 # Coverage includes:
 # - Authentication flow (redirect, provider buttons, test login)
@@ -201,7 +201,7 @@ uv run pytest tests/e2e/test_sidebar.py
 
 ## Adding New Pages
 
-1. Create a new file under `apps/web/app/(protected)/your-page/page.tsx` — it is automatically protected by the middleware.
+1. Create a new file under `sources/microservices/web-construct/app/(protected)/your-page/page.tsx` — it is automatically protected by the middleware.
 2. Add a corresponding menu item via the Admin → Menu Builder UI (or directly in the DB).
 3. Optionally restrict it to `admin` role by setting `roles: ['admin']` in the menu item.
 
@@ -211,10 +211,10 @@ No changes to middleware, layout, or navigation code required.
 
 ## Deployment
 
-Kubernetes manifests are in `deploy/k8s/` with base configuration and environment overlays:
+Kubernetes manifests are in `devops/k8s/` with base configuration and environment overlays:
 
 ```
-deploy/k8s/
+devops/k8s/
 - base/web/       # Base K8s manifests
 - overlays/
     - dev/
@@ -225,7 +225,7 @@ deploy/k8s/
 Apply with:
 
 ```bash
-kubectl apply -k deploy/k8s/overlays/prod
+kubectl apply -k devops/k8s/overlays/prod
 ```
 
 ---

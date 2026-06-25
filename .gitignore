@@ -1,7 +1,6 @@
 # Dependencies
 node_modules/
-apps/*/node_modules/
-services/*/node_modules/
+sources/*/*/node_modules/
 packages/*/node_modules/
 .pnp
 .pnp.js
@@ -10,11 +9,10 @@ packages/*/node_modules/
 dist/
 dist-ssr/
 build/
-apps/*/dist/
-services/*/dist/
+sources/*/*/dist/
 packages/*/dist/
-apps/*/.next/
-apps/*/next-env.d.ts
+sources/*/*/.next/
+sources/*/*/next-env.d.ts
 
 # Environment variables
 .env
@@ -22,10 +20,8 @@ apps/*/next-env.d.ts
 .env.development.local
 .env.test.local
 .env.production.local
-apps/*/.env
-apps/*/.env.local
-services/*/.env
-services/*/.env.local
+sources/*/*/.env
+sources/*/*/.env.local
 
 # Logs
 logs/
@@ -50,8 +46,11 @@ Thumbs.db
 # Testing
 coverage/
 .mcp.json
-tests/e2e/.env.test
+sources/tests/e2e/.env.test
 
 # Python
 __pycache__/
 *.pyc
+
+# Temporary
+tmp/

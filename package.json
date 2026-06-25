@@ -2,10 +2,10 @@
   "name": "construct",
   "private": true,
   "scripts": {
-    "web:dev": "cd apps/web && npm run dev",
-    "web:build": "cd apps/web && npm run build",
-    "web:lint": "cd apps/web && npm run lint",
-    "web:clean": "cd apps/web && npm run clean",
-    "install:all": "cd apps/web && npm install"
+    "web:dev": "cd sources/microservices/web-construct && npm run dev",
+    "web:build": "cd sources/microservices/web-construct && npm run build",
+    "web:lint": "cd sources/microservices/web-construct && npm run lint",
+    "web:clean": "cd sources/microservices/web-construct && npm run clean",
+    "install:all": "cd sources/microservices/web-construct && npm install"
   }
 }

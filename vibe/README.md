@@ -9,9 +9,9 @@
 
 # Downloaded agents and skills
 ## Agents
-- .claude/agents/architect-reviewer.md = https://github.com/VoltAgent/awesome-claude-code-subagents/blob/main/categories/04-quality-security/architect-reviewer.md
-- .claude/agents/code-reviewer.md = https://github.com/VoltAgent/awesome-claude-code-subagents/blob/main/categories/04-quality-security/code-reviewer.md
-- .claude/agents/ui-ux-tester.md = https://github.com/VoltAgent/awesome-claude-code-subagents/blob/main/categories/04-quality-security/ui-ux-tester.md
+- curl -sL https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/main/categories/04-quality-security/architect-reviewer.md -o .claude/agents/architect-reviewer.md
+- curl -sL https://github.com/VoltAgent/awesome-claude-code-subagents/blob/main/categories/04-quality-security/code-reviewer.md -o .claude/agents/code-reviewer.md
+- curl -sL https://github.com/VoltAgent/awesome-claude-code-subagents/blob/main/categories/04-quality-security/ui-ux-tester.md -o .claude/agents/ui-ux-tester.md
 
 ## Skills
 - .claude/skills/webapp-testing = https://github.com/anthropics/skills/tree/main/skills/webapp-testing
