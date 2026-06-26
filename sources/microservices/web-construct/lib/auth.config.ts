@@ -7,10 +7,17 @@ export const authConfig = {
       const session = auth
       const pathname = nextUrl.pathname
 
-      if (!session && pathname !== '/login' && !pathname.startsWith('/set-password') && !pathname.startsWith('/forgot-password') && !pathname.startsWith('/register')) {
+      const PUBLIC_PATHS = ['/login', '/set-password', '/forgot-password', '/register']
+      const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/') || pathname.startsWith(p + '?'))
+
+      // Authenticated users can still access /set-password (invite links work even when logged in)
+      const AUTH_ONLY_REDIRECT = ['/login', '/forgot-password', '/register']
+      const isAuthOnlyRedirect = AUTH_ONLY_REDIRECT.some(p => pathname === p || pathname.startsWith(p + '/'))
+
+      if (!session && !isPublic) {
         return Response.redirect(new URL('/login', nextUrl))
       }
-      if (session && pathname === '/login') {
+      if (session && isAuthOnlyRedirect) {
         return Response.redirect(new URL('/', nextUrl))
       }
       if (session && pathname.startsWith('/admin') && (session.user as { role?: string })?.role !== 'admin') {
