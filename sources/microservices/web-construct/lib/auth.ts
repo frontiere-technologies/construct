@@ -117,7 +117,7 @@ function buildProviders() {
   if (process.env.AUTH_TEST_CREDENTIALS === 'true') {
     providers.push(
       Credentials({
-        id: 'test-credentials',
+        id: 'test',
         name: 'Test Credentials',
         credentials: {
           email: { label: 'Email', type: 'email' },
@@ -137,7 +137,7 @@ function buildProviders() {
             .eq('email', credentials.email)
             .single()
           if (!data) return null
-          return { id: data.id, email: data.email, name: data.name ?? data.email }
+          return { id: data.id, email: data.email, name: data.name ?? data.email, role: data.role }
         },
       })
     )
@@ -168,7 +168,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.provider = account.provider
       }
       if (account && user) {
-        if (account.provider === 'credentials') {
+        if (account.provider === 'credentials' || account.provider === 'test') {
           token.userId = user.id as string
           token.role = (user as { role?: string }).role ?? 'user'
         } else {

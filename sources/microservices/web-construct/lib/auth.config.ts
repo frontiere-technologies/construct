@@ -3,6 +3,13 @@ import type { NextAuthConfig } from 'next-auth'
 export const authConfig = {
   pages: { signIn: '/login' },
   callbacks: {
+    session({ session, token }) {
+      // Map custom JWT fields so middleware's `auth` object includes role/userId/provider
+      if (token.role) (session.user as { role?: string }).role = token.role as string
+      if (token.userId) (session.user as { id?: string }).id = token.userId as string
+      if (token.provider) (session.user as { provider?: string }).provider = token.provider as string
+      return session
+    },
     authorized({ auth, request: { nextUrl } }) {
       const session = auth
       const pathname = nextUrl.pathname
