@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 
 export function ForgotPasswordForm() {
@@ -8,6 +9,7 @@ export function ForgotPasswordForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!email.trim()) return
     setStatus('sending')
     try {
       const res = await fetch('/api/auth/forgot-password', {
@@ -27,9 +29,9 @@ export function ForgotPasswordForm() {
         <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
           Se l&apos;email è registrata riceverai un link per reimpostare la password.
         </p>
-        <a href="/login" className="text-sm text-center hover:underline" style={{ color: '#0f5a8a' }}>
+        <Link href="/login" className="text-sm text-center hover:underline" style={{ color: '#0f5a8a' }}>
           ← Torna al login
-        </a>
+        </Link>
       </div>
     )
   }
@@ -63,9 +65,9 @@ export function ForgotPasswordForm() {
       >
         {status === 'sending' ? 'Invio…' : 'Invia link'}
       </button>
-      <a href="/login" className="text-sm text-center hover:underline" style={{ color: '#0f5a8a' }}>
+      <Link href="/login" className="text-sm text-center hover:underline" style={{ color: '#0f5a8a' }}>
         ← Torna al login
-      </a>
+      </Link>
     </form>
   )
 }
