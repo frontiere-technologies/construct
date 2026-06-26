@@ -7,7 +7,7 @@ export const authConfig = {
       const session = auth
       const pathname = nextUrl.pathname
 
-      if (!session && pathname !== '/login' && !pathname.startsWith('/set-password') && !pathname.startsWith('/forgot-password')) {
+      if (!session && pathname !== '/login' && !pathname.startsWith('/set-password') && !pathname.startsWith('/forgot-password') && !pathname.startsWith('/register')) {
         return Response.redirect(new URL('/login', nextUrl))
       }
       if (session && pathname === '/login') {
