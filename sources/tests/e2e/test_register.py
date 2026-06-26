@@ -1,8 +1,6 @@
 """E2e tests for the self-registration flow (dedicated /register page)."""
 import time
 
-import pytest
-
 
 def test_registrati_link_navigates_to_register_page(page, base_url):
     """Clicking 'Registrati' navigates to /register."""
