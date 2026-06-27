@@ -6,8 +6,3 @@ namespace: construct
 resources:
   - ../../base/web
   - ingress.yaml
-
-images:
-  - name: web-construct
-    newName: web-construct
-    newTag: local
