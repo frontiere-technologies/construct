@@ -19,7 +19,7 @@ kubectl create secret generic web-construct-secret \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo "→ Applicazione manifest..."
-kubectl apply -k "$SCRIPT_DIR"
+kubectl apply -f "$SCRIPT_DIR"
 
 echo ""
 echo "✓ Deploy completato. Attendi che il pod sia Ready:"
