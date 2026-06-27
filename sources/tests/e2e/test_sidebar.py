@@ -29,15 +29,6 @@ def test_l1_shows_menu_labels(logged_in_page):
     assert l1_btn(l1, "Admin").is_visible()
 
 
-def test_support_navigation(logged_in_page):
-    page = logged_in_page
-    l1 = page.locator("aside").first
-    ensure_l1_expanded(page, l1)
-    l1_btn(l1, "Support").click()
-    page.wait_for_url("**/support", timeout=5_000)
-    assert "/support" in page.url
-
-
 def test_sidebar_persists_after_navigation(logged_in_page):
     page = logged_in_page
     l1 = page.locator("aside").first

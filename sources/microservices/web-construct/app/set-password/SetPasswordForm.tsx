@@ -17,7 +17,15 @@ export function SetPasswordForm({ token }: { token: string }) {
     setError(null)
 
     if (password.length < 8) {
-      setError('La password deve essere di almeno 8 caratteri.')
+      setError('La password deve contenere almeno 8 caratteri.')
+      return
+    }
+    if (!/[A-Z]/.test(password)) {
+      setError('La password deve contenere almeno una lettera maiuscola.')
+      return
+    }
+    if (!/[0-9]/.test(password)) {
+      setError('La password deve contenere almeno un numero.')
       return
     }
     if (password !== confirm) {
@@ -56,7 +64,7 @@ export function SetPasswordForm({ token }: { token: string }) {
             onChange={e => setPassword(e.target.value)}
             required
             minLength={8}
-            placeholder="Minimo 8 caratteri"
+            placeholder="Min. 8 caratteri, una maiuscola, un numero"
             className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-12 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button

@@ -9,5 +9,8 @@
   "enabledMcpjsonServers": [
     "supabase",
     "github"
-  ]
+  ],
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
+  }
 }

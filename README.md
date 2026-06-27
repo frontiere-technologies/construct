@@ -32,7 +32,7 @@ Read also the ./CLAUDE.md file.
 | Database | PostgreSQL via Supabase (database only, not Supabase Auth) |
 | Validation | Zod |
 | Testing | Python + Playwright (E2E), via `uv` |
-| Deployment | Kubernetes (overlays for dev / staging / prod) |
+| Deployment | Kubernetes — self-contained manifest directories per environment |
 
 ---
 
@@ -55,9 +55,9 @@ construct/
     - lib/                        # Server actions, services, Supabase client, Auth.js config
     - types/                      # TypeScript types
     - middleware.ts               # Route protection + admin RBAC enforcement
-- devops/
+- sources/devops/
     - db/schema.sql               # Database schema (users + menu_items)
-    - k8s/                        # Kubernetes manifests (base + dev/staging/prod overlays)
+    - k8s/dev/                    # Kubernetes manifests — self-contained per environment
 - sources/tests/e2e/              # Playwright E2E test suite
 ```
 
@@ -127,10 +127,10 @@ Apply the schema to your database:
 
 ```bash
 # Using Supabase CLI (local)
-supabase db push --file devops/db/schema.sql
+supabase db push --file sources/devops/db/schema.sql
 
 # Or run the SQL directly in the Supabase dashboard / psql
-psql $DATABASE_URL -f devops/db/schema.sql
+psql $DATABASE_URL -f sources/devops/db/schema.sql
 ```
 
 ### 3. Configure environment variables
@@ -211,22 +211,28 @@ No changes to middleware, layout, or navigation code required.
 
 ## Deployment
 
-Kubernetes manifests are in `devops/k8s/` with base configuration and environment overlays:
+Kubernetes manifests are in `sources/devops/k8s/`. Each environment has its own self-contained directory with all the manifests it needs (Deployment, Service, ConfigMap, Ingress).
 
 ```
-devops/k8s/
-- base/web/       # Base K8s manifests
-- overlays/
-    - dev/
-    - staging/
-    - prod/
+sources/devops/k8s/
+└── dev/
+    ├── deployment.yaml
+    ├── service.yaml
+    ├── configmap.yaml
+    ├── ingress.yaml
+    ├── secret.env.example   # copy to secret.env and fill in real values (gitignored)
+    └── apply.sh             # creates namespace + secret + applies all manifests
 ```
 
-Apply with:
+Deploy to local Docker Desktop K8s:
 
 ```bash
-kubectl apply -k devops/k8s/overlays/prod
+cd sources/devops/k8s/dev
+cp secret.env.example secret.env   # fill in real values
+bash apply.sh
 ```
+
+To add staging or prod, create `sources/devops/k8s/staging/` or `sources/devops/k8s/prod/` with their own set of files.
 
 ---
 

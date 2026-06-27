@@ -1,6 +1,6 @@
 # Login Redesign Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Redesign the login page with email+password and Google OAuth (domain-restricted), plus a full "first login / set password" flow via Resend email.
 
@@ -46,7 +46,7 @@
 **Interfaces:**
 - Produces: `users.password_hash text` column, `password_set_tokens` table, `allowed_domains` table — consumed by all subsequent tasks
 
-- [✅] **Step 1: Add the three schema changes to `deploy/db/schema.sql`**
+- [x] **Step 1: Add the three schema changes to `deploy/db/schema.sql`**
 
   Open `deploy/db/schema.sql`. After the existing `users` table block (around line 55 where the trigger is defined), add:
 
@@ -88,13 +88,13 @@
   on conflict (domain) do nothing;
   ```
 
-- [✅] **Step 2: Apply the migration via Supabase MCP**
+- [x] **Step 2: Apply the migration via Supabase MCP**
 
   Use the `mcp__supabase__apply_migration` tool with:
   - `name`: `add_password_login_tables`
   - `query`: the exact SQL from Step 1 above (all three blocks together)
 
-- [✅] **Step 3: Verify tables exist**
+- [x] **Step 3: Verify tables exist**
 
   Use `mcp__supabase__execute_sql` with:
   ```sql
@@ -108,7 +108,7 @@
   ```
   Expected output: `password_hash` column present; both tables listed; `frontiere.io` in `allowed_domains`.
 
-- [✅] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add deploy/db/schema.sql
@@ -126,14 +126,14 @@
 **Interfaces:**
 - Produces: `resend` and `bcryptjs` packages available for import in all subsequent tasks
 
-- [✅] **Step 1: Install packages**
+- [x] **Step 1: Install packages**
 
   ```bash
   cd apps/web && npm install resend bcryptjs && npm install -D @types/bcryptjs
   ```
   Expected: no errors, `package.json` updated.
 
-- [✅] **Step 2: Update `.env.template`**
+- [x] **Step 2: Update `.env.template`**
 
   Add at the end of `apps/web/.env.template`:
   ```env
@@ -142,7 +142,7 @@
   RESEND_FROM=noreply@frontiere.io
   ```
 
-- [✅] **Step 3: Verify import works**
+- [x] **Step 3: Verify import works**
 
   Create a temp file to confirm TypeScript resolves the packages (delete after):
   ```bash
@@ -150,7 +150,7 @@
   ```
   Expected: `OK`
 
-- [✅] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add apps/web/package.json apps/web/package-lock.json apps/web/.env.template
@@ -169,7 +169,7 @@
 - Consumes: `users.password_hash` (Task 1), `allowed_domains` table (Task 1), `bcryptjs` (Task 2)
 - Produces: `auth.ts` exports unchanged (`handlers`, `auth`, `signIn`, `signOut`); credentials provider ID `'credentials'`; Google sign-in blocks non-allowed domains
 
-- [✅] **Step 1: Replace `apps/web/lib/auth.ts` with the updated version**
+- [x] **Step 1: Replace `apps/web/lib/auth.ts` with the updated version**
 
   ```typescript
   import NextAuth, { CredentialsSignin } from 'next-auth'
@@ -357,7 +357,7 @@
   })
   ```
 
-- [✅] **Step 2: Update `apps/web/middleware.ts` to allow `/set-password` without session**
+- [x] **Step 2: Update `apps/web/middleware.ts` to allow `/set-password` without session**
 
   Change the unauthenticated redirect condition from:
   ```typescript
@@ -368,14 +368,14 @@
   if (!session && pathname !== '/login' && !pathname.startsWith('/set-password')) {
   ```
 
-- [✅] **Step 3: Verify TypeScript compiles**
+- [x] **Step 3: Verify TypeScript compiles**
 
   ```bash
   cd apps/web && npm run build 2>&1 | tail -20
   ```
   Expected: build succeeds or only pre-existing warnings (no new type errors).
 
-- [✅] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add apps/web/lib/auth.ts apps/web/middleware.ts
@@ -393,7 +393,7 @@
 - Consumes: `signIn('credentials', ...)` and `signIn('google', ...)` from `next-auth/react`; `NEXT_PUBLIC_AUTH_TEST_MODE` env var
 - Produces: redesigned Login component; error codes `CredentialsSignin`, `AccessDenied`, `PasswordNotSet` mapped to Italian messages; `?message=password-set` banner; `?message=password-set` query param support
 
-- [✅] **Step 1: Replace `apps/web/components/Login.tsx` with the redesigned version**
+- [x] **Step 1: Replace `apps/web/components/Login.tsx` with the redesigned version**
 
   ```typescript
   'use client'
@@ -623,7 +623,7 @@
   }
   ```
 
-- [✅] **Step 2: Start the dev server and visually verify the login page**
+- [x] **Step 2: Start the dev server and visually verify the login page**
 
   ```bash
   cd apps/web && npm run dev
@@ -636,7 +636,7 @@
   - "Continua con Google" button with Google G logo
   - Footer with "Problemi di accesso?" and "Registrati" link (clicking does nothing)
 
-- [✅] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
   ```bash
   git add apps/web/components/Login.tsx
@@ -654,7 +654,7 @@
 - Consumes: `password_set_tokens` table (Task 1), `users.password_hash` (Task 1), `bcryptjs` (Task 2)
 - Produces: `POST /api/auth/set-password` — accepts `{ token: string, password: string }`; returns `200` on success, `400` on validation error, `410` on expired/used token
 
-- [✅] **Step 1: Create `apps/web/app/api/auth/set-password/route.ts`**
+- [x] **Step 1: Create `apps/web/app/api/auth/set-password/route.ts`**
 
   ```typescript
   import { NextRequest, NextResponse } from 'next/server'
@@ -712,14 +712,14 @@
   }
   ```
 
-- [✅] **Step 2: Build to verify no TypeScript errors**
+- [x] **Step 2: Build to verify no TypeScript errors**
 
   ```bash
   cd apps/web && npm run build 2>&1 | grep -E 'error|Error' | head -10
   ```
   Expected: no new errors.
 
-- [✅] **Step 3: Test the route with curl (start dev server first)**
+- [x] **Step 3: Test the route with curl (start dev server first)**
 
   Test with missing params:
   ```bash
@@ -737,7 +737,7 @@
   ```
   Expected: `{"error":"Link non valido."}`
 
-- [✅] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add apps/web/app/api/auth/set-password/route.ts
@@ -755,7 +755,7 @@
 - Consumes: `password_set_tokens` table (Task 1), `users` table, `resend` (Task 2), `RESEND_API_KEY` and `RESEND_FROM` env vars
 - Produces: `POST /api/admin/send-invite` — accepts `{ userId: string }`; creates token, sends email; returns `200` on success, `403` if not admin, `404` if user not found
 
-- [✅] **Step 1: Create `apps/web/app/api/admin/send-invite/route.ts`**
+- [x] **Step 1: Create `apps/web/app/api/admin/send-invite/route.ts`**
 
   ```typescript
   import { NextRequest, NextResponse } from 'next/server'
@@ -837,14 +837,14 @@
   }
   ```
 
-- [✅] **Step 2: Build to verify no TypeScript errors**
+- [x] **Step 2: Build to verify no TypeScript errors**
 
   ```bash
   cd apps/web && npm run build 2>&1 | grep -E 'error|Error' | head -10
   ```
   Expected: no new errors.
 
-- [✅] **Step 3: Test unauthenticated request returns 403**
+- [x] **Step 3: Test unauthenticated request returns 403**
 
   With dev server running:
   ```bash
@@ -854,7 +854,7 @@
   ```
   Expected: `{"error":"Non autorizzato."}`
 
-- [✅] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add apps/web/app/api/admin/send-invite/route.ts
@@ -873,7 +873,7 @@
 - Consumes: `POST /api/auth/set-password` (Task 5); `password_set_tokens` table (Task 1)
 - Produces: `/set-password?token=<uuid>` — server-validates token, renders form or error; on success redirects to `/login?message=password-set`
 
-- [✅] **Step 1: Create `apps/web/app/set-password/SetPasswordForm.tsx`**
+- [x] **Step 1: Create `apps/web/app/set-password/SetPasswordForm.tsx`**
 
   ```typescript
   'use client'
@@ -980,7 +980,7 @@
   }
   ```
 
-- [✅] **Step 2: Create `apps/web/app/set-password/page.tsx`**
+- [x] **Step 2: Create `apps/web/app/set-password/page.tsx`**
 
   ```typescript
   import { createAdminClient } from '@/lib/supabase-server'
@@ -1057,14 +1057,14 @@
   }
   ```
 
-- [✅] **Step 3: Build to verify no TypeScript errors**
+- [x] **Step 3: Build to verify no TypeScript errors**
 
   ```bash
   cd apps/web && npm run build 2>&1 | tail -20
   ```
   Expected: build succeeds.
 
-- [✅] **Step 4: End-to-end smoke test**
+- [x] **Step 4: End-to-end smoke test**
 
   Insert a test token directly in Supabase (replace `<user-id>` with an existing user's UUID from the `users` table):
 
@@ -1102,7 +1102,7 @@
   `http://localhost:3000/set-password?token=test-token-abc123` (same token, now marked used)
   Expected: error page "Link non valido o scaduto."
 
-- [✅] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add apps/web/app/set-password/page.tsx apps/web/app/set-password/SetPasswordForm.tsx

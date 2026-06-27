@@ -1,6 +1,6 @@
 # Container Route/URL Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Allow Container menu items to have an optional Route/URL so that clicking them in the sidebar navigates to the route and simultaneously opens the children panel.
 
@@ -29,7 +29,7 @@
 - Consumes: nothing new — existing form fields, existing `upsertMenuItem` action
 - Produces: Route/URL and Open In fields visible for `container` type in the form
 
-- [✅] **Step 1: Write the failing E2E test**
+- [x] **Step 1: Write the failing E2E test**
 
 Append to `tests/e2e/test_menu_builder.py`:
 
@@ -72,7 +72,7 @@ def test_container_route_field_visible_and_saves(logged_in_page, base_url):
     page.wait_for_load_state("networkidle")
 ```
 
-- [✅] **Step 2: Run test to confirm it fails**
+- [x] **Step 2: Run test to confirm it fails**
 
 ```bash
 uv run pytest tests/e2e/test_menu_builder.py::test_container_route_field_visible_and_saves -v
@@ -80,7 +80,7 @@ uv run pytest tests/e2e/test_menu_builder.py::test_container_route_field_visible
 
 Expected: FAIL — `AssertionError: Route/URL field not visible for container type`
 
-- [✅] **Step 3: Remove the `type === 'link'` guard on the Route/URL field**
+- [x] **Step 3: Remove the `type === 'link'` guard on the Route/URL field**
 
 In `apps/web/components/AdminMenuBuilder.tsx`, replace:
 
@@ -112,7 +112,7 @@ With:
                 </div>
 ```
 
-- [✅] **Step 4: Remove the `type === 'link'` guard on the Open In field**
+- [x] **Step 4: Remove the `type === 'link'` guard on the Open In field**
 
 In `apps/web/components/AdminMenuBuilder.tsx`, replace:
 
@@ -148,7 +148,7 @@ With:
                 </div>
 ```
 
-- [✅] **Step 5: Build to verify TypeScript**
+- [x] **Step 5: Build to verify TypeScript**
 
 ```bash
 cd apps/web && npm run build
@@ -156,7 +156,7 @@ cd apps/web && npm run build
 
 Expected: build succeeds with no type errors.
 
-- [✅] **Step 6: Run the new test**
+- [x] **Step 6: Run the new test**
 
 ```bash
 uv run pytest tests/e2e/test_menu_builder.py::test_container_route_field_visible_and_saves -v
@@ -164,7 +164,7 @@ uv run pytest tests/e2e/test_menu_builder.py::test_container_route_field_visible
 
 Expected: PASS
 
-- [✅] **Step 7: Run the full menu builder test suite to check regressions**
+- [x] **Step 7: Run the full menu builder test suite to check regressions**
 
 ```bash
 uv run pytest tests/e2e/test_menu_builder.py -v
@@ -172,7 +172,7 @@ uv run pytest tests/e2e/test_menu_builder.py -v
 
 Expected: all tests PASS
 
-- [✅] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/web/components/AdminMenuBuilder.tsx tests/e2e/test_menu_builder.py
@@ -192,7 +192,7 @@ git commit -m "feat: show Route/URL and Open In for Container items in AdminMenu
 - Consumes: Container items with `route` set (created via Task 1's AdminMenuBuilder changes)
 - Produces: `L1Item` and `SubItem` render as `<Link>` when `item.route` is set, with `onClick` still calling the panel-toggle handler
 
-- [✅] **Step 1: Write the failing E2E test**
+- [x] **Step 1: Write the failing E2E test**
 
 Append to `tests/e2e/test_sidebar.py`:
 
@@ -251,7 +251,7 @@ def test_container_with_route_navigates_and_opens_l2(logged_in_page, base_url):
     assert page.locator('[data-testid="menu-item-row"]', has_text=parent_label).count() == 0
 ```
 
-- [✅] **Step 2: Run test to confirm it fails**
+- [x] **Step 2: Run test to confirm it fails**
 
 ```bash
 uv run pytest tests/e2e/test_sidebar.py::test_container_with_route_navigates_and_opens_l2 -v
@@ -259,7 +259,7 @@ uv run pytest tests/e2e/test_sidebar.py::test_container_with_route_navigates_and
 
 Expected: FAIL — the container renders as a `<button>` (not a `<Link>`), so `wait_for_url` times out — navigation does not happen.
 
-- [✅] **Step 3: Update `L1Item` in `Sidebar.tsx`**
+- [x] **Step 3: Update `L1Item` in `Sidebar.tsx`**
 
 In `apps/web/components/Sidebar.tsx`, in the `L1Item` component, replace:
 
@@ -275,7 +275,7 @@ With:
 
 This makes containers with both a route and children render as a `<Link>` (which handles navigation) while keeping `onClick={onClick}` (which calls `handleL1Click` to toggle the children panel).
 
-- [✅] **Step 4: Update `SubItem` in `Sidebar.tsx`**
+- [x] **Step 4: Update `SubItem` in `Sidebar.tsx`**
 
 In `apps/web/components/Sidebar.tsx`, in the `SubItem` component, replace:
 
@@ -347,7 +347,7 @@ With:
   }
 ```
 
-- [✅] **Step 5: Build to verify TypeScript**
+- [x] **Step 5: Build to verify TypeScript**
 
 ```bash
 cd apps/web && npm run build
@@ -355,7 +355,7 @@ cd apps/web && npm run build
 
 Expected: build succeeds with no type errors.
 
-- [✅] **Step 6: Run the new test**
+- [x] **Step 6: Run the new test**
 
 ```bash
 uv run pytest tests/e2e/test_sidebar.py::test_container_with_route_navigates_and_opens_l2 -v
@@ -363,7 +363,7 @@ uv run pytest tests/e2e/test_sidebar.py::test_container_with_route_navigates_and
 
 Expected: PASS
 
-- [✅] **Step 7: Run the full sidebar + highlight test suite to check regressions**
+- [x] **Step 7: Run the full sidebar + highlight test suite to check regressions**
 
 ```bash
 uv run pytest tests/e2e/test_sidebar.py tests/e2e/test_highlight.py -v
@@ -374,7 +374,7 @@ Expected: all tests PASS. Key regressions to watch:
 - `test_support_navigation` — Support link (with route, no children) still navigates ✓
 - `test_admin_closes_l2_on_second_click` — collapsible behavior unchanged ✓
 
-- [✅] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/web/components/Sidebar.tsx tests/e2e/test_sidebar.py

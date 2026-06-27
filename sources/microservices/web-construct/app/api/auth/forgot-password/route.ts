@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { sendEmail } from '@/lib/mailer'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('auth:forgot-password')
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
@@ -30,17 +33,20 @@ export async function POST(req: NextRequest) {
     .insert({ user_id: user.id, token, expires_at: expiresAt })
 
   if (insertErr) {
-    console.error('[forgot-password] Failed to create token:', insertErr)
-    return NextResponse.json({ ok: true }) // still 200 — don't expose DB errors
+    log.error({ err: insertErr }, 'failed to create reset token')
+    return NextResponse.json({ ok: true })
   }
 
   const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL
   if (!baseUrl) {
-    console.error('[forgot-password] AUTH_URL / NEXTAUTH_URL not set')
+    log.error('AUTH_URL / NEXTAUTH_URL not set')
     return NextResponse.json({ ok: true })
   }
 
   const resetUrl = `${baseUrl.replace(/\/$/, '')}/set-password?token=${token}`
+  if (process.env.NODE_ENV === 'development') {
+    log.info({ resetUrl }, 'dev: reset-password link')
+  }
 
   try {
     await sendEmail({
@@ -65,7 +71,7 @@ export async function POST(req: NextRequest) {
       text: `Hai richiesto il reset della password su Construct.\n\nReimposta la tua password al seguente link (valido 2 ore):\n${resetUrl}\n\nSe non hai richiesto il reset, ignora questa email.`,
     })
   } catch (emailErr) {
-    console.error('[forgot-password] Failed to send email:', emailErr)
+    log.error({ err: emailErr }, 'failed to send reset email')
   }
 
   return NextResponse.json({ ok: true })

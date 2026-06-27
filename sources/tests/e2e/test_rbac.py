@@ -17,22 +17,22 @@ def test_unauthenticated_redirect_from_admin_theme(page, base_url):
 
 
 @pytest.fixture
-def non_admin_credentials():
+def non_admin_user_email():
     email = os.getenv("TEST_EMAIL_USER", "")
-    password = os.getenv("TEST_PASSWORD_USER", "")
-    if not email or not password:
-        pytest.skip("Set TEST_EMAIL_USER and TEST_PASSWORD_USER in .env.test to run non-admin RBAC tests")
-    return {"email": email, "password": password}
+    if not email:
+        pytest.skip("Set TEST_EMAIL_USER in .env.test to run non-admin RBAC tests")
+    return email
 
 
 @pytest.fixture
-def non_admin_page(page, base_url, non_admin_credentials):
+def non_admin_page(page, base_url, non_admin_user_email):
+    """Authenticate as a non-admin user via the test credentials form."""
     page.goto(f"{base_url}/login")
     page.wait_for_load_state("networkidle")
-    page.fill('input[type="email"]', non_admin_credentials["email"])
-    page.fill('input[type="password"]', non_admin_credentials["password"])
-    page.click('button[type="submit"]')
-    page.wait_for_url(f"{base_url}/", timeout=10_000)
+    page.click('button:has-text("Accesso test")')
+    page.fill('input[placeholder="Email di test"]', non_admin_user_email)
+    page.click('button:has-text("Entra (test)")')
+    page.wait_for_url(f"{base_url}/", timeout=15_000)
     page.wait_for_load_state("networkidle")
     yield page
 

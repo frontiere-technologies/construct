@@ -1,6 +1,6 @@
 # Card Component Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Create a shared `<Card>` component and apply it consistently to ProfileForm, AdminTheme, and AdminMenuBuilder.
 
@@ -27,7 +27,7 @@
 **Interfaces:**
 - Produces: `Card({ children: React.ReactNode, className?: string }): JSX.Element`
 
-- [✅] **Step 1: Create `apps/web/components/Card.tsx`**
+- [x] **Step 1: Create `apps/web/components/Card.tsx`**
 
 ```tsx
 interface CardProps {
@@ -44,7 +44,7 @@ export function Card({ children, className }: CardProps) {
 }
 ```
 
-- [✅] **Step 2: Update `ProfileForm.tsx` — replace outer div with Card**
+- [x] **Step 2: Update `ProfileForm.tsx` — replace outer div with Card**
 
 In `apps/web/components/ProfileForm.tsx`:
 
@@ -69,7 +69,7 @@ Replace closing `</div>` at line 143 (the one matching line 38):
       </Card>
 ```
 
-- [✅] **Step 3: Update `AdminTheme.tsx` — replace outer div with Card**
+- [x] **Step 3: Update `AdminTheme.tsx` — replace outer div with Card**
 
 In `apps/web/components/AdminTheme.tsx`:
 
@@ -94,7 +94,7 @@ Replace the matching closing `</div>` at line 111:
       </Card>
 ```
 
-- [✅] **Step 4: Update `AdminMenuBuilder.tsx` — replace edit panel div with Card**
+- [x] **Step 4: Update `AdminMenuBuilder.tsx` — replace edit panel div with Card**
 
 In `apps/web/components/AdminMenuBuilder.tsx`:
 
@@ -119,7 +119,7 @@ Replace the matching closing `</div>` at line 391:
             </Card>
 ```
 
-- [✅] **Step 5: Verify build passes**
+- [x] **Step 5: Verify build passes**
 
 ```bash
 cd apps/web && npm run build
@@ -127,14 +127,14 @@ cd apps/web && npm run build
 
 Expected: no TypeScript errors, build completes successfully.
 
-- [✅] **Step 6: Verify visually — check all three pages in the browser**
+- [x] **Step 6: Verify visually — check all three pages in the browser**
 
 With the dev server running at http://localhost:3000:
 - `/profile` — card should look identical to Theme & Styles (border visible, `rounded-xl`, lighter shadow)
 - `/admin/theme` — no visible change
 - `/admin/menu-builder` — edit panel (open by clicking Edit on any item) should look identical to Theme & Styles card
 
-- [✅] **Step 7: Run E2E tests**
+- [x] **Step 7: Run E2E tests**
 
 ```bash
 uv run pytest tests/e2e/ -v
@@ -142,7 +142,7 @@ uv run pytest tests/e2e/ -v
 
 Expected: all tests pass (no structural changes to the pages, only class names changed).
 
-- [✅] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/web/components/Card.tsx apps/web/components/ProfileForm.tsx apps/web/components/AdminTheme.tsx apps/web/components/AdminMenuBuilder.tsx

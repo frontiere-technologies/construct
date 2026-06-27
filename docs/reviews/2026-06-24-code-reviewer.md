@@ -10,9 +10,9 @@ The changes are small, well-targeted diagnostic additions plus a clean DRY refac
 
 Findings:
 
-- [ ] ID=IMP-1, Severity=Important, Complexity=Low, Priority=P2, Title=Recipient email (PII) logged at INFO in three places, Fix description=Email addresses are now logged unconditionally in mailer.ts and both routes. Confirm this is acceptable under the project's privacy/GDPR posture, or mask the local part (e.g. `m***@frontiere.io`) / gate behind a debug flag. Currently unaddressed.
+- [✅] ID=IMP-1, Severity=Important, Complexity=Low, Priority=P2, Title=Recipient email (PII) logged at INFO in three places, Fix description=Email addresses are now logged unconditionally in mailer.ts and both routes. Confirm this is acceptable under the project's privacy/GDPR posture, or mask the local part (e.g. `m***@frontiere.io`) / gate behind a debug flag. Currently unaddressed.
 - [✅] ID=MIN-1, Severity=Minor, Complexity=Low, Priority=P3, Title=Redundant `to` logging between routes and mailer, Fix description=Removed route-level `console.log` from register/route.ts:71 and forgot-password/route.ts:46; recipient is already logged by the mailer.
-- [ ] ID=MIN-2, Severity=Minor, Complexity=Medium, Priority=P3, Title=`console.log`/`console.error` instead of structured logging, Fix description=For production observability prefer a leveled/structured logger so these can be filtered or silenced; INFO-level success logs on every email will add steady noise. Currently unaddressed.
+- [✅] ID=MIN-2, Severity=Minor, Complexity=Medium, Priority=P3, Title=`console.log`/`console.error` instead of structured logging, Fix description=For production observability prefer a leveled/structured logger so these can be filtered or silenced; INFO-level success logs on every email will add steady noise. Currently unaddressed.
 - [✅] ID=MIN-3, Severity=Minor, Complexity=Low, Priority=P3, Title=Non-ASCII arrow `→` in log lines, Fix description=Replaced `→` with `->` in both log lines in mailer.ts (smtp and resend paths).
 
 ## Strengths

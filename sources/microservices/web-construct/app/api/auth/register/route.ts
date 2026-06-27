@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { sendEmail } from '@/lib/mailer'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('auth:register')
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
@@ -15,6 +18,8 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient()
 
+  log.info({ domain }, 'register attempt')
+
   // Domain allow-list check
   const { data: domainRow } = await supabase
     .from('allowed_domains')
@@ -23,6 +28,7 @@ export async function POST(req: NextRequest) {
     .eq('active', true)
     .maybeSingle()
   if (!domainRow) {
+    log.info({ domain }, 'domain not allowed, skipping')
     return NextResponse.json({ ok: true })
   }
 
@@ -33,6 +39,7 @@ export async function POST(req: NextRequest) {
     .eq('email', normalizedEmail)
     .maybeSingle()
   if (existing?.id) {
+    log.info('email already registered, skipping')
     return NextResponse.json({ ok: true })
   }
 
@@ -43,9 +50,10 @@ export async function POST(req: NextRequest) {
     .select('id')
     .single()
   if (insertError || !newUser?.id) {
-    console.error('[register] Failed to create user:', insertError)
+    log.error({ err: insertError }, 'failed to create user')
     return NextResponse.json({ ok: true })
   }
+  log.info({ userId: newUser.id }, 'user created')
 
   // Create set-password token (48h)
   const token = crypto.randomUUID()
@@ -54,18 +62,23 @@ export async function POST(req: NextRequest) {
     .from('password_set_tokens')
     .insert({ user_id: newUser.id, token, expires_at: expiresAt })
   if (tokenError) {
-    console.error('[register] Failed to create token:', tokenError)
+    log.error({ err: tokenError }, 'failed to create password token')
     await supabase.from('users').delete().eq('id', newUser.id)
     return NextResponse.json({ ok: true })
   }
+  log.info({ userId: newUser.id }, 'password token created')
 
   const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL
   if (!baseUrl) {
-    console.error('[register] AUTH_URL / NEXTAUTH_URL not set')
+    log.error('AUTH_URL / NEXTAUTH_URL not set')
     return NextResponse.json({ ok: true })
   }
 
   const setPasswordUrl = `${baseUrl.replace(/\/$/, '')}/set-password?token=${token}`
+  if (process.env.NODE_ENV === 'development') {
+    log.info({ setPasswordUrl }, 'dev: set-password link')
+  }
+  log.info('sending welcome email')
 
   try {
     await sendEmail({
@@ -89,8 +102,9 @@ export async function POST(req: NextRequest) {
       `,
       text: `Benvenuto in Construct.\n\nImposta la tua password al seguente link (valido 48 ore):\n${setPasswordUrl}\n\nSe non ti aspettavi questa email, ignorala.`,
     })
+    log.info('welcome email sent')
   } catch (emailErr) {
-    console.error('[register] Failed to send email:', emailErr)
+    log.error({ err: emailErr }, 'failed to send welcome email')
   }
 
   return NextResponse.json({ ok: true })

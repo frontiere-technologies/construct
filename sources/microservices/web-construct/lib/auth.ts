@@ -5,6 +5,10 @@ import Keycloak from 'next-auth/providers/keycloak'
 import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { createAdminClient } from '@/lib/supabase-server'
+import { createLogger } from '@/lib/logger'
+import { authConfig } from '@/lib/auth.config'
+
+const log = createLogger('auth')
 
 // In-memory cache for allowed domains (60s TTL)
 let domainCache: { domains: string[]; expiresAt: number } | null = null
@@ -18,7 +22,7 @@ async function getAllowedDomains(): Promise<string[]> {
     .select('domain')
     .eq('active', true)
   if (error) {
-    console.error('[auth] Failed to retrieve allowed domains:', error)
+    log.error({ err: error }, 'failed to retrieve allowed domains')
     return domainCache?.domains ?? []
   }
   const domains = (data ?? []).map((r: { domain: string }) => r.domain)
@@ -113,7 +117,7 @@ function buildProviders() {
   if (process.env.AUTH_TEST_CREDENTIALS === 'true') {
     providers.push(
       Credentials({
-        id: 'test-credentials',
+        id: 'test',
         name: 'Test Credentials',
         credentials: {
           email: { label: 'Email', type: 'email' },
@@ -133,7 +137,7 @@ function buildProviders() {
             .eq('email', credentials.email)
             .single()
           if (!data) return null
-          return { id: data.id, email: data.email, name: data.name ?? data.email }
+          return { id: data.id, email: data.email, name: data.name ?? data.email, role: data.role }
         },
       })
     )
@@ -143,6 +147,7 @@ function buildProviders() {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers: buildProviders(),
   session: { strategy: 'jwt' as const },
   callbacks: {
@@ -163,7 +168,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.provider = account.provider
       }
       if (account && user) {
-        if (account.provider === 'credentials') {
+        if (account.provider === 'credentials' || account.provider === 'test') {
           token.userId = user.id as string
           token.role = (user as { role?: string }).role ?? 'user'
         } else {
@@ -185,7 +190,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.userId = (data?.id as string) ?? ''
             token.role = (data?.role as string) ?? 'user'
           } catch (err) {
-            console.error('[auth] Failed to provision user in Supabase:', err)
+            log.error({ err }, 'failed to provision user in Supabase')
             throw err
           }
         }
@@ -199,5 +204,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session
     },
   },
-  pages: { signIn: '/login' },
 })

@@ -54,3 +54,6 @@ __pycache__/
 
 # Temporary
 tmp/
+
+# Kubernetes secrets (valori reali — mai committare)
+sources/devops/k8s/*/secret.env
