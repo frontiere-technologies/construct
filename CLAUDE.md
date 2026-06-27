@@ -31,5 +31,7 @@ When generating any markdown file that contains actions, tasks, or items to addr
 
 ## Mark checkboxes as completed when done
 
-When an implementation is performed and the request originated from a markdown file that contains checkboxes (`- [ ]`), update each checkbox to `- [✅]` as soon as the corresponding implementation task is completed — only for tasks actually performed. This applies to any markdown file used as the source of the request (Superpowers plans in `docs/superpowers/plans/`, review files, or any other `.md` file with task lists).
+If the original request came from a `.md` file that contains checkboxes (`- [ ]`), you MUST immediately edit that file and mark the corresponding checkbox to `- [x] ✅` as soon as the related work is done. (`- [x]` is standard GFM and renders as a checked box on GitHub/IDE; `✅` adds a green visual in any renderer.) This rule applies regardless of how the implementation was performed: via superpowers plans, direct commands, test fixes, bug fixes, refactoring, or any other method. The trigger is the source file, not the method. Do this after each individual item — do not wait until the end. Only mark checkboxes for work actually performed.
+
+This rule also applies when work is delegated to subagents. As the orchestrating agent, you are responsible for updating the checkboxes — the subagent completing the work does not exempt you from this. In subagent-driven development, mark each task's checkboxes in the plan file as soon as the task reviewer approves it, not only at the end of all tasks.
 

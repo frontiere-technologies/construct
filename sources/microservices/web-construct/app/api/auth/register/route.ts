@@ -18,6 +18,8 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient()
 
+  log.info({ domain }, 'register attempt')
+
   // Domain allow-list check
   const { data: domainRow } = await supabase
     .from('allowed_domains')
@@ -26,6 +28,7 @@ export async function POST(req: NextRequest) {
     .eq('active', true)
     .maybeSingle()
   if (!domainRow) {
+    log.info({ domain }, 'domain not allowed, skipping')
     return NextResponse.json({ ok: true })
   }
 
@@ -36,6 +39,7 @@ export async function POST(req: NextRequest) {
     .eq('email', normalizedEmail)
     .maybeSingle()
   if (existing?.id) {
+    log.info('email already registered, skipping')
     return NextResponse.json({ ok: true })
   }
 
@@ -49,6 +53,7 @@ export async function POST(req: NextRequest) {
     log.error({ err: insertError }, 'failed to create user')
     return NextResponse.json({ ok: true })
   }
+  log.info({ userId: newUser.id }, 'user created')
 
   // Create set-password token (48h)
   const token = crypto.randomUUID()
@@ -61,6 +66,7 @@ export async function POST(req: NextRequest) {
     await supabase.from('users').delete().eq('id', newUser.id)
     return NextResponse.json({ ok: true })
   }
+  log.info({ userId: newUser.id }, 'password token created')
 
   const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL
   if (!baseUrl) {
@@ -69,6 +75,10 @@ export async function POST(req: NextRequest) {
   }
 
   const setPasswordUrl = `${baseUrl.replace(/\/$/, '')}/set-password?token=${token}`
+  if (process.env.NODE_ENV === 'development') {
+    log.info({ setPasswordUrl }, 'dev: set-password link')
+  }
+  log.info('sending welcome email')
 
   try {
     await sendEmail({
@@ -92,6 +102,7 @@ export async function POST(req: NextRequest) {
       `,
       text: `Benvenuto in Construct.\n\nImposta la tua password al seguente link (valido 48 ore):\n${setPasswordUrl}\n\nSe non ti aspettavi questa email, ignorala.`,
     })
+    log.info('welcome email sent')
   } catch (emailErr) {
     log.error({ err: emailErr }, 'failed to send welcome email')
   }

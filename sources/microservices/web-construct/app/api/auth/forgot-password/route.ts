@@ -44,6 +44,9 @@ export async function POST(req: NextRequest) {
   }
 
   const resetUrl = `${baseUrl.replace(/\/$/, '')}/set-password?token=${token}`
+  if (process.env.NODE_ENV === 'development') {
+    log.info({ resetUrl }, 'dev: reset-password link')
+  }
 
   try {
     await sendEmail({

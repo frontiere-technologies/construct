@@ -340,7 +340,7 @@ git commit -m "feat(deploy): add K8s base manifests (Deployment, Service, Config
 rm sources/devops/k8s/overlays/dev/.gitkeep
 ```
 
-- [ ] **Step 2: Crea kustomization.yaml dell'overlay dev**
+- [x] ✅ **Step 2: Crea kustomization.yaml dell'overlay dev**
 
 Crea `sources/devops/k8s/overlays/dev/kustomization.yaml`:
 
@@ -458,7 +458,7 @@ Aggiungi in fondo al file `.gitignore` della root:
 sources/devops/k8s/overlays/*/secret.env
 ```
 
-- [ ] **Step 7: Valida i manifest dell'overlay dev con dry-run**
+- [x] ✅ **Step 7: Valida i manifest dell'overlay dev con dry-run**
 
 ```bash
 kubectl apply -k sources/devops/k8s/overlays/dev --dry-run=client
@@ -562,7 +562,7 @@ git commit -m "feat(deploy): add staging and prod overlay placeholders"
 **Files:**
 - Nessun nuovo file — verifica operativa del deploy completo.
 
-- [ ] **Step 1: Abilita Kubernetes in Docker Desktop**
+- [x] ✅ **Step 1: Abilita Kubernetes in Docker Desktop**
 
 Apri Docker Desktop → Settings → Kubernetes → Enable Kubernetes → Apply & Restart.
 
@@ -577,7 +577,7 @@ kubectl cluster-info
 ```
 Atteso: `Kubernetes control plane is running at https://127.0.0.1:...`
 
-- [ ] **Step 2: Installa NGINX Ingress Controller**
+- [x] ✅ **Step 2: Installa NGINX Ingress Controller**
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.3/deploy/static/provider/cloud/deploy.yaml
@@ -593,7 +593,7 @@ kubectl wait --namespace ingress-nginx \
 
 Atteso: `pod/ingress-nginx-controller-... condition met`
 
-- [ ] **Step 3: Aggiungi construct.local a /etc/hosts**
+- [x] ✅ **Step 3: Aggiungi construct.local a /etc/hosts**
 
 ```bash
 echo "127.0.0.1  construct.local" | sudo tee -a /etc/hosts
@@ -605,7 +605,7 @@ grep construct.local /etc/hosts
 ```
 Atteso: `127.0.0.1  construct.local`
 
-- [ ] **Step 4: Builda l'immagine Docker con le variabili NEXT_PUBLIC**
+- [x] ✅ **Step 4: Builda l'immagine Docker con le variabili NEXT_PUBLIC**
 
 ```bash
 cd sources/microservices/web-construct
@@ -625,7 +625,7 @@ docker images web-construct:local
 ```
 Atteso: riga con `web-construct` e tag `local`.
 
-- [ ] **Step 5: Prepara il file secret.env**
+- [x] ✅ **Step 5: Prepara il file secret.env**
 
 ```bash
 cd sources/devops/k8s/overlays/dev
@@ -639,7 +639,7 @@ Apri `secret.env` con un editor e compila i valori copiandoli da `sources/micros
 - `SUPABASE_SERVICE_ROLE_KEY`
 - Almeno un provider OIDC oppure `AUTH_TEST_CREDENTIALS` e `NEXT_PUBLIC_AUTH_TEST_MODE=true`
 
-- [ ] **Step 6: Esegui il deploy**
+- [x] ✅ **Step 6: Esegui il deploy**
 
 ```bash
 cd sources/devops/k8s/overlays/dev
@@ -660,7 +660,7 @@ ingress.networking.k8s.io/web-construct configured
 ✓ Deploy completato. ...
 ```
 
-- [ ] **Step 7: Attendi che il pod sia Ready**
+- [x] ✅ **Step 7: Attendi che il pod sia Ready**
 
 ```bash
 kubectl get pods -n construct -w
@@ -670,13 +670,13 @@ Atteso entro ~60 secondi: `web-construct-<hash>   1/1   Running   0   ...`
 
 Premi `Ctrl+C` per uscire dal watch.
 
-- [ ] **Step 8: Verifica l'app in un browser**
+- [x] ✅ **Step 8: Verifica l'app in un browser**
 
 Apri http://construct.local
 
 Atteso: pagina di login dell'app visibile e funzionante. Prova il login con un provider configurato.
 
-- [ ] **Step 9: Commit finale**
+- [x] ✅ **Step 9: Commit finale**
 
 ```bash
 cd /Users/mario.stefanutti/mario/programming/github-frontiere/construct

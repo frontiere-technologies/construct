@@ -56,7 +56,7 @@ function LoginForm() {
   const handleTestLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setTestLoading(true)
-    await signIn('test-credentials', { email: testEmail, callbackUrl: '/' })
+    await signIn('test', { email: testEmail, callbackUrl: '/' })
   }
 
   return (

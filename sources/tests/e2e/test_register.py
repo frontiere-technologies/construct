@@ -31,9 +31,10 @@ def test_register_unauthorized_domain_shows_confirmation(page, base_url):
     page.locator('input[type="email"]').fill('hacker@notallowed.xyz')
     page.locator('button[type="submit"]').click()
 
+    # Higher timeout: first hit to this API route triggers Next.js dev-mode compilation (~3-5s)
     page.wait_for_selector(
         'text=Se l\'email è autorizzata riceverai un link per completare la registrazione.',
-        timeout=5000,
+        timeout=15000,
     )
     assert page.locator(
         'text=Se l\'email è autorizzata riceverai un link per completare la registrazione.'
@@ -87,9 +88,10 @@ def test_forgot_password_submission_shows_confirmation(page, base_url):
     page.locator('input[type="email"]').fill('anyone@frontiere.io')
     page.locator('button[type="submit"]').click()
 
+    # Higher timeout: first hit to this API route triggers Next.js dev-mode compilation (~3-5s)
     page.wait_for_selector(
         'text=Se l\'email è registrata riceverai un link per reimpostare la password.',
-        timeout=5000,
+        timeout=15000,
     )
     assert page.locator(
         'text=Se l\'email è registrata riceverai un link per reimpostare la password.'

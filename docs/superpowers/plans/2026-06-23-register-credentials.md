@@ -37,7 +37,7 @@
 - Consumes: `createAdminClient()` from `@/lib/supabase-server`, `sendEmail()` from `@/lib/mailer`
 - Produces: `POST /api/auth/register` accepts `{ email: string }`, always returns `{ ok: true }`
 
-- [✅] **Step 1: Create the route file**
+- [x] **Step 1: Create the route file**
 
 Create `apps/web/app/api/auth/register/route.ts` with this exact content:
 
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [✅] **Step 2: Verify the route builds**
+- [x] **Step 2: Verify the route builds**
 
 ```bash
 npm run build 2>&1 | grep -E "error|Error|✓"
@@ -147,7 +147,7 @@ npm run build 2>&1 | grep -E "error|Error|✓"
 
 Expected: no TypeScript errors, route appears in build output.
 
-- [✅] **Step 3: Smoke-test the route with curl**
+- [x] **Step 3: Smoke-test the route with curl**
 
 With the dev server running (`npm run dev`):
 
@@ -165,7 +165,7 @@ curl -s -X POST http://localhost:3000/api/auth/register \
 # Expected: {"ok":true}
 ```
 
-- [✅] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/app/api/auth/register/route.ts
@@ -183,7 +183,7 @@ git commit -m "feat(api): add POST /api/auth/register for credentials self-regis
 - Consumes: `POST /api/auth/register` from Task 1
 - Produces: visible inline form triggered by "Registrati" link
 
-- [✅] **Step 1: Add register state variables**
+- [x] **Step 1: Add register state variables**
 
 In `LoginForm` (after the existing `forgotStatus` state line ~49), add:
 
@@ -193,7 +193,7 @@ const [registerEmail, setRegisterEmail] = useState('')
 const [registerStatus, setRegisterStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 ```
 
-- [✅] **Step 2: Add the submit handler**
+- [x] **Step 2: Add the submit handler**
 
 After the `handleForgotPassword` function (~line 77), add:
 
@@ -214,7 +214,7 @@ const handleRegister = async (e: React.FormEvent) => {
 }
 ```
 
-- [✅] **Step 3: Wire the "Registrati" link**
+- [x] **Step 3: Wire the "Registrati" link**
 
 Replace the current dead `<a href="#">` link (~line 190-198):
 
@@ -236,7 +236,7 @@ Replace the current dead `<a href="#">` link (~line 190-198):
 </a>
 ```
 
-- [✅] **Step 4: Add the inline form**
+- [x] **Step 4: Add the inline form**
 
 In the footer `<div>`, after the closing `)}` of the `{forgotMode && (...)}` block and before the `{isTestMode && (...)}` block, add:
 
@@ -284,7 +284,7 @@ In the footer `<div>`, after the closing `)}` of the `{forgotMode && (...)}` blo
 )}
 ```
 
-- [✅] **Step 5: Also close registerMode when forgotMode is opened**
+- [x] **Step 5: Also close registerMode when forgotMode is opened**
 
 Find the "Password dimenticata?" button handler (~line 143-146) and add `setRegisterMode(false)`:
 
@@ -297,7 +297,7 @@ onClick={() => {
 }}
 ```
 
-- [✅] **Step 6: Verify no TypeScript errors**
+- [x] **Step 6: Verify no TypeScript errors**
 
 ```bash
 npm run lint 2>&1 | grep -E "error|Error"
@@ -305,7 +305,7 @@ npm run lint 2>&1 | grep -E "error|Error"
 
 Expected: no errors.
 
-- [✅] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/web/components/Login.tsx
@@ -322,7 +322,7 @@ git commit -m "feat(ui): wire Registrati link to inline self-registration form"
 **Interfaces:**
 - Consumes: `POST /api/auth/register` (Task 1), login page UI (Task 2)
 
-- [✅] **Step 1: Create the test file**
+- [x] **Step 1: Create the test file**
 
 Create `tests/e2e/test_register.py`:
 
@@ -407,7 +407,7 @@ def test_registrati_and_forgotmode_are_mutually_exclusive(page, base_url):
     assert not page.locator('text=Inserisci la tua email per ricevere un link di reset.').is_visible()
 ```
 
-- [✅] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 From the project root (with dev server already running):
 
@@ -424,7 +424,7 @@ tests/e2e/test_register.py::test_register_authorized_domain_shows_confirmation P
 tests/e2e/test_register.py::test_registrati_and_forgotmode_are_mutually_exclusive PASSED
 ```
 
-- [✅] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e/test_register.py

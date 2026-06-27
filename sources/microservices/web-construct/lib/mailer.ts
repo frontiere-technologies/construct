@@ -12,6 +12,12 @@ interface SendEmailOptions {
 }
 
 export async function sendEmail({ to, subject, html, text }: SendEmailOptions): Promise<void> {
+  const devOverride = process.env.EMAIL_DEV_OVERRIDE
+  if (devOverride) {
+    log.info({ originalTo: to, overrideTo: devOverride }, 'dev override: redirecting email')
+    to = devOverride
+  }
+
   const provider = process.env.MAIL_PROVIDER ?? 'resend'
 
   if (provider === 'smtp') {
