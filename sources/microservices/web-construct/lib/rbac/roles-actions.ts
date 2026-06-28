@@ -32,7 +32,7 @@ export async function renameRole(roleId: number, roleName: string): Promise<void
   if (!name) throw new Error('Role name is required')
   const supabase = createAdminClient()
   if (await getRoleType(supabase, roleId) !== 'SERVICE') throw new Error('This role cannot be renamed')
-  const { error } = await supabase.from('role').update({ description: name }).eq('id_role', roleId)
+  const { error } = await supabase.from('role').update({ description: name, date_mod: new Date().toISOString() }).eq('id_role', roleId)
   if (error) throw new Error(`Failed to rename role: ${error.message}`)
 }
 
@@ -52,6 +52,8 @@ export async function updateRolePermissions(roleId: number, deltas: PermissionDe
     const { error } = await supabase.from('role_item').delete().eq('id_role', roleId).in('id_item', revokeIds)
     if (error) throw new Error(`Failed to revoke permissions: ${error.message}`)
   }
+  const { error: stampErr } = await supabase.from('role').update({ date_mod: new Date().toISOString() }).eq('id_role', roleId)
+  if (stampErr) throw new Error(`Failed to update role timestamp: ${stampErr.message}`)
 }
 
 export async function deleteRole(roleId: number): Promise<void> {
