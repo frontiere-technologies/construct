@@ -37,8 +37,10 @@ describe('mapNavigationToSidebar', () => {
     cat(2, 0, 'RBAC', { item_translation: { EN: { name: 'RBAC' } } }),
     fn(3, 2, 'Users', 'userManagement', { order_position: 0 }),
     fn(99, -1, 'USER_READ', '', { id_functionality_type: 5 }),
+    cat(100, 99, 'deep ops child'),
+    fn(50, 2, 'Hidden', 'hidden', { config_visibility: 1 }),
   ]
-  const authorized = new Set([2, 3, 99])
+  const authorized = new Set([2, 3, 99, 100, 50])
   const result = mapNavigationToSidebar(items, authorized)
 
   it('omits the root and operations virtual nodes', () => {
@@ -59,5 +61,11 @@ describe('mapNavigationToSidebar', () => {
     expect(users.type).toBe('link')
     expect(users.route).toBe('/userManagement')
     expect(users.parentId).toBe('2')
+  })
+  it('deeply-nested operations item is excluded', () => {
+    expect(result.find(i => i.id === '100')).toBeUndefined()
+  })
+  it('config_visibility item is excluded', () => {
+    expect(result.find(i => i.id === '50')).toBeUndefined()
   })
 })
