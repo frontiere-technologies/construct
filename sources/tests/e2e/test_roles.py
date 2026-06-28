@@ -1,5 +1,7 @@
 import time
 
+from playwright.sync_api import expect
+
 
 def test_roles_list_loads(logged_in_page, base_url):
     page = logged_in_page
@@ -25,22 +27,28 @@ def test_create_rename_delete_role(logged_in_page, base_url):
 
     # Rename via the pencil (SERVICE roles are renamable)
     renamed = name + " R"
-    page.locator("h1").get_by_role("button").click()
+    page.get_by_test_id("rename-role-btn").click()
     page.get_by_placeholder("Nome ruolo").fill(renamed)
     page.get_by_role("button", name="Salva").click()
-    page.wait_for_load_state("networkidle")
-    assert renamed in page.inner_text("h1")
+    # Wait for the heading to reflect the rename (retrying assertion)
+    expect(page.locator("h1")).to_contain_text(renamed)
 
-    # Back to list, delete it
-    page.goto(f"{base_url}/rolesPermissions?search={renamed.replace(' ', '%20')}")
+    # Back to list, delete it — use search input to avoid URL encoding issues
+    page.goto(f"{base_url}/rolesPermissions")
     page.wait_for_load_state("networkidle")
-    page.locator('[data-testid="row-menu"]').first.click()
+    page.get_by_placeholder("Cerca").fill(renamed)
+    # Wait for the filtered row to appear (debounce ~350ms, default timeout retries)
+    # Use the row that contains the renamed text specifically
+    row = page.locator("tr").filter(has_text=renamed)
+    expect(row).to_be_visible()
+    row.locator('[data-testid="row-menu"]').click()
     page.once("dialog", lambda d: d.accept())
     page.get_by_role("button", name="Elimina").click()
-    page.wait_for_timeout(1000)
-    page.reload()
+    # Navigate to list and confirm the role is gone
+    page.goto(f"{base_url}/rolesPermissions")
     page.wait_for_load_state("networkidle")
-    assert renamed not in page.content()
+    page.get_by_placeholder("Cerca").fill(renamed)
+    expect(page.get_by_text(renamed, exact=True)).to_have_count(0)
 
 
 def test_toggle_permission_persists(logged_in_page, base_url):
@@ -57,11 +65,14 @@ def test_toggle_permission_persists(logged_in_page, base_url):
     page.get_by_role("button", name="Modifica").click()
     page.locator('[data-testid="perm-toggle"]').first.click()
     page.get_by_role("button", name="Salva").click()
-    page.wait_for_load_state("networkidle")
 
-    # Reload: at least one toggle must be ON (aria-checked=true)
+    # Wait for save to complete: edit mode exits → "Modifica" button reappears
+    page.get_by_role("button", name="Modifica").wait_for(state="visible", timeout=10_000)
+
+    # Reload and assert at least one permission toggle is ON
     page.goto(detail_url)
     page.wait_for_load_state("networkidle")
+    page.wait_for_selector('[data-testid="perm-toggle"][aria-checked="true"]', timeout=10_000)
     assert page.locator('[data-testid="perm-toggle"][aria-checked="true"]').count() >= 1
 
 
