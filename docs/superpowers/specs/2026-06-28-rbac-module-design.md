@@ -198,12 +198,20 @@ Per project rule: **browser verification of every area** (build success is not e
 
 ## 7. Phasing
 
-- [ ] **Phase 0 — Foundation:** schema + seed + migration; auth/session rewire (`isAdmin`, `roleIds`); `requireAdmin`; remove old menu system; repoint sidebar to `navigation_item`; DTOs + `DataTable`/`NavigationTree` primitives.
+- [x] ✅ **Phase 0 — Foundation:** schema + seed + migration; auth/session rewire (`isAdmin`, `roleIds`); `requireAdmin`; remove old menu system; repoint sidebar to `navigation_item`. (`DataTable`/`NavigationTree` primitives + DTOs deferred to Phase 1, where they are first consumed.) Completed 2026-06-28 via subagent-driven development (11 tasks); final whole-branch review: Ready to merge. Plan: `docs/superpowers/plans/2026-06-28-rbac-phase-0-foundation.md`.
 - [ ] **Phase 1 — Roles & Permissions** (exercises tree + permissions end-to-end first).
 - [ ] **Phase 2 — Functionalities** (richest forms).
 - [ ] **Phase 3 — Users** (depends on roles existing).
 
 Each phase: build → browser-verify → E2E → review.
+
+### Phase 0 → later-phase carry-forward (from final whole-branch review)
+- [ ] ID=CARRY-1, Severity=Important, Priority=P1, Phase=1, Title=Orphaned-child in sidebar adapter — `mapNavigationToSidebar` authorizes each item only on its own id; a SERVICE role granted a leaf without its parent category yields a dangling `parentId`. Invisible for Administrator (all authorized). Fix in Phase 1: auto-include authorized-leaf ancestors, or drop items whose parentId isn't in the emitted set.
+- [ ] ID=CARRY-2, Severity=Important, Priority=P1, Phase=1, Title=Non-admin baseline sidebar is empty — only Administrator has `role_item` grants and nothing has `no_permission_need_for_navigation=1`, so role-0-only users see no nav (not even Home). Spec-consistent + fail-closed. Decide whether Home should be universally visible (seed `no_permission_need_for_navigation=1`).
+- [ ] ID=CARRY-3, Severity=Important, Priority=P1, Phase=2, Title=IconRenderer SVG sanitization — `dangerouslySetInnerHTML` on `icon_path` is safe only while admin-only; MUST add sanitization before the Phase-2 Functionalities form lets an admin store SVG (otherwise stored-XSS to every user's sidebar).
+- [ ] ID=CARRY-4, Severity=Minor, Priority=P2, Phase=2, Title=navigation_item self-FK is ON DELETE CASCADE — `is_immutable` is enforced only in the app layer; the Phase-2 delete action must block deleting immutable nodes (the DB cascade won't).
+- [ ] ID=CARRY-5, Severity=Minor, Priority=P2, Phase=1, Title=Stale pre-deploy JWT — users logged in before this deploy carry a token without `roleIds`/`isAdmin` (fail-closed: empty sidebar, no admin access) until re-login. Add a release note or short token maxAge for the rollout.
+- [ ] ID=CARRY-6, Severity=Minor, Priority=P3, Phase=1, Title=Cosmetic/robustness cleanup — auth.ts OIDC empty-userId guard + drop redundant `(token.roleIds as number[]) ?? []` cast; schema sequence `OWNED BY` + `CREATE OR REPLACE TRIGGER`; test_highlight 400ms wait → wait-for-visible.
 
 ---
 
