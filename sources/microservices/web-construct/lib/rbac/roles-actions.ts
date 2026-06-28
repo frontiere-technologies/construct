@@ -11,7 +11,7 @@ async function getRoleType(supabase: ReturnType<typeof createAdminClient>, roleI
     .from('role').select('role_type:role_type(description)').eq('id_role', roleId).single()
   if (error) throw new Error(`Role not found: ${error.message}`)
   const desc = (data as { role_type?: { description?: string } })?.role_type?.description
-  return (desc as RoleType) ?? 'SERVICE'
+  return (desc as RoleType) ?? 'SYSTEM'
 }
 
 export async function createRole(roleName: string): Promise<{ id: number }> {
