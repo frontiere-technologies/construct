@@ -314,3 +314,18 @@ on conflict (user_id, id_role) do nothing;
 insert into user_role (user_id, id_role)
 select id, 1 from users where role = 'admin'
 on conflict (user_id, id_role) do nothing;
+
+-- ============================================================
+-- RBAC: role list view (counts for the roles table)
+-- ============================================================
+create or replace view role_list_view as
+select
+  r.id_role                                                            as id,
+  r.description                                                        as description,
+  rt.description                                                       as role_type,
+  r.date_ins                                                           as date_ins,
+  r.date_mod                                                           as date_mod,
+  (select count(*) from user_role ur where ur.id_role = r.id_role)     as associated_users,
+  exists(select 1 from role_item ri where ri.id_role = r.id_role)      as has_permissions
+from role r
+left join role_type rt on rt.id_role_type = r.id_role_type;
