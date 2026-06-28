@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import type { AppSettings } from '@/types/menu'
-import { defaultSettings, defaultThemeConfig } from '@/lib/menu-utils'
+import { defaultSettings, defaultThemeConfig } from '@/types/menu'
 import { loadThemeConfig } from '@/lib/theme-actions'
 
 interface UIContextType {

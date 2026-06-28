@@ -36,3 +36,21 @@ export interface AppSettings {
   theme: 'light' | 'dark';
   themeConfig: ThemeConfig;
 }
+
+export const defaultThemeConfig: ThemeConfig = {
+  primaryColor: '#6366f1',
+  sidebarBgLight: '#ffffff',
+  sidebarBgDark: '#111827',
+  sidebarTextLight: '#4b5563',
+  sidebarTextDark: '#9ca3af',
+  activeItemBgLight: '#f3f4f6',
+  activeItemBgDark: '#1f2937',
+  activeItemTextLight: '#111827',
+  activeItemTextDark: '#ffffff',
+}
+
+export const defaultSettings: AppSettings = {
+  language: 'en',
+  theme: 'light',
+  themeConfig: defaultThemeConfig,
+}

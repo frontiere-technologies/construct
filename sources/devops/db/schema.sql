@@ -284,9 +284,22 @@ from (values
 ) as v(name, ord)
 where not exists (select 1 from navigation_item n where n.name = v.name and n.id_item_parent = -1);
 
+-- Admin section + Theme page (replaces old menu_items seed)
+insert into navigation_item
+  (id_item, name, id_item_type, id_functionality_type, functionality_link, id_item_parent, order_position, icon_path, navbar_position, item_translation, is_immutable, config_visibility)
+values
+  (6, 'Admin', 1, null, null, 0, 9, 'Shield', 'BOTTOM', '{"EN":{"name":"Admin"}}', 1, 0),
+  (7, 'Theme & Styles', 2, 3, 'admin/theme', 6, 0, 'Palette', 'BOTTOM', '{"EN":{"name":"Theme & Styles"}}', 1, 0)
+on conflict (id_item) do nothing;
+
 -- Administrator authorized on every navigation item
 insert into role_item (id_role, id_item, authorized)
 select 1, n.id_item, true from navigation_item n
+on conflict (id_role, id_item) do update set authorized = true;
+
+-- Explicit Administrator grant for Admin/Theme nav items
+insert into role_item (id_role, id_item, authorized)
+select 1, n.id_item from navigation_item n where n.id_item in (6,7)
 on conflict (id_role, id_item) do update set authorized = true;
 
 -- ============================================================

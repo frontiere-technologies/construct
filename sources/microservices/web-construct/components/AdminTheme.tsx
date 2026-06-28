@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useUI } from '@/context/UIContext'
-import { defaultThemeConfig } from '@/lib/menu-utils'
+import { defaultThemeConfig } from '@/types/menu'
 import { saveThemeConfig } from '@/lib/theme-actions'
 import type { ThemeConfig } from '@/types/menu'
 import { Card } from '@/components/Card'
