@@ -199,19 +199,25 @@ Per project rule: **browser verification of every area** (build success is not e
 ## 7. Phasing
 
 - [x] ✅ **Phase 0 — Foundation:** schema + seed + migration; auth/session rewire (`isAdmin`, `roleIds`); `requireAdmin`; remove old menu system; repoint sidebar to `navigation_item`. (`DataTable`/`NavigationTree` primitives + DTOs deferred to Phase 1, where they are first consumed.) Completed 2026-06-28 via subagent-driven development (11 tasks); final whole-branch review: Ready to merge. Plan: `docs/superpowers/plans/2026-06-28-rbac-phase-0-foundation.md`.
-- [ ] **Phase 1 — Roles & Permissions** (exercises tree + permissions end-to-end first).
+- [x] ✅ **Phase 1 — Roles & Permissions** (exercises tree + permissions end-to-end first). Completed 2026-06-28 via subagent-driven development (11 tasks); full E2E 41/41 green; final whole-branch review: Ready to merge. Spec: `docs/superpowers/specs/2026-06-28-rbac-phase-1-roles-permissions-design.md`; plan: `docs/superpowers/plans/2026-06-28-rbac-phase-1-roles-permissions.md`. Resolved CARRY-1 (adapter orphan-drop + auto-authorize-ancestors) and CARRY-2 (confirmed strictly-gated).
 - [ ] **Phase 2 — Functionalities** (richest forms).
 - [ ] **Phase 3 — Users** (depends on roles existing).
 
 Each phase: build → browser-verify → E2E → review.
 
 ### Phase 0 → later-phase carry-forward (from final whole-branch review)
-- [ ] ID=CARRY-1, Severity=Important, Priority=P1, Phase=1, Title=Orphaned-child in sidebar adapter — `mapNavigationToSidebar` authorizes each item only on its own id; a SERVICE role granted a leaf without its parent category yields a dangling `parentId`. Invisible for Administrator (all authorized). Fix in Phase 1: auto-include authorized-leaf ancestors, or drop items whose parentId isn't in the emitted set.
-- [ ] ID=CARRY-2, Severity=Important, Priority=P1, Phase=1, Title=Non-admin baseline sidebar is empty — only Administrator has `role_item` grants and nothing has `no_permission_need_for_navigation=1`, so role-0-only users see no nav (not even Home). Spec-consistent + fail-closed. Decide whether Home should be universally visible (seed `no_permission_need_for_navigation=1`).
+- [x] ✅ ID=CARRY-1, Severity=Important, Priority=P1, Phase=1, Title=Orphaned-child in sidebar adapter — RESOLVED in Phase 1: cascade auto-authorizes ancestors on grant (permission-tree `applyToggle`) AND `mapNavigationToSidebar` drops items whose parentId isn't in the emitted set (sidebar-adapter, unit-tested).
+- [x] ✅ ID=CARRY-2, Severity=Important, Priority=P1, Phase=1, Title=Non-admin baseline sidebar is empty — RESOLVED as intended: kept strictly gated (user decision); the always-present user/profile/theme panel is the baseline. No change.
 - [ ] ID=CARRY-3, Severity=Important, Priority=P1, Phase=2, Title=IconRenderer SVG sanitization — `dangerouslySetInnerHTML` on `icon_path` is safe only while admin-only; MUST add sanitization before the Phase-2 Functionalities form lets an admin store SVG (otherwise stored-XSS to every user's sidebar).
 - [ ] ID=CARRY-4, Severity=Minor, Priority=P2, Phase=2, Title=navigation_item self-FK is ON DELETE CASCADE — `is_immutable` is enforced only in the app layer; the Phase-2 delete action must block deleting immutable nodes (the DB cascade won't).
 - [ ] ID=CARRY-5, Severity=Minor, Priority=P2, Phase=1, Title=Stale pre-deploy JWT — users logged in before this deploy carry a token without `roleIds`/`isAdmin` (fail-closed: empty sidebar, no admin access) until re-login. Add a release note or short token maxAge for the rollout.
 - [ ] ID=CARRY-6, Severity=Minor, Priority=P3, Phase=1, Title=Cosmetic/robustness cleanup — auth.ts OIDC empty-userId guard + drop redundant `(token.roleIds as number[]) ?? []` cast; schema sequence `OWNED BY` + `CREATE OR REPLACE TRIGGER`; test_highlight 400ms wait → wait-for-visible.
+
+### Phase 1 → later-phase carry-forward (from final whole-branch review)
+- [x] ✅ ID=CARRY-7, Severity=Important, Priority=P2, Phase=1, Title=role.date_mod never stamped — RESOLVED in Phase 1: `renameRole` and `updateRolePermissions` now set `role.date_mod` (commit 3fc7be3), so "Ultimo aggiornamento" + dateMod sort work.
+- [ ] ID=CARRY-8, Severity=Minor, Priority=P2, Phase=2, Title=updateRolePermissions not atomic — grant-upsert + revoke-delete + date_mod stamp are separate statements; a mid-failure leaves a partial update (idempotent on retry). Consider a Postgres RPC for atomicity.
+- [ ] ID=CARRY-9, Severity=Minor, Priority=P3, Phase=2, Title=DRY/perf cleanups — extract shared `labelFor` (duplicated in sidebar-adapter + permission-tree); `buildAuthMap` redundant `indexTree` pass; `getRoleAuthorizationTree` loads full navigation_item twice per detail load (single-fetch helper); `getRoleType` extra round-trip per mutation.
+- [ ] ID=CARRY-10, Severity=Minor, Priority=P3, Phase=2, Title=RolesTableClient URL-state polish — remove debounce `eslint-disable` (add `props.search`+`setParam` deps); sync local search to `props.search` on browser back/forward; CreateRoleModal busy-reset + RenameRoleModal close/refresh ordering; breadcrumb → Link; remove unused `UserNavigationTreeDto` import in permission-tree.test.ts; harden the two non-retrying assertions in test_roles.py.
 
 ---
 
