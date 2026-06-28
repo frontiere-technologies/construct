@@ -11,7 +11,7 @@ export interface MenuItem {
   order: number;
   visible: boolean;
   active: boolean;
-  roles: string[];
+  roles?: string[];
   target?: '_blank' | '_self';
   position: MenuPosition;
   collapsible?: boolean;

@@ -291,11 +291,11 @@ export const AdminMenuBuilder: React.FC<AdminMenuBuilderProps> = ({ initialMenuI
                       <label key={role} className="flex items-center space-x-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={editingItem.roles.includes(role)}
+                          checked={(editingItem.roles ?? []).includes(role)}
                           onChange={e => {
                             const roles = e.target.checked
-                              ? [...editingItem.roles, role]
-                              : editingItem.roles.filter(r => r !== role)
+                              ? [...(editingItem.roles ?? []), role]
+                              : (editingItem.roles ?? []).filter(r => r !== role)
                             setEditingItem({ ...editingItem, roles })
                           }}
                           className="rounded"
