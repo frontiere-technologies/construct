@@ -68,4 +68,9 @@ describe('mapNavigationToSidebar', () => {
   it('config_visibility item is excluded', () => {
     expect(result.find(i => i.id === '50')).toBeUndefined()
   })
+  it('drops an item whose parent is not in the emitted set (orphan)', () => {
+    // authorize a leaf (3, parent 2) but NOT its parent category (2)
+    const result2 = mapNavigationToSidebar(items, new Set([3]))
+    expect(result2.find(i => i.id === '3')).toBeUndefined()
+  })
 })

@@ -74,5 +74,6 @@ export function mapNavigationToSidebar(
       system: it.is_immutable === 1,
     })
   }
-  return out
+  const emitted = new Set(out.map(m => m.id))
+  return out.filter(m => m.parentId === null || emitted.has(m.parentId))
 }
