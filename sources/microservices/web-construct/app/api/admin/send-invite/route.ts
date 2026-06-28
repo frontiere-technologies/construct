@@ -8,7 +8,7 @@ const log = createLogger('admin:send-invite')
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  if (!session || session.user.role !== 'admin') {
+  if (!session || !session.user.isAdmin) {
     return NextResponse.json({ error: 'Non autorizzato.' }, { status: 403 })
   }
 

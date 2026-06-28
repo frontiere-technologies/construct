@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs'
 import { createAdminClient } from '@/lib/supabase-server'
 import { createLogger } from '@/lib/logger'
 import { authConfig } from '@/lib/auth.config'
+import { resolveUserRoleIds, computeIsAdmin } from '@/lib/rbac/auth-roles'
 
 const log = createLogger('auth')
 
@@ -84,7 +85,7 @@ function buildProviders() {
         const supabase = createAdminClient()
         const { data: user } = await supabase
           .from('users')
-          .select('id, email, name, role, password_hash')
+          .select('id, email, name, password_hash')
           .eq('email', (credentials.email as string).toLowerCase().trim())
           .single()
 
@@ -108,7 +109,7 @@ function buildProviders() {
           .update({ auth_provider: 'credentials' })
           .eq('id', user.id)
 
-        return { id: user.id, email: user.email, name: user.name ?? user.email, role: user.role }
+        return { id: user.id, email: user.email, name: user.name ?? user.email }
       },
     })
   )
@@ -133,11 +134,11 @@ function buildProviders() {
             )
           const { data } = await supabase
             .from('users')
-            .select('id, email, role, name')
+            .select('id, email, name')
             .eq('email', credentials.email)
             .single()
           if (!data) return null
-          return { id: data.id, email: data.email, name: data.name ?? data.email, role: data.role }
+          return { id: data.id, email: data.email, name: data.name ?? data.email }
         },
       })
     )
@@ -163,14 +164,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true
     },
     async jwt({ token, user, account }) {
-      // Always persist provider when account is present (first sign-in and token updates)
-      if (account) {
-        token.provider = account.provider
-      }
+      if (account) token.provider = account.provider
+
       if (account && user) {
+        let userId: string
         if (account.provider === 'credentials' || account.provider === 'test') {
-          token.userId = user.id as string
-          token.role = (user as { role?: string }).role ?? 'user'
+          userId = user.id as string
         } else {
           try {
             const supabase = createAdminClient()
@@ -185,21 +184,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 },
                 { onConflict: 'email', ignoreDuplicates: false }
               )
-              .select('id, role')
+              .select('id')
               .single()
-            token.userId = (data?.id as string) ?? ''
-            token.role = (data?.role as string) ?? 'user'
+            userId = (data?.id as string) ?? ''
           } catch (err) {
             log.error({ err }, 'failed to provision user in Supabase')
             throw err
           }
         }
+        token.userId = userId
+        const roleIds = userId ? await resolveUserRoleIds(userId) : []
+        token.roleIds = roleIds
+        token.isAdmin = computeIsAdmin(roleIds)
       }
       return token
     },
     async session({ session, token }) {
       session.user.id = token.userId as string
-      session.user.role = token.role as string
+      session.user.roleIds = (token.roleIds as number[]) ?? []
+      session.user.isAdmin = Boolean(token.isAdmin)
       session.user.provider = token.provider as string
       return session
     },

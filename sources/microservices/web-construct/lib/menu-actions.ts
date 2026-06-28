@@ -7,7 +7,7 @@ import type { MenuItem } from '@/types/menu'
 
 export async function upsertMenuItem(item: MenuItem): Promise<void> {
   const session = await auth()
-  if (session?.user?.role !== 'admin') throw new Error('Unauthorized')
+  if (!session?.user?.isAdmin) throw new Error('Unauthorized')
   const supabase = createAdminClient()
   const { error } = await supabase
     .from('menu_items')
@@ -17,7 +17,7 @@ export async function upsertMenuItem(item: MenuItem): Promise<void> {
 
 export async function deleteMenuItem(id: string): Promise<void> {
   const session = await auth()
-  if (session?.user?.role !== 'admin') throw new Error('Unauthorized')
+  if (!session?.user?.isAdmin) throw new Error('Unauthorized')
   const supabase = createAdminClient()
   const { error } = await supabase
     .from('menu_items')
@@ -30,7 +30,7 @@ export async function updateMenuItemOrders(
   updates: Array<{ id: string; order: number }>
 ): Promise<void> {
   const session = await auth()
-  if (session?.user?.role !== 'admin') throw new Error('Unauthorized')
+  if (!session?.user?.isAdmin) throw new Error('Unauthorized')
   const supabase = createAdminClient()
   const { error } = await supabase.rpc('update_menu_orders', { updates })
   if (error) throw new Error(error.message)

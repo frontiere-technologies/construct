@@ -4,10 +4,10 @@ import { Layout } from '@/components/Layout'
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const [menuItems, session] = await Promise.all([getMenuItems(), auth()])
-  const userRole = session?.user?.role ?? 'user'
+  const isAdmin = session?.user?.isAdmin ?? false
 
   const filteredItems = menuItems.filter(i =>
-    i.roles.length === 0 || i.roles.includes(userRole)
+    i.roles.length === 0 || i.roles.includes(isAdmin ? 'admin' : 'user')
   )
 
   return <Layout menuItems={filteredItems}>{children}</Layout>
