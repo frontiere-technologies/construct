@@ -30,6 +30,10 @@ interface IconRendererProps {
 }
 
 export const IconRenderer: React.FC<IconRendererProps> = memo(({ name, className, size = 20 }) => {
+  const LazyIcon = useMemo(() => (!isInlineSvg(name) && name) ? getLazyIcon(name) : null, [name])
+
+  // icon_path values come from the admin-managed navigation_item table (RBAC Administrator only);
+  // rendered as trusted inline SVG. TODO(security): sanitize if a non-admin path can ever populate icon_path.
   if (isInlineSvg(name)) {
     return (
       <span
@@ -39,7 +43,7 @@ export const IconRenderer: React.FC<IconRendererProps> = memo(({ name, className
       />
     )
   }
-  const LazyIcon = useMemo(() => name ? getLazyIcon(name) : null, [name])
+
   if (!name || !LazyIcon) return null
   return (
     <Suspense fallback={<HelpCircle className={className} size={size} />}>
