@@ -38,3 +38,52 @@ export interface RoleItemRow {
   id_item: number
   authorized: boolean
 }
+
+export type RoleType = 'SYSTEM' | 'SERVICE' | 'SYNCED'
+
+export interface RolePageItemDto {
+  id: number
+  description: string
+  associatedUsers: number
+  hasPermissions: boolean
+  dateIns: string | null
+  dateMod: string | null
+  roleType: RoleType
+}
+
+export interface RoleInformationDto {
+  id: number
+  roleName: string
+  associatedUsersCount: number
+  roleType: RoleType
+}
+
+export interface UserNavigationTreeDto {
+  id: number
+  name: string
+  type: 'CATEGORY' | 'FUNCTIONALITY'
+  parentId: number | null
+  authorization: boolean
+  children: UserNavigationTreeDto[]
+}
+
+export interface PermissionDelta {
+  idItem: number
+  authorization: boolean
+}
+
+export interface RolesQuery {
+  page: number
+  size: number
+  search?: string
+  sort?: 'id' | 'description' | 'associatedUsers' | 'dateIns' | 'dateMod'
+  direction?: 'ASC' | 'DESC'
+  hasPermission?: boolean
+  startDateIns?: string
+  endDateIns?: string
+}
+
+export interface RolesPage {
+  pagination: { currentElements: number; currentPage: number; totalPages: number }
+  elements: RolePageItemDto[]
+}
