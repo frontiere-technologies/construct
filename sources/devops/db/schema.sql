@@ -101,6 +101,7 @@ create table if not exists role_type (
   id_role_type bigint primary key,
   description  text not null
 );
+alter table role_type enable row level security;
 insert into role_type (id_role_type, description) values
   (1, 'SYSTEM'), (2, 'SERVICE'), (3, 'SYNCED')
 on conflict (id_role_type) do nothing;
@@ -109,6 +110,7 @@ create table if not exists navigation_item_type (
   id_item_type bigint primary key,
   description  text not null
 );
+alter table navigation_item_type enable row level security;
 insert into navigation_item_type (id_item_type, description) values
   (1, 'CATEGORY'), (2, 'FUNCTIONALITY')
 on conflict (id_item_type) do nothing;
@@ -117,6 +119,7 @@ create table if not exists functionality_type (
   id_functionality_type bigint primary key,
   description           text not null
 );
+alter table functionality_type enable row level security;
 insert into functionality_type (id_functionality_type, description) values
   (1, 'EMBEDDED_PAGE'), (2, 'EXTERNAL_LINK'), (3, 'INTERNAL_FUNCTIONALITY'),
   (4, 'REMOTE_DESKTOP'), (5, 'PERMISSION')
@@ -126,6 +129,7 @@ create table if not exists user_status (
   id_user_status bigint primary key,
   description    text not null
 );
+alter table user_status enable row level security;
 insert into user_status (id_user_status, description) values
   (1, 'Deactivated'), (2, 'Active')
 on conflict (id_user_status) do nothing;
