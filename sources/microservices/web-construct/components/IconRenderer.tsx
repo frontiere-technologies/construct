@@ -4,6 +4,7 @@ import React, { lazy, Suspense, useMemo, memo } from 'react'
 import type { ComponentType } from 'react'
 import type { LucideProps } from 'lucide-react'
 import { HelpCircle } from 'lucide-react'
+import { isInlineSvg } from '@/lib/icon-utils'
 
 type LucideComponent = ComponentType<LucideProps>
 
@@ -29,6 +30,15 @@ interface IconRendererProps {
 }
 
 export const IconRenderer: React.FC<IconRendererProps> = memo(({ name, className, size = 20 }) => {
+  if (isInlineSvg(name)) {
+    return (
+      <span
+        className={className}
+        style={{ display: 'inline-flex', width: size, height: size }}
+        dangerouslySetInnerHTML={{ __html: name! }}
+      />
+    )
+  }
   const LazyIcon = useMemo(() => name ? getLazyIcon(name) : null, [name])
   if (!name || !LazyIcon) return null
   return (
