@@ -115,3 +115,30 @@ export interface CreateNavItemInput {
 }
 export type UpdateNavItemInput = CreateNavItemInput
 export interface MoveInput { targetParentId: number; orderPosition: number }
+
+export type UserStatusId = 1 | 2 // 1 Deactivated, 2 Active
+
+export interface UserDTO {
+  id: string
+  firstName: string | null
+  lastName: string | null
+  email: string
+  createdAt: string
+  updatedAt: string | null
+  roles: { id: number; name: string }[]
+  status: { idUserStatus: UserStatusId; description: 'Active' | 'Deactivated' }
+  tenantValidationPending: false
+  multiTenancyEnabled: false
+}
+
+export interface UsersQuery {
+  page: number
+  size: number
+  search?: string
+  roleIds?: number[]
+  statuses?: UserStatusId[]
+  createdFrom?: string
+  createdTo?: string
+  sort?: 'firstName' | 'lastName' | 'email' | 'dateIns' | 'dateMod' | 'status'
+  direction?: 'ASC' | 'DESC'
+}
