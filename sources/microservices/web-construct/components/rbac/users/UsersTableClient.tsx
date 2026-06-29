@@ -7,6 +7,7 @@ import StatusBadge from './StatusBadge'
 import ManageRolesModal from './ManageRolesModal'
 import { setUserStatus } from '@/lib/rbac/users-actions'
 import type { UserDTO } from '@/lib/rbac/types'
+import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from '@/lib/rbac/types'
 
 interface Props {
   rows: UserDTO[]
@@ -32,8 +33,8 @@ export default function UsersTableClient({ rows, page, totalPages, sortField, so
   }
 
   const toggleStatus = async (u: UserDTO) => {
-    const next = u.status.idUserStatus === 2 ? 1 : 2
-    if (!confirm(next === 1 ? `Disattivare ${u.email}?` : `Attivare ${u.email}?`)) return
+    const next = u.status.idUserStatus === USER_STATUS_ACTIVE ? USER_STATUS_DEACTIVATED : USER_STATUS_ACTIVE
+    if (!confirm(next === USER_STATUS_DEACTIVATED ? `Disattivare ${u.email}?` : `Attivare ${u.email}?`)) return
     try { await setUserStatus(u.id, next); router.refresh() }
     catch (e) { alert(e instanceof Error ? e.message : 'Errore') }
   }

@@ -5,6 +5,9 @@ export const DEFAULT_LOCALE: Locale = 'EN'
 export const ROLE_REGISTERED = 0
 export const ROLE_ADMINISTRATOR = 1
 
+export const USER_STATUS_DEACTIVATED = 1
+export const USER_STATUS_ACTIVE = 2
+
 export const ROOT_ID = 0
 export const OPERATIONS_ID = -1
 

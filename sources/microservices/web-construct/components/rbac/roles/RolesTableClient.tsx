@@ -36,6 +36,11 @@ export default function RolesTableClient(props: Props) {
     router.push(`/rolesPermissions?${next.toString()}`)
   }, [params, router])
 
+  // Sync local search with URL on navigation (back/forward)
+  useEffect(() => {
+    setSearch(props.search)
+  }, [props.search])
+
   // Debounced search → URL
   useEffect(() => {
     const t = setTimeout(() => {

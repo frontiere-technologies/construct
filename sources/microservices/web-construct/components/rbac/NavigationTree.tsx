@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
 import {
   DndContext, PointerSensor, useSensor, useSensors, pointerWithin,
@@ -110,7 +110,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
     return byId
   }, [nodes])
 
-  const handleDragEnd = (e: DragEndEvent) => {
+  const handleDragEnd = useCallback((e: DragEndEvent) => {
     if (!dnd || !e.over) return
     const activeId = Number(String(e.active.id).replace('item-', ''))
     const overId = String(e.over.id)
@@ -132,7 +132,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
       const idx = siblings.findIndex(n => n.id === beforeId)
       dnd.onMove(activeId, targetParent, idx < 0 ? siblings.length : idx)
     }
-  }
+  }, [dnd, index, nodes])
 
   const tree = (
     <div className="rounded-lg border border-gray-200 dark:border-gray-800">

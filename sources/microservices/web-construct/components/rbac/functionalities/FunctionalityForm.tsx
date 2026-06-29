@@ -10,7 +10,7 @@ import type { CreateNavItemInput } from '@/lib/rbac/types'
 
 const FUNC_TYPES: { id: number; label: string }[] = [
   { id: 1, label: 'Pagina incorporata' }, { id: 2, label: 'Link esterno' },
-  { id: 3, label: 'Funzionalità interna' }, { id: 5, label: 'Permesso' }, { id: 4, label: 'Desktop remoto' },
+  { id: 3, label: 'Funzionalità interna' }, { id: 4, label: 'Desktop remoto' }, { id: 5, label: 'Permesso' },
 ]
 
 interface Initial {

@@ -28,6 +28,7 @@ describe('buildNavTree', () => {
     expect(b1.link).toBe('link-5')
     expect(b1.tagTranslations).toEqual({ EN: ['x', 'y'] })
     expect(b1.isImmutable).toBe(false)
+    expect(b1.authorization).toBe(false)
   })
   it('marks immutable nodes', () => {
     expect(trees.find(t => t.id === 2)!.isImmutable).toBe(true)

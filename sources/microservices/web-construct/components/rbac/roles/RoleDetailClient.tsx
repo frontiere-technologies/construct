@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Pencil } from 'lucide-react'
 import PermissionsTree from '@/components/rbac/PermissionsTree'
 import RenameRoleModal from './RenameRoleModal'
@@ -45,7 +46,7 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="text-sm text-gray-500 mb-2">Ruoli &amp; permessi / Dettagli</div>
+      <div className="text-sm text-gray-500 mb-2"><Link href="/rolesPermissions" className="hover:text-gray-700 hover:underline">Ruoli &amp; permessi</Link> / Dettagli</div>
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-2">
