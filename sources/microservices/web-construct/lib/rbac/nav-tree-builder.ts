@@ -1,11 +1,7 @@
 import {
-  type NavigationItemRow, type UserNavigationTreeDto, type FunctionalityType, type Locale,
-  DEFAULT_LOCALE, ITEM_TYPE_CATEGORY,
+  type NavigationItemRow, type UserNavigationTreeDto, type Locale,
+  DEFAULT_LOCALE, ITEM_TYPE_CATEGORY, FUNCTIONALITY_TYPE_BY_ID,
 } from './types'
-
-const FUNC_TYPE: Record<number, FunctionalityType> = {
-  1: 'EMBEDDED_PAGE', 2: 'EXTERNAL_LINK', 3: 'INTERNAL_FUNCTIONALITY', 4: 'REMOTE_DESKTOP', 5: 'PERMISSION',
-}
 
 function labelFor(it: NavigationItemRow, locale: Locale): string {
   return it.item_translation?.[locale]?.name ?? it.item_translation?.[DEFAULT_LOCALE]?.name ?? it.name ?? ''
@@ -40,7 +36,7 @@ export function buildNavTree(
         parentId: it.id_item_parent,
         authorization: false,
         description: it.item_translation?.[locale]?.description ?? it.item_translation?.[DEFAULT_LOCALE]?.description ?? null,
-        functionalityType: it.id_functionality_type ? FUNC_TYPE[it.id_functionality_type] ?? null : null,
+        functionalityType: it.id_functionality_type ? FUNCTIONALITY_TYPE_BY_ID[it.id_functionality_type] ?? null : null,
         link: it.functionality_link,
         icon: it.icon_path,
         navbarPosition: it.navbar_position,

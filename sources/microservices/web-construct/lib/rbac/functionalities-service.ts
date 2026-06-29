@@ -2,16 +2,12 @@ import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase-server'
 import { buildNavTree } from './nav-tree-builder'
 import {
-  type UserNavigationTreeDto, type NavigationItemRow, type FunctionalityType,
-  DEFAULT_LOCALE, ROOT_ID, OPERATIONS_ID, ITEM_TYPE_CATEGORY,
+  type UserNavigationTreeDto, type NavigationItemRow,
+  DEFAULT_LOCALE, ROOT_ID, OPERATIONS_ID, ITEM_TYPE_CATEGORY, FUNCTIONALITY_TYPE_BY_ID,
 } from './types'
 
 const NAV_COLUMNS =
   'id_item,name,id_item_type,id_functionality_type,functionality_link,icon_path,id_item_parent,order_position,navbar_position,item_translation,is_immutable,config_visibility,no_permission_need_for_navigation'
-
-const FUNC_TYPE: Record<number, FunctionalityType> = {
-  1: 'EMBEDDED_PAGE', 2: 'EXTERNAL_LINK', 3: 'INTERNAL_FUNCTIONALITY', 4: 'REMOTE_DESKTOP', 5: 'PERMISSION',
-}
 
 async function loadNavAndTags() {
   const supabase = createAdminClient()
@@ -48,7 +44,7 @@ export const getNavigationItem = cache(async (id: number): Promise<UserNavigatio
     parentId: it.id_item_parent,
     authorization: false,
     description: it.item_translation?.[DEFAULT_LOCALE]?.description ?? null,
-    functionalityType: it.id_functionality_type ? FUNC_TYPE[it.id_functionality_type] ?? null : null,
+    functionalityType: it.id_functionality_type ? FUNCTIONALITY_TYPE_BY_ID[it.id_functionality_type] ?? null : null,
     link: it.functionality_link,
     icon: it.icon_path,
     navbarPosition: it.navbar_position,

@@ -100,6 +100,14 @@ export interface RolesPage {
 export type FunctionalityType =
   | 'EMBEDDED_PAGE' | 'EXTERNAL_LINK' | 'INTERNAL_FUNCTIONALITY' | 'REMOTE_DESKTOP' | 'PERMISSION'
 
+export const FUNCTIONALITY_TYPE_BY_ID: Record<number, FunctionalityType> = {
+  1: 'EMBEDDED_PAGE', 2: 'EXTERNAL_LINK', 3: 'INTERNAL_FUNCTIONALITY', 4: 'REMOTE_DESKTOP', 5: 'PERMISSION',
+}
+
+export const FUNCTIONALITY_ID_BY_TYPE: Record<FunctionalityType, number> = {
+  EMBEDDED_PAGE: 1, EXTERNAL_LINK: 2, INTERNAL_FUNCTIONALITY: 3, REMOTE_DESKTOP: 4, PERMISSION: 5,
+}
+
 export interface CreateNavItemInput {
   name: string
   idItemType: 1 | 2
