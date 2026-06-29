@@ -1,4 +1,4 @@
-import { listUsers, countUsers } from '@/lib/rbac/users-service'
+import { listUsers } from '@/lib/rbac/users-service'
 import { getAllRoles } from '@/lib/rbac/roles-service'
 import UsersTableClient from '@/components/rbac/users/UsersTableClient'
 import type { UsersQuery, UserStatusId } from '@/lib/rbac/types'
