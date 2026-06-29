@@ -20,8 +20,8 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
     if (!search.trim()) return nodes
     const q = search.toLowerCase()
     const walk = (ns: UserNavigationTreeDto[]): UserNavigationTreeDto[] =>
-      ns.map(n => ({ ...n, children: walk(n.children) }))
-       .filter(n => n.name.toLowerCase().includes(q) || n.children.length > 0)
+      ns.map(n => ({ ...n, children: walk(n.children ?? []) }))
+       .filter(n => n.name.toLowerCase().includes(q) || (n.children?.length ?? 0) > 0)
     return walk(nodes)
   }
 
