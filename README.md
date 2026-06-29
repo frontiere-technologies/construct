@@ -243,5 +243,16 @@ This template is intentionally minimal outside of its core features. When buildi
 - **New features** go under `app/(protected)/` — protected by default
 - **Shared UI components** go in `components/`
 - **Server actions** go in `lib/` — use Supabase service-role client from `lib/supabase-server.ts`
-- **New roles** can be added by extending the `users.role` column and updating the middleware RBAC check
+- **New roles** are managed in the RBAC area (`/rolesPermissions`): create a SERVICE role and grant it navigation permissions (the legacy single `users.role` string column has been replaced by the N:N `role` / `user_role` / `role_item` model)
 - **New providers** can be added in `lib/auth.ts` following the existing pattern
+
+---
+
+## RBAC rollout note (CARRY-5)
+
+The session JWT carries `roleIds` and `isAdmin`, populated at login. **Users who were logged in before the RBAC deploy hold a token without these claims** and fail closed — empty sidebar and no admin access — until their token refreshes or they log back in. This is safe (no privilege leak) but visible to active users during a rollout.
+
+Mitigation when deploying RBAC to an environment with live sessions:
+
+- **Preferred:** force re-authentication — set a short NextAuth session `maxAge` for the release window (so stale tokens expire quickly), or invalidate existing sessions, then restore the normal `maxAge`.
+- **Minimum:** include a release note telling users to log out and back in once after the deploy.
