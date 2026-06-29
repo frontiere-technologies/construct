@@ -19,17 +19,28 @@ async function otherAdminUserIds(supabase: ReturnType<typeof createAdminClient>,
   return Array.from(new Set((data ?? []).map((r: { user_id: string }) => r.user_id)))
 }
 
+// Count OTHER admins (excluding the target) whose account is Active. Both the
+// role-removal and the deactivation lockouts use this so neither can leave the
+// system without a usable (active) administrator.
+async function countOtherActiveAdmins(supabase: ReturnType<typeof createAdminClient>, excludeUserId: string): Promise<number> {
+  const others = await otherAdminUserIds(supabase, excludeUserId)
+  if (!others.length) return 0
+  const { count, error } = await supabase
+    .from('users').select('id', { count: 'exact', head: true }).in('id', others).eq('id_user_status', 2)
+  if (error) throw new Error(`Failed to count active admins: ${error.message}`)
+  return count ?? 0
+}
+
 export async function updateUserRoles(userId: string, roleIds: number[]): Promise<void> {
   const { userId: currentUserId } = await requireAdmin()
   const supabase = createAdminClient()
   const targetCurrentlyAdmin = await userIsAdmin(supabase, userId)
-  const others = await otherAdminUserIds(supabase, userId)
   assertRoleChangeAllowed({
     targetUserId: userId,
     currentUserId,
     targetCurrentlyAdmin,
     newRolesIncludeAdmin: roleIds.includes(ROLE_ADMINISTRATOR),
-    otherAdminCount: others.length,
+    otherActiveAdminCount: await countOtherActiveAdmins(supabase, userId),
   })
 
   // Atomic full replace via RPC (delete + insert in one transaction) — no manual
@@ -46,13 +57,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
   let otherActiveAdminCount = 0
   if (status === 1) {
     targetIsAdmin = await userIsAdmin(supabase, userId)
-    const others = await otherAdminUserIds(supabase, userId)
-    if (others.length) {
-      const { count, error } = await supabase
-        .from('users').select('id', { count: 'exact', head: true }).in('id', others).eq('id_user_status', 2)
-      if (error) throw new Error(`Failed to count active admins: ${error.message}`)
-      otherActiveAdminCount = count ?? 0
-    }
+    otherActiveAdminCount = await countOtherActiveAdmins(supabase, userId)
   }
   assertStatusChangeAllowed({ targetUserId: userId, currentUserId, newStatus: status, targetIsAdmin, otherActiveAdminCount })
 

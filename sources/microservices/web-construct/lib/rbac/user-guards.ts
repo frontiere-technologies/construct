@@ -3,14 +3,14 @@ export interface RoleChangeArgs {
   currentUserId: string
   targetCurrentlyAdmin: boolean
   newRolesIncludeAdmin: boolean
-  otherAdminCount: number
+  otherActiveAdminCount: number
 }
 
 export function assertRoleChangeAllowed(a: RoleChangeArgs): void {
   const losingAdmin = a.targetCurrentlyAdmin && !a.newRolesIncludeAdmin
   if (!losingAdmin) return
   if (a.targetUserId === a.currentUserId) throw new Error('Non puoi rimuovere il tuo accesso admin')
-  if (a.otherAdminCount === 0) throw new Error("Non puoi rimuovere l'ultimo amministratore")
+  if (a.otherActiveAdminCount === 0) throw new Error("Non puoi rimuovere l'ultimo amministratore attivo")
 }
 
 export interface StatusChangeArgs {
