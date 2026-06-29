@@ -32,22 +32,11 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
     otherAdminCount: others.length,
   })
 
-  // Fetch previous role set for rollback before delete
-  const { data: prevRows, error: prevErr } = await supabase.from('user_role').select('id_role').eq('user_id', userId)
-  if (prevErr) throw new Error(`Failed to load current roles: ${prevErr.message}`)
-  const prevRoleIds = (prevRows ?? []).map((r: { id_role: number }) => r.id_role)
-
+  // Atomic full replace via RPC (delete + insert in one transaction) — no manual
+  // rollback needed; a failed insert rolls back the delete (CARRY-P3-1 resolved).
   const finalRoleIds = Array.from(new Set<number>([ROLE_REGISTERED, ...roleIds]))
-  const { error: delErr } = await supabase.from('user_role').delete().eq('user_id', userId)
-  if (delErr) throw new Error(`Failed to clear roles: ${delErr.message}`)
-  const rows = finalRoleIds.map(id_role => ({ user_id: userId, id_role }))
-  const { error: insErr } = await supabase.from('user_role').insert(rows)
-  if (insErr) {
-    if (prevRoleIds.length) {
-      await supabase.from('user_role').insert(prevRoleIds.map(id_role => ({ user_id: userId, id_role })))
-    }
-    throw new Error(`Failed to assign roles: ${insErr.message}`)
-  }
+  const { error } = await supabase.rpc('replace_user_roles', { p_user_id: userId, p_role_ids: finalRoleIds })
+  if (error) throw new Error(`Failed to assign roles: ${error.message}`)
 }
 
 export async function setUserStatus(userId: string, status: UserStatusId): Promise<void> {

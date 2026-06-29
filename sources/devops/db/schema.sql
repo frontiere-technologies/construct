@@ -332,3 +332,36 @@ select
   exists(select 1 from role_item ri where ri.id_role = r.id_role)      as has_permissions
 from role r
 left join role_type rt on rt.id_role_type = r.id_role_type;
+
+-- ============================================================
+-- Atomic RBAC replace functions (transactional; plpgsql bodies roll back
+-- entirely on error). Used by updateUserRoles (CARRY-P3-1) and
+-- updateRolePermissions (CARRY-8) instead of multi-statement delete+insert.
+-- ============================================================
+create or replace function public.replace_user_roles(p_user_id uuid, p_role_ids bigint[])
+returns void language plpgsql as $$
+begin
+  delete from public.user_role where user_id = p_user_id;
+  if array_length(p_role_ids, 1) is not null then
+    insert into public.user_role (user_id, id_role)
+      select p_user_id, unnest(p_role_ids)
+      on conflict (user_id, id_role) do nothing;
+  end if;
+end;
+$$;
+
+create or replace function public.apply_role_permission_deltas(
+  p_role_id bigint, p_grant_ids bigint[], p_revoke_ids bigint[]
+) returns void language plpgsql as $$
+begin
+  if array_length(p_grant_ids, 1) is not null then
+    insert into public.role_item (id_role, id_item, authorized)
+      select p_role_id, unnest(p_grant_ids), true
+      on conflict (id_role, id_item) do update set authorized = true;
+  end if;
+  if array_length(p_revoke_ids, 1) is not null then
+    delete from public.role_item where id_role = p_role_id and id_item = any(p_revoke_ids);
+  end if;
+  update public.role set date_mod = now() where id_role = p_role_id;
+end;
+$$;

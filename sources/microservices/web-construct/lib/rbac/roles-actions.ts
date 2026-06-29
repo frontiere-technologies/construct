@@ -41,19 +41,14 @@ export async function updateRolePermissions(roleId: number, deltas: PermissionDe
   const supabase = createAdminClient()
   if (await getRoleType(supabase, roleId) === 'SYSTEM') throw new Error('System roles cannot be edited')
 
-  const grants = deltas.filter(d => d.authorization).map(d => ({ id_role: roleId, id_item: d.idItem, authorized: true }))
+  const grantIds = deltas.filter(d => d.authorization).map(d => d.idItem)
   const revokeIds = deltas.filter(d => !d.authorization).map(d => d.idItem)
 
-  if (grants.length) {
-    const { error } = await supabase.from('role_item').upsert(grants, { onConflict: 'id_role,id_item' })
-    if (error) throw new Error(`Failed to grant permissions: ${error.message}`)
-  }
-  if (revokeIds.length) {
-    const { error } = await supabase.from('role_item').delete().eq('id_role', roleId).in('id_item', revokeIds)
-    if (error) throw new Error(`Failed to revoke permissions: ${error.message}`)
-  }
-  const { error: stampErr } = await supabase.from('role').update({ date_mod: new Date().toISOString() }).eq('id_role', roleId)
-  if (stampErr) throw new Error(`Failed to update role timestamp: ${stampErr.message}`)
+  // Atomic grant/revoke + date_mod stamp in one transaction (CARRY-8 resolved).
+  const { error } = await supabase.rpc('apply_role_permission_deltas', {
+    p_role_id: roleId, p_grant_ids: grantIds, p_revoke_ids: revokeIds,
+  })
+  if (error) throw new Error(`Failed to update permissions: ${error.message}`)
 }
 
 export async function deleteRole(roleId: number): Promise<void> {
