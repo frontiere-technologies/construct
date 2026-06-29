@@ -9,7 +9,7 @@ Se in queste specifiche ci sono delle migliorie da fare, proponile.
 
 Una nota per la multitenancy. Non so quanto la multitenancy completa sul vecchio sistema, Credo fosse predisposto, però non utilizzata nella realtà.
 
-Una nota per le funzionalità. In qualche modo le funzionalità erano legate anche al menu in cui venivano visualizzate. Però, questo non è una cosa generale. In realtà, le funzionalità potrebbero essere tranquillamente funzionalità da legare ai ruoli, ma che non vengono assolutamente visualizzate nei menu a sinistra da nessun utente. Cerca di generalizzare questa parte.  
+Una nota per le funzionalità. In qualche modo le funzionalità erano legate anche al menu in cui venivano visualizzate. Però, questo non è una cosa generale. In realtà, le funzionalità potrebbero essere tranquillamente funzionalità da legare ai ruoli, ma che non vengono assolutamente visualizzate nei menu a sinistra della web application da nessun utente. Cerca di generalizzare questa parte.  
 
 ---
 

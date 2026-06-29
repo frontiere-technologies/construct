@@ -1,0 +1,43 @@
+Verificato lo stato DB. Ecco il debito tecnico rimasto, dal ledger SDD, ordinato per priorità.
+
+🔴 Bug funzionale (priorità alta)
+
+- Drag&drop su /functionalities non funziona (confermato da te). Gli handle si renderizzano e canDrag distingue mutabili/immutabili, ma il drop non invoca moveNavigationItem. Candidati da indagare: attivazione del PointerSensor di @dnd-kit, wiring dei droppable (beforeDrop sulla riga vs into sullo span del nome), o la collision detection del DndContext. La logica server moveNavigationItem e il mapping onDragEnd→onMove sono già revisionati e corretti — il problema è nell'interazione client dnd-kit.
+
+🟠 Atomicità mutazioni (dati)
+
+- CARRY-8 / CARRY-P3-1 — updateRolePermissions (Phase 1) e writeTags (Phase 2) sono ancora delete+insert non-transazionali. updateUserRoles (Phase 3) ora ha un catch-rollback leggero, ma non una RPC transazionale. Fix pulito: una RPC Postgres condivisa (replace_*) per tutti e tre.
+
+🟡 Phase 3 (Users) — Minor lasciati
+
+- Colonna "Utente" ordina solo per first_name (chi ha first_name nullo, mostrato per cognome/email, ordina in modo incoerente).
+- setUserStatus/lockout ruoli: il blocco rimozione-ruolo conta qualsiasi admin, non solo attivi (MIN-3, lasciato come da spec — edge case: unico admin attivo = target con altri admin disattivati).
+- Status id 2 hardcoded in StatusBadge/UsersTableClient; label badge "Active/Deactivated" in inglese mentre il resto è in italiano.
+- countUsers esportato ma non usato (intenzionale per uso futuro/test).
+
+🟡 Phase 2 (Functionalities) — Minor lasciati
+
+- loadItems rilegge l'intera tabella navigation_item a ogni move/delete (perf, ok all'attuale scala).
+- CARRY-9 (DRY): la mappa FUNC_TYPE (id→tipo) è triplicata (nav-tree-builder, functionalities-service, edit page) + mapping DTO duplicato in getNavigationItem/buildNavTree.
+- handleDragEnd non memoizzato; classe beforeDrop.isOver presente nel path no-dnd (sempre falsa).
+- Hook globale DOMPurify.addHook applica lo stripping on* a ogni DOMPurify.sanitize del processo (innocuo oggi).
+- moveNavigationItem non verifica server-side che il target sia una CATEGORY (la UI lo impedisce; il server no).
+- Il filtro di ricerca + drag insieme potrebbero corrompere l'ordine (drag con filtro attivo); campo name inerte in FunctionalityForm; search non resettata al cambio tab.
+- nav-tree-builder: nessun test asserisce authorization:false; canDeleteSubtree ritorna true per id inesistenti (i caller validano l'esistenza).
+
+🟡 Phase 1 (Roles) — CARRY lasciati
+
+- CARRY-10: RolesTableClient URL-state polish (sync search su back/forward, deps exhaustive-deps).
+- Breadcrumb statico (non Link) nella pagina dettaglio ruolo; data-testid="row-menu" non univoco per riga.
+
+🟡 Phase 0 (Foundation) — lasciati
+
+- IconRenderer usa dangerouslySetInnerHTML su icon_path senza sanitizzazione per chiamanti diversi da IconUpload (in Phase 2 ho sanitizzato lato client solo il path di creazione icona; il componente di rendering resta non protetto se altri lo alimentano).
+- CARRY-5: utenti loggati prima del deploy hanno un JWT senza roleIds/isAdmin (fail-closed: sidebar vuota / no admin) finché non rifanno login — serve una release note o un maxAge breve del token per il rollout.
+- Sequenze s_id_role/s_id_navigation_item non OWNED BY le colonne; trigger con DROP+CREATE invece di CREATE OR REPLACE (cosmetico).
+
+🟢 Pulizia DB/test remoti (verificato ora)
+
+- public.users.role (text) è ancora presente — il module design (§2.1, §3.5) prevedeva di eliminarla dopo il backfill di cutover in Phase 0. Non è stata droppata. Da rimuovere quando sicuro che nessun codice la legge più.
+- 10 ruoli di test E2E residui (id_role ≥ 100, "E2E Role/Perm ...") nella DB remota da run E2E di Phase 1 (CARRY-P3-2). Item navigation_item mutabili: 0 (pulito).
+- Alcuni test E2E lasciano righe nel DB (non fanno cleanup) e un paio usano wait_for_timeout fissi.

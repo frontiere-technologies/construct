@@ -4,8 +4,8 @@ export const authConfig = {
   pages: { signIn: '/login' },
   callbacks: {
     session({ session, token }) {
-      // Map custom JWT fields so middleware's `auth` object includes role/userId/provider
-      if (token.role) (session.user as { role?: string }).role = token.role as string
+      if (token.roleIds) (session.user as { roleIds?: number[] }).roleIds = token.roleIds as number[]
+      if (typeof token.isAdmin !== 'undefined') (session.user as { isAdmin?: boolean }).isAdmin = Boolean(token.isAdmin)
       if (token.userId) (session.user as { id?: string }).id = token.userId as string
       if (token.provider) (session.user as { provider?: string }).provider = token.provider as string
       return session
@@ -27,7 +27,9 @@ export const authConfig = {
       if (session && isAuthOnlyRedirect) {
         return Response.redirect(new URL('/', nextUrl))
       }
-      if (session && pathname.startsWith('/admin') && (session.user as { role?: string })?.role !== 'admin') {
+      const ADMIN_PATHS = ['/admin', '/userManagement', '/functionalities', '/rolesPermissions']
+      const needsAdmin = ADMIN_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+      if (session && needsAdmin && !(session.user as { isAdmin?: boolean })?.isAdmin) {
         return Response.redirect(new URL('/', nextUrl))
       }
       return true

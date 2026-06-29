@@ -1,0 +1,178 @@
+'use client'
+
+import React, { useState } from 'react'
+import { Search, SlidersHorizontal, Columns3, MoreHorizontal, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
+
+export interface Column<T> {
+  key: string
+  header: string
+  sortable?: boolean
+  render?: (row: T) => React.ReactNode
+}
+
+interface RowMenuItem { label: string; onClick: () => void; disabled?: boolean }
+
+interface DataTableProps<T> {
+  columns: Column<T>[]
+  rows: T[]
+  rowKey: (row: T) => string | number
+  sort?: { field: string; direction: 'ASC' | 'DESC' }
+  onSortChange?: (field: string) => void
+  page: number
+  totalPages: number
+  onPageChange: (page: number) => void
+  search: string
+  onSearchChange: (v: string) => void
+  filtersSlot?: React.ReactNode
+  actionButton?: React.ReactNode
+  rowMenu?: (row: T) => RowMenuItem[]
+  onRowClick?: (row: T) => void
+}
+
+export default function DataTable<T>(props: DataTableProps<T>) {
+  const { columns, rows, rowKey, sort, onSortChange, page, totalPages, onPageChange,
+    search, onSearchChange, filtersSlot, actionButton, rowMenu, onRowClick } = props
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const [showCols, setShowCols] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [openMenu, setOpenMenu] = useState<string | number | null>(null)
+
+  const visibleCols = columns.filter(c => !hidden.has(c.key))
+  const toggleCol = (key: string) => {
+    setHidden(prev => {
+      const n = new Set(prev)
+      if (n.has(key)) {
+        n.delete(key)
+      } else {
+        n.add(key)
+      }
+      return n
+    })
+  }
+
+  const pages: (number | '…')[] = []
+  for (let i = 0; i < totalPages; i++) {
+    if (i === 0 || i === totalPages - 1 || Math.abs(i - page) <= 1) pages.push(i)
+    else if (pages[pages.length - 1] !== '…') pages.push('…')
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => onSearchChange(e.target.value)}
+            placeholder="Cerca"
+            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+          />
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <div className="relative">
+            <button onClick={() => setShowCols(s => !s)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
+              <Columns3 size={16} /> Colonne
+            </button>
+            {showCols && (
+              <div className="absolute right-0 mt-1 z-20 w-48 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow">
+                {columns.map(c => (
+                  <label key={c.key} className="flex items-center gap-2 py-1 text-sm cursor-pointer">
+                    <input type="checkbox" checked={!hidden.has(c.key)} onChange={() => toggleCol(c.key)} />
+                    {c.header}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          {filtersSlot && (
+            <button onClick={() => setShowFilters(s => !s)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
+              <SlidersHorizontal size={16} /> Filtri
+            </button>
+          )}
+          {actionButton}
+        </div>
+      </div>
+
+      {showFilters && filtersSlot && (
+        <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">{filtersSlot}</div>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-900 text-white">
+            <tr>
+              {visibleCols.map(c => (
+                <th key={c.key} className="text-left font-medium px-4 py-3">
+                  <button
+                    disabled={!c.sortable}
+                    onClick={() => c.sortable && onSortChange?.(c.key)}
+                    className={`flex items-center gap-1 ${c.sortable ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    {c.header}
+                    {c.sortable && sort?.field === c.key && (sort.direction === 'ASC' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+                  </button>
+                </th>
+              ))}
+              {rowMenu && <th className="w-10 px-4 py-3" />}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => {
+              const k = rowKey(row)
+              return (
+                <tr
+                  key={k}
+                  onClick={() => onRowClick?.(row)}
+                  className={`border-t border-gray-100 dark:border-gray-800 ${onRowClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50' : ''}`}
+                >
+                  {visibleCols.map(c => (
+                    <td key={c.key} className="px-4 py-3">{c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? '')}</td>
+                  ))}
+                  {rowMenu && (
+                    <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="relative">
+                        <button data-testid={`row-menu-${k}`} onClick={() => setOpenMenu(openMenu === k ? null : k)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                          <MoreHorizontal size={16} />
+                        </button>
+                        {openMenu === k && (
+                          <div className="absolute right-0 mt-1 z-20 w-40 p-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow">
+                            {rowMenu(row).map(item => (
+                              <button
+                                key={item.label}
+                                disabled={item.disabled}
+                                onClick={() => { setOpenMenu(null); item.onClick() }}
+                                className="block w-full text-left px-3 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-center gap-1">
+        {pages.map((p, i) => p === '…'
+          ? <span key={`e${i}`} className="px-2 text-gray-400">…</span>
+          : <button
+              key={p}
+              onClick={() => onPageChange(p)}
+              className={`min-w-8 h-8 px-2 rounded-lg text-sm ${p === page ? 'bg-gray-900 text-white' : 'border border-gray-200 dark:border-gray-700'}`}
+            >{p + 1}</button>
+        )}
+        <button
+          onClick={() => onPageChange(Math.min(totalPages - 1, page + 1))}
+          disabled={page >= totalPages - 1}
+          className="min-w-8 h-8 px-2 rounded-lg text-sm border border-gray-200 dark:border-gray-700 disabled:opacity-40"
+        ><ChevronRight size={16} /></button>
+      </div>
+    </div>
+  )
+}

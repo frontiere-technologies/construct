@@ -4,6 +4,8 @@ import React, { lazy, Suspense, useMemo, memo } from 'react'
 import type { ComponentType } from 'react'
 import type { LucideProps } from 'lucide-react'
 import { HelpCircle } from 'lucide-react'
+import { isInlineSvg } from '@/lib/icon-utils'
+import { sanitizeSvg } from '@/lib/rbac/svg-sanitize'
 
 type LucideComponent = ComponentType<LucideProps>
 
@@ -29,7 +31,18 @@ interface IconRendererProps {
 }
 
 export const IconRenderer: React.FC<IconRendererProps> = memo(({ name, className, size = 20 }) => {
-  const LazyIcon = useMemo(() => name ? getLazyIcon(name) : null, [name])
+  const LazyIcon = useMemo(() => (!isInlineSvg(name) && name) ? getLazyIcon(name) : null, [name])
+
+  if (isInlineSvg(name)) {
+    return (
+      <span
+        className={className}
+        style={{ display: 'inline-flex', width: size, height: size }}
+        dangerouslySetInnerHTML={{ __html: sanitizeSvg(name) }}
+      />
+    )
+  }
+
   if (!name || !LazyIcon) return null
   return (
     <Suspense fallback={<HelpCircle className={className} size={size} />}>

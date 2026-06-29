@@ -25,7 +25,7 @@ def test_l1_shows_menu_labels(logged_in_page):
     page = logged_in_page
     l1 = page.locator("aside").first
     ensure_l1_expanded(page, l1)
-    assert l1_btn(l1, "Support").is_visible()
+    assert l1_btn(l1, "RBAC").is_visible()
     assert l1_btn(l1, "Admin").is_visible()
 
 
@@ -33,8 +33,16 @@ def test_sidebar_persists_after_navigation(logged_in_page):
     page = logged_in_page
     l1 = page.locator("aside").first
     ensure_l1_expanded(page, l1)
-    l1_btn(l1, "Support").click()
-    page.wait_for_url("**/support", timeout=5_000)
+    # Open RBAC L2 (or it may already be open); ensure we're on a clean state
+    aside_count = page.locator("aside").count()
+    if aside_count < 2:
+        l1_btn(l1, "RBAC").click()
+        page.locator("aside").nth(1).wait_for(state="visible", timeout=5_000)
+    l2 = page.locator("aside").nth(1)
+    l2.get_by_role("link", name="Users", exact=True).or_(
+        l2.get_by_role("button", name="Users", exact=True)
+    ).click()
+    page.wait_for_url("**/userManagement", timeout=5_000)
     assert l1.is_visible(), "Sidebar not visible after navigation"
     assert l1.bounding_box()["width"] >= 100, "L1 collapsed after navigation"
 
@@ -53,16 +61,24 @@ def test_l2_shows_admin_items(logged_in_page):
     page = logged_in_page
     ensure_l2_open(page)
     l2 = page.locator("aside").nth(1)
-    assert l2.get_by_text("Menu Builder").is_visible()
     assert l2.get_by_text("Theme & Styles").is_visible()
 
 
-def test_l2_navigation_menu_builder(logged_in_page):
+def test_l2_navigation_users(logged_in_page):
     page = logged_in_page
-    ensure_l2_open(page)
-    page.locator("aside").nth(1).get_by_text("Menu Builder").click()
-    page.wait_for_url("**/admin/menu-builder", timeout=5_000)
-    assert "/admin/menu-builder" in page.url
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    # Open RBAC L2 if not already open
+    aside_count = page.locator("aside").count()
+    if aside_count < 2:
+        l1_btn(l1, "RBAC").click()
+        page.locator("aside").nth(1).wait_for(state="visible", timeout=5_000)
+    l2 = page.locator("aside").nth(1)
+    l2.get_by_role("link", name="Users", exact=True).or_(
+        l2.get_by_role("button", name="Users", exact=True)
+    ).click()
+    page.wait_for_url("**/userManagement", timeout=5_000)
+    assert "/userManagement" in page.url
 
 
 def test_l2_navigation_theme(logged_in_page):
