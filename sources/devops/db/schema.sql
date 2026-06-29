@@ -23,7 +23,6 @@ create table if not exists users (
   name         text,
   email        text        constraint users_email_unique unique,
   avatar       text,
-  role         text        not null default 'user',
   first_name   text,
   last_name    text,
   username     text,
@@ -43,6 +42,10 @@ alter table users add column if not exists password_hash text;
 
 -- Migration: track how the user authenticates (google, microsoft-entra-id, keycloak, credentials, test)
 alter table users add column if not exists auth_provider text;
+
+-- Migration: drop the legacy single-role string column. RBAC replaces it with the
+-- N:N role / user_role model (see below); the test-credentials upsert no longer writes it.
+alter table users drop column if exists role;
 
 -- ============================================================
 -- Tabella: password_set_tokens

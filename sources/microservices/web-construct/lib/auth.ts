@@ -129,7 +129,7 @@ function buildProviders() {
           await supabase
             .from('users')
             .upsert(
-              { email: credentials.email, role: 'user', auth_provider: 'test' },
+              { email: credentials.email, auth_provider: 'test' },
               { onConflict: 'email', ignoreDuplicates: true }
             )
           const { data } = await supabase
