@@ -65,6 +65,15 @@ export interface UserNavigationTreeDto {
   parentId: number | null
   authorization: boolean
   children: UserNavigationTreeDto[]
+  // Phase 2 (optional — Phase 1 consumers don't set these):
+  description?: string | null
+  functionalityType?: FunctionalityType | null
+  link?: string | null
+  icon?: string | null
+  navbarPosition?: 'TOP' | 'BOTTOM' | null
+  isImmutable?: boolean
+  translations?: Record<string, { name?: string; description?: string }>
+  tagTranslations?: Record<string, string[]>
 }
 
 export interface PermissionDelta {
@@ -87,3 +96,20 @@ export interface RolesPage {
   pagination: { currentElements: number; currentPage: number; totalPages: number }
   elements: RolePageItemDto[]
 }
+
+export type FunctionalityType =
+  | 'EMBEDDED_PAGE' | 'EXTERNAL_LINK' | 'INTERNAL_FUNCTIONALITY' | 'REMOTE_DESKTOP' | 'PERMISSION'
+
+export interface CreateNavItemInput {
+  name: string
+  idItemType: 1 | 2
+  idFunctionalityType: number | null
+  functionalityLink: string | null
+  iconPath: string | null
+  idItemParent: number | null
+  description: string
+  itemTranslation: Record<string, { name?: string; description?: string }>
+  tagTranslations: Record<string, string[]>
+}
+export type UpdateNavItemInput = CreateNavItemInput
+export interface MoveInput { targetParentId: number; orderPosition: number }
