@@ -26,6 +26,7 @@ export default function FunctionalityForm(
   const router = useRouter()
   const [f, setF] = useState<Initial>(initial)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const set = <K extends keyof Initial>(k: K, v: Initial[K]) => setF(prev => ({ ...prev, [k]: v }))
 
   const isFunc = f.idItemType === 2
@@ -37,16 +38,30 @@ export default function FunctionalityForm(
     if (!valid) return
     setBusy(true)
     try {
-      const input: CreateNavItemInput = {
-        name: itName, idItemType: f.idItemType,
-        idFunctionalityType: isFunc ? f.idFunctionalityType : null,
-        functionalityLink: isFunc ? f.functionalityLink : null,
-        iconPath: f.iconPath || null, idItemParent: f.idItemParent,
-        description: itDesc, itemTranslation: f.translations, tagTranslations: f.tagTranslations,
+      setError(null)
+      if (mode === 'edit') {
+        if (funcId == null) { setError('ID funzionalità mancante'); return }
+        const input: CreateNavItemInput = {
+          name: itName, idItemType: f.idItemType,
+          idFunctionalityType: isFunc ? f.idFunctionalityType : null,
+          functionalityLink: isFunc ? f.functionalityLink : null,
+          iconPath: f.iconPath || null, idItemParent: f.idItemParent,
+          description: itDesc, itemTranslation: f.translations, tagTranslations: f.tagTranslations,
+        }
+        await updateNavigationItem(funcId, input)
+      } else {
+        const input: CreateNavItemInput = {
+          name: itName, idItemType: f.idItemType,
+          idFunctionalityType: isFunc ? f.idFunctionalityType : null,
+          functionalityLink: isFunc ? f.functionalityLink : null,
+          iconPath: f.iconPath || null, idItemParent: f.idItemParent,
+          description: itDesc, itemTranslation: f.translations, tagTranslations: f.tagTranslations,
+        }
+        await createNavigationItem(input)
       }
-      if (mode === 'create') await createNavigationItem(input)
-      else await updateNavigationItem(funcId!, input)
       router.push('/functionalities')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Errore durante il salvataggio. Riprova.')
     } finally { setBusy(false) }
   }
 
@@ -56,9 +71,12 @@ export default function FunctionalityForm(
     <div className="max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Funzionalità / {mode === 'create' ? 'Crea' : 'Modifica'}</h1>
-        <button onClick={submit} disabled={!valid || busy} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed">
-          {mode === 'create' ? 'Crea funzionalità' : 'Salva'}
-        </button>
+        <div className="flex flex-col items-end gap-2">
+          <button onClick={submit} disabled={!valid || busy} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed">
+            {mode === 'create' ? 'Crea funzionalità' : 'Salva'}
+          </button>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
