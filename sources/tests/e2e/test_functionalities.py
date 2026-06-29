@@ -64,6 +64,12 @@ def test_immutable_item_has_no_actions(logged_in_page, base_url):
     page = logged_in_page
     page.goto(f"{base_url}/functionalities")
     page.wait_for_load_state("networkidle")
-    # RBAC is immutable — its row must expose no edit/delete buttons
-    rbac_row = page.locator("div").filter(has_text="RBAC").first
+    # RBAC is immutable — its OWN row must expose no edit/delete buttons.
+    # Scope to the label's row container (parent of the name span) so that
+    # neither child rows nor any unrelated mutable item elsewhere in the tree
+    # can leak their action buttons into this assertion.
+    rbac_label = page.get_by_text("RBAC", exact=True).first
+    expect(rbac_label).to_be_visible()
+    rbac_row = rbac_label.locator("xpath=..")
     expect(rbac_row.locator('[data-testid="nav-delete"]')).to_have_count(0)
+    expect(rbac_row.locator('[data-testid="nav-edit"]')).to_have_count(0)
