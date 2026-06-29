@@ -11,6 +11,16 @@ describe('sanitizeSvg', () => {
     const out = sanitizeSvg('<svg onload="alert(1)" viewBox="0 0 24 24"></svg>')
     expect(out.toLowerCase()).not.toContain('onload')
   })
+  it('strips ALL on* handlers including non-blocklist handlers', () => {
+    const out = sanitizeSvg(
+      '<svg onmouseenter="alert(1)" viewBox="0 0 24 24"><circle onfocus="x()" r="1"/></svg>'
+    )
+    expect(out.toLowerCase()).not.toContain('onmouseenter')
+    expect(out.toLowerCase()).not.toContain('onfocus')
+    // Verify structure is preserved
+    expect(out).toContain('<circle')
+    expect(out).toContain('viewBox')
+  })
   it('strips foreignObject', () => {
     const out = sanitizeSvg('<svg><foreignObject><body>x</body></foreignObject></svg>')
     expect(out.toLowerCase()).not.toContain('foreignobject')
