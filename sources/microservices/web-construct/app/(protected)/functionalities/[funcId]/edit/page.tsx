@@ -12,7 +12,6 @@ export default async function EditFunctionalityPage({ params }: { params: Promis
       funcId={id}
       parents={parents.filter(p => p.id !== id)}
       initial={{
-        name: item.name,
         description: item.description ?? '',
         idItemType: item.type === 'CATEGORY' ? 1 : 2,
         idFunctionalityType: item.functionalityType

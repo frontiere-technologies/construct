@@ -14,7 +14,7 @@ const FUNC_TYPES: { id: number; label: string }[] = [
 ]
 
 interface Initial {
-  name: string; description: string; idItemType: 1 | 2; idFunctionalityType: number | null
+  description: string; idItemType: 1 | 2; idFunctionalityType: number | null
   functionalityLink: string; iconPath: string; idItemParent: number | null
   /** Active root id (ROOT_ID=0 or OPERATIONS_ID=-1). Used only in create mode to determine placement when idItemParent is null. */
   idRootParent?: number | null

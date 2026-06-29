@@ -12,7 +12,7 @@ export default async function CreateFunctionalityPage({ searchParams }: { search
       mode="create"
       parents={parents}
       initial={{
-        name: '', description: '', idItemType: 2, idFunctionalityType: null,
+        description: '', idItemType: 2, idFunctionalityType: null,
         functionalityLink: '', iconPath: '', idItemParent: parentId,
         idRootParent,
         translations: {}, tagTranslations: {},

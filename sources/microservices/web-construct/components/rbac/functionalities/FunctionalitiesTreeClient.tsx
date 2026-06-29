@@ -58,7 +58,7 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
         className="w-full max-w-sm mb-4 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent" />
       <div className="flex gap-6 border-b border-gray-200 dark:border-gray-800 mb-4">
         {(['root', 'operations'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
+          <button key={t} onClick={() => { setTab(t); setSearch('') }}
             className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-gray-900 text-gray-900 dark:text-white dark:border-white' : 'border-transparent text-gray-500'}`}>
             {t === 'root' ? 'Tutto' : 'Operazioni'}
           </button>
@@ -67,7 +67,8 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
       <NavigationTree
         nodes={filterTree(activeTree)}
         renderTrailing={trailing}
-        dnd={{ canDrag: n => !n.isImmutable, onMove }}
+        // drag disabled while filtering — reorder indices would be computed over the filtered subset
+        dnd={search.trim() ? undefined : { canDrag: n => !n.isImmutable, onMove }}
       />
     </div>
   )
