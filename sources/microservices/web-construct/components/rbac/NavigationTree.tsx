@@ -60,7 +60,7 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
     <div>
       <div
         ref={dnd ? setRowRef : undefined}
-        className={`flex items-center gap-2 py-2.5 px-3 border-b border-gray-100 dark:border-gray-800 ${beforeDrop.isOver ? 'border-t-2 border-t-primary' : ''} ${intoDrop.isOver ? 'bg-primary/10' : ''}`}
+        className={`flex items-center gap-2 py-2.5 px-3 border-b border-gray-100 dark:border-gray-800 ${dnd && beforeDrop.isOver ? 'border-t-2 border-t-primary' : ''} ${dnd && intoDrop.isOver ? 'bg-primary/10' : ''}`}
         style={{ paddingLeft: 12 + depth * 24 }}
       >
         {dnd && (
