@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { sanitizeSvg } from './svg-sanitize'
 import { canDeleteSubtree, isDescendant } from './nav-tree-builder'
 import type { CreateNavItemInput, UpdateNavItemInput, MoveInput, NavigationItemRow } from './types'
-import { ROOT_ID } from './types'
+import { ROOT_ID, OPERATIONS_ID, ITEM_TYPE_CATEGORY } from './types'
 
 async function writeTags(
   supabase: ReturnType<typeof createAdminClient>,
@@ -89,6 +89,15 @@ export async function moveNavigationItem(id: number, move: MoveInput): Promise<v
   await assertMutable(supabase, id)
   const items = await loadItems(supabase)
   if (isDescendant(items, move.targetParentId, id)) throw new Error('Cannot move an item into its own subtree')
+
+  // Guard: target parent must be a virtual root or a category item
+  const isVirtualRoot = move.targetParentId === ROOT_ID || move.targetParentId === OPERATIONS_ID
+  if (!isVirtualRoot) {
+    const targetItem = items.find(i => i.id_item === move.targetParentId)
+    if (!targetItem || targetItem.id_item_type !== ITEM_TYPE_CATEGORY) {
+      throw new Error('Target parent must be a category')
+    }
+  }
 
   // Re-parent the moved item, then renumber the destination siblings with it inserted at orderPosition.
   const dest = items
