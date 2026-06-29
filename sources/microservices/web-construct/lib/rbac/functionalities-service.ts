@@ -1,9 +1,9 @@
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase-server'
-import { buildNavTree } from './nav-tree-builder'
+import { buildNavTree, mapRowToDto } from './nav-tree-builder'
 import {
   type UserNavigationTreeDto, type NavigationItemRow,
-  DEFAULT_LOCALE, ROOT_ID, OPERATIONS_ID, ITEM_TYPE_CATEGORY, FUNCTIONALITY_TYPE_BY_ID,
+  DEFAULT_LOCALE, ROOT_ID, OPERATIONS_ID, ITEM_TYPE_CATEGORY,
 } from './types'
 
 const NAV_COLUMNS =
@@ -37,22 +37,7 @@ export const getNavigationItem = cache(async (id: number): Promise<UserNavigatio
   if (!it) throw new Error(`Navigation item ${id} not found`)
   const tagTranslations: Record<string, string[]> = {}
   for (const t of tagsByItem.get(id) ?? []) (tagTranslations[t.tag_lan] ??= []).push(t.tag)
-  return {
-    id: it.id_item,
-    name: it.item_translation?.[DEFAULT_LOCALE]?.name ?? it.name ?? '',
-    type: it.id_item_type === ITEM_TYPE_CATEGORY ? 'CATEGORY' : 'FUNCTIONALITY',
-    parentId: it.id_item_parent,
-    authorization: false,
-    description: it.item_translation?.[DEFAULT_LOCALE]?.description ?? null,
-    functionalityType: it.id_functionality_type ? FUNCTIONALITY_TYPE_BY_ID[it.id_functionality_type] ?? null : null,
-    link: it.functionality_link,
-    icon: it.icon_path,
-    navbarPosition: it.navbar_position,
-    isImmutable: it.is_immutable === 1,
-    translations: it.item_translation ?? {},
-    tagTranslations,
-    children: [],
-  }
+  return mapRowToDto(it, { tagTranslations, children: [] })
 })
 
 export const getParentList = cache(async (): Promise<{ id: number; name: string }[]> => {

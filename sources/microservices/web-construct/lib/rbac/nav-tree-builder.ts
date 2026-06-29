@@ -3,8 +3,27 @@ import {
   DEFAULT_LOCALE, ITEM_TYPE_CATEGORY, FUNCTIONALITY_TYPE_BY_ID,
 } from './types'
 
-function labelFor(it: NavigationItemRow, locale: Locale): string {
-  return it.item_translation?.[locale]?.name ?? it.item_translation?.[DEFAULT_LOCALE]?.name ?? it.name ?? ''
+export function mapRowToDto(
+  it: NavigationItemRow,
+  opts: { tagTranslations: Record<string, string[]>; children: UserNavigationTreeDto[]; locale?: Locale },
+): UserNavigationTreeDto {
+  const locale = opts.locale ?? DEFAULT_LOCALE
+  return {
+    id: it.id_item,
+    name: it.item_translation?.[locale]?.name ?? it.item_translation?.[DEFAULT_LOCALE]?.name ?? it.name ?? '',
+    type: it.id_item_type === ITEM_TYPE_CATEGORY ? 'CATEGORY' : 'FUNCTIONALITY',
+    parentId: it.id_item_parent,
+    authorization: false,
+    description: it.item_translation?.[locale]?.description ?? it.item_translation?.[DEFAULT_LOCALE]?.description ?? null,
+    functionalityType: it.id_functionality_type ? FUNCTIONALITY_TYPE_BY_ID[it.id_functionality_type] ?? null : null,
+    link: it.functionality_link,
+    icon: it.icon_path,
+    navbarPosition: it.navbar_position,
+    isImmutable: it.is_immutable === 1,
+    translations: it.item_translation ?? {},
+    tagTranslations: opts.tagTranslations,
+    children: opts.children,
+  }
 }
 
 export function buildNavTree(
@@ -29,22 +48,7 @@ export function buildNavTree(
     (childrenByParent.get(parentId) ?? [])
       .slice()
       .sort((a, b) => a.order_position - b.order_position)
-      .map(it => ({
-        id: it.id_item,
-        name: labelFor(it, locale),
-        type: it.id_item_type === ITEM_TYPE_CATEGORY ? 'CATEGORY' : 'FUNCTIONALITY',
-        parentId: it.id_item_parent,
-        authorization: false,
-        description: it.item_translation?.[locale]?.description ?? it.item_translation?.[DEFAULT_LOCALE]?.description ?? null,
-        functionalityType: it.id_functionality_type ? FUNCTIONALITY_TYPE_BY_ID[it.id_functionality_type] ?? null : null,
-        link: it.functionality_link,
-        icon: it.icon_path,
-        navbarPosition: it.navbar_position,
-        isImmutable: it.is_immutable === 1,
-        translations: it.item_translation ?? {},
-        tagTranslations: tagsFor(it.id_item),
-        children: build(it.id_item),
-      }))
+      .map(it => mapRowToDto(it, { tagTranslations: tagsFor(it.id_item), children: build(it.id_item), locale }))
   return build(rootId)
 }
 
