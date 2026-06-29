@@ -45,7 +45,10 @@ export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserD
 
   let q = supabase.from('users').select(USER_COLUMNS, { count: 'exact' })
   q = applyUserFilters(q as unknown as FilterableQuery, query, ids) as unknown as typeof q
-  const { data, error, count } = await q.order(sortCol, { ascending }).range(from, to)
+  const ordered = query.sort === 'firstName'
+    ? q.order('first_name', { ascending }).order('last_name', { ascending }).order('email', { ascending })
+    : q.order(sortCol, { ascending })
+  const { data, error, count } = await ordered.range(from, to)
   if (error) throw new Error(`Failed to list users: ${error.message}`)
   const userRows = (data ?? []) as unknown as UserRow[]
 
