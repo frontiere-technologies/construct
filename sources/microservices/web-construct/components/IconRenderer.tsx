@@ -5,6 +5,7 @@ import type { ComponentType } from 'react'
 import type { LucideProps } from 'lucide-react'
 import { HelpCircle } from 'lucide-react'
 import { isInlineSvg } from '@/lib/icon-utils'
+import { sanitizeSvg } from '@/lib/rbac/svg-sanitize'
 
 type LucideComponent = ComponentType<LucideProps>
 
@@ -32,14 +33,12 @@ interface IconRendererProps {
 export const IconRenderer: React.FC<IconRendererProps> = memo(({ name, className, size = 20 }) => {
   const LazyIcon = useMemo(() => (!isInlineSvg(name) && name) ? getLazyIcon(name) : null, [name])
 
-  // icon_path values come from the admin-managed navigation_item table (RBAC Administrator only);
-  // rendered as trusted inline SVG. TODO(security): sanitize if a non-admin path can ever populate icon_path.
   if (isInlineSvg(name)) {
     return (
       <span
         className={className}
         style={{ display: 'inline-flex', width: size, height: size }}
-        dangerouslySetInnerHTML={{ __html: name! }}
+        dangerouslySetInnerHTML={{ __html: sanitizeSvg(name) }}
       />
     )
   }
