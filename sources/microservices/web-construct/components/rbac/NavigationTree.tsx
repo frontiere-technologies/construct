@@ -114,9 +114,11 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
       const before = index.get(beforeId)
       if (!before) return
       const targetParent = before.parentId ?? 0
-      const siblings = (targetParent === 0
-        ? nodes
-        : index.get(targetParent)?.children ?? []).filter(n => n.id !== activeId)
+      // If the target parent is not a real node in the index (e.g. root=0 or operations=-1),
+      // fall back to the top-level nodes list. This handles both root and operations tabs correctly.
+      const siblings = (index.has(targetParent)
+        ? index.get(targetParent)!.children
+        : nodes).filter(n => n.id !== activeId)
       const idx = siblings.findIndex(n => n.id === beforeId)
       dnd.onMove(activeId, targetParent, idx < 0 ? siblings.length : idx)
     }

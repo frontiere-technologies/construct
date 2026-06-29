@@ -16,6 +16,8 @@ const FUNC_TYPES: { id: number; label: string }[] = [
 interface Initial {
   name: string; description: string; idItemType: 1 | 2; idFunctionalityType: number | null
   functionalityLink: string; iconPath: string; idItemParent: number | null
+  /** Active root id (ROOT_ID=0 or OPERATIONS_ID=-1). Used only in create mode to determine placement when idItemParent is null. */
+  idRootParent?: number | null
   translations: Record<string, { name?: string; description?: string }>; tagTranslations: Record<string, string[]>
 }
 
@@ -55,6 +57,7 @@ export default function FunctionalityForm(
           idFunctionalityType: isFunc ? f.idFunctionalityType : null,
           functionalityLink: isFunc ? f.functionalityLink : null,
           iconPath: f.iconPath || null, idItemParent: f.idItemParent,
+          idRootParent: f.idRootParent ?? null,
           description: itDesc, itemTranslation: f.translations, tagTranslations: f.tagTranslations,
         }
         await createNavigationItem(input)
@@ -88,7 +91,9 @@ export default function FunctionalityForm(
                 placeholder="Nome funzionalità *" maxLength={100}
                 className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent" />
               <select value={f.idItemParent ?? ''} onChange={e => set('idItemParent', e.target.value ? Number(e.target.value) : null)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent">
+                disabled={mode === 'edit'}
+                title={mode === 'edit' ? 'Sposta tramite trascinamento nell\'albero' : undefined}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent disabled:opacity-50 disabled:cursor-not-allowed">
                 <option value="">Genitore</option>
                 {parents.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>

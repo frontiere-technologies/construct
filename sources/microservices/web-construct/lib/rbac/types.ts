@@ -107,6 +107,8 @@ export interface CreateNavItemInput {
   functionalityLink: string | null
   iconPath: string | null
   idItemParent: number | null
+  /** Resolved active-root id (ROOT_ID=0 or OPERATIONS_ID=-1). Used only on create to determine placement when idItemParent is null. Optional so edit-mode callers can omit it. */
+  idRootParent?: number | null
   description: string
   itemTranslation: Record<string, { name?: string; description?: string }>
   tagTranslations: Record<string, string[]>

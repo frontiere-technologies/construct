@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from 'react'
 import { IconRenderer } from '@/components/IconRenderer'
+import { sanitizeSvg } from '@/lib/rbac/svg-sanitize'
 
 export default function IconUpload({ value, onChange }: { value: string; onChange: (svg: string) => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -12,7 +13,7 @@ export default function IconUpload({ value, onChange }: { value: string; onChang
     if (!file) return
     if (!file.name.toLowerCase().endsWith('.svg') && file.type !== 'image/svg+xml') { setErr('Solo file SVG'); return }
     const reader = new FileReader()
-    reader.onload = () => onChange(String(reader.result ?? ''))
+    reader.onload = () => onChange(sanitizeSvg(String(reader.result ?? '')))
     reader.readAsText(file)
   }
 

@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { sanitizeSvg } from './svg-sanitize'
 import { canDeleteSubtree, isDescendant } from './nav-tree-builder'
 import type { CreateNavItemInput, UpdateNavItemInput, MoveInput, NavigationItemRow } from './types'
+import { ROOT_ID } from './types'
 
 async function writeTags(
   supabase: ReturnType<typeof createAdminClient>,
@@ -27,9 +28,10 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   await requireAdmin()
   if (!input.name.trim()) throw new Error('Name is required')
   const supabase = createAdminClient()
-  const parent = input.idItemParent
+  // Resolve the parent: explicit item parent takes precedence; otherwise use the active root (operations=-1 or root=0)
+  const parent = input.idItemParent ?? input.idRootParent ?? ROOT_ID
   // next order_position among siblings of the chosen parent
-  const { data: siblings, error: siblingError } = await supabase.from('navigation_item').select('order_position').eq('id_item_parent', parent ?? 0)
+  const { data: siblings, error: siblingError } = await supabase.from('navigation_item').select('order_position').eq('id_item_parent', parent)
   if (siblingError) throw new Error(`Failed to load siblings: ${siblingError.message}`)
   const nextOrder = (siblings ?? []).reduce((m: number, r: { order_position: number }) => Math.max(m, r.order_position + 1), 0)
   const { data, error } = await supabase.from('navigation_item').insert({
@@ -38,7 +40,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
     id_functionality_type: input.idItemType === 2 ? input.idFunctionalityType : null,
     functionality_link: input.idItemType === 2 ? input.functionalityLink : null,
     icon_path: sanitizeSvg(input.iconPath),
-    id_item_parent: parent ?? 0,
+    id_item_parent: parent,
     order_position: nextOrder,
     description: input.description,
     item_translation: input.itemTranslation,
