@@ -53,7 +53,7 @@
 **Interfaces:**
 - Produces: `RoleType`, `RolePageItemDto`, `RoleInformationDto`, `UserNavigationTreeDto`, `PermissionDelta`, `RolesQuery`, `RolesPage`.
 
-- [x] **Step 1: Append types to `lib/rbac/types.ts`**
+- [x] ✅ **Step 1: Append types to `lib/rbac/types.ts`**
 
 ```ts
 export type RoleType = 'SYSTEM' | 'SERVICE' | 'SYNCED'
@@ -106,7 +106,7 @@ export interface RolesPage {
 }
 ```
 
-- [x] **Step 2: Typecheck & commit**
+- [x] ✅ **Step 2: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → no new errors.
 ```bash
@@ -126,7 +126,7 @@ git commit -m "feat(rbac): add Phase 1 role DTOs and query types"
 - Consumes: existing `mapNavigationToSidebar(items, authorizedIds, locale?)`.
 - Produces: same signature; output now excludes orphans (an item whose `parentId` is non-null and not among emitted ids).
 
-- [x] **Step 1: Add the failing test** (append inside the existing `describe('mapNavigationToSidebar', …)` block in `sidebar-adapter.test.ts`)
+- [x] ✅ **Step 1: Add the failing test** (append inside the existing `describe('mapNavigationToSidebar', …)` block in `sidebar-adapter.test.ts`)
 
 ```ts
   it('drops an item whose parent is not in the emitted set (orphan)', () => {
@@ -136,12 +136,12 @@ git commit -m "feat(rbac): add Phase 1 role DTOs and query types"
   })
 ```
 
-- [x] **Step 2: Run, expect fail**
+- [x] ✅ **Step 2: Run, expect fail**
 
 Run: `npm test -- sidebar-adapter`
 Expected: FAIL (item '3' is currently emitted with parentId '2' though 2 isn't emitted).
 
-- [x] **Step 3: Add the orphan-drop pass**
+- [x] ✅ **Step 3: Add the orphan-drop pass**
 
 In `lib/rbac/sidebar-adapter.ts`, replace the final `return out` of `mapNavigationToSidebar` with:
 ```ts
@@ -149,12 +149,12 @@ In `lib/rbac/sidebar-adapter.ts`, replace the final `return out` of `mapNavigati
   return out.filter(m => m.parentId === null || emitted.has(m.parentId))
 ```
 
-- [x] **Step 4: Run, expect pass**
+- [x] ✅ **Step 4: Run, expect pass**
 
 Run: `npm test -- sidebar-adapter`
 Expected: PASS (all prior cases still pass; the new orphan case passes).
 
-- [x] **Step 5: Commit**
+- [x] ✅ **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/sidebar-adapter.ts sources/microservices/web-construct/lib/rbac/sidebar-adapter.test.ts
@@ -177,7 +177,7 @@ git commit -m "fix(rbac): drop orphaned items in sidebar adapter (CARRY-1)"
   - `applyToggle(trees: UserNavigationTreeDto[], map: Map<number, boolean>, itemId: number, on: boolean): Map<number, boolean>`
   - `computeDeltas(loaded: Map<number, boolean>, current: Map<number, boolean>): PermissionDelta[]`
 
-- [x] **Step 1: Write the failing tests**
+- [x] ✅ **Step 1: Write the failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -274,12 +274,12 @@ describe('computeDeltas', () => {
 })
 ```
 
-- [x] **Step 2: Run, expect fail**
+- [x] ✅ **Step 2: Run, expect fail**
 
 Run: `npm test -- permission-tree`
 Expected: FAIL (module missing).
 
-- [x] **Step 3: Implement `lib/rbac/permission-tree.ts`**
+- [x] ✅ **Step 3: Implement `lib/rbac/permission-tree.ts`**
 
 ```ts
 import {
@@ -385,12 +385,12 @@ export function computeDeltas(
 }
 ```
 
-- [x] **Step 4: Run, expect pass**
+- [x] ✅ **Step 4: Run, expect pass**
 
 Run: `npm test -- permission-tree`
 Expected: PASS (all cases).
 
-- [x] **Step 5: Commit**
+- [x] ✅ **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/permission-tree.ts sources/microservices/web-construct/lib/rbac/permission-tree.test.ts
@@ -414,7 +414,7 @@ git commit -m "feat(rbac): pure permission-tree cascade/delta logic"
   - `getRole(roleId: number): Promise<RoleInformationDto>`
   - `getRoleAuthorizationTree(roleId: number, rootName: 'ROOT' | 'OPERATIONS'): Promise<UserNavigationTreeDto[]>`
 
-- [x] **Step 1: Append `role_list_view` to `schema.sql`**
+- [x] ✅ **Step 1: Append `role_list_view` to `schema.sql`**
 
 ```sql
 -- ============================================================
@@ -433,7 +433,7 @@ from role r
 left join role_type rt on rt.id_role_type = r.id_role_type;
 ```
 
-- [x] **Step 2: Apply to remote DB and verify**
+- [x] ✅ **Step 2: Apply to remote DB and verify**
 
 Load tools: ToolSearch `select:mcp__supabase__apply_migration,mcp__supabase__execute_sql`. Apply the full `schema.sql` via `apply_migration` (name `rbac_phase1_role_list_view`). Then verify:
 ```sql
@@ -442,7 +442,7 @@ from role_list_view where id in (0,1,2) order by id;
 ```
 Expected: rows for ids 0/1/2; role 1 (Administrator) `role_type=SYSTEM`, `has_permissions=true`. Paste into the report.
 
-- [x] **Step 3: Implement `lib/rbac/roles-service.ts`**
+- [x] ✅ **Step 3: Implement `lib/rbac/roles-service.ts`**
 
 ```ts
 import { cache } from 'react'
@@ -553,7 +553,7 @@ export const getRoleAuthorizationTree = cache(
 )
 ```
 
-- [x] **Step 4: Typecheck & commit**
+- [x] ✅ **Step 4: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → no new errors.
 ```bash
@@ -576,7 +576,7 @@ git commit -m "feat(rbac): roles read-side service + role_list_view"
   - `updateRolePermissions(roleId: number, deltas: PermissionDelta[]): Promise<void>`
   - `deleteRole(roleId: number): Promise<void>`
 
-- [x] **Step 1: Implement `lib/rbac/roles-actions.ts`**
+- [x] ✅ **Step 1: Implement `lib/rbac/roles-actions.ts`**
 
 ```ts
 'use server'
@@ -644,11 +644,11 @@ export async function deleteRole(roleId: number): Promise<void> {
 }
 ```
 
-- [x] **Step 2: Typecheck**
+- [x] ✅ **Step 2: Typecheck**
 
 Run: `npx tsc --noEmit` → no new errors. (If the `role_type:role_type(description)` embedded-select typing is awkward, the `as` casts above handle it; do not change the query shape.)
 
-- [x] **Step 3: Verify the SERVICE/SYSTEM guards against the live DB**
+- [x] ✅ **Step 3: Verify the SERVICE/SYSTEM guards against the live DB**
 
 Load `mcp__supabase__execute_sql`. Confirm role 1 is SYSTEM (so guards will fire) and there are no SERVICE seeds yet:
 ```sql
@@ -657,7 +657,7 @@ from role r join role_type rt on rt.id_role_type = r.id_role_type order by r.id_
 ```
 Expected: ids 0,1,2 all SYSTEM. (Functional create/rename/delete behavior is covered by E2E in Task 11.) Paste into the report.
 
-- [x] **Step 4: Commit**
+- [x] ✅ **Step 4: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/roles-actions.ts
@@ -676,7 +676,7 @@ git commit -m "feat(rbac): role create/rename/updatePermissions/delete actions"
   - `Column<T> = { key: string; header: string; sortable?: boolean; render?: (row: T) => React.ReactNode }`
   - Props: `{ columns: Column<T>[]; rows: T[]; rowKey: (row: T) => string | number; sort?: { field: string; direction: 'ASC' | 'DESC' }; onSortChange?: (field: string) => void; page: number; totalPages: number; onPageChange: (page: number) => void; search: string; onSearchChange: (v: string) => void; filtersSlot?: React.ReactNode; actionButton?: React.ReactNode; rowMenu?: (row: T) => { label: string; onClick: () => void; disabled?: boolean }[]; onRowClick?: (row: T) => void }`
 
-- [x] **Step 1: Implement `components/rbac/DataTable.tsx`**
+- [x] ✅ **Step 1: Implement `components/rbac/DataTable.tsx`**
 
 ```tsx
 'use client'
@@ -850,7 +850,7 @@ export default function DataTable<T>(props: DataTableProps<T>) {
 }
 ```
 
-- [x] **Step 2: Typecheck & commit**
+- [x] ✅ **Step 2: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → no new errors. (Behavior verified via the list page + E2E in later tasks.)
 ```bash
@@ -870,7 +870,7 @@ git commit -m "feat(rbac): generic controlled DataTable primitive"
 - Produces: `NavigationTree` (default export).
   - Props: `{ nodes: UserNavigationTreeDto[]; renderTrailing?: (node: UserNavigationTreeDto) => React.ReactNode; expandedByDefault?: boolean }`
 
-- [x] **Step 1: Implement `components/rbac/NavigationTree.tsx`**
+- [x] ✅ **Step 1: Implement `components/rbac/NavigationTree.tsx`**
 
 ```tsx
 'use client'
@@ -931,7 +931,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
 }
 ```
 
-- [x] **Step 2: Typecheck & commit**
+- [x] ✅ **Step 2: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → no new errors.
 ```bash
@@ -952,7 +952,7 @@ git commit -m "feat(rbac): generic NavigationTree primitive"
   - Props: `{ trees: UserNavigationTreeDto[]; map: Map<number, boolean>; onChange: (next: Map<number, boolean>) => void; editable: boolean }`
   - The parent owns the `map` state (so it can compute deltas across both root tabs and reset on cancel).
 
-- [x] **Step 1: Implement `components/rbac/PermissionsTree.tsx`**
+- [x] ✅ **Step 1: Implement `components/rbac/PermissionsTree.tsx`**
 
 ```tsx
 'use client'
@@ -998,7 +998,7 @@ export default function PermissionsTree({ trees, map, onChange, editable }: Perm
 }
 ```
 
-- [x] **Step 2: Typecheck & commit**
+- [x] ✅ **Step 2: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → no new errors.
 ```bash
@@ -1020,7 +1020,7 @@ git commit -m "feat(rbac): PermissionsTree toggle component"
 - Consumes: `listRoles`, `getAllRoles` from `@/lib/rbac/roles-service`; `createRole`, `renameRole`, `deleteRole` from `@/lib/rbac/roles-actions`; `DataTable`; types.
 - Produces: the `/rolesPermissions` route.
 
-- [x] **Step 1: `CreateRoleModal.tsx`**
+- [x] ✅ **Step 1: `CreateRoleModal.tsx`**
 
 ```tsx
 'use client'
@@ -1065,7 +1065,7 @@ export default function CreateRoleModal({ onClose }: { onClose: () => void }) {
 }
 ```
 
-- [x] **Step 2: `RenameRoleModal.tsx`**
+- [x] ✅ **Step 2: `RenameRoleModal.tsx`**
 
 ```tsx
 'use client'
@@ -1104,7 +1104,7 @@ export default function RenameRoleModal({ roleId, currentName, onClose }: { role
 }
 ```
 
-- [x] **Step 3: `RolesTableClient.tsx`** (URL-driven state; the page re-renders on searchParam changes)
+- [x] ✅ **Step 3: `RolesTableClient.tsx`** (URL-driven state; the page re-renders on searchParam changes)
 
 ```tsx
 'use client'
@@ -1211,7 +1211,7 @@ export default function RolesTableClient(props: Props) {
 }
 ```
 
-- [x] **Step 4: `app/(protected)/rolesPermissions/page.tsx`**
+- [x] ✅ **Step 4: `app/(protected)/rolesPermissions/page.tsx`**
 
 ```tsx
 import { listRoles } from '@/lib/rbac/roles-service'
@@ -1247,12 +1247,12 @@ export default async function RolesPage({ searchParams }: { searchParams: Promis
 }
 ```
 
-- [x] **Step 5: Typecheck, lint, build**
+- [x] ✅ **Step 5: Typecheck, lint, build**
 
 Run: `npx tsc --noEmit && npm run lint && npm run build`
 Expected: clean; `/rolesPermissions` appears in the route list.
 
-- [x] **Step 6: Commit**
+- [x] ✅ **Step 6: Commit**
 
 ```bash
 git add "sources/microservices/web-construct/app/(protected)/rolesPermissions/page.tsx" sources/microservices/web-construct/components/rbac/roles/
@@ -1271,7 +1271,7 @@ git commit -m "feat(rbac): roles list page with create/rename/delete"
 - Consumes: `getRole`, `getRoleAuthorizationTree` from `@/lib/rbac/roles-service`; `updateRolePermissions` from `@/lib/rbac/roles-actions`; `PermissionsTree`; `buildAuthMap`, `computeDeltas` from `@/lib/rbac/permission-tree`; `RenameRoleModal`; types.
 - Produces: the `/rolesPermissions/[roleId]` route.
 
-- [x] **Step 1: `RoleDetailClient.tsx`**
+- [x] ✅ **Step 1: `RoleDetailClient.tsx`**
 
 ```tsx
 'use client'
@@ -1366,7 +1366,7 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
 }
 ```
 
-- [x] **Step 2: `app/(protected)/rolesPermissions/[roleId]/page.tsx`**
+- [x] ✅ **Step 2: `app/(protected)/rolesPermissions/[roleId]/page.tsx`**
 
 ```tsx
 import { getRole, getRoleAuthorizationTree } from '@/lib/rbac/roles-service'
@@ -1384,12 +1384,12 @@ export default async function RoleDetailPage({ params }: { params: Promise<{ rol
 }
 ```
 
-- [x] **Step 3: Typecheck, lint, build**
+- [x] ✅ **Step 3: Typecheck, lint, build**
 
 Run: `npx tsc --noEmit && npm run lint && npm run build`
 Expected: clean; `/rolesPermissions/[roleId]` appears in the route list.
 
-- [x] **Step 4: Commit**
+- [x] ✅ **Step 4: Commit**
 
 ```bash
 git add "sources/microservices/web-construct/app/(protected)/rolesPermissions/[roleId]/page.tsx" sources/microservices/web-construct/components/rbac/roles/RoleDetailClient.tsx
@@ -1405,7 +1405,7 @@ git commit -m "feat(rbac): role detail page with PermissionsTree editor"
 
 **Prerequisites:** dev server running with `AUTH_TEST_CREDENTIALS=true`; `.env.test` has `TEST_EMAIL` (admin). Start (from `sources/microservices/web-construct/`): `AUTH_TEST_CREDENTIALS=true npm run dev`, wait until `http://localhost:3000/login` returns 200.
 
-- [x] **Step 1: Write `sources/tests/e2e/test_roles.py`**
+- [x] ✅ **Step 1: Write `sources/tests/e2e/test_roles.py`**
 
 ```python
 import time
@@ -1483,21 +1483,21 @@ def test_system_role_not_editable(logged_in_page, base_url):
     assert edit.is_disabled()
 ```
 
-- [x] **Step 2: Run the roles E2E**
+- [x] ✅ **Step 2: Run the roles E2E**
 
 Run (repo root): `HEADLESS=true uv run pytest sources/tests/e2e/test_roles.py -v`
 Expected: all 4 tests PASS.
 
-- [x] **Step 3: Run the full E2E suite (no regressions)**
+- [x] ✅ **Step 3: Run the full E2E suite (no regressions)**
 
 Run: `HEADLESS=true uv run pytest sources/tests/e2e -v`
 Expected: all PASS (Phase 0 suite + new roles tests).
 
-- [x] **Step 4: Browser verification**
+- [x] ✅ **Step 4: Browser verification**
 
 Manually (or with `webapp-testing`): open `/rolesPermissions`, confirm the table (sort a column, toggle a filter, paginate if >10 roles); open a SERVICE role, enter Modifica, toggle a category and confirm its children flip (cascade), Salva, reload, confirm persisted; confirm Administrator shows Modifica disabled.
 
-- [x] **Step 5: Commit**
+- [x] ✅ **Step 5: Commit**
 
 ```bash
 git add sources/tests/e2e/test_roles.py

@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<!-- saved from url=(0101)https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#database -->
+<html lang="it"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><!--<base href="/_f/1782632438-396a/">--><base href="."><script>(()=>{function F(b){if(window===top)return;if(b.type==="auxclick"&&b.button!==1)return;const j=b.composedPath?b.composedPath():[b.target];let m=null;for(let y=0;y<j.length;y++){const x=j[y];if(x&&x.matches&&x.matches("a[href],area[href]")){m=x;break}}if(!m&&b.target&&b.target.closest){m=b.target.closest("a[href],area[href]")}if(!m)return;const B=m.getAttribute("href");if(!B)return;let q,C;try{q=new URL(B,document.baseURI);C=new URL(document.baseURI).origin}catch{return}if((q.protocol==="http:"||q.protocol==="https:")&&q.origin!==C){b.preventDefault();parent.postMessage({__frame_nav:true,url:q.href},"*")}}addEventListener("click",F,true);addEventListener("auxclick",F,true);var D={};function z(b){if(window===top)return;const j=Date.now();if(j-(D[b]||0)<500)return;D[b]=j;parent.postMessage({__frame_engaged:true,kind:b},"*")}addEventListener("scroll",()=>z("scroll"),{capture:true,passive:true});addEventListener("pointermove",()=>z("pointer"),{capture:true,passive:true});addEventListener("click",()=>z("click"),{capture:true,passive:true});})();</script><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+
+
+
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Specifiche Funzionali — IDM Module</title>
+<meta name="description" content="Specifiche di reverse engineering per le aree Utenti, Funzionalità e Ruoli del modulo IDM.">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #ECEEF6;
+    --surface:     #FFFFFF;
+    --surface-2:   #F4F5FB;
+    --border:      #D0D4E8;
+    --border-2:    #E4E6F2;
+    --text:        #1B1E2F;
+    --text-2:      #565B78;
+    --text-3:      #8A8FA8;
+    --accent:      #1A43A0;
+    --accent-dim:  #E2EAF8;
+    --code-bg:     #171A27;
+    --code-text:   #C8D4FF;
+    --code-comment:#6B7299;
+    --sidebar-w:   230px;
+
+    --get-bg:    #E2F4EC; --get-fg:    #0A5C34;
+    --post-bg:   #FFF1DF; --post-fg:   #7A4500;
+    --put-bg:    #FFECE0; --put-fg:    #7A2E00;
+    --patch-bg:  #EEE5FF; --patch-fg:  #420080;
+    --delete-bg: #FFE5EA; --delete-fg: #96001E;
+
+    --radius: 5px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    background: var(--bg);
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── SIDEBAR ────────────────────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-w);
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 28px 0 40px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-logo {
+    padding: 0 20px 24px;
+    border-bottom: 1px solid var(--border-2);
+    margin-bottom: 20px;
+  }
+
+  .sidebar-logo .badge {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+  }
+
+  .sidebar-logo h1 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+  }
+
+  .sidebar-logo p {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-top: 3px;
+  }
+
+  .nav-group {
+    padding: 0 8px;
+    margin-bottom: 6px;
+  }
+
+  .nav-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    padding: 0 12px;
+    margin-bottom: 4px;
+  }
+
+  .nav-link {
+    display: block;
+    padding: 5px 12px;
+    font-size: 12.5px;
+    color: var(--text-2);
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background .12s, color .12s;
+  }
+
+  .nav-link:hover { background: var(--accent-dim); color: var(--accent); }
+
+  .nav-link.sub {
+    padding-left: 24px;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  .nav-link.sub:hover { color: var(--accent); }
+
+  /* ── MAIN ───────────────────────────────────────────────── */
+  .main {
+    flex: 1;
+    min-width: 0;
+    padding: 48px 56px 80px;
+    max-width: 900px;
+  }
+
+  /* ── SECTION ────────────────────────────────────────────── */
+  .section {
+    margin-bottom: 64px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 28px;
+    padding-bottom: 14px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .section-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .section-header h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    text-wrap: balance;
+  }
+
+  .area-chip {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding: 3px 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 28px 0 12px;
+    padding-left: 12px;
+    border-left: 3px solid var(--accent);
+  }
+
+  h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-2);
+    margin: 20px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    font-size: 11px;
+  }
+
+  p {
+    color: var(--text-2);
+    margin-bottom: 10px;
+    max-width: 680px;
+  }
+
+  /* ── TABLES ─────────────────────────────────────────────── */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 12px 0 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead th {
+    background: var(--surface-2);
+    text-align: left;
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tbody tr { border-bottom: 1px solid var(--border-2); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--surface-2); }
+
+  td {
+    padding: 8px 14px;
+    vertical-align: top;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  td.dim { color: var(--text-2); }
+  td code, td .mono { font-family: var(--mono); font-size: 12px; color: var(--text); }
+
+  /* ── METHOD BADGES ──────────────────────────────────────── */
+  .method {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .GET    { background: var(--get-bg);    color: var(--get-fg); }
+  .POST   { background: var(--post-bg);   color: var(--post-fg); }
+  .PUT    { background: var(--put-bg);    color: var(--put-fg); }
+  .PATCH  { background: var(--patch-bg);  color: var(--patch-fg); }
+  .DELETE { background: var(--delete-bg); color: var(--delete-fg); }
+
+  /* ── CODE BLOCKS ────────────────────────────────────────── */
+  .code-block {
+    background: var(--code-bg);
+    color: var(--code-text);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.65;
+    padding: 18px 20px;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    margin: 12px 0 20px;
+    tab-size: 2;
+  }
+
+  .code-block .k  { color: #7EC8E3; }   /* keyword / http verb  */
+  .code-block .s  { color: #A8E89C; }   /* string value         */
+  .code-block .n  { color: #C8A4FF; }   /* property name        */
+  .code-block .c  { color: var(--code-comment); font-style: italic; }
+  .code-block .t  { color: #FFD580; }   /* type / number        */
+
+  /* ── ENDPOINT ITEM ──────────────────────────────────────── */
+  .endpoint {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius);
+    background: var(--surface);
+    margin-bottom: 8px;
+  }
+
+  .endpoint-path {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .endpoint-desc {
+    font-size: 12px;
+    color: var(--text-2);
+    margin-top: 1px;
+  }
+
+  .endpoint-auth {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--get-fg);
+    background: var(--get-bg);
+    padding: 2px 8px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* ── OVERVIEW CARDS ─────────────────────────────────────── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 16px 0 24px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+
+  .card-icon {
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    background: var(--accent-dim);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .card-icon svg { width: 16px; height: 16px; fill: var(--accent); }
+
+  .card h3 {
+    font-size: 14px;
+    border: none;
+    padding: 0;
+    margin: 0 0 4px;
+    color: var(--text);
+  }
+
+  .card p {
+    font-size: 12px;
+    color: var(--text-2);
+    margin: 0;
+  }
+
+  /* ── INLINE BADGES ──────────────────────────────────────── */
+  .badge-ok   { display:inline-block; background:#E2F4EC; color:#0A5C34; font-size:11px; font-weight:700; padding:1px 7px; border-radius:3px; }
+  .badge-sys  { display:inline-block; background:#E8ECF8; color:#1B46A0; font-size:11px; font-weight:700; padding:1px 7px; border-radius:3px; }
+  .badge-warn { display:inline-block; background:#FFF1DF; color:#7A4500; font-size:11px; font-weight:700; padding:1px 7px; border-radius:3px; }
+
+  /* ── CALLOUT ────────────────────────────────────────────── */
+  .callout {
+    background: var(--accent-dim);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 12px 0 20px;
+    font-size: 13px;
+    color: var(--accent);
+  }
+
+  /* ── UI MOCKUP ──────────────────────────────────────────── */
+  .ui-desc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin: 12px 0 20px;
+    font-size: 13px;
+  }
+
+  .ui-desc ul {
+    list-style: disc;
+    padding-left: 18px;
+    margin: 8px 0;
+    color: var(--text-2);
+  }
+
+  .ui-desc ul li { margin-bottom: 5px; }
+
+  .ui-desc strong { color: var(--text); }
+
+  .field-row {
+    display: flex;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border-2);
+    align-items: flex-start;
+  }
+
+  .field-row:last-child { border-bottom: none; }
+
+  .field-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    min-width: 180px;
+    flex-shrink: 0;
+  }
+
+  .field-type {
+    font-size: 11px;
+    color: var(--patch-fg);
+    background: var(--patch-bg);
+    padding: 1px 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    font-weight: 600;
+    align-self: flex-start;
+    margin-top: 1px;
+  }
+
+  .field-desc {
+    font-size: 12px;
+    color: var(--text-2);
+    flex: 1;
+  }
+
+  .req { color: #96001E; font-size: 11px; margin-left: 2px; }
+</style>
+
+
+
+<!-- ══════════════════════════════════ SIDEBAR -->
+<nav class="sidebar" aria-label="Indice del documento">
+  <div class="sidebar-logo">
+    <div class="badge">Specifiche</div>
+    <h1>IDM Module</h1>
+    <p>Reverse Engineering Spec v1.0</p>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-label">Documento</div>
+    <a class="nav-link" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#overview">Panoramica</a>
+    <a class="nav-link" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#database">Schema Database</a>
+  </div>
+
+  <div class="nav-group" style="margin-top:12px">
+    <div class="nav-label">Aree Funzionali</div>
+
+    <a class="nav-link" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#users">Utenti</a>
+    <a class="nav-link sub" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#users-api">API Backend</a>
+    <a class="nav-link sub" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#users-ui">Frontend</a>
+    <a class="nav-link sub" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#users-models">Data Models</a>
+
+    <a class="nav-link" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#functionalities">Funzionalità</a>
+    <a class="nav-link sub" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#func-api">API Backend</a>
+    <a class="nav-link sub" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#func-ui">Frontend</a>
+    <a class="nav-link sub" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#func-models">Data Models</a>
+
+    <a class="nav-link" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#roles">Ruoli &amp; Permessi</a>
+    <a class="nav-link sub" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#roles-api">API Backend</a>
+    <a class="nav-link sub" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#roles-ui">Frontend</a>
+    <a class="nav-link sub" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#roles-models">Data Models</a>
+  </div>
+
+  <div class="nav-group" style="margin-top:12px">
+    <div class="nav-label">Riferimento</div>
+    <a class="nav-link" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#seed">Dati di Seed</a>
+    <a class="nav-link" href="https://e057ad87-44c0-4180-bff5-8123d87ee90b.frame.claudeusercontent.com/_f/1782632438-396a/#auth">Autenticazione</a>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════ MAIN -->
+<main class="main">
+
+  <!-- ── OVERVIEW ──────────────────────────────────────────── -->
+  <section class="section" id="overview">
+    <div class="section-header">
+      <span class="section-num">00</span>
+      <h2>Panoramica</h2>
+    </div>
+
+    <p>Questo documento descrive le specifiche funzionali e tecniche delle tre aree del modulo <strong>IDM (Identity Management)</strong>: <strong>Utenti</strong>, <strong>Funzionalità</strong> e <strong>Ruoli &amp; Permessi</strong>. Le specifiche sono ricavate per reverse engineering dal codice sorgente e dagli screenshot dell'applicazione originale.</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"></path></svg>
+        </div>
+        <h3>Utenti</h3>
+        <p>Lista paginata, filtri avanzati, assegnazione ruoli tramite modal multiselect.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24"><path d="M3 3h18v2H3zm0 8h18v2H3zm0 8h18v2H3z"></path></svg>
+        </div>
+        <h3>Funzionalità</h3>
+        <p>Albero gerarchico configurabile: categorie e funzionalità, drag&amp;drop, multilingua.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"></path></svg>
+        </div>
+        <h3>Ruoli &amp; Permessi</h3>
+        <p>RBAC: creazione ruoli, assegnazione permessi per funzionalità tramite albero con toggle.</p>
+      </div>
+    </div>
+
+    <h3>Stack Tecnologico dell'Originale</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Layer</th><th>Tecnologia</th></tr></thead>
+        <tbody>
+          <tr><td class="dim">Database</td><td><code>PostgreSQL</code> — schema parametrico (default: <code>iam</code>)</td></tr>
+          <tr><td class="dim">Backend</td><td><code>Java 17 / Spring Boot</code> — API REST generata da OpenAPI spec</td></tr>
+          <tr><td class="dim">Frontend</td><td><code>Next.js (React)</code> con React Query per la gestione dello stato async</td></tr>
+          <tr><td class="dim">Auth</td><td>JWT Bearer Token — l'IDP esterno emette il token; il backend lo valida</td></tr>
+          <tr><td class="dim">API Base URL</td><td>Configurabile — es. <code>https://api.example.com</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── DATABASE ───────────────────────────────────────────── -->
+  <section class="section" id="database">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2>Schema Database</h2>
+    </div>
+
+    <p>Tutte le tabelle vivono in uno schema PostgreSQL nominabile (default <code>iam</code>). Qui sotto le tabelle rilevanti per le tre aree.</p>
+
+    <h3>Tabelle Utenti</h3>
+
+    <h4>user</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Colonna</th><th>Tipo</th><th>Vincoli</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><code>id_user</code></td><td>NUMERIC</td><td>PK, DEFAULT nextval(s_id_user)</td><td>Chiave surrogata</td></tr>
+          <tr><td><code>sub</code></td><td>VARCHAR(50)</td><td></td><td>Subject ID dall'IDP (es. auth0|...)</td></tr>
+          <tr><td><code>first_name</code></td><td>VARCHAR(30)</td><td></td><td></td></tr>
+          <tr><td><code>last_name</code></td><td>VARCHAR(30)</td><td></td><td></td></tr>
+          <tr><td><code>email</code></td><td>VARCHAR(50)</td><td></td><td></td></tr>
+          <tr><td><code>country</code></td><td>VARCHAR(3)</td><td></td><td>ISO 3166-1 alpha-3</td></tr>
+          <tr><td><code>branch</code></td><td>VARCHAR(50)</td><td></td><td></td></tr>
+          <tr><td><code>flow</code></td><td>VARCHAR(10)</td><td></td><td></td></tr>
+          <tr><td><code>uom_role</code></td><td>VARCHAR(20)</td><td></td><td></td></tr>
+          <tr><td><code>additional_company</code></td><td>TEXT</td><td></td><td></td></tr>
+          <tr><td><code>owner_company</code></td><td>VARCHAR(10)</td><td></td><td></td></tr>
+          <tr><td><code>features</code></td><td>TEXT</td><td></td><td>Feature flags dell'IDP (stringa libera)</td></tr>
+          <tr><td><code>date_ins</code></td><td>TIMESTAMP</td><td>DEFAULT now(), NOT NULL</td><td></td></tr>
+          <tr><td><code>picture_url</code></td><td>VARCHAR(200)</td><td></td><td>Avatar URL dall'IDP</td></tr>
+          <tr><td><code>date_mod</code></td><td>TIMESTAMP</td><td></td><td></td></tr>
+          <tr><td><code>id_user_status</code></td><td>NUMERIC</td><td>FK → user_status, DEFAULT 2</td><td>Default = Active</td></tr>
+          <tr><td><code>last_status_ts</code></td><td>TIMESTAMP</td><td></td><td>Ultima variazione stato</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>user_status (lookup)</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>id_user_status</th><th>description</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Deactivated</td></tr>
+          <tr><td>2</td><td>Active</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>user_role (N:N utenti–ruoli)</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Colonna</th><th>Tipo</th><th>Vincoli</th></tr></thead>
+        <tbody>
+          <tr><td><code>id_user</code></td><td>NUMERIC</td><td>PK, FK → user</td></tr>
+          <tr><td><code>id_role</code></td><td>NUMERIC</td><td>PK, FK → role</td></tr>
+          <tr><td><code>date_ins</code></td><td>TIMESTAMP</td><td>DEFAULT now(), NOT NULL</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>user_info (attributi K/V estendibili per utente)</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Colonna</th><th>Tipo</th><th>Vincoli</th></tr></thead>
+        <tbody>
+          <tr><td><code>id_user</code></td><td>NUMERIC</td><td>PK, FK → user</td></tr>
+          <tr><td><code>attribute_type</code></td><td>VARCHAR(30)</td><td>PK</td></tr>
+          <tr><td><code>attribute_value</code></td><td>TEXT</td><td>NOT NULL</td></tr>
+          <tr><td><code>date_ins</code></td><td>TIMESTAMP</td><td>DEFAULT now()</td></tr>
+          <tr><td><code>date_mod</code></td><td>TIMESTAMP</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Tabelle Ruoli</h3>
+
+    <h4>role</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Colonna</th><th>Tipo</th><th>Vincoli</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><code>id_role</code></td><td>NUMERIC</td><td>PK, DEFAULT nextval(s_id_role)</td><td></td></tr>
+          <tr><td><code>id_role_type</code></td><td>NUMERIC</td><td>FK → role_type, nullable</td><td></td></tr>
+          <tr><td><code>description</code></td><td>VARCHAR(80)</td><td>NOT NULL</td><td>Nome del ruolo</td></tr>
+          <tr><td><code>date_ins</code></td><td>TIMESTAMP</td><td>DEFAULT now()</td><td></td></tr>
+          <tr><td><code>date_mod</code></td><td>TIMESTAMP</td><td></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Un trigger <code>trigger_role_delete</code> (BEFORE DELETE) archivia la riga eliminata in <code>role_history</code>.</p>
+
+    <h4>role_type (lookup)</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>id_role_type</th><th>description</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>SYSTEM</td><td>Ruoli di sistema — non editabili dall'UI</td></tr>
+          <tr><td>2</td><td>SERVICE</td><td>Ruoli applicativi — editabili</td></tr>
+          <tr><td>3</td><td>SYNCED</td><td>Sincronizzati da sistemi esterni</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>role_history (audit append-only)</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Colonna</th><th>Tipo</th><th>Vincoli</th></tr></thead>
+        <tbody>
+          <tr><td><code>id_role</code></td><td>NUMERIC</td><td>PK</td></tr>
+          <tr><td><code>h_date_ins</code></td><td>TIMESTAMP</td><td>PK, DEFAULT now()</td></tr>
+          <tr><td><code>description</code></td><td>VARCHAR(80)</td><td>NOT NULL</td></tr>
+          <tr><td><code>date_ins</code></td><td>TIMESTAMP</td><td></td></tr>
+          <tr><td><code>date_mod</code></td><td>TIMESTAMP</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Tabelle Funzionalità (Navigation Items)</h3>
+
+    <h4>navigation_item</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Colonna</th><th>Tipo</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><code>id_item</code></td><td>NUMERIC</td><td>PK, DEFAULT nextval(s_id_navigation_item)</td></tr>
+          <tr><td><code>name</code></td><td>VARCHAR(100)</td><td>Nome tecnico/interno</td></tr>
+          <tr><td><code>id_external_system</code></td><td>INT8</td><td>FK → external_system (default: 1=ALL)</td></tr>
+          <tr><td><code>id_item_type</code></td><td>NUMERIC</td><td>FK → navigation_item_type — NOT NULL</td></tr>
+          <tr><td><code>id_functionality_type</code></td><td>NUMERIC</td><td>FK → functionality_type — null per le categorie</td></tr>
+          <tr><td><code>functionality_link</code></td><td>VARCHAR(250)</td><td>Route relativa o URL</td></tr>
+          <tr><td><code>icon_path</code></td><td>TEXT</td><td>SVG inline</td></tr>
+          <tr><td><code>id_item_parent</code></td><td>NUMERIC</td><td>FK self-referenziale → navigation_item</td></tr>
+          <tr><td><code>order_position</code></td><td>NUMERIC</td><td>Posizione nell'albero</td></tr>
+          <tr><td><code>description</code></td><td>TEXT</td><td>Descrizione tecnica o JSON config</td></tr>
+          <tr><td><code>navbar_position</code></td><td>VARCHAR(6)</td><td>TOP | BOTTOM | null</td></tr>
+          <tr><td><code>date_ins</code></td><td>TIMESTAMP</td><td>DEFAULT now()</td></tr>
+          <tr><td><code>date_mod</code></td><td>TIMESTAMP</td><td></td></tr>
+          <tr><td><code>item_translation</code></td><td>TEXT</td><td>JSON: <code>{"IT":{"name":"...","description":"..."},"EN":{...}}</code></td></tr>
+          <tr><td><code>is_immutable</code></td><td>NUMERIC(1)</td><td>DEFAULT 0 — se 1, non eliminabile dall'UI</td></tr>
+          <tr><td><code>config_visibility</code></td><td>NUMERIC(1)</td><td>DEFAULT 0 — se 1, nascosto nella config UI</td></tr>
+          <tr><td><code>no_permission_need_for_navigation</code></td><td>NUMERIC(1)</td><td>DEFAULT 0 — se 1, accessibile senza permesso esplicito</td></tr>
+          <tr><td><code>external_id</code></td><td>VARCHAR(64)</td><td>ID in sistemi esterni</td></tr>
+          <tr><td><code>click_count</code></td><td>NUMERIC</td><td>Contatore click (analytics)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>navigation_item_type (lookup)</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>id_item_type</th><th>description</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>CATEGORY</td></tr>
+          <tr><td>2</td><td>FUNCTIONALITY</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>functionality_type (lookup)</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>id_functionality_type</th><th>description</th><th>Etichetta UI (IT)</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>EMBEDDED_PAGE</td><td>Pagina incorporata</td></tr>
+          <tr><td>2</td><td>EXTERNAL_LINK</td><td>Link esterno</td></tr>
+          <tr><td>3</td><td>INTERNAL_FUNCTIONALITY</td><td>Funzionalità interna</td></tr>
+          <tr><td>4</td><td>REMOTE_DESKTOP</td><td>Desktop remoto</td></tr>
+          <tr><td>5</td><td>PERMISSION</td><td>Permesso</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>navigation_item_tag (tag multilingue per item)</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Colonna</th><th>Tipo</th><th>Vincoli</th></tr></thead>
+        <tbody>
+          <tr><td><code>id_item</code></td><td>NUMERIC</td><td>PK, FK → navigation_item</td></tr>
+          <tr><td><code>tag_lan</code></td><td>VARCHAR(5)</td><td>PK — codice lingua: IT, EN, DE, FR, ES, NL</td></tr>
+          <tr><td><code>tag</code></td><td>VARCHAR(50)</td><td>PK</td></tr>
+          <tr><td><code>date_ins</code></td><td>TIMESTAMP</td><td>DEFAULT now(), NOT NULL</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>role_item (N:N ruolo–funzionalità con permessi CRUD)</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Colonna</th><th>Tipo</th><th>Vincoli</th></tr></thead>
+        <tbody>
+          <tr><td><code>id_role</code></td><td>NUMERIC</td><td>PK, FK → role</td></tr>
+          <tr><td><code>id_item</code></td><td>NUMERIC</td><td>PK, FK → navigation_item</td></tr>
+          <tr><td><code>create_permission</code></td><td>NUMERIC(1)</td><td>0 | 1</td></tr>
+          <tr><td><code>edit_permission</code></td><td>NUMERIC(1)</td><td>0 | 1</td></tr>
+          <tr><td><code>delete_permission</code></td><td>NUMERIC(1)</td><td>0 | 1</td></tr>
+          <tr><td><code>view_permission</code></td><td>NUMERIC(1)</td><td>0 | 1</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── USERS ──────────────────────────────────────────────── -->
+  <section class="section" id="users">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <h2>Area: Utenti</h2>
+      <span class="area-chip">User Management</span>
+    </div>
+
+    <p>Permette agli amministratori di visualizzare tutti gli utenti del sistema con filtri avanzati e di assegnare/rimuovere ruoli.</p>
+
+    <h3 id="users-api">API Backend</h3>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/user</div>
+        <div class="endpoint-desc">Lista paginata degli utenti con filtri multipli</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <h4>Query Parameters — GET /user</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Parametro</th><th>Tipo</th><th>Default</th><th>Descrizione</th></tr></thead>
+        <tbody>
+          <tr><td><code>page</code></td><td>number</td><td>0</td><td>Indice pagina (0-based)</td></tr>
+          <tr><td><code>size</code></td><td>number</td><td>10</td><td>Elementi per pagina</td></tr>
+          <tr><td><code>search</code></td><td>string</td><td>—</td><td>Ricerca libera su nome e email</td></tr>
+          <tr><td><code>direction</code></td><td>ASC | DESC</td><td>ASC</td><td>Direzione ordinamento</td></tr>
+          <tr><td><code>sort</code></td><td>string</td><td>—</td><td>Campo di ordinamento: <code>firstName</code>, <code>lastName</code>, <code>email</code>, <code>dateIns</code>, <code>dateMod</code>, <code>status</code></td></tr>
+          <tr><td><code>roles</code></td><td>number[]</td><td>—</td><td>Filtro per ID ruolo (multi-value, ripetuto: <code>roles=1&amp;roles=5</code>)</td></tr>
+          <tr><td><code>statuses</code></td><td>string[]</td><td>—</td><td>Filtro per stato: <code>Active</code>, <code>Deactivated</code></td></tr>
+          <tr><td><code>startDateIns</code></td><td>ISO 8601</td><td>—</td><td>Data creazione da</td></tr>
+          <tr><td><code>endDateIns</code></td><td>ISO 8601</td><td>—</td><td>Data creazione a</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Response — GET /user</h4>
+    <div class="code-block"><span class="c">// 200 OK</span>
+{
+  <span class="n">"pagination"</span>: {
+    <span class="n">"currentElements"</span>: <span class="t">10</span>,
+    <span class="n">"currentPage"</span>: <span class="t">0</span>,
+    <span class="n">"totalPages"</span>: <span class="t">7</span>
+  },
+  <span class="n">"elements"</span>: [
+    {
+      <span class="n">"idUser"</span>: <span class="t">123</span>,
+      <span class="n">"sub"</span>: <span class="s">"auth0|abc123"</span>,
+      <span class="n">"firstName"</span>: <span class="s">"Mario"</span>,
+      <span class="n">"lastName"</span>: <span class="s">"Rossi"</span>,
+      <span class="n">"email"</span>: <span class="s">"mario.rossi@example.com"</span>,
+      <span class="n">"country"</span>: <span class="s">"ITA"</span>,
+      <span class="n">"branch"</span>: <span class="s">"HQ"</span>,
+      <span class="n">"flow"</span>: <span class="t">null</span>,
+      <span class="n">"uomRole"</span>: <span class="t">null</span>,
+      <span class="n">"additionalCompany"</span>: <span class="t">null</span>,
+      <span class="n">"ownerCompany"</span>: <span class="t">null</span>,
+      <span class="n">"features"</span>: <span class="t">null</span>,
+      <span class="n">"dateIns"</span>: <span class="s">"2024-08-20T10:30:00Z"</span>,
+      <span class="n">"dateMod"</span>: <span class="s">"2025-01-15T08:00:00Z"</span>,
+      <span class="n">"status"</span>: { <span class="n">"idUserStatus"</span>: <span class="t">2</span>, <span class="n">"description"</span>: <span class="s">"Active"</span> },
+      <span class="n">"roles"</span>: [
+        { <span class="n">"id"</span>: <span class="t">1</span>, <span class="n">"description"</span>: <span class="s">"Administrator"</span>, <span class="n">"dateIns"</span>: <span class="s">"..."</span>, <span class="n">"dateMod"</span>: <span class="s">"..."</span> }
+      ],
+      <span class="n">"tenantValidationPending"</span>: <span class="t">false</span>,
+      <span class="n">"multiTenancyEnabled"</span>: <span class="t">false</span>
+    }
+  ]
+}</div>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/user/count</div>
+        <div class="endpoint-desc">Conteggio utenti (stessi filtri di GET /user, escluso page/size/sort)</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+    <p>Response: <code>200 OK</code> — body: intero (es. <code>68</code>)</p>
+
+    <div class="endpoint">
+      <span class="method POST">POST</span>
+      <div>
+        <div class="endpoint-path">/user/role</div>
+        <div class="endpoint-desc">Sostituisce completamente i ruoli di un utente</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <h4>Request Body — POST /user/role</h4>
+    <div class="code-block">{
+  <span class="n">"userId"</span>: <span class="t">123</span>,
+  <span class="n">"roleIds"</span>: [<span class="t">1</span>, <span class="t">5</span>, <span class="t">12</span>]   <span class="c">// lista completa dei ruoli da assegnare</span>
+}</div>
+    <p>Response: <code>200 OK</code> — nessun body. La lista viene sostituita (non aggiunta).</p>
+
+    <h3 id="users-ui">Frontend — Pagina Utenti</h3>
+
+    <p>Route: <code>/userManagement</code> &nbsp;·&nbsp; Titolo pagina: <strong>"Gestione utenti"</strong></p>
+
+    <h4>Layout Tabella</h4>
+    <div class="ui-desc">
+      <ul>
+        <li><strong>Colonne visibili di default:</strong> Utente (firstName + lastName), Email, Data di creazione, Ruoli, Stato, Ultimo aggiornamento</li>
+        <li>Tutte le colonne sono <strong>ordinabili</strong> cliccando l'intestazione; freccia indica direzione (ASC/DESC)</li>
+        <li>La colonna Ruoli mostra i nomi separati da virgola (es. "Administrator, Card viewer, Registered user")</li>
+        <li>La colonna Stato mostra un badge colorato: <span class="badge-ok">Attivo</span> (verde) / Disattivato (grigio)</li>
+        <li>La colonna Ultimo aggiornamento mostra tempo relativo (es. "1 anno fa", "4 mesi fa")</li>
+        <li>Ogni riga ha un menu <code>⋯</code> (tre puntini) con l'azione "Gestisci Ruoli"</li>
+      </ul>
+    </div>
+
+    <h4>Barra superiore (toolbar)</h4>
+    <div class="ui-desc">
+      <ul>
+        <li><strong>Search input</strong> (sinistra): placeholder "Cerca" — filtra per nome e email, ricerca con debounce</li>
+        <li><strong>Pulsante "Colonne"</strong>: apre un pannello per mostrare/nascondere colonne</li>
+        <li><strong>Pulsante "Filtri"</strong>: apre un drawer laterale con filtri avanzati:
+          <ul>
+            <li>Multi-select Ruoli (lista da <code>GET /role/all</code>)</li>
+            <li>Multi-select Stato (<code>Active</code> / <code>Deactivated</code>)</li>
+            <li>Date range picker (Data di creazione: da ... a ...)</li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+
+    <h4>Paginazione</h4>
+    <div class="ui-desc">
+      <ul>
+        <li>Paginazione numerata in fondo: <code>[1] [2] [3] [...] [N] [›]</code></li>
+        <li>La pagina corrente è evidenziata</li>
+      </ul>
+    </div>
+
+    <h4>Modal "Gestisci Ruoli"</h4>
+    <div class="ui-desc">
+      <ul>
+        <li>Aperto dal menu <code>⋯</code> → "Gestisci Ruoli"</li>
+        <li>Titolo: <strong>"Gestisci Ruoli"</strong></li>
+        <li>Sottotitolo: <em>"Stai gestendo i ruoli di [firstName] [lastName] ([email])."</em></li>
+        <li>Campo "Ruoli": dropdown multi-select con checkbox per ogni ruolo disponibile</li>
+        <li>I ruoli già assegnati all'utente sono pre-selezionati (caricati da <code>GET /user</code>)</li>
+        <li>La lista dei ruoli disponibili viene da <code>GET /role/all</code></li>
+        <li>Bottone "Conferma" → <code>POST /user/role</code> con l'intera lista aggiornata → chiusura modal → refresh tabella</li>
+        <li>Bottone "Annulla" → chiude senza salvare</li>
+      </ul>
+    </div>
+
+    <h3 id="users-models">Data Models</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Campo</th><th>Tipo TS</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><code>idUser</code></td><td>number</td><td></td></tr>
+          <tr><td><code>sub</code></td><td>string | null</td><td>Subject IDP</td></tr>
+          <tr><td><code>firstName</code></td><td>string | null</td><td></td></tr>
+          <tr><td><code>lastName</code></td><td>string | null</td><td></td></tr>
+          <tr><td><code>email</code></td><td>string</td><td></td></tr>
+          <tr><td><code>country</code></td><td>string | null</td><td></td></tr>
+          <tr><td><code>branch</code></td><td>string | null</td><td></td></tr>
+          <tr><td><code>flow</code></td><td>string | null</td><td></td></tr>
+          <tr><td><code>uomRole</code></td><td>string | null</td><td></td></tr>
+          <tr><td><code>additionalCompany</code></td><td>string | null</td><td></td></tr>
+          <tr><td><code>ownerCompany</code></td><td>string | null</td><td></td></tr>
+          <tr><td><code>features</code></td><td>string | null</td><td></td></tr>
+          <tr><td><code>dateIns</code></td><td>Date</td><td></td></tr>
+          <tr><td><code>dateMod</code></td><td>Date | null</td><td></td></tr>
+          <tr><td><code>status</code></td><td>UserStatus</td><td><code>{idUserStatus: number, description: string}</code></td></tr>
+          <tr><td><code>roles</code></td><td>RoleDto[]</td><td><code>[{id, description, dateIns, dateMod}]</code></td></tr>
+          <tr><td><code>tenantValidationPending</code></td><td>boolean</td><td></td></tr>
+          <tr><td><code>multiTenancyEnabled</code></td><td>boolean</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── FUNCTIONALITIES ────────────────────────────────────── -->
+  <section class="section" id="functionalities">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2>Area: Funzionalità</h2>
+      <span class="area-chip">Configuration</span>
+    </div>
+
+    <p>Gestione dell'albero delle funzionalità del prodotto. L'albero è gerarchico (categorie + funzionalità) e definisce sia la navigazione del prodotto sia gli oggetti su cui il sistema RBAC assegna i permessi.</p>
+
+    <div class="callout">
+      L'albero ha due <strong>root virtuali</strong>: <code>root</code> (id_item = 0) per le sezioni principali e <code>operations</code> (id_item = -1) per i permessi tecnici/operativi. Ogni root rappresenta un tab distinto nell'UI.
+    </div>
+
+    <h3 id="func-api">API Backend</h3>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/configuration/navigation_tree/{root}/subtree</div>
+        <div class="endpoint-desc">Albero completo a partire da una root. <code>root</code> = nome letterale (es. <code>root</code>, <code>operations</code>).</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/configuration/navigation_tree/{itemId}</div>
+        <div class="endpoint-desc">Recupera un singolo nodo (per pre-popolare il form di modifica)</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="endpoint">
+      <span class="method POST">POST</span>
+      <div>
+        <div class="endpoint-path">/configuration/navigation_tree/item</div>
+        <div class="endpoint-desc">Crea un nuovo nodo (categoria o funzionalità)</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="endpoint">
+      <span class="method PATCH">PATCH</span>
+      <div>
+        <div class="endpoint-path">/configuration/navigation_tree/{itemId}</div>
+        <div class="endpoint-desc">Aggiorna un nodo esistente</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="endpoint">
+      <span class="method POST">POST</span>
+      <div>
+        <div class="endpoint-path">/configuration/navigation_tree/{itemId}/move</div>
+        <div class="endpoint-desc">Sposta un nodo nell'albero (drag&amp;drop o cambio genitore)</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="endpoint">
+      <span class="method DELETE">DELETE</span>
+      <div>
+        <div class="endpoint-path">/configuration/navigation_tree/{itemId}</div>
+        <div class="endpoint-desc">Elimina un nodo (ricorsivo sui figli)</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/configuration/parentList</div>
+        <div class="endpoint-desc">Lista dei nodi utilizzabili come genitore (per il dropdown "Genitore" nel form)</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <h4>Response — GET .../subtree (albero ricorsivo)</h4>
+    <div class="code-block"><span class="c">// UserNavigationTreeDto — struttura ricorsiva</span>
+{
+  <span class="n">"id"</span>: <span class="t">4</span>,
+  <span class="n">"name"</span>: <span class="s">"Functionalities"</span>,
+  <span class="n">"description"</span>: <span class="s">"funzionalità"</span>,
+  <span class="n">"type"</span>: <span class="s">"FUNCTIONALITY"</span>,          <span class="c">// CATEGORY | FUNCTIONALITY</span>
+  <span class="n">"functionalityType"</span>: <span class="s">"INTERNAL_FUNCTIONALITY"</span>, <span class="c">// vedi lookup</span>
+  <span class="n">"link"</span>: <span class="s">"functionalities"</span>,
+  <span class="n">"navbarPosition"</span>: <span class="s">"TOP"</span>,         <span class="c">// TOP | BOTTOM | null</span>
+  <span class="n">"parentId"</span>: <span class="s">"2"</span>,
+  <span class="n">"icon"</span>: <span class="s">"&lt;svg&gt;...&lt;/svg&gt;"</span>,           <span class="c">// SVG inline</span>
+  <span class="n">"translations"</span>: {
+    <span class="n">"IT"</span>: { <span class="n">"name"</span>: <span class="s">"Funzionalità"</span>, <span class="n">"description"</span>: <span class="s">"funzionalità"</span> },
+    <span class="n">"EN"</span>: { <span class="n">"name"</span>: <span class="s">"Functionalities"</span>, <span class="n">"description"</span>: <span class="s">"functionalities"</span> }
+  },
+  <span class="n">"authorization"</span>: <span class="t">null</span>,           <span class="c">// usato solo nell'albero dei permessi del ruolo</span>
+  <span class="n">"noPermissionNeedForNavigation"</span>: <span class="t">false</span>,
+  <span class="n">"clickCount"</span>: <span class="t">0</span>,
+  <span class="n">"tagTranslations"</span>: {
+    <span class="n">"IT"</span>: [<span class="s">"tag1"</span>, <span class="s">"tag2"</span>],
+    <span class="n">"EN"</span>: [<span class="s">"tag1"</span>]
+  },
+  <span class="n">"children"</span>: [ <span class="c">/* ricorsivo stesso schema */</span> ]
+}</div>
+
+    <h4>Request Body — POST /configuration/navigation_tree/item</h4>
+    <div class="code-block">{
+  <span class="n">"name"</span>: <span class="s">"Il mio item"</span>,             <span class="c">// nome tecnico (IT)</span>
+  <span class="n">"idExternalSystem"</span>: <span class="t">1</span>,          <span class="c">// sempre 1 (ALL)</span>
+  <span class="n">"idItemType"</span>: <span class="t">2</span>,               <span class="c">// 1=CATEGORY, 2=FUNCTIONALITY</span>
+  <span class="n">"idFunctionalityType"</span>: <span class="t">1</span>,      <span class="c">// null se CATEGORY, altrimenti 1-5</span>
+  <span class="n">"functionalityLink"</span>: <span class="s">"/my-route"</span>, <span class="c">// obbligatorio se FUNCTIONALITY</span>
+  <span class="n">"iconPath"</span>: <span class="s">"&lt;svg&gt;...&lt;/svg&gt;"</span>,
+  <span class="n">"idItemParent"</span>: <span class="t">5</span>,             <span class="c">// null per nodo di primo livello</span>
+  <span class="n">"orderPosition"</span>: <span class="t">3</span>,
+  <span class="n">"description"</span>: <span class="s">"Descrizione IT"</span>,
+  <span class="n">"itemTranslation"</span>: {
+    <span class="n">"IT"</span>: { <span class="n">"name"</span>: <span class="s">"Il mio item"</span>, <span class="n">"description"</span>: <span class="s">"Descrizione"</span> },
+    <span class="n">"EN"</span>: { <span class="n">"name"</span>: <span class="s">"My item"</span>, <span class="n">"description"</span>: <span class="s">"Description"</span> },
+    <span class="n">"DE"</span>: { <span class="n">"name"</span>: <span class="s">""</span>, <span class="n">"description"</span>: <span class="s">""</span> }
+  }
+}
+<span class="c">// Response: 200 OK — { "id": 47 }</span></div>
+
+    <h4>Request Body — POST .../move</h4>
+    <div class="code-block">{
+  <span class="n">"targetParentId"</span>: <span class="t">3</span>,   <span class="c">// nuovo nodo genitore</span>
+  <span class="n">"orderPosition"</span>: <span class="t">1</span>    <span class="c">// posizione fra i fratelli</span>
+}
+<span class="c">// Response: 200 OK</span></div>
+
+    <h3 id="func-ui">Frontend — Pagina Funzionalità</h3>
+
+    <p>Route: <code>/functionalities</code> &nbsp;·&nbsp; Titolo: <strong>"Funzionalità"</strong></p>
+
+    <h4>Vista Albero (index)</h4>
+    <div class="ui-desc">
+      <ul>
+        <li>Barra superiore: <strong>Search input</strong> (300px, icona lente, placeholder "Cerca") a sinistra; pulsante <strong>"Crea nuovo"</strong> + (opzionale) pulsante <strong>"Batch Patch"</strong> a destra</li>
+        <li>Tabs: una per ogni root dell'albero — il tab root è etichettato <strong>"Tutto"</strong>; altri tab dalla loro traduzione</li>
+        <li>L'albero mostra la gerarchia con indentazione; i nodi sono espandibili/collassabili</li>
+        <li>Ogni riga ha un handle <code>⠿</code> per il drag&amp;drop di riordinamento</li>
+        <li>Nodo CATEGORY (icona + sfondo): azioni <code>+</code> (crea figlio), <code>✎</code> (modifica), <code>🗑</code> (elimina)</li>
+        <li>Nodo FUNCTIONALITY: azioni <code>✎</code> (modifica), <code>🗑</code> (elimina)</li>
+        <li>Drag&amp;drop chiama <code>POST .../move</code> con la nuova posizione</li>
+        <li>Elimina con modal di conferma → <code>DELETE .../navigation_tree/{itemId}</code></li>
+      </ul>
+    </div>
+
+    <h4>Form Creazione (<code>/functionalities/create?root={rootName}</code>)</h4>
+    <div class="ui-desc">
+      <p>Layout a due colonne: pannello sinistro (form) + pannello destro (traduzioni).</p>
+
+      <p><strong>Sezione INFORMAZIONI GENERALI (sinistra):</strong></p>
+      <ul>
+        <li><strong>Nome funzionalità (IT)</strong><span class="req">*</span> — input testo, max 100 caratteri</li>
+        <li><strong>Genitore</strong> — dropdown opzionale, lista da <code>GET /configuration/parentList</code></li>
+        <li><strong>Icona</strong> — area drag&amp;drop o file picker, solo SVG; mostra anteprima SVG caricato</li>
+        <li><strong>Descrizione (IT)</strong><span class="req">*</span> — textarea, max 500 caratteri con counter visibile</li>
+        <li><strong>Tags (IT)</strong> — tag input: digitare + Invio per aggiungere; tag rimovibili con ×</li>
+      </ul>
+
+      <p><strong>Sezione IMPOSTAZIONI (sinistra, sotto):</strong></p>
+      <ul>
+        <li>Radio button: <strong>Categoria</strong> / <strong>Funzionalità</strong></li>
+        <li>Se selezionato <em>Funzionalità</em>:
+          <ul>
+            <li><strong>Tipologia</strong><span class="req">*</span> — dropdown: Pagina incorporata, Link esterno, Funzionalità interna, Permesso, Desktop remoto</li>
+            <li><strong>Link</strong><span class="req">*</span> — input testo</li>
+          </ul>
+        </li>
+      </ul>
+
+      <p><strong>Sezione GESTIONE TRADUZIONI (destra):</strong></p>
+      <ul>
+        <li>Accordion per lingua: <strong>INGLESE (EN)</strong> aperto, <strong>ITALIANO (IT)</strong> aperto, TEDESCO (DE), FRANCESE (FR), SPAGNOLO (ES), OLANDESE (NL) chiusi</li>
+        <li>Per ogni lingua: Nome funzionalità, Descrizione, Tags</li>
+      </ul>
+
+      <p>Pulsante <strong>"Crea funzionalità"</strong> in alto a destra — disabilitato finché i campi obbligatori non sono validi. Al click: <code>POST /configuration/navigation_tree/item</code> → redirect alla lista.</p>
+    </div>
+
+    <h4>Form Modifica (<code>/functionalities/{funcId}/edit</code>)</h4>
+    <div class="ui-desc">
+      <ul>
+        <li>Stesso layout del form di creazione, pre-popolato con i dati da <code>GET /configuration/navigation_tree/{funcId}</code></li>
+        <li>Al salvataggio: <code>PATCH /configuration/navigation_tree/{funcId}</code></li>
+        <li>Pulsante <strong>"Salva modifiche"</strong> al posto di "Crea funzionalità"</li>
+      </ul>
+    </div>
+
+    <h3 id="func-models">Data Models</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Campo (UserNavigationTreeDto)</th><th>Tipo</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>number</td><td></td></tr>
+          <tr><td><code>name</code></td><td>string</td><td>Nome tecnico</td></tr>
+          <tr><td><code>description</code></td><td>string | null</td><td></td></tr>
+          <tr><td><code>type</code></td><td>CATEGORY | FUNCTIONALITY</td><td></td></tr>
+          <tr><td><code>functionalityType</code></td><td>enum string | null</td><td>Null per CATEGORY</td></tr>
+          <tr><td><code>link</code></td><td>string | null</td><td>Route o URL</td></tr>
+          <tr><td><code>navbarPosition</code></td><td>TOP | BOTTOM | null</td><td></td></tr>
+          <tr><td><code>parentId</code></td><td>string | null</td><td>ID del nodo genitore</td></tr>
+          <tr><td><code>icon</code></td><td>string | null</td><td>SVG inline</td></tr>
+          <tr><td><code>translations</code></td><td>Map&lt;LangCode, {name, description}&gt;</td><td></td></tr>
+          <tr><td><code>authorization</code></td><td>boolean | null</td><td>Solo nell'albero permessi ruolo</td></tr>
+          <tr><td><code>noPermissionNeedForNavigation</code></td><td>boolean</td><td></td></tr>
+          <tr><td><code>clickCount</code></td><td>number | null</td><td></td></tr>
+          <tr><td><code>tagTranslations</code></td><td>Map&lt;LangCode, string[]&gt;</td><td></td></tr>
+          <tr><td><code>children</code></td><td>UserNavigationTreeDto[]</td><td>Ricorsivo</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── ROLES ──────────────────────────────────────────────── -->
+  <section class="section" id="roles">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2>Area: Ruoli &amp; Permessi</h2>
+      <span class="area-chip">RBAC</span>
+    </div>
+
+    <p>Gestione dei ruoli applicativi con sistema RBAC (Role-Based Access Control). Permette di creare ruoli, rinominarli, eliminarli e assegnare loro l'accesso alle funzionalità tramite un albero con toggle.</p>
+
+    <h3 id="roles-api">API Backend</h3>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/role/all</div>
+        <div class="endpoint-desc">Tutti i ruoli senza paginazione (per dropdown). Query param opzionale: <code>roleTypes[]=SYSTEM&amp;roleTypes[]=SERVICE</code></div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/role</div>
+        <div class="endpoint-desc">Lista paginata ruoli con filtri</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <h4>Query Parameters — GET /role</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Parametro</th><th>Tipo</th><th>Descrizione</th></tr></thead>
+        <tbody>
+          <tr><td><code>page</code></td><td>number</td><td>Indice pagina (0-based)</td></tr>
+          <tr><td><code>size</code></td><td>number</td><td>Elementi per pagina</td></tr>
+          <tr><td><code>search</code></td><td>string</td><td>Ricerca libera sul nome ruolo</td></tr>
+          <tr><td><code>direction</code></td><td>ASC | DESC</td><td>Direzione ordinamento</td></tr>
+          <tr><td><code>sort</code></td><td>string</td><td>Campo di ordinamento: <code>id</code>, <code>description</code>, <code>associatedUsers</code>, <code>dateIns</code>, <code>dateMod</code></td></tr>
+          <tr><td><code>startDateIns</code></td><td>ISO 8601</td><td>Data creazione da</td></tr>
+          <tr><td><code>endDateIns</code></td><td>ISO 8601</td><td>Data creazione a</td></tr>
+          <tr><td><code>hasPermission</code></td><td>boolean</td><td>Filtra ruoli che hanno almeno un permesso</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Response — GET /role</h4>
+    <div class="code-block">{
+  <span class="n">"pagination"</span>: { <span class="n">"currentElements"</span>: <span class="t">10</span>, <span class="n">"currentPage"</span>: <span class="t">0</span>, <span class="n">"totalPages"</span>: <span class="t">10</span> },
+  <span class="n">"elements"</span>: [
+    {
+      <span class="n">"id"</span>: <span class="t">1</span>,
+      <span class="n">"description"</span>: <span class="s">"Administrator"</span>,
+      <span class="n">"associatedUsers"</span>: <span class="t">26</span>,
+      <span class="n">"hasPermissions"</span>: <span class="t">true</span>,
+      <span class="n">"dateIns"</span>: <span class="s">"2024-08-06T00:00:00Z"</span>,
+      <span class="n">"dateMod"</span>: <span class="s">"2024-08-06T00:00:00Z"</span>,
+      <span class="n">"roleType"</span>: <span class="s">"SYSTEM"</span>      <span class="c">// SYSTEM | SERVICE | SYNCED</span>
+    }
+  ]
+}</div>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/role/count</div>
+        <div class="endpoint-desc">Conteggio ruoli (stessi filtri di GET /role). Response: intero.</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/role/default</div>
+        <div class="endpoint-desc">Restituisce il ruolo di default assegnato agli utenti al primo login (id=0, "Registered user")</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="endpoint">
+      <span class="method POST">POST</span>
+      <div>
+        <div class="endpoint-path">/role</div>
+        <div class="endpoint-desc">Crea un nuovo ruolo di tipo SERVICE</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="code-block"><span class="c">// Request body</span>
+{ <span class="n">"roleName"</span>: <span class="s">"Il mio nuovo ruolo"</span> }
+
+<span class="c">// Response: 200 OK</span>
+{ <span class="n">"id"</span>: <span class="t">45</span> }</div>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/role/{roleId}</div>
+        <div class="endpoint-desc">Dettaglio di un ruolo (usato nell'header della pagina di dettaglio)</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="code-block"><span class="c">// Response: 200 OK</span>
+{
+  <span class="n">"id"</span>: <span class="t">42</span>,
+  <span class="n">"roleName"</span>: <span class="s">"Arcese Trasporti S.p.A."</span>,
+  <span class="n">"associatedUsersCount"</span>: <span class="t">22</span>,
+  <span class="n">"roleType"</span>: <span class="s">"SERVICE"</span>
+}</div>
+
+    <div class="endpoint">
+      <span class="method PUT">PUT</span>
+      <div>
+        <div class="endpoint-path">/role/{roleId}/name</div>
+        <div class="endpoint-desc">Rinomina un ruolo</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="code-block">{ <span class="n">"roleName"</span>: <span class="s">"Nuovo nome"</span> }
+<span class="c">// Response: 200 OK — nessun body</span></div>
+
+    <div class="endpoint">
+      <span class="method PUT">PUT</span>
+      <div>
+        <div class="endpoint-path">/role/{roleId}</div>
+        <div class="endpoint-desc">Aggiorna le autorizzazioni del ruolo per le funzionalità modificate</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <div class="code-block"><span class="c">// Request body: array dei soli item modificati</span>
+[
+  { <span class="n">"idItem"</span>: <span class="t">4</span>,  <span class="n">"authorization"</span>: <span class="t">true</span>  },
+  { <span class="n">"idItem"</span>: <span class="t">7</span>,  <span class="n">"authorization"</span>: <span class="t">false</span> },
+  { <span class="n">"idItem"</span>: <span class="t">12</span>, <span class="n">"authorization"</span>: <span class="t">true</span>  }
+]
+<span class="c">// Response: 200 OK — nessun body</span></div>
+
+    <div class="endpoint">
+      <span class="method GET">GET</span>
+      <div>
+        <div class="endpoint-path">/role/{roleId}/authorizationTree/{rootName}</div>
+        <div class="endpoint-desc">Albero funzionalità con flag <code>authorization</code> per ogni nodo. <code>rootName</code>: <code>ROOT</code> | <code>OPERATIONS</code></div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+
+    <p>Response: stesso schema <code>UserNavigationTreeDto</code> con <code>"authorization": true | false</code> per ogni nodo.</p>
+
+    <div class="endpoint">
+      <span class="method DELETE">DELETE</span>
+      <div>
+        <div class="endpoint-path">/role/{roleId}</div>
+        <div class="endpoint-desc">Elimina un ruolo. Prima dell'eliminazione il trigger archivia la riga in <code>role_history</code>.</div>
+      </div>
+      <span class="endpoint-auth">Admin</span>
+    </div>
+    <p>Response: <code>200 OK</code></p>
+
+    <h3 id="roles-ui">Frontend — Ruoli &amp; Permessi</h3>
+
+    <p>Route lista: <code>/rolesPermissions</code> &nbsp;·&nbsp; Titolo: <strong>"Ruoli &amp; permessi"</strong></p>
+
+    <h4>Tabella Ruoli</h4>
+    <div class="ui-desc">
+      <ul>
+        <li><strong>Colonne:</strong> ID (sortable), Nome ruolo (sortable), Utenti associati, Ha permessi (badge <span class="badge-ok">Si</span> / <span class="badge-warn">No</span>), Data di creazione, Ultimo aggiornamento</li>
+        <li>Toolbar: Search input, "Colonne" (selettore colonne), "Filtri", pulsante <strong>"Nuovo ruolo"</strong> (primario)</li>
+        <li>Filtri drawer: toggle "Ha permessi", date range</li>
+        <li>Clic su una riga → naviga a <code>/rolesPermissions/{roleId}</code></li>
+        <li>Menu <code>⋯</code> per riga: "Rinomina", "Elimina"</li>
+        <li>Paginazione numerata</li>
+      </ul>
+    </div>
+
+    <h4>Modal "Crea nuovo ruolo"</h4>
+    <div class="ui-desc">
+      <ul>
+        <li>Titolo: <strong>"Crea nuovo ruolo"</strong></li>
+        <li>Testo: <em>"Per procedere con la creazione di un nuovo ruolo, inserisci il nome del ruolo desiderato"</em></li>
+        <li>Input: <strong>"Nome ruolo"</strong> (testo, required)</li>
+        <li>Pulsanti: "Annulla" | "Crea nuovo ruolo" (disabilitato se input vuoto)</li>
+        <li>Conferma → <code>POST /role</code> → redirect a <code>/rolesPermissions/{newId}</code></li>
+      </ul>
+    </div>
+
+    <h4>Pagina Dettaglio Ruolo (<code>/rolesPermissions/{roleId}</code>)</h4>
+    <div class="ui-desc">
+      <ul>
+        <li>Breadcrumb: "Ruoli &amp; permessi / Dettagli"</li>
+        <li>Header: <strong>"#{id} {roleName}"</strong> + <em>"{N} Utenti associati"</em></li>
+        <li>Icona matita <code>✎</code> accanto al nome del ruolo — visibile solo se <code>roleType = SERVICE</code> — apre modal di rinomina</li>
+        <li>Pulsanti:
+          <ul>
+            <li>In modalità visualizzazione: pulsante <strong>"Modifica"</strong> (disabilitato se roleType = SYSTEM, con tooltip)</li>
+            <li>In modalità modifica: pulsanti <strong>"Annulla"</strong> e <strong>"Salva"</strong></li>
+          </ul>
+        </li>
+        <li>Tabs: una per ogni root dell'albero — <strong>"Sezioni"</strong> (ROOT), <strong>"Operazioni"</strong> o nome root aggiuntive (OPERATIONS)</li>
+        <li>Per ogni tab: albero PermissionsTree</li>
+      </ul>
+    </div>
+
+    <h4>PermissionsTree (albero dei permessi)</h4>
+    <div class="ui-desc">
+      <ul>
+        <li>Albero gerarchico dei nodi, uno per riga con indentazione</li>
+        <li>Ogni riga ha un <strong>toggle switch</strong> a destra: acceso (scuro) = ruolo ha accesso, spento (grigio) = nessun accesso</li>
+        <li>In modalità visualizzazione: toggle disabilitati (non cliccabili)</li>
+        <li>In modalità modifica: toggle cliccabili; il cambiamento viene registrato in un map locale <code>changedAuthorizations</code></li>
+        <li>Categorie: espandibili/collassabili con la freccia — il toggle della categoria abilita/disabilita anche tutti i figli</li>
+        <li>Al click "Salva" → <code>PUT /role/{roleId}</code> con il solo array degli item modificati</li>
+        <li>Al click "Annulla" → la map viene svuotata, si torna in modalità visualizzazione</li>
+      </ul>
+    </div>
+
+    <h3 id="roles-models">Data Models</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Campo (RolePageItemDto)</th><th>Tipo</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>number</td><td></td></tr>
+          <tr><td><code>description</code></td><td>string</td><td>Nome del ruolo</td></tr>
+          <tr><td><code>associatedUsers</code></td><td>number</td><td>Conteggio utenti assegnati</td></tr>
+          <tr><td><code>hasPermissions</code></td><td>boolean</td><td>Ha almeno un item autorizzato</td></tr>
+          <tr><td><code>dateIns</code></td><td>Date</td><td></td></tr>
+          <tr><td><code>dateMod</code></td><td>Date | null</td><td></td></tr>
+          <tr><td><code>roleType</code></td><td>SYSTEM | SERVICE | SYNCED</td><td>Determina editabilità</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-wrap" style="margin-top:12px">
+      <table>
+        <thead><tr><th>Campo (RoleInformationDto — dettaglio)</th><th>Tipo</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>number</td></tr>
+          <tr><td><code>roleName</code></td><td>string</td></tr>
+          <tr><td><code>associatedUsersCount</code></td><td>number</td></tr>
+          <tr><td><code>roleType</code></td><td>SYSTEM | SERVICE | SYNCED</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SEED DATA ──────────────────────────────────────────── -->
+  <section class="section" id="seed">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2>Dati di Seed Obbligatori</h2>
+    </div>
+
+    <p>Questi dati devono essere presenti nel DB prima che il sistema sia operativo.</p>
+
+    <h3>Ruoli di sistema</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>id_role</th><th>description</th><th>id_role_type</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td>Registered user</td><td>1 (SYSTEM)</td><td>Assegnato automaticamente a ogni nuovo utente</td></tr>
+          <tr><td>1</td><td>Administrator</td><td>1 (SYSTEM)</td><td>Accesso completo alle 3 aree IDM</td></tr>
+          <tr><td>2</td><td>Tenant Super Administrator</td><td>1 (SYSTEM)</td><td>Accesso alla gestione tenant</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Navigation Item di sistema (immutabili)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>id_item</th><th>name</th><th>id_item_type</th><th>id_func_type</th><th>link</th><th>id_parent</th></tr></thead>
+        <tbody>
+          <tr><td>-1</td><td>operations</td><td>1 (CATEGORY)</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>0</td><td>root</td><td>1 (CATEGORY)</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>1</td><td>Home</td><td>1 (CATEGORY)</td><td>—</td><td></td><td>0</td></tr>
+          <tr><td>2</td><td>IDM</td><td>1 (CATEGORY)</td><td>—</td><td></td><td>0</td></tr>
+          <tr><td>3</td><td>Users</td><td>2 (FUNC)</td><td>3 (INTERNAL)</td><td>userManagement</td><td>2</td></tr>
+          <tr><td>4</td><td>Functionalities</td><td>2 (FUNC)</td><td>3 (INTERNAL)</td><td>functionalities</td><td>2</td></tr>
+          <tr><td>5</td><td>Roles &amp; Permissions</td><td>2 (FUNC)</td><td>3 (INTERNAL)</td><td>rolesPermissions</td><td>2</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Item tecnici RBAC (sotto root operations, id_item = -1)</h3>
+    <p>Sono item di tipo FUNCTIONALITY / PERMISSION, nascosti dalla config UI (<code>config_visibility=1</code>), immutabili (<code>is_immutable=1</code>). Vengono usati per controllo granulare delle operazioni.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>name</th><th>Scope</th></tr></thead>
+        <tbody>
+          <tr><td>USER_CREATE</td><td>Permesso per creare utenti</td></tr>
+          <tr><td>USER_READ</td><td>Permesso per leggere utenti</td></tr>
+          <tr><td>USER_UPDATE</td><td>Permesso per modificare utenti</td></tr>
+          <tr><td>USER_DELETE</td><td>Permesso per eliminare utenti</td></tr>
+          <tr><td>PERMISSION_CREATE</td><td>Permesso per creare permessi/ruoli</td></tr>
+          <tr><td>PERMISSION_READ</td><td>Permesso per leggere permessi/ruoli</td></tr>
+          <tr><td>PERMISSION_UPDATE</td><td>Permesso per modificare permessi/ruoli</td></tr>
+          <tr><td>PERMISSION_DELETE</td><td>Permesso per eliminare permessi/ruoli</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Il ruolo Administrator (id=1) viene associato a tutti questi item con <code>view_permission=1</code> al momento del seed.</p>
+  </section>
+
+  <!-- ── AUTH ───────────────────────────────────────────────── -->
+  <section class="section" id="auth">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2>Autenticazione &amp; Autorizzazione</h2>
+    </div>
+
+    <h3>Schema generale</h3>
+    <div class="ui-desc">
+      <ul>
+        <li>Tutti gli endpoint delle 3 aree richiedono un <strong>JWT Bearer Token</strong> nell'header <code>Authorization: Bearer &lt;token&gt;</code></li>
+        <li>Il token viene emesso da un IDP esterno (es. Keycloak, Auth0). Il backend lo valida e ne estrae il <code>sub</code> (subject)</li>
+        <li>Al primo login l'utente viene sincronizzato nel DB via <code>POST /user/sync</code></li>
+        <li>Le 3 aree richiedono che l'utente abbia il ruolo <strong>Administrator</strong> (id=1). Il backend verifica questa condizione su ogni endpoint</li>
+        <li>Se l'utente non ha il ruolo Administrator → risposta <code>403 Forbidden</code></li>
+      </ul>
+    </div>
+
+    <h3>Regole di editabilità per i Ruoli</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>roleType</th><th>Rinomina</th><th>Modifica permessi</th><th>Elimina</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge-sys">SYSTEM</span></td><td>✗</td><td>✗</td><td>✗</td><td>Icona matita nascosta; "Modifica" disabilitato con tooltip</td></tr>
+          <tr><td><span class="badge-ok">SERVICE</span></td><td>✓</td><td>✓</td><td>✓</td><td>Operazioni complete disponibili</td></tr>
+          <tr><td><span class="badge-warn">SYNCED</span></td><td>✗</td><td>✓</td><td>✓</td><td>Creato da sistema esterno; nome non modificabile</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Lingue supportate (traduzioni)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Codice</th><th>Lingua</th></tr></thead>
+        <tbody>
+          <tr><td>IT</td><td>Italiano</td></tr>
+          <tr><td>EN</td><td>Inglese</td></tr>
+          <tr><td>DE</td><td>Tedesco</td></tr>
+          <tr><td>FR</td><td>Francese</td></tr>
+          <tr><td>ES</td><td>Spagnolo</td></tr>
+          <tr><td>NL</td><td>Olandese</td></tr>
+          <tr><td>PT</td><td>Portoghese</td></tr>
+          <tr><td>SK</td><td>Slovacco</td></tr>
+          <tr><td>RO</td><td>Romeno</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </section>
+
+</main>
+
+
+
+
+</body></html>
