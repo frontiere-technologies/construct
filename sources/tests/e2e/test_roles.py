@@ -41,7 +41,7 @@ def test_create_rename_delete_role(logged_in_page, base_url):
     # Use the row that contains the renamed text specifically
     row = page.locator("tr").filter(has_text=renamed)
     expect(row).to_be_visible()
-    row.locator('[data-testid="row-menu"]').click()
+    row.locator('[data-testid^="row-menu"]').click()
     page.once("dialog", lambda d: d.accept())
     page.get_by_role("button", name="Elimina").click()
     # Navigate to list and confirm the role is gone
@@ -74,6 +74,20 @@ def test_toggle_permission_persists(logged_in_page, base_url):
     page.wait_for_load_state("networkidle")
     page.wait_for_selector('[data-testid="perm-toggle"][aria-checked="true"]', timeout=10_000)
     assert page.locator('[data-testid="perm-toggle"][aria-checked="true"]').count() >= 1
+
+    # Cleanup: delete the role this test created (avoid leaking E2E roles into the DB)
+    page.goto(f"{base_url}/rolesPermissions")
+    page.wait_for_load_state("networkidle")
+    page.get_by_placeholder("Cerca").fill(name)
+    row = page.locator("tr").filter(has_text=name)
+    expect(row).to_be_visible()
+    row.locator('[data-testid^="row-menu"]').click()
+    page.once("dialog", lambda d: d.accept())
+    page.get_by_role("button", name="Elimina").click()
+    page.goto(f"{base_url}/rolesPermissions")
+    page.wait_for_load_state("networkidle")
+    page.get_by_placeholder("Cerca").fill(name)
+    expect(page.get_by_text(name, exact=True)).to_have_count(0)
 
 
 def test_system_role_not_editable(logged_in_page, base_url):

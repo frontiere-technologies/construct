@@ -32,7 +32,7 @@ def test_manage_roles_opens_and_lists_roles(logged_in_page, base_url):
     page.goto(f"{base_url}/userManagement")
     page.wait_for_load_state("networkidle")
     # open the first row's action menu, then "Gestisci ruoli"
-    page.locator('[data-testid="row-menu"]').first.click()
+    page.locator('[data-testid^="row-menu"]').first.click()
     page.get_by_text("Gestisci ruoli", exact=True).first.click()
     expect(page.get_by_test_id("save-roles")).to_be_visible()
     # the Registered-user checkbox (id 0) is present and disabled

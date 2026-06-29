@@ -131,7 +131,7 @@ export default function DataTable<T>(props: DataTableProps<T>) {
                   {rowMenu && (
                     <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                       <div className="relative">
-                        <button data-testid="row-menu" onClick={() => setOpenMenu(openMenu === k ? null : k)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                        <button data-testid={`row-menu-${k}`} onClick={() => setOpenMenu(openMenu === k ? null : k)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
                           <MoreHorizontal size={16} />
                         </button>
                         {openMenu === k && (

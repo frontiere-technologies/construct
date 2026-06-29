@@ -150,6 +150,7 @@ create table if not exists role (
   date_mod     timestamptz
 );
 alter table role enable row level security;
+alter sequence if exists s_id_role owned by role.id_role;
 
 create table if not exists role_history (
   id_role     bigint not null,
@@ -170,8 +171,7 @@ begin
   return old;
 end;
 $$;
-drop trigger if exists trigger_role_delete on role;
-create trigger trigger_role_delete
+create or replace trigger trigger_role_delete
   before delete on role for each row execute function trg_role_delete();
 
 create table if not exists user_role (
@@ -215,6 +215,7 @@ create table if not exists navigation_item (
   updated_at                         timestamptz default now()
 );
 alter table navigation_item enable row level security;
+alter sequence if exists s_id_navigation_item owned by navigation_item.id_item;
 
 create table if not exists navigation_item_tag (
   id_item  bigint not null references navigation_item(id_item) on delete cascade,

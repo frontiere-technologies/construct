@@ -47,7 +47,7 @@ export default function RolesTableClient(props: Props) {
       if (search !== props.search) setParam({ search: search || null, page: '0' })
     }, 350)
     return () => clearTimeout(t)
-  }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, props.search, setParam])
 
   const onSort = (field: string) => {
     const dir = props.sortField === field && props.sortDir === 'ASC' ? 'DESC' : 'ASC'
