@@ -25,7 +25,7 @@ async function candidateUserIds(roleIds: number[] | undefined): Promise<string[]
 function applyUserFilters<T extends FilterableQuery>(q: T, query: UsersQuery, ids: string[] | null): T {
   let r = q
   if (query.search) {
-    const s = query.search.replace(/[%,]/g, '')
+    const s = query.search.replace(/[%,()&]/g, '')
     r = r.or(`first_name.ilike.%${s}%,last_name.ilike.%${s}%,email.ilike.%${s}%`) as T
   }
   if (query.statuses?.length) r = r.in('id_user_status', query.statuses) as T
@@ -38,7 +38,7 @@ function applyUserFilters<T extends FilterableQuery>(q: T, query: UsersQuery, id
 export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserDTO[]; total: number }> => {
   const supabase = createAdminClient()
   const ids = await candidateUserIds(query.roleIds)
-  const sortCol = USER_SORT_COLUMN[query.sort ?? 'dateIns']
+  const sortCol = USER_SORT_COLUMN[query.sort ?? 'dateIns'] ?? 'created_at'
   const ascending = (query.direction ?? 'DESC') === 'ASC'
   const from = query.page * query.size
   const to = from + query.size - 1
