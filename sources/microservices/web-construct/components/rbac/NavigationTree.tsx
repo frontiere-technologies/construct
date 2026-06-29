@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
 import {
-  DndContext, PointerSensor, useSensor, useSensors, closestCenter,
+  DndContext, PointerSensor, useSensor, useSensors, pointerWithin,
   useDraggable, useDroppable, type DragEndEvent,
 } from '@dnd-kit/core'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
@@ -41,15 +41,25 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
 
   // Extract dnd refs/handlers before JSX to satisfy react-hooks/refs lint rule
   const dragActivatorRef = drag.setActivatorNodeRef
+  const dragNodeRef = drag.setNodeRef
   const dragListeners = drag.listeners
   const dragAttributes = drag.attributes
   const beforeDropRef = beforeDrop.setNodeRef
   const intoDropRef = intoDrop.setNodeRef
 
+  // The row line is BOTH the draggable node and the "before" droppable.
+  // dnd-kit needs setNodeRef on the draggable element (not just the activator
+  // handle) to measure the active rect; without it closestCenter never resolves
+  // an `over` droppable and onMove is never called. Merge both refs onto the row.
+  const setRowRef = React.useCallback((el: HTMLElement | null) => {
+    dragNodeRef(el)
+    beforeDropRef(el)
+  }, [dragNodeRef, beforeDropRef])
+
   return (
     <div>
       <div
-        ref={dnd ? beforeDropRef : undefined}
+        ref={dnd ? setRowRef : undefined}
         className={`flex items-center gap-2 py-2.5 px-3 border-b border-gray-100 dark:border-gray-800 ${beforeDrop.isOver ? 'border-t-2 border-t-primary' : ''} ${intoDrop.isOver ? 'bg-primary/10' : ''}`}
         style={{ paddingLeft: 12 + depth * 24 }}
       >
@@ -134,7 +144,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
 
   if (!dnd) return tree
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
       {tree}
     </DndContext>
   )
