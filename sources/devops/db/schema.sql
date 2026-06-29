@@ -365,3 +365,16 @@ begin
   update public.role set date_mod = now() where id_role = p_role_id;
 end;
 $$;
+
+-- Atomic replace of a navigation item's tags (delete + insert in one transaction).
+create or replace function public.replace_item_tags(p_id_item bigint, p_rows jsonb)
+returns void language plpgsql as $$
+begin
+  delete from public.navigation_item_tag where id_item = p_id_item;
+  if jsonb_array_length(coalesce(p_rows, '[]'::jsonb)) > 0 then
+    insert into public.navigation_item_tag (id_item, tag_lan, tag)
+      select p_id_item, r.tag_lan, r.tag
+      from jsonb_to_recordset(p_rows) as r(tag_lan text, tag text);
+  end if;
+end;
+$$;

@@ -12,16 +12,13 @@ async function writeTags(
   idItem: number,
   tagTranslations: Record<string, string[]>,
 ) {
-  const rows: { id_item: number; tag_lan: string; tag: string }[] = []
+  const rows: { tag_lan: string; tag: string }[] = []
   for (const [lan, tags] of Object.entries(tagTranslations)) {
-    for (const tag of tags) if (tag.trim()) rows.push({ id_item: idItem, tag_lan: lan, tag: tag.trim() })
+    for (const tag of tags) if (tag.trim()) rows.push({ tag_lan: lan, tag: tag.trim() })
   }
-  const { error: delError } = await supabase.from('navigation_item_tag').delete().eq('id_item', idItem)
-  if (delError) throw new Error(`Failed to clear tags: ${delError.message}`)
-  if (rows.length) {
-    const { error } = await supabase.from('navigation_item_tag').insert(rows)
-    if (error) throw new Error(`Failed to write tags: ${error.message}`)
-  }
+  // Atomic replace (delete + insert in one transaction) — no partial-failure window.
+  const { error } = await supabase.rpc('replace_item_tags', { p_id_item: idItem, p_rows: rows })
+  if (error) throw new Error(`Failed to write tags: ${error.message}`)
 }
 
 export async function createNavigationItem(input: CreateNavItemInput): Promise<{ id: number }> {
