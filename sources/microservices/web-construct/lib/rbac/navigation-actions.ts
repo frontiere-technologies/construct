@@ -15,7 +15,8 @@ async function writeTags(
   for (const [lan, tags] of Object.entries(tagTranslations)) {
     for (const tag of tags) if (tag.trim()) rows.push({ id_item: idItem, tag_lan: lan, tag: tag.trim() })
   }
-  await supabase.from('navigation_item_tag').delete().eq('id_item', idItem)
+  const { error: delError } = await supabase.from('navigation_item_tag').delete().eq('id_item', idItem)
+  if (delError) throw new Error(`Failed to clear tags: ${delError.message}`)
   if (rows.length) {
     const { error } = await supabase.from('navigation_item_tag').insert(rows)
     if (error) throw new Error(`Failed to write tags: ${error.message}`)
@@ -28,7 +29,8 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   const supabase = createAdminClient()
   const parent = input.idItemParent
   // next order_position among siblings of the chosen parent
-  const { data: siblings } = await supabase.from('navigation_item').select('order_position').eq('id_item_parent', parent ?? 0)
+  const { data: siblings, error: siblingError } = await supabase.from('navigation_item').select('order_position').eq('id_item_parent', parent ?? 0)
+  if (siblingError) throw new Error(`Failed to load siblings: ${siblingError.message}`)
   const nextOrder = (siblings ?? []).reduce((m: number, r: { order_position: number }) => Math.max(m, r.order_position + 1), 0)
   const { data, error } = await supabase.from('navigation_item').insert({
     name: input.name.trim(),
