@@ -1,6 +1,6 @@
 # RBAC Phase 3 — Users Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
 
 **Goal:** Build the Users admin area (`/userManagement`) — a searchable/filterable/sortable, paginated user list showing roles + account status, with a "Manage Roles" modal (full role replace) and a clickable status badge (activate/deactivate), all protected by anti-lockout guardrails.
 
@@ -33,7 +33,7 @@
 **Files:** Modify `lib/rbac/types.ts`
 **Interfaces:** Produces `UserStatusId`, `UserDTO`, `UsersQuery`.
 
-- [ ] **Step 1: Append the new types to `lib/rbac/types.ts`**
+- [✅] **Step 1: Append the new types to `lib/rbac/types.ts`**
 
 ```ts
 export type UserStatusId = 1 | 2 // 1 Deactivated, 2 Active
@@ -65,7 +65,7 @@ export interface UsersQuery {
 ```
 Verify `ROLE_ADMINISTRATOR` and `ROLE_REGISTERED` already exist in this file (they do: `=1` and `=0`). Do not redefine them.
 
-- [ ] **Step 2: Typecheck & commit**
+- [✅] **Step 2: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → 0 errors.
 ```bash
@@ -80,7 +80,7 @@ git commit -m "feat(rbac): add UserDTO + UsersQuery types for Phase 3"
 **Files:** Create `lib/rbac/user-guards.ts`, `lib/rbac/user-guards.test.ts`
 **Interfaces:** Produces `assertRoleChangeAllowed(args)` and `assertStatusChangeAllowed(args)` (throw on violation, return void otherwise).
 
-- [ ] **Step 1: Write the failing tests**
+- [✅] **Step 1: Write the failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -127,12 +127,12 @@ describe('assertStatusChangeAllowed', () => {
 })
 ```
 
-- [ ] **Step 2: Run, expect fail**
+- [✅] **Step 2: Run, expect fail**
 
 Run: `npm test -- user-guards`
 Expected: FAIL (module missing).
 
-- [ ] **Step 3: Implement `lib/rbac/user-guards.ts`**
+- [✅] **Step 3: Implement `lib/rbac/user-guards.ts`**
 
 ```ts
 export interface RoleChangeArgs {
@@ -165,12 +165,12 @@ export function assertStatusChangeAllowed(a: StatusChangeArgs): void {
 }
 ```
 
-- [ ] **Step 4: Run, expect pass**
+- [✅] **Step 4: Run, expect pass**
 
 Run: `npm test -- user-guards`
 Expected: PASS (all cases).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/user-guards.ts sources/microservices/web-construct/lib/rbac/user-guards.test.ts
@@ -187,7 +187,7 @@ git commit -m "feat(rbac): pure anti-lockout guards for user role/status changes
 - `mapUserStatus(id: number): UserDTO['status']`
 - `buildUserDtos(userRows, userRoleRows, roleNameById): UserDTO[]`
 
-- [ ] **Step 1: Write the failing tests**
+- [✅] **Step 1: Write the failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -242,12 +242,12 @@ describe('buildUserDtos', () => {
 })
 ```
 
-- [ ] **Step 2: Run, expect fail**
+- [✅] **Step 2: Run, expect fail**
 
 Run: `npm test -- user-mappers`
 Expected: FAIL (module missing).
 
-- [ ] **Step 3: Implement `lib/rbac/user-mappers.ts`**
+- [✅] **Step 3: Implement `lib/rbac/user-mappers.ts`**
 
 ```ts
 import type { UserDTO, UserStatusId, UsersQuery } from './types'
@@ -302,12 +302,12 @@ export function buildUserDtos(
 }
 ```
 
-- [ ] **Step 4: Run, expect pass**
+- [✅] **Step 4: Run, expect pass**
 
 Run: `npm test -- user-mappers`
 Expected: PASS (all cases).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/user-mappers.ts sources/microservices/web-construct/lib/rbac/user-mappers.test.ts
@@ -323,7 +323,7 @@ git commit -m "feat(rbac): pure user DTO/sort/status mappers"
 
 > Role-membership filtering (`roleIds`) is applied by first resolving the candidate `user_id`s from `user_role`, then constraining the users query with `.in('id', ids)`. `getAllRoles()` (reused from roles-service) returns `{ id, description }[]` for both the role-name map and the UI filter/modal.
 
-- [ ] **Step 1: Implement `lib/rbac/users-service.ts`**
+- [✅] **Step 1: Implement `lib/rbac/users-service.ts`**
 
 ```ts
 import { cache } from 'react'
@@ -402,7 +402,7 @@ export const countUsers = cache(async (query: UsersQuery): Promise<number> => {
 
 > Note: `getAllRoles` in `roles-service.ts` returns `{ id: number; description: string }[]`. Verify that signature before relying on it; if it differs, adapt the `roleNameById` construction and report the deviation.
 
-- [ ] **Step 2: Typecheck & commit**
+- [✅] **Step 2: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → 0 errors.
 ```bash
@@ -417,7 +417,7 @@ git commit -m "feat(rbac): users read service (list/count with filters)"
 **Files:** Create `lib/rbac/users-actions.ts`
 **Interfaces:** Consumes `requireAdmin`, `createAdminClient`, `assertRoleChangeAllowed`/`assertStatusChangeAllowed` from `./user-guards`, `ROLE_ADMINISTRATOR`/`ROLE_REGISTERED` from `./types`. Produces `updateUserRoles(userId, roleIds)`, `setUserStatus(userId, status)`.
 
-- [ ] **Step 1: Implement `lib/rbac/users-actions.ts`**
+- [✅] **Step 1: Implement `lib/rbac/users-actions.ts`**
 
 ```ts
 'use server'
@@ -485,7 +485,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
 }
 ```
 
-- [ ] **Step 2: Typecheck, lint & commit**
+- [✅] **Step 2: Typecheck, lint & commit**
 
 Run: `npx tsc --noEmit && npm run lint` → 0 errors (pre-existing warnings OK).
 ```bash
@@ -502,7 +502,7 @@ git commit -m "feat(rbac): updateUserRoles + setUserStatus actions with anti-loc
 - `StatusBadge`: `{ status: UserDTO['status']; onToggle: () => void; disabled?: boolean }`.
 - `ManageRolesModal`: `{ user: UserDTO; allRoles: { id: number; name: string }[]; onClose: () => void; onSaved: () => void }`.
 
-- [ ] **Step 1: `StatusBadge.tsx`**
+- [✅] **Step 1: `StatusBadge.tsx`**
 
 ```tsx
 'use client'
@@ -527,7 +527,7 @@ export default function StatusBadge({ status, onToggle, disabled }: { status: Us
 }
 ```
 
-- [ ] **Step 2: `ManageRolesModal.tsx`**
+- [✅] **Step 2: `ManageRolesModal.tsx`**
 
 ```tsx
 'use client'
@@ -600,7 +600,7 @@ export default function ManageRolesModal(
 }
 ```
 
-- [ ] **Step 3: Typecheck, lint & commit**
+- [✅] **Step 3: Typecheck, lint & commit**
 
 Run: `npx tsc --noEmit && npm run lint` → clean.
 ```bash
@@ -615,7 +615,7 @@ git commit -m "feat(rbac): user status badge + manage-roles modal"
 **Files:** Create `components/rbac/users/UsersTableClient.tsx`, `app/(protected)/userManagement/page.tsx`
 **Interfaces:** Consumes `DataTable`/`Column` from `@/components/rbac/DataTable`; `StatusBadge`, `ManageRolesModal`; `setUserStatus` from `@/lib/rbac/users-actions`; `listUsers`/`countUsers` from `@/lib/rbac/users-service`; `getAllRoles` from `@/lib/rbac/roles-service`; `UserDTO`, `UsersQuery` from types.
 
-- [ ] **Step 1: `UsersTableClient.tsx`**
+- [✅] **Step 1: `UsersTableClient.tsx`**
 
 ```tsx
 'use client'
@@ -702,7 +702,7 @@ export default function UsersTableClient({ rows, page, totalPages, sortField, so
 }
 ```
 
-- [ ] **Step 2: `app/(protected)/userManagement/page.tsx`**
+- [✅] **Step 2: `app/(protected)/userManagement/page.tsx`**
 
 ```tsx
 import { listUsers, countUsers } from '@/lib/rbac/users-service'
@@ -744,7 +744,7 @@ export default async function UserManagementPage({ searchParams }: { searchParam
 
 > `countUsers` is not called here because `listUsers` already returns `total`. Keep `countUsers` exported (the service interface promises it; a future caller / test may use it). If lint flags it as unused at module scope, that is fine — it is an exported function.
 
-- [ ] **Step 3: Typecheck, lint, build & commit**
+- [✅] **Step 3: Typecheck, lint, build & commit**
 
 Run: `npx tsc --noEmit && npm run lint && npm run build` → clean; `/userManagement` in the route list.
 ```bash
@@ -759,7 +759,7 @@ git commit -m "feat(rbac): users table page with manage-roles + status toggle"
 **Files:** Create `sources/tests/e2e/test_users.py`
 **Prerequisites:** dev server running with `AUTH_TEST_CREDENTIALS=true`; `.env.test` has admin `TEST_EMAIL` and non-admin `TEST_EMAIL_USER`.
 
-- [ ] **Step 1: Write `sources/tests/e2e/test_users.py`**
+- [✅] **Step 1: Write `sources/tests/e2e/test_users.py`**
 
 ```python
 import time
@@ -821,21 +821,21 @@ def test_non_admin_denied(page, base_url):
 
 > Note: `data-testid="row-menu"` is the DataTable row action trigger (Phase-1 primitive). Verify that hook exists in `DataTable.tsx`; if the attribute name differs, use the actual one and note it. The non-admin test relies on `TEST_EMAIL_USER` in `.env.test` (used by Phase-0/1 RBAC E2E). Iterate selectors against the running server until green; do not weaken assertions.
 
-- [ ] **Step 2: Run the users E2E**
+- [✅] **Step 2: Run the users E2E**
 
 Run (repo root): `HEADLESS=true uv run pytest sources/tests/e2e/test_users.py -v`
 Expected: 4 passed. Iterate selectors if needed (without weakening assertions).
 
-- [ ] **Step 3: Full suite (no regressions)**
+- [✅] **Step 3: Full suite (no regressions)**
 
 Run: `HEADLESS=true uv run pytest sources/tests/e2e -v`
 Expected: all pass (Phase 0 + 1 + 2 + users).
 
-- [ ] **Step 4: Browser verification (controller)**
+- [✅] **Step 4: Browser verification (controller)**
 
 Manually (or with `webapp-testing`): open `/userManagement`; confirm the list renders with roles + status; open "Gestisci ruoli" for a non-admin user, toggle a SERVICE role, save, confirm it persists (check the Ruoli cell after refresh); click a status badge to deactivate then reactivate a non-admin user, confirm persistence; confirm the guardrails fire — attempt to remove your own Administrator role (expect the Italian error) and to deactivate your own account (expect the error). Clean up any test mutations afterward.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/tests/e2e/test_users.py

@@ -3,6 +3,8 @@ import pytest
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
+from helpers import do_test_login
+
 _env_file = Path(__file__).parent / ".env.test"
 if _env_file.exists():
     for _line in _env_file.read_text().splitlines():
@@ -26,6 +28,14 @@ def test_email():
 
 
 @pytest.fixture(scope="session")
+def test_email_user():
+    email = os.getenv("TEST_EMAIL_USER", "")
+    if not email:
+        pytest.skip("Set TEST_EMAIL_USER in .env.test to run non-admin tests")
+    return email
+
+
+@pytest.fixture(scope="session")
 def browser():
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
@@ -44,12 +54,13 @@ def page(browser):
 
 @pytest.fixture
 def logged_in_page(page, base_url, test_email):
-    """Authenticate via the test credentials form (requires AUTH_TEST_CREDENTIALS=true on server)."""
-    page.goto(f"{base_url}/login")
-    page.wait_for_load_state("networkidle")
-    page.click('button:has-text("Accesso test")')
-    page.fill('input[placeholder="Email di test"]', test_email)
-    page.click('button:has-text("Entra (test)")')
-    page.wait_for_url(f"{base_url}/", timeout=15_000)
-    page.wait_for_load_state("networkidle")
+    """Authenticated admin page."""
+    do_test_login(page, base_url, test_email)
+    yield page
+
+
+@pytest.fixture
+def non_admin_page(page, base_url, test_email_user):
+    """Authenticated non-admin page."""
+    do_test_login(page, base_url, test_email_user)
     yield page

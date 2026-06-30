@@ -1,31 +1,55 @@
 import time
 from playwright.sync_api import expect
+from helpers import nav, drag_row_onto
+
+
+def _select_tipologia(page, label: str):
+    """Open the Tipologia custom-select dropdown and click an option by label."""
+    page.locator('[data-testid="select-tipologia"]').click()
+    page.get_by_role("button", name=label, exact=True).first.click()
+
+
+def _create_functionality(page, base_url, name, link):
+    """Create an internal-link-functionality tree item at the root level."""
+    nav(page, f"{base_url}/functionalities/create?root=root")
+    page.get_by_placeholder("Nome funzionalità *").fill(name)
+    page.get_by_placeholder("Descrizione *").fill("e2e")
+    _select_tipologia(page, "Link interno (/path)")
+    page.get_by_placeholder("Link *").fill(link)
+    page.get_by_role("button", name="Crea funzionalità").click()
+    page.wait_for_url("**/functionalities", timeout=10_000)
+    page.wait_for_load_state("networkidle")
+
+
+def _delete_functionality(page, base_url, name):
+    nav(page, f"{base_url}/functionalities")
+    page.get_by_text(name, exact=True).first.scroll_into_view_if_needed()
+    row = page.locator("div").filter(has_text=name).filter(has=page.locator('[data-testid="nav-delete"]')).last
+    page.once("dialog", lambda d: d.accept())
+    row.locator('[data-testid="nav-delete"]').click()
+    page.wait_for_timeout(600)
 
 
 def test_tree_loads_with_tabs(logged_in_page, base_url):
     page = logged_in_page
-    page.goto(f"{base_url}/functionalities")
-    page.wait_for_load_state("networkidle")
+    nav(page, f"{base_url}/functionalities")
     expect(page.get_by_role("heading", name="Funzionalità")).to_be_visible()
     expect(page.get_by_role("button", name="Tutto")).to_be_visible()
     expect(page.get_by_role("button", name="Operazioni")).to_be_visible()
-    # Seeded immutable category RBAC is visible in the tree
-    expect(page.get_by_text("RBAC", exact=True).first).to_be_visible()
+    # Seeded immutable category Admin is visible in the tree
+    expect(page.get_by_text("Admin", exact=True).first).to_be_visible()
 
 
 def test_create_edit_delete_functionality(logged_in_page, base_url):
     page = logged_in_page
     name = f"E2E Func {int(time.time())}"
     # Create — navigate with ?root=root so the server knows which subtree
-    page.goto(f"{base_url}/functionalities/create?root=root")
-    page.wait_for_load_state("networkidle")
+    nav(page, f"{base_url}/functionalities/create?root=root")
     # Fill IT name (first input with that placeholder)
     page.get_by_placeholder("Nome funzionalità *").fill(name)
     # Fill IT description (textarea)
     page.get_by_placeholder("Descrizione *").fill("desc e2e")
-    # idItemType defaults to 2 (Funzionalità) — Tipologia select is select[1]
-    # select[0] = parent, select[1] = Tipologia (only visible when Funzionalità is selected)
-    page.locator("select").nth(1).select_option("3")  # Funzionalità interna
+    _select_tipologia(page, "Link interno (/path)")
     page.get_by_placeholder("Link *").fill("/e2e-func")
     page.get_by_role("button", name="Crea funzionalità").click()
     page.wait_for_url("**/functionalities", timeout=10_000)
@@ -62,14 +86,67 @@ def test_create_edit_delete_functionality(logged_in_page, base_url):
 
 def test_immutable_item_has_no_actions(logged_in_page, base_url):
     page = logged_in_page
-    page.goto(f"{base_url}/functionalities")
-    page.wait_for_load_state("networkidle")
-    # RBAC is immutable — its OWN row must expose no edit/delete buttons.
+    nav(page, f"{base_url}/functionalities")
+    # Admin is immutable — its OWN row must expose no edit/delete buttons.
     # Scope to the label's row container (parent of the name span) so that
     # neither child rows nor any unrelated mutable item elsewhere in the tree
     # can leak their action buttons into this assertion.
-    rbac_label = page.get_by_text("RBAC", exact=True).first
-    expect(rbac_label).to_be_visible()
-    rbac_row = rbac_label.locator("xpath=..")
-    expect(rbac_row.locator('[data-testid="nav-delete"]')).to_have_count(0)
-    expect(rbac_row.locator('[data-testid="nav-edit"]')).to_have_count(0)
+    admin_label = page.get_by_text("Admin", exact=True).first
+    expect(admin_label).to_be_visible()
+    admin_row = admin_label.locator("xpath=..")
+    expect(admin_row.locator('[data-testid="nav-delete"]')).to_have_count(0)
+    expect(admin_row.locator('[data-testid="nav-edit"]')).to_have_count(0)
+
+
+def test_immutable_item_has_no_add_button(logged_in_page, base_url):
+    """F-01 (revised): immutable items (Home, Admin) have no +/edit/delete buttons."""
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities")
+    for label in ("Home", "Admin"):
+        row = page.locator("div").filter(has_text=label).filter(
+            has=page.locator('[data-testid="drag-handle"]')
+        ).last
+        expect(row.locator('[data-testid="nav-add"]')).to_have_count(0)
+        expect(row.locator('[data-testid="nav-edit"]')).to_have_count(0)
+        expect(row.locator('[data-testid="nav-delete"]')).to_have_count(0)
+
+
+def test_mutable_item_has_all_action_buttons(logged_in_page, base_url):
+    """F-01: mutable items (user-created) expose +, edit, and delete buttons."""
+    import time
+    page = logged_in_page
+    name = f"E2E BtnTest {int(time.time())}"
+    _create_functionality(page, base_url, name, f"/e2e-btn-{int(time.time())}")
+    nav(page, f"{base_url}/functionalities")
+    row = page.locator("div").filter(has_text=name).filter(
+        has=page.locator('[data-testid="drag-handle"]')
+    ).last
+    expect(row.locator('[data-testid="nav-add"]')).to_have_count(1)
+    expect(row.locator('[data-testid="nav-edit"]')).to_have_count(1)
+    expect(row.locator('[data-testid="nav-delete"]')).to_have_count(1)
+    _delete_functionality(page, base_url, name)
+
+
+def test_drag_moves_item_after_last(logged_in_page, base_url):
+    """F-02: an item can be dropped *after* the last element (regression test)."""
+    page = logged_in_page
+    ts = int(time.time())
+    a, b = f"E2E Drag A {ts}", f"E2E Drag B {ts}"
+    _create_functionality(page, base_url, a, f"/e2e-drag-a-{ts}")
+    _create_functionality(page, base_url, b, f"/e2e-drag-b-{ts}")
+    try:
+        # Both appended at the end (a before b, with b now the last row). Drag a after b.
+        nav(page, f"{base_url}/functionalities")
+        drag_row_onto(page, a, b, rel_y=0.85)
+        # Poll until the server action + refresh land the new order.
+        page.wait_for_function(
+            """([a, b]) => {
+                const labels = [...document.querySelectorAll('.rounded-lg.border span.flex-1')].map(e => e.textContent.trim());
+                return labels.includes(a) && labels.includes(b) && labels.indexOf(a) > labels.indexOf(b);
+            }""",
+            arg=[a, b],
+            timeout=8_000,
+        )
+    finally:
+        _delete_functionality(page, base_url, a)
+        _delete_functionality(page, base_url, b)

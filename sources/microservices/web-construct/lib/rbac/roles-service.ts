@@ -15,7 +15,7 @@ const SORT_COLUMN: Record<NonNullable<RolesQuery['sort']>, string> = {
   hasPermissions: 'has_permissions', dateIns: 'date_ins', dateMod: 'date_mod',
 }
 
-function applyFilters<T extends {
+export function applyFilters<T extends {
   ilike(column: string, value: string): T
   eq(column: string, value: unknown): T
   gte(column: string, value: unknown): T
@@ -26,6 +26,8 @@ function applyFilters<T extends {
   if (query.hasPermission) r = r.eq('has_permissions', true) as T
   if (query.startDateIns) r = r.gte('date_ins', query.startDateIns) as T
   if (query.endDateIns) r = r.lte('date_ins', query.endDateIns) as T
+  if (query.minAssociatedUsers != null) r = r.gte('associated_users', query.minAssociatedUsers) as T
+  if (query.maxAssociatedUsers != null) r = r.lte('associated_users', query.maxAssociatedUsers) as T
   return r
 }
 

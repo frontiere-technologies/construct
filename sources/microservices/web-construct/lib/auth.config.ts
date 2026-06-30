@@ -27,7 +27,7 @@ export const authConfig = {
       if (session && isAuthOnlyRedirect) {
         return Response.redirect(new URL('/', nextUrl))
       }
-      const ADMIN_PATHS = ['/admin', '/userManagement', '/functionalities', '/rolesPermissions']
+      const ADMIN_PATHS = ['/admin', '/user-management', '/functionalities', '/roles-permissions']
       const needsAdmin = ADMIN_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
       if (session && needsAdmin && !(session.user as { isAdmin?: boolean })?.isAdmin) {
         return Response.redirect(new URL('/', nextUrl))

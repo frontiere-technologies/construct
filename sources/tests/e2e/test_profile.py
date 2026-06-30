@@ -1,11 +1,10 @@
 import pytest
-from helpers import ensure_l1_expanded
+from helpers import nav, ensure_l1_expanded
 
 
 @pytest.fixture
 def profile_page(logged_in_page, base_url):
-    logged_in_page.goto(f"{base_url}/profile")
-    logged_in_page.wait_for_load_state("networkidle")
+    nav(logged_in_page, f"{base_url}/profile")
     return logged_in_page
 
 

@@ -243,7 +243,7 @@ This template is intentionally minimal outside of its core features. When buildi
 - **New features** go under `app/(protected)/` — protected by default
 - **Shared UI components** go in `components/`
 - **Server actions** go in `lib/` — use Supabase service-role client from `lib/supabase-server.ts`
-- **New roles** are managed in the RBAC area (`/rolesPermissions`): create a SERVICE role and grant it navigation permissions (the legacy single `users.role` string column has been replaced by the N:N `role` / `user_role` / `role_item` model)
+- **New roles** are managed in the Admin area (`/roles-permissions`): create a SERVICE role and grant it navigation permissions (the legacy single `users.role` string column has been replaced by the N:N `role` / `user_role` / `role_item` model)
 - **New providers** can be added in `lib/auth.ts` following the existing pattern
 
 ---

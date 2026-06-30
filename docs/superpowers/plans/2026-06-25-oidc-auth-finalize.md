@@ -29,7 +29,7 @@
 **Interfaces:**
 - Produces: `createLogger(module: string): pino.Logger` — child logger factory consumed by all subsequent tasks
 
-- [x] **Step 1: Install pino**
+- [✅] **Step 1: Install pino**
 
 ```bash
 cd sources/microservices/web-construct
@@ -39,7 +39,7 @@ npm install --save-dev pino-pretty
 
 Expected: `package.json` and `package-lock.json` updated.
 
-- [x] **Step 2: Add serverExternalPackages to next.config.ts**
+- [✅] **Step 2: Add serverExternalPackages to next.config.ts**
 
 Replace the full content of `next.config.ts` with:
 
@@ -61,7 +61,7 @@ const nextConfig: NextConfig = {
 export default nextConfig
 ```
 
-- [x] **Step 3: Create lib/logger.ts**
+- [✅] **Step 3: Create lib/logger.ts**
 
 ```typescript
 import pino from 'pino'
@@ -77,7 +77,7 @@ export function createLogger(module: string) {
 }
 ```
 
-- [x] **Step 4: Verify TypeScript compiles**
+- [✅] **Step 4: Verify TypeScript compiles**
 
 ```bash
 cd sources/microservices/web-construct
@@ -86,7 +86,7 @@ npm run build
 
 Expected: Build succeeds with no TypeScript errors.
 
-- [x] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add \
@@ -108,7 +108,7 @@ git commit -m "feat(logging): add pino logger with PII redaction"
 - Produces: `passwordSchema: ZodString` — consumed by set-password and change-password routes in Task 4
 - Produces: `emailSchema: ZodString` — available for future use
 
-- [x] **Step 1: Create lib/validations.ts**
+- [✅] **Step 1: Create lib/validations.ts**
 
 ```typescript
 import { z } from 'zod'
@@ -122,7 +122,7 @@ export const passwordSchema = z
 export const emailSchema = z.string().email('Email non valida.').toLowerCase().trim()
 ```
 
-- [x] **Step 2: Verify TypeScript compiles**
+- [✅] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd sources/microservices/web-construct
@@ -131,7 +131,7 @@ npm run build
 
 Expected: Build succeeds.
 
-- [x] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/validations.ts
@@ -148,7 +148,7 @@ git commit -m "feat(auth): add Zod password and email validation schemas"
 **Interfaces:**
 - Consumes: `createLogger` from `@/lib/logger`
 
-- [x] **Step 1: Replace lib/mailer.ts**
+- [✅] **Step 1: Replace lib/mailer.ts**
 
 ```typescript
 import { Resend } from 'resend'
@@ -199,7 +199,7 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions): 
 
 Note: `to` is passed in the log object but pino's `redact: ['to']` config replaces it with `[Redacted]` automatically — IMP-1 resolved without any manual masking.
 
-- [x] **Step 2: Verify build**
+- [✅] **Step 2: Verify build**
 
 ```bash
 cd sources/microservices/web-construct
@@ -208,7 +208,7 @@ npm run build
 
 Expected: Build succeeds.
 
-- [x] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/mailer.ts
@@ -225,7 +225,7 @@ git commit -m "fix(logging): migrate mailer to pino, auto-redact recipient PII (
 **Interfaces:**
 - Consumes: `createLogger` from `@/lib/logger`
 
-- [x] **Step 1: Add logger import and instance at the top of lib/auth.ts**
+- [✅] **Step 1: Add logger import and instance at the top of lib/auth.ts**
 
 After the existing imports (before the first `const` or `let` declaration at module level), add:
 
@@ -235,7 +235,7 @@ import { createLogger } from '@/lib/logger'
 const log = createLogger('auth')
 ```
 
-- [x] **Step 2: Replace the allowed-domains fetch error (search for `Failed to retrieve allowed domains`)**
+- [✅] **Step 2: Replace the allowed-domains fetch error (search for `Failed to retrieve allowed domains`)**
 
 Before:
 ```typescript
@@ -247,7 +247,7 @@ After:
 log.error({ err: error }, 'failed to retrieve allowed domains')
 ```
 
-- [x] **Step 3: Replace the Supabase user provisioning error (search for `Failed to provision user`)**
+- [✅] **Step 3: Replace the Supabase user provisioning error (search for `Failed to provision user`)**
 
 Before:
 ```typescript
@@ -259,7 +259,7 @@ After:
 log.error({ err }, 'failed to provision user in Supabase')
 ```
 
-- [x] **Step 4: Verify build**
+- [✅] **Step 4: Verify build**
 
 ```bash
 cd sources/microservices/web-construct
@@ -268,7 +268,7 @@ npm run build
 
 Expected: Build succeeds.
 
-- [x] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/auth.ts
@@ -291,7 +291,7 @@ These three routes only need logger migration (no schema changes).
 
 #### register/route.ts
 
-- [x] **Step 1: Replace app/api/auth/register/route.ts**
+- [✅] **Step 1: Replace app/api/auth/register/route.ts**
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server'
@@ -398,7 +398,7 @@ export async function POST(req: NextRequest) {
 
 #### forgot-password/route.ts
 
-- [x] **Step 2: Replace app/api/auth/forgot-password/route.ts**
+- [✅] **Step 2: Replace app/api/auth/forgot-password/route.ts**
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server'
@@ -480,7 +480,7 @@ export async function POST(req: NextRequest) {
 
 #### admin/send-invite/route.ts
 
-- [x] **Step 3: Replace app/api/admin/send-invite/route.ts**
+- [✅] **Step 3: Replace app/api/admin/send-invite/route.ts**
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server'
@@ -566,7 +566,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [x] **Step 4: Verify build**
+- [✅] **Step 4: Verify build**
 
 ```bash
 cd sources/microservices/web-construct
@@ -575,7 +575,7 @@ npm run build
 
 Expected: Build succeeds.
 
-- [x] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add \
@@ -601,7 +601,7 @@ These two routes get both the logger migration and the `passwordSchema` enforcem
 
 #### set-password/route.ts
 
-- [x] **Step 1: Replace app/api/auth/set-password/route.ts**
+- [✅] **Step 1: Replace app/api/auth/set-password/route.ts**
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server'
@@ -677,7 +677,7 @@ export async function POST(req: NextRequest) {
 
 #### change-password/route.ts
 
-- [x] **Step 2: Replace app/api/auth/change-password/route.ts**
+- [✅] **Step 2: Replace app/api/auth/change-password/route.ts**
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server'
@@ -744,7 +744,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [x] **Step 3: Verify build**
+- [✅] **Step 3: Verify build**
 
 ```bash
 cd sources/microservices/web-construct
@@ -753,7 +753,7 @@ npm run build
 
 Expected: Build succeeds.
 
-- [x] **Step 4: Verify no remaining console.* in auth files**
+- [✅] **Step 4: Verify no remaining console.* in auth files**
 
 ```bash
 grep -rn "console\." \
@@ -765,7 +765,7 @@ grep -rn "console\." \
 
 Expected: No output (zero matches).
 
-- [x] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add \
@@ -781,7 +781,7 @@ git commit -m "feat(auth): enforce password policy server-side + pino logging (M
 **Files:**
 - Modify: `app/set-password/SetPasswordForm.tsx`
 
-- [x] **Step 1: Replace the password validation block in handleSubmit**
+- [✅] **Step 1: Replace the password validation block in handleSubmit**
 
 In `SetPasswordForm.tsx`, find and replace the existing validation section:
 
@@ -809,7 +809,7 @@ if (!/[0-9]/.test(password)) {
 }
 ```
 
-- [x] **Step 2: Update the password input placeholder**
+- [✅] **Step 2: Update the password input placeholder**
 
 Before:
 ```typescript
@@ -821,7 +821,7 @@ After:
 placeholder="Min. 8 caratteri, una maiuscola, un numero"
 ```
 
-- [x] **Step 3: Verify build**
+- [✅] **Step 3: Verify build**
 
 ```bash
 cd sources/microservices/web-construct
@@ -830,7 +830,7 @@ npm run build
 
 Expected: Build succeeds.
 
-- [x] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add sources/microservices/web-construct/app/set-password/SetPasswordForm.tsx
@@ -845,7 +845,7 @@ git commit -m "feat(auth): align set-password form validation with server-side p
 - Modify: `sources/microservices/web-construct/.env.template`
 - Modify: `docs/reviews/2026-06-24-code-reviewer.md`
 
-- [x] **Step 1: Add LOG_LEVEL to .env.template**
+- [✅] **Step 1: Add LOG_LEVEL to .env.template**
 
 In `.env.template`, after the `AUTH_URL` block, add:
 
@@ -855,7 +855,7 @@ In `.env.template`, after the `AUTH_URL` block, add:
 LOG_LEVEL=info
 ```
 
-- [x] **Step 2: Manual verification — PII redaction**
+- [✅] **Step 2: Manual verification — PII redaction**
 
 Start the dev server:
 
@@ -871,7 +871,7 @@ Expected server log (JSON):
 {"service":"web-construct","module":"mailer","provider":"resend","to":"[Redacted]","from":"onboarding@resend.dev","subject":"Benvenuto in Construct — Imposta la tua password","msg":"sending email"}
 ```
 
-- [x] **Step 3: Manual verification — password policy**
+- [✅] **Step 3: Manual verification — password policy**
 
 With dev server running, open `http://localhost:3000/set-password?token=<any-valid-token>` and test:
 
@@ -882,23 +882,23 @@ With dev server running, open `http://localhost:3000/set-password?token=<any-val
 | `short1A` | 400 — "La password deve contenere almeno 8 caratteri." |
 | `Valid1pass` | 200 — `{ ok: true }` |
 
-- [x] **Step 4: Mark IMP-1 and MIN-2 as resolved in the review file**
+- [✅] **Step 4: Mark IMP-1 and MIN-2 as resolved in the review file**
 
 In `docs/reviews/2026-06-24-code-reviewer.md`, update:
 
 Before:
 ```
-- [x] ID=IMP-1, Severity=Important, ...
-- [x] ID=MIN-2, Severity=Minor, ...
+- [✅] ID=IMP-1, Severity=Important, ...
+- [✅] ID=MIN-2, Severity=Minor, ...
 ```
 
 After:
 ```
-- [x] ID=IMP-1, Severity=Important, ...
-- [x] ID=MIN-2, Severity=Minor, ...
+- [✅] ID=IMP-1, Severity=Important, ...
+- [✅] ID=MIN-2, Severity=Minor, ...
 ```
 
-- [x] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add \

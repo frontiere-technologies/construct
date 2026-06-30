@@ -43,7 +43,7 @@ For Copilot/OpenAI/Gemini, equivalent agent/skill definitions go in the tool-spe
 
 ### Tasks as checkboxes
 
-NOTA: Non sono riuscito a trovare un modo per farle funzionare automaticamente
+NOTA (27/Giu/2026): Non sono riuscito a trovare un modo per farle funzionare automaticamente. Quindi l'ho tolto ed ora gestisco le checkboxes a mano
 
 > **Scope:** The checkbox rules in this section and in "Mark checkboxes as completed when done" apply **only** to markdown files located under the `./docs` directory (i.e. `docs/**/*.md` relative to the project root). Markdown files outside `./docs` are exempt from these rules.
 

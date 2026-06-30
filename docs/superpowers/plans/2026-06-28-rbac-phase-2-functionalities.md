@@ -1,6 +1,6 @@
 # RBAC Phase 2 — Functionalities Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x] ✅`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
 
 **Goal:** Build the Functionalities admin area (`/functionalities`) — a tabbed navigation_item tree with @dnd-kit drag reorder/re-parent, node create/edit/delete, and a two-column create/edit form with SVG upload, 5 functionality types, and 9-language translations + tags.
 
@@ -35,7 +35,7 @@
 **Files:** Modify `lib/rbac/types.ts`
 **Interfaces:** Produces `FunctionalityType`, extended `UserNavigationTreeDto`, `CreateNavItemInput`, `UpdateNavItemInput`, `MoveInput`.
 
-- [x] ✅ **Step 1: Edit `UserNavigationTreeDto` and append new types**
+- [✅] **Step 1: Edit `UserNavigationTreeDto` and append new types**
 
 Replace the existing `UserNavigationTreeDto` interface with this extended version (keeps `authorization` required; adds optional fields):
 ```ts
@@ -78,7 +78,7 @@ export interface MoveInput { targetParentId: number; orderPosition: number }
 ```
 (`FunctionalityType` is referenced by the interface above; declaring it after is fine — TS hoists type declarations.)
 
-- [x] ✅ **Step 2: Typecheck & commit**
+- [✅] **Step 2: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → 0 errors (Phase-1 consumers still compile since added fields are optional).
 ```bash
@@ -93,12 +93,12 @@ git commit -m "feat(rbac): extend UserNavigationTreeDto + nav item input types"
 **Files:** Create `lib/rbac/svg-sanitize.ts`, `lib/rbac/svg-sanitize.test.ts`; Modify `package.json`
 **Interfaces:** Consumes `isInlineSvg` from `@/lib/icon-utils`. Produces `sanitizeSvg(raw: string | null | undefined): string`.
 
-- [x] ✅ **Step 1: Install isomorphic-dompurify**
+- [✅] **Step 1: Install isomorphic-dompurify**
 
 In `package.json` add to `dependencies`: `"isomorphic-dompurify": "^2.16.0"`. Then run (from web-construct): `npm install`
 Expected: resolves. (If peer-deps conflict, use `npm install --legacy-peer-deps` — the project already uses that.)
 
-- [x] ✅ **Step 2: Write the failing tests**
+- [✅] **Step 2: Write the failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -134,12 +134,12 @@ describe('sanitizeSvg', () => {
 })
 ```
 
-- [x] ✅ **Step 3: Run, expect fail**
+- [✅] **Step 3: Run, expect fail**
 
 Run: `npm test -- svg-sanitize`
 Expected: FAIL (module missing).
 
-- [x] ✅ **Step 4: Implement `lib/rbac/svg-sanitize.ts`**
+- [✅] **Step 4: Implement `lib/rbac/svg-sanitize.ts`**
 
 ```ts
 import DOMPurify from 'isomorphic-dompurify'
@@ -156,12 +156,12 @@ export function sanitizeSvg(raw: string | null | undefined): string {
 }
 ```
 
-- [x] ✅ **Step 5: Run, expect pass**
+- [✅] **Step 5: Run, expect pass**
 
 Run: `npm test -- svg-sanitize`
 Expected: PASS (all 6 cases).
 
-- [x] ✅ **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add sources/microservices/web-construct/package.json sources/microservices/web-construct/package-lock.json sources/microservices/web-construct/lib/rbac/svg-sanitize.ts sources/microservices/web-construct/lib/rbac/svg-sanitize.test.ts
@@ -180,7 +180,7 @@ git commit -m "feat(rbac): server-side SVG sanitizer (CARRY-3)"
 
 > Note: `buildNavTree` needs `id_functionality_type` mapped to the `FunctionalityType` string. Add a private map. Also needs `item_translation` and `navbar_position` from the row — both already on `NavigationItemRow`.
 
-- [x] ✅ **Step 1: Write the failing tests**
+- [✅] **Step 1: Write the failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -240,12 +240,12 @@ describe('isDescendant', () => {
 })
 ```
 
-- [x] ✅ **Step 2: Run, expect fail**
+- [✅] **Step 2: Run, expect fail**
 
 Run: `npm test -- nav-tree-builder`
 Expected: FAIL (module missing).
 
-- [x] ✅ **Step 3: Implement `lib/rbac/nav-tree-builder.ts`**
+- [✅] **Step 3: Implement `lib/rbac/nav-tree-builder.ts`**
 
 ```ts
 import {
@@ -334,12 +334,12 @@ export function isDescendant(items: NavigationItemRow[], candidateId: number, an
 }
 ```
 
-- [x] ✅ **Step 4: Run, expect pass**
+- [✅] **Step 4: Run, expect pass**
 
 Run: `npm test -- nav-tree-builder`
 Expected: PASS (all cases).
 
-- [x] ✅ **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/nav-tree-builder.ts sources/microservices/web-construct/lib/rbac/nav-tree-builder.test.ts
@@ -356,7 +356,7 @@ git commit -m "feat(rbac): pure nav tree builder + immutable/cycle guards"
 - `getNavigationItem(id: number): Promise<UserNavigationTreeDto>`
 - `getParentList(): Promise<{ id: number; name: string }[]>`
 
-- [x] ✅ **Step 1: Implement `lib/rbac/functionalities-service.ts`**
+- [✅] **Step 1: Implement `lib/rbac/functionalities-service.ts`**
 
 ```ts
 import { cache } from 'react'
@@ -428,7 +428,7 @@ export const getParentList = cache(async (): Promise<{ id: number; name: string 
 })
 ```
 
-- [x] ✅ **Step 2: Typecheck & commit**
+- [✅] **Step 2: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → 0 errors.
 ```bash
@@ -449,7 +449,7 @@ git commit -m "feat(rbac): functionalities read service"
 
 > `moveNavigationItem` treats `orderPosition` as the target index and RENUMBERS the destination parent's children (compacting to 0..n) so ordering is always clean.
 
-- [x] ✅ **Step 1: Implement `lib/rbac/navigation-actions.ts`**
+- [✅] **Step 1: Implement `lib/rbac/navigation-actions.ts`**
 
 ```ts
 'use server'
@@ -566,7 +566,7 @@ export async function deleteNavigationItem(id: number): Promise<void> {
 }
 ```
 
-- [x] ✅ **Step 2: Typecheck, lint & verify guards via DB**
+- [✅] **Step 2: Typecheck, lint & verify guards via DB**
 
 Run: `npx tsc --noEmit && npm run lint` → 0 errors (pre-existing warnings OK).
 Then via Supabase MCP (`select:mcp__supabase__execute_sql`) confirm there are immutable items to guard:
@@ -575,7 +575,7 @@ select count(*) filter (where is_immutable=1) as immutable, count(*) as total fr
 ```
 Expected: immutable ≥ 7. Paste into report. (Functional create/move/delete behavior is covered by E2E in Task 10.)
 
-- [x] ✅ **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/navigation-actions.ts
@@ -591,11 +591,11 @@ git commit -m "feat(rbac): navigation item create/update/move/delete actions"
 
 > This is the hardest UI task and the one NOT covered by E2E — you MUST browser-verify a drag reorders and a drop-onto-category re-parents (use the running dev server). Treat the code below as a complete starting implementation; adapt minimally if @dnd-kit behavior requires it, but keep the public props stable and the no-`dnd` path byte-for-byte behavior-compatible with Phase 1.
 
-- [x] ✅ **Step 1: Install @dnd-kit**
+- [✅] **Step 1: Install @dnd-kit**
 
 In `package.json` dependencies add `"@dnd-kit/core": "^6.3.1"` and `"@dnd-kit/sortable": "^10.0.0"` and `"@dnd-kit/utilities": "^3.2.2"`. Run `npm install` (use `--legacy-peer-deps` if needed).
 
-- [x] ✅ **Step 2: Replace `components/rbac/NavigationTree.tsx`**
+- [✅] **Step 2: Replace `components/rbac/NavigationTree.tsx`**
 
 ```tsx
 'use client'
@@ -729,12 +729,12 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
 }
 ```
 
-- [x] ✅ **Step 3: Typecheck, lint, build**
+- [✅] **Step 3: Typecheck, lint, build**
 
 Run: `npx tsc --noEmit && npm run lint && npm run build`
 Expected: clean. (Phase-1 `PermissionsTree` passes no `dnd` prop, so its behavior is unchanged.)
 
-- [x] ✅ **Step 4: Browser-verify the drag (REQUIRED — not covered by E2E)**
+- [✅] **Step 4: Browser-verify the drag (REQUIRED — not covered by E2E)**
 
 Start the dev server (`AUTH_TEST_CREDENTIALS=true npm run dev`), and once Task 9's tree page exists this is verified there. For THIS task, verify the no-`dnd` path: run the existing role-permission E2E to confirm PermissionsTree still works:
 Run (repo root): `HEADLESS=true uv run pytest sources/tests/e2e/test_roles.py::test_toggle_permission_persists -v`
@@ -742,7 +742,7 @@ Expected: PASS (NavigationTree change didn't break the Phase-1 consumer).
 
 > The actual drag interaction is browser-verified by the controller after Task 9 wires the tree page with `dnd`. If you (implementer) can run the dev server + the webapp-testing skill now against a temporary mount, do so and report; otherwise note that drag verification is deferred to the Task 9 browser check.
 
-- [x] ✅ **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/package.json sources/microservices/web-construct/package-lock.json sources/microservices/web-construct/components/rbac/NavigationTree.tsx
@@ -759,7 +759,7 @@ git commit -m "feat(rbac): optional @dnd-kit drag support in NavigationTree"
 - `TagInput`: props `{ value: string[]; onChange: (tags: string[]) => void; placeholder?: string }`.
 - `TranslationsAccordion`: props `{ translations: Record<string,{name?:string;description?:string}>; tags: Record<string,string[]>; onTranslations: (t) => void; onTags: (t) => void }`.
 
-- [x] ✅ **Step 1: `TagInput.tsx`**
+- [✅] **Step 1: `TagInput.tsx`**
 
 ```tsx
 'use client'
@@ -795,7 +795,7 @@ export default function TagInput({ value, onChange, placeholder }: { value: stri
 }
 ```
 
-- [x] ✅ **Step 2: `IconUpload.tsx`**
+- [✅] **Step 2: `IconUpload.tsx`**
 
 ```tsx
 'use client'
@@ -835,7 +835,7 @@ export default function IconUpload({ value, onChange }: { value: string; onChang
 }
 ```
 
-- [x] ✅ **Step 3: `TranslationsAccordion.tsx`**
+- [✅] **Step 3: `TranslationsAccordion.tsx`**
 
 ```tsx
 'use client'
@@ -891,7 +891,7 @@ export default function TranslationsAccordion(
 }
 ```
 
-- [x] ✅ **Step 4: Typecheck, lint & commit**
+- [✅] **Step 4: Typecheck, lint & commit**
 
 Run: `npx tsc --noEmit && npm run lint` → clean.
 ```bash
@@ -906,7 +906,7 @@ git commit -m "feat(rbac): functionality form sub-components (icon/tag/translati
 **Files:** Create `components/rbac/functionalities/FunctionalityForm.tsx`, `app/(protected)/functionalities/create/page.tsx`, `app/(protected)/functionalities/[funcId]/edit/page.tsx`
 **Interfaces:** Consumes `createNavigationItem`/`updateNavigationItem` (`@/lib/rbac/navigation-actions`), `getNavigationItem`/`getParentList` (`@/lib/rbac/functionalities-service`), the Task-7 sub-components, types. Produces the create/edit routes.
 
-- [x] ✅ **Step 1: `FunctionalityForm.tsx`**
+- [✅] **Step 1: `FunctionalityForm.tsx`**
 
 ```tsx
 'use client'
@@ -1026,7 +1026,7 @@ export default function FunctionalityForm(
 }
 ```
 
-- [x] ✅ **Step 2: `app/(protected)/functionalities/create/page.tsx`**
+- [✅] **Step 2: `app/(protected)/functionalities/create/page.tsx`**
 
 ```tsx
 import { getParentList } from '@/lib/rbac/functionalities-service'
@@ -1050,7 +1050,7 @@ export default async function CreateFunctionalityPage({ searchParams }: { search
 }
 ```
 
-- [x] ✅ **Step 3: `app/(protected)/functionalities/[funcId]/edit/page.tsx`**
+- [✅] **Step 3: `app/(protected)/functionalities/[funcId]/edit/page.tsx`**
 
 ```tsx
 import { getNavigationItem, getParentList } from '@/lib/rbac/functionalities-service'
@@ -1083,7 +1083,7 @@ export default async function EditFunctionalityPage({ params }: { params: Promis
 }
 ```
 
-- [x] ✅ **Step 4: Typecheck, lint, build & commit**
+- [✅] **Step 4: Typecheck, lint, build & commit**
 
 Run: `npx tsc --noEmit && npm run lint && npm run build` → clean; `/functionalities/create` and `/functionalities/[funcId]/edit` in the route list.
 ```bash
@@ -1098,7 +1098,7 @@ git commit -m "feat(rbac): functionality create/edit form + pages"
 **Files:** Create `components/rbac/functionalities/FunctionalitiesTreeClient.tsx`, `app/(protected)/functionalities/page.tsx`
 **Interfaces:** Consumes `getNavigationSubtree` (`@/lib/rbac/functionalities-service`), `moveNavigationItem`/`deleteNavigationItem` (`@/lib/rbac/navigation-actions`), `NavigationTree`, types. Produces `/functionalities`.
 
-- [x] ✅ **Step 1: `FunctionalitiesTreeClient.tsx`**
+- [✅] **Step 1: `FunctionalitiesTreeClient.tsx`**
 
 ```tsx
 'use client'
@@ -1177,7 +1177,7 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
 }
 ```
 
-- [x] ✅ **Step 2: `app/(protected)/functionalities/page.tsx`**
+- [✅] **Step 2: `app/(protected)/functionalities/page.tsx`**
 
 ```tsx
 import { getNavigationSubtree } from '@/lib/rbac/functionalities-service'
@@ -1192,7 +1192,7 @@ export default async function FunctionalitiesPage() {
 }
 ```
 
-- [x] ✅ **Step 3: Typecheck, lint, build & commit**
+- [✅] **Step 3: Typecheck, lint, build & commit**
 
 Run: `npx tsc --noEmit && npm run lint && npm run build` → clean; `/functionalities` in the route list.
 ```bash
@@ -1207,7 +1207,7 @@ git commit -m "feat(rbac): functionalities tree page with drag + node actions"
 **Files:** Create `sources/tests/e2e/test_functionalities.py`
 **Prerequisites:** dev server running with `AUTH_TEST_CREDENTIALS=true`; `.env.test` has admin `TEST_EMAIL`.
 
-- [x] ✅ **Step 1: Write `sources/tests/e2e/test_functionalities.py`**
+- [✅] **Step 1: Write `sources/tests/e2e/test_functionalities.py`**
 
 ```python
 import time
@@ -1277,21 +1277,21 @@ def test_immutable_item_has_no_actions(logged_in_page, base_url):
 
 > Note for the implementer: the edit/delete tests target `[data-testid="nav-edit"]`/`[data-testid="nav-delete"]` with `.first` after filtering/scrolling to the created row. If `.first` proves ambiguous on a large seeded tree, narrow with `page.locator("div", has_text=name).locator('[data-testid="nav-edit"]')`. Iterate against the running server until all three tests pass; do not weaken assertions.
 
-- [x] ✅ **Step 2: Run the functionalities E2E**
+- [✅] **Step 2: Run the functionalities E2E**
 
 Run (repo root): `HEADLESS=true uv run pytest sources/tests/e2e/test_functionalities.py -v`
 Expected: 3 passed. Iterate selectors if needed (without weakening assertions).
 
-- [x] ✅ **Step 3: Full suite (no regressions)**
+- [✅] **Step 3: Full suite (no regressions)**
 
 Run: `HEADLESS=true uv run pytest sources/tests/e2e -v`
 Expected: all pass (Phase 0 + Phase 1 + functionalities).
 
-- [x] ✅ **Step 4: Browser verification (REQUIRED — covers the un-E2E'd drag)**
+- [✅] **Step 4: Browser verification (REQUIRED — covers the un-E2E'd drag)**
 
 Manually (or with `webapp-testing`): open `/functionalities`; drag a functionality to reorder among siblings (verify it persists after refresh); drag a functionality onto a different category (verify it re-parents); confirm an immutable item (RBAC) can't be dragged and shows no edit/delete; create a functionality with an SVG icon and confirm it renders in the tree/sidebar (and that a `<script>`-laced SVG is stripped — paste `<svg onload="alert(1)"><script>…</script></svg>` and confirm no alert).
 
-- [x] ✅ **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/tests/e2e/test_functionalities.py

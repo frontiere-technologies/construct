@@ -28,7 +28,7 @@
 **Interfaces:**
 - Produces: `session.user.provider: string` — consumed by Task 5
 
-- [x] **Step 1: Update type augmentation**
+- [✅] **Step 1: Update type augmentation**
 
 Replace entire content of `types/next-auth.d.ts`:
 
@@ -54,7 +54,7 @@ declare module 'next-auth/jwt' {
 }
 ```
 
-- [x] **Step 2: Store provider in JWT callback**
+- [✅] **Step 2: Store provider in JWT callback**
 
 In `lib/auth.ts`, inside the `jwt` callback, after `token.role = ...`, add:
 
@@ -90,7 +90,7 @@ if (account && user) {
 }
 ```
 
-- [x] **Step 3: Expose provider in session callback**
+- [✅] **Step 3: Expose provider in session callback**
 
 In `lib/auth.ts`, the `session` callback becomes:
 
@@ -103,7 +103,7 @@ async session({ session, token }) {
 },
 ```
 
-- [x] **Step 4: Verify TypeScript compiles**
+- [✅] **Step 4: Verify TypeScript compiles**
 
 ```bash
 npm run build 2>&1 | grep -E "error TS|compiled"
@@ -111,7 +111,7 @@ npm run build 2>&1 | grep -E "error TS|compiled"
 
 Expected: no `error TS` lines.
 
-- [x] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add lib/auth.ts types/next-auth.d.ts
@@ -129,7 +129,7 @@ git commit -m "feat(auth): expose provider in JWT and session"
 - Consumes: `createAdminClient()` from `@/lib/supabase-server`, `Resend` from `resend`
 - Produces: `POST /api/auth/forgot-password { email: string }` → `200 { ok: true }` always (no user enumeration)
 
-- [x] **Step 1: Create the route**
+- [✅] **Step 1: Create the route**
 
 Create `app/api/auth/forgot-password/route.ts`:
 
@@ -209,7 +209,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [x] **Step 2: Verify TypeScript compiles**
+- [✅] **Step 2: Verify TypeScript compiles**
 
 ```bash
 npm run build 2>&1 | grep -E "error TS|compiled"
@@ -217,7 +217,7 @@ npm run build 2>&1 | grep -E "error TS|compiled"
 
 Expected: no `error TS` lines.
 
-- [x] **Step 3: Test the endpoint manually**
+- [✅] **Step 3: Test the endpoint manually**
 
 With dev server running:
 
@@ -229,7 +229,7 @@ curl -s -X POST http://localhost:3000/api/auth/forgot-password \
 
 Expected: `{ "ok": true }` (no error even for unknown email).
 
-- [x] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add app/api/auth/forgot-password/route.ts
@@ -246,7 +246,7 @@ git commit -m "feat(api): add POST /api/auth/forgot-password"
 **Interfaces:**
 - Consumes: `POST /api/auth/forgot-password { email }` → `{ ok: true }`
 
-- [x] **Step 1: Add forgot-password state and handler to `LoginForm`**
+- [✅] **Step 1: Add forgot-password state and handler to `LoginForm`**
 
 Add to the state declarations inside `LoginForm` (after the existing `useState` calls):
 
@@ -275,7 +275,7 @@ const handleForgotPassword = async (e: React.FormEvent) => {
 }
 ```
 
-- [x] **Step 2: Add "Password dimenticata?" link below the password field**
+- [✅] **Step 2: Add "Password dimenticata?" link below the password field**
 
 In the credentials form, after the password `<div className="flex flex-col gap-1">...</div>` block and before `{errorMessage && ...}`, add:
 
@@ -292,7 +292,7 @@ In the credentials form, after the password `<div className="flex flex-col gap-1
 </div>
 ```
 
-- [x] **Step 3: Add forgot-password panel below the footer**
+- [✅] **Step 3: Add forgot-password panel below the footer**
 
 Inside the `<div className="bg-gray-50 border-t ...">` footer block, after the existing `<p>` tags and before the `{isTestMode && ...}` block, add:
 
@@ -340,7 +340,7 @@ Inside the `<div className="bg-gray-50 border-t ...">` footer block, after the e
 )}
 ```
 
-- [x] **Step 4: Verify TypeScript compiles**
+- [✅] **Step 4: Verify TypeScript compiles**
 
 ```bash
 npm run build 2>&1 | grep -E "error TS|compiled"
@@ -348,7 +348,7 @@ npm run build 2>&1 | grep -E "error TS|compiled"
 
 Expected: no `error TS` lines.
 
-- [x] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add components/Login.tsx
@@ -366,7 +366,7 @@ git commit -m "feat(ui): add forgot-password flow to login page"
 - Consumes: `auth()` from `@/lib/auth`, `createAdminClient()`, `bcrypt` from `bcryptjs`
 - Produces: `POST /api/auth/change-password { currentPassword, newPassword }` → `200 { ok: true }` or error
 
-- [x] **Step 1: Create the route**
+- [✅] **Step 1: Create the route**
 
 Create `app/api/auth/change-password/route.ts`:
 
@@ -430,7 +430,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [x] **Step 2: Verify TypeScript compiles**
+- [✅] **Step 2: Verify TypeScript compiles**
 
 ```bash
 npm run build 2>&1 | grep -E "error TS|compiled"
@@ -438,7 +438,7 @@ npm run build 2>&1 | grep -E "error TS|compiled"
 
 Expected: no `error TS` lines.
 
-- [x] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add app/api/auth/change-password/route.ts
@@ -457,7 +457,7 @@ git commit -m "feat(api): add POST /api/auth/change-password"
 **Interfaces:**
 - Consumes: `session.user.provider` (from Task 1), `POST /api/auth/change-password` (from Task 4)
 
-- [x] **Step 1: Create `ChangePasswordForm` component**
+- [✅] **Step 1: Create `ChangePasswordForm` component**
 
 Create `components/ChangePasswordForm.tsx`:
 
@@ -570,7 +570,7 @@ export function ChangePasswordForm() {
 }
 ```
 
-- [x] **Step 2: Pass `provider` from profile page to `ProfileForm`**
+- [✅] **Step 2: Pass `provider` from profile page to `ProfileForm`**
 
 In `app/(protected)/profile/page.tsx`, change the `ProfileForm` render to:
 
@@ -585,7 +585,7 @@ return (
 )
 ```
 
-- [x] **Step 3: Update `ProfileForm` to accept `provider` and render `ChangePasswordForm`**
+- [✅] **Step 3: Update `ProfileForm` to accept `provider` and render `ChangePasswordForm`**
 
 In `components/ProfileForm.tsx`:
 
@@ -635,7 +635,7 @@ The full return block ends like:
 
 Note: wrap the existing `<Card>` and the new `<ChangePasswordForm />` in a `<div className="flex flex-col items-center">` so they stack vertically centered.
 
-- [x] **Step 4: Verify TypeScript compiles**
+- [✅] **Step 4: Verify TypeScript compiles**
 
 ```bash
 npm run build 2>&1 | grep -E "error TS|compiled"
@@ -643,7 +643,7 @@ npm run build 2>&1 | grep -E "error TS|compiled"
 
 Expected: no `error TS` lines.
 
-- [x] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add components/ChangePasswordForm.tsx components/ProfileForm.tsx app/\(protected\)/profile/page.tsx

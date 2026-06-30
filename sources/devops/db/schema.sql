@@ -271,11 +271,8 @@ insert into navigation_item
 values
   (-1, 'operations', 1, null, null, null, 0, null, null, '{"EN":{"name":"Operations"},"IT":{"name":"Operazioni"}}', 1, 1),
   (0,  'root',       1, null, null, null, 0, null, null, '{"EN":{"name":"All"},"IT":{"name":"Tutto"}}', 1, 1),
-  (1,  'Home',       1, null, null, 0, 0, 'House', 'TOP', '{"EN":{"name":"Home"},"IT":{"name":"Home"}}', 1, 0),
-  (2,  'RBAC',       1, null, null, 0, 1, 'Shield', null, '{"EN":{"name":"RBAC"},"IT":{"name":"RBAC"}}', 1, 0),
-  (3,  'Users',      2, 3, 'userManagement', 2, 0, 'Users', null, '{"EN":{"name":"Users"},"IT":{"name":"Gestione utenti"}}', 1, 0),
-  (4,  'Functionalities', 2, 3, 'functionalities', 2, 1, 'LayoutList', null, '{"EN":{"name":"Functionalities"},"IT":{"name":"Funzionalità"}}', 1, 0),
-  (5,  'Roles & Permissions', 2, 3, 'rolesPermissions', 2, 2, 'ShieldCheck', null, '{"EN":{"name":"Roles & Permissions"},"IT":{"name":"Ruoli & permessi"}}', 1, 0)
+  (1,  'Home',       1, null, null, 0, 0, '/logo.svg', 'TOP', '{"EN":{"name":"Home"},"IT":{"name":"Home"}}', 1, 0),
+  (6,  'Admin',      1, null, null, 0, 9, 'Shield', 'BOTTOM', '{"EN":{"name":"Admin"}}', 1, 0)
 on conflict (id_item) do nothing;
 
 -- Technical RBAC permission items under operations (hidden from config UI)
@@ -288,12 +285,14 @@ from (values
 ) as v(name, ord)
 where not exists (select 1 from navigation_item n where n.name = v.name and n.id_item_parent = -1);
 
--- Admin section + Theme page (replaces old menu_items seed)
+-- Admin section pages: user/role management (formerly under the removed "RBAC" section) + Theme
 insert into navigation_item
   (id_item, name, id_item_type, id_functionality_type, functionality_link, id_item_parent, order_position, icon_path, navbar_position, item_translation, is_immutable, config_visibility)
 values
-  (6, 'Admin', 1, null, null, 0, 9, 'Shield', 'BOTTOM', '{"EN":{"name":"Admin"}}', 1, 0),
-  (7, 'Theme & Styles', 2, 3, 'admin/theme', 6, 0, 'Palette', 'BOTTOM', '{"EN":{"name":"Theme & Styles"}}', 1, 0)
+  (3, 'Users',               2, 3, 'user-management', 6, 0, 'Users', null, '{"EN":{"name":"Users"},"IT":{"name":"Gestione utenti"}}', 1, 0),
+  (4, 'Functionalities',     2, 3, 'functionalities', 6, 1, 'LayoutList', null, '{"EN":{"name":"Functionalities"},"IT":{"name":"Funzionalità"}}', 1, 0),
+  (5, 'Roles & Permissions', 2, 3, 'roles-permissions', 6, 2, 'ShieldCheck', null, '{"EN":{"name":"Roles & Permissions"},"IT":{"name":"Ruoli & permessi"}}', 1, 0),
+  (7, 'Theme & Styles',      2, 3, 'admin/theme', 6, 3, 'Palette', 'BOTTOM', '{"EN":{"name":"Theme & Styles"}}', 1, 0)
 on conflict (id_item) do nothing;
 
 -- Administrator authorized on every navigation item
@@ -305,6 +304,19 @@ on conflict (id_role, id_item) do update set authorized = true;
 insert into role_item (id_role, id_item, authorized)
 select 1, n.id_item from navigation_item n where n.id_item in (6,7)
 on conflict (id_role, id_item) do update set authorized = true;
+
+-- Migration: consolidate the former "RBAC" section (id 2) under Admin (id 6) and remove it.
+-- Reparent the children FIRST — navigation_item.id_item_parent is ON DELETE CASCADE, so
+-- deleting RBAC before reparenting would also delete Users/Functionalities/Roles & Permissions.
+update navigation_item set id_item_parent = 6, order_position = 0 where id_item = 3;
+update navigation_item set id_item_parent = 6, order_position = 1 where id_item = 4;
+update navigation_item set id_item_parent = 6, order_position = 2 where id_item = 5;
+update navigation_item set id_item_parent = 6, order_position = 3 where id_item = 7;
+delete from navigation_item where id_item = 2;
+
+-- Migration: internal routes switched to kebab-case (existing deployments).
+update navigation_item set functionality_link = 'user-management'  where functionality_link = 'userManagement';
+update navigation_item set functionality_link = 'roles-permissions' where functionality_link = 'rolesPermissions';
 
 -- ============================================================
 -- RBAC: backfill user_role from legacy users.role

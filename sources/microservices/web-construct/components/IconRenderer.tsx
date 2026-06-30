@@ -4,7 +4,7 @@ import React, { lazy, Suspense, useMemo, memo } from 'react'
 import type { ComponentType } from 'react'
 import type { LucideProps } from 'lucide-react'
 import { HelpCircle } from 'lucide-react'
-import { isInlineSvg } from '@/lib/icon-utils'
+import { isInlineSvg, isImagePath } from '@/lib/icon-utils'
 import { sanitizeSvg } from '@/lib/rbac/svg-sanitize'
 
 type LucideComponent = ComponentType<LucideProps>
@@ -31,7 +31,23 @@ interface IconRendererProps {
 }
 
 export const IconRenderer: React.FC<IconRendererProps> = memo(({ name, className, size = 20 }) => {
-  const LazyIcon = useMemo(() => (!isInlineSvg(name) && name) ? getLazyIcon(name) : null, [name])
+  const LazyIcon = useMemo(
+    () => (!isInlineSvg(name) && !isImagePath(name) && name) ? getLazyIcon(name) : null,
+    [name],
+  )
+
+  if (isImagePath(name)) {
+    return (
+      <img
+        src={name}
+        alt=""
+        width={size}
+        height={size}
+        className={className}
+        style={{ objectFit: 'contain' }}
+      />
+    )
+  }
 
   if (isInlineSvg(name)) {
     return (
@@ -45,7 +61,9 @@ export const IconRenderer: React.FC<IconRendererProps> = memo(({ name, className
 
   if (!name || !LazyIcon) return null
   return (
-    <Suspense fallback={<HelpCircle className={className} size={size} />}>
+    // Blank, size-matched placeholder while the icon's chunk loads — avoids the
+    // brief HelpCircle ("?") flash and reserves the space so layout doesn't shift.
+    <Suspense fallback={<span className={className} style={{ display: 'inline-flex', width: size, height: size }} />}>
       <LazyIcon className={className} size={size} />
     </Suspense>
   )

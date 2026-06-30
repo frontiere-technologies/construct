@@ -34,16 +34,14 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
     if (node.isImmutable) return null
     return (
       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-        {node.type === 'CATEGORY' && (
-          <button data-testid="nav-add" title="Crea figlio" onClick={() => router.push(`/functionalities/create?root=${tab}&parent=${node.id}`)} className="p-1 text-gray-400 hover:text-gray-700"><Plus size={15} /></button>
-        )}
+        <button data-testid="nav-add" title="Aggiungi sotto-elemento" onClick={() => router.push(`/functionalities/create?root=${tab}&parent=${node.id}`)} className="p-1 text-gray-400 hover:text-gray-700"><Plus size={15} /></button>
         <button data-testid="nav-edit" title="Modifica" onClick={() => router.push(`/functionalities/${node.id}/edit`)} className="p-1 text-gray-400 hover:text-gray-700"><Pencil size={15} /></button>
         <button data-testid="nav-delete" title="Elimina" onClick={async () => {
-          if (confirm(`Eliminare "${node.name}" e tutti i suoi figli?`)) {
-            try { await deleteNavigationItem(node.id); router.refresh() }
-            catch (e) { alert(e instanceof Error ? e.message : 'Delete failed') }
-          }
-        }} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
+            if (confirm(`Eliminare "${node.name}" e tutti i suoi figli?`)) {
+              try { await deleteNavigationItem(node.id); router.refresh() }
+              catch (e) { alert(e instanceof Error ? e.message : 'Delete failed') }
+            }
+          }} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
       </div>
     )
   }

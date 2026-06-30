@@ -65,7 +65,7 @@
 - Modify: `sources/microservices/web-construct/package.json`
 - Test: `sources/microservices/web-construct/lib/rbac/_smoke.test.ts` (temporary)
 
-- [x] ✅ **Step 1: Add Vitest deps and script**
+- [✅] **Step 1: Add Vitest deps and script**
 
 In `package.json`, add to `devDependencies`: `"vitest": "^3.2.4"`. Add to `scripts`:
 ```json
@@ -73,12 +73,12 @@ In `package.json`, add to `devDependencies`: `"vitest": "^3.2.4"`. Add to `scrip
 "test:watch": "vitest"
 ```
 
-- [x] ✅ **Step 2: Install**
+- [✅] **Step 2: Install**
 
 Run (from `sources/microservices/web-construct/`): `npm install`
 Expected: completes; `vitest` resolves in `node_modules/.bin/`.
 
-- [x] ✅ **Step 3: Create `vitest.config.ts`**
+- [✅] **Step 3: Create `vitest.config.ts`**
 
 ```ts
 import { defineConfig } from 'vitest/config'
@@ -95,7 +95,7 @@ export default defineConfig({
 })
 ```
 
-- [x] ✅ **Step 4: Write a smoke test**
+- [✅] **Step 4: Write a smoke test**
 
 Create `lib/rbac/_smoke.test.ts`:
 ```ts
@@ -108,12 +108,12 @@ describe('vitest wiring', () => {
 })
 ```
 
-- [x] ✅ **Step 5: Run it**
+- [✅] **Step 5: Run it**
 
 Run: `npm test`
 Expected: PASS, 1 test passed.
 
-- [x] ✅ **Step 6: Remove the smoke test and commit**
+- [✅] **Step 6: Remove the smoke test and commit**
 
 Delete `lib/rbac/_smoke.test.ts`.
 ```bash
@@ -133,7 +133,7 @@ git commit -m "chore(web): add vitest for unit tests"
 
 > DB verification uses the connected Supabase MCP tools (`mcp__supabase__apply_migration`, `mcp__supabase__execute_sql`). If running without MCP, apply `schema.sql` with `psql "$DATABASE_URL" -f sources/devops/db/schema.sql` and run the same verification queries.
 
-- [x] ✅ **Step 1: Append lookup tables + sequences to `schema.sql`**
+- [✅] **Step 1: Append lookup tables + sequences to `schema.sql`**
 
 Append (after the existing tables, before the trigger section):
 ```sql
@@ -174,7 +174,7 @@ insert into user_status (id_user_status, description) values
 on conflict (id_user_status) do nothing;
 ```
 
-- [x] ✅ **Step 2: Append `role`, `role_history`, `user_role` + trigger**
+- [✅] **Step 2: Append `role`, `role_history`, `user_role` + trigger**
 
 ```sql
 -- ============================================================
@@ -230,7 +230,7 @@ insert into role (id_role, id_role_type, description) values
 on conflict (id_role) do nothing;
 ```
 
-- [x] ✅ **Step 3: Append `navigation_item`, tag table, `role_item`**
+- [✅] **Step 3: Append `navigation_item`, tag table, `role_item`**
 
 ```sql
 -- ============================================================
@@ -282,7 +282,7 @@ create or replace trigger navigation_item_updated_at
   for each row execute function set_updated_at();
 ```
 
-- [x] ✅ **Step 4: Append `users` extension + `user_info`**
+- [✅] **Step 4: Append `users` extension + `user_info`**
 
 ```sql
 -- ============================================================
@@ -311,7 +311,7 @@ create table if not exists user_info (
 alter table user_info enable row level security;
 ```
 
-- [x] ✅ **Step 5: Append navigation seed + Administrator permissions**
+- [✅] **Step 5: Append navigation seed + Administrator permissions**
 
 ```sql
 -- ============================================================
@@ -345,7 +345,7 @@ select 1, n.id_item, true from navigation_item n
 on conflict (id_role, id_item) do update set authorized = true;
 ```
 
-- [x] ✅ **Step 6: Append idempotent user→role backfill**
+- [✅] **Step 6: Append idempotent user→role backfill**
 
 ```sql
 -- ============================================================
@@ -362,7 +362,7 @@ select id, 1 from users where role = 'admin'
 on conflict (user_id, id_role) do nothing;
 ```
 
-- [x] ✅ **Step 7: Remove the old `menu_items` system from `schema.sql`**
+- [✅] **Step 7: Remove the old `menu_items` system from `schema.sql`**
 
 Delete from `schema.sql`: the `create table ... menu_items` block, its `alter table menu_items enable row level security;`, the `menu_items_updated_at` trigger, the `update_menu_orders` function, and the `insert into menu_items ... values (...)` seed block. Add in their place:
 ```sql
@@ -371,12 +371,12 @@ drop table if exists menu_items cascade;
 drop function if exists public.update_menu_orders(jsonb);
 ```
 
-- [x] ✅ **Step 8: Apply the schema**
+- [✅] **Step 8: Apply the schema**
 
 Apply the full updated `schema.sql` to the database (via `mcp__supabase__apply_migration` with the file contents, name `rbac_phase0_foundation`; or `psql`).
 Expected: applies without error.
 
-- [x] ✅ **Step 9: Verify seeds and backfill**
+- [✅] **Step 9: Verify seeds and backfill**
 
 Run via `mcp__supabase__execute_sql` (or psql):
 ```sql
@@ -390,7 +390,7 @@ select
 ```
 Expected: roles=3, nav_sys=7, perms=8, admin_perms≥15, registered=(number of users), menu_items_gone=true.
 
-- [x] ✅ **Step 10: Commit**
+- [✅] **Step 10: Commit**
 
 ```bash
 git add sources/devops/db/schema.sql
@@ -407,7 +407,7 @@ git commit -m "feat(db): add RBAC schema, seeds and user_role backfill; drop men
 **Interfaces:**
 - Produces: `SUPPORTED_LOCALES`, `DEFAULT_LOCALE`, `Locale`; role IDs `ROLE_REGISTERED=0`, `ROLE_ADMINISTRATOR=1`; nav IDs `ROOT_ID=0`, `OPERATIONS_ID=-1`; types `NavigationItemRow`, `RoleItemRow`, `ItemTranslation`.
 
-- [x] ✅ **Step 1: Create the file**
+- [✅] **Step 1: Create the file**
 
 ```ts
 export const SUPPORTED_LOCALES = ['EN', 'IT', 'DE', 'FR', 'ES', 'NL', 'PT', 'SK', 'RO'] as const
@@ -452,7 +452,7 @@ export interface RoleItemRow {
 }
 ```
 
-- [x] ✅ **Step 2: Typecheck & commit**
+- [✅] **Step 2: Typecheck & commit**
 
 Run (from web-construct): `npx tsc --noEmit`
 Expected: no errors from this file.
@@ -473,7 +473,7 @@ git commit -m "feat(rbac): add shared types and constants"
 - Consumes: `ROLE_ADMINISTRATOR`, `ROLE_REGISTERED` from `./types`; `createAdminClient` from `@/lib/supabase-server`.
 - Produces: `computeIsAdmin(roleIds: number[]): boolean`; `resolveUserRoleIds(userId: string): Promise<number[]>` (ensures Registered user, returns all role ids).
 
-- [x] ✅ **Step 1: Write failing tests for the pure helper**
+- [✅] **Step 1: Write failing tests for the pure helper**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -490,12 +490,12 @@ describe('computeIsAdmin', () => {
 })
 ```
 
-- [x] ✅ **Step 2: Run, expect fail**
+- [✅] **Step 2: Run, expect fail**
 
 Run: `npm test -- auth-roles`
 Expected: FAIL (`computeIsAdmin` not exported / module missing).
 
-- [x] ✅ **Step 3: Implement**
+- [✅] **Step 3: Implement**
 
 ```ts
 import { createAdminClient } from '@/lib/supabase-server'
@@ -523,12 +523,12 @@ export async function resolveUserRoleIds(userId: string): Promise<number[]> {
 }
 ```
 
-- [x] ✅ **Step 4: Run, expect pass**
+- [✅] **Step 4: Run, expect pass**
 
 Run: `npm test -- auth-roles`
 Expected: PASS.
 
-- [x] ✅ **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/auth-roles.ts sources/microservices/web-construct/lib/rbac/auth-roles.test.ts
@@ -549,7 +549,7 @@ git commit -m "feat(rbac): add role-resolution helpers"
 - Consumes: `resolveUserRoleIds`, `computeIsAdmin` from `@/lib/rbac/auth-roles`.
 - Produces: `session.user.roleIds: number[]`, `session.user.isAdmin: boolean`; JWT `roleIds`, `isAdmin`.
 
-- [x] ✅ **Step 1: Update NextAuth type augmentation**
+- [✅] **Step 1: Update NextAuth type augmentation**
 
 Replace the contents of `types/next-auth.d.ts` with:
 ```ts
@@ -576,7 +576,7 @@ declare module 'next-auth/jwt' {
 }
 ```
 
-- [x] ✅ **Step 2: Rewire the `jwt` callback in `lib/auth.ts`**
+- [✅] **Step 2: Rewire the `jwt` callback in `lib/auth.ts`**
 
 In `lib/auth.ts`, replace the entire `async jwt({ token, user, account })` callback body (currently lines ~165-199) with:
 ```ts
@@ -618,7 +618,7 @@ In `lib/auth.ts`, replace the entire `async jwt({ token, user, account })` callb
     },
 ```
 
-- [x] ✅ **Step 3: Rewire the `session` callback in `lib/auth.ts`**
+- [✅] **Step 3: Rewire the `session` callback in `lib/auth.ts`**
 
 Replace the `async session({ session, token })` callback (currently lines ~200-205) with:
 ```ts
@@ -631,14 +631,14 @@ Replace the `async session({ session, token })` callback (currently lines ~200-2
     },
 ```
 
-- [x] ✅ **Step 4: Add the import in `lib/auth.ts`**
+- [✅] **Step 4: Add the import in `lib/auth.ts`**
 
 After the existing imports near the top of `lib/auth.ts`, add:
 ```ts
 import { resolveUserRoleIds, computeIsAdmin } from '@/lib/rbac/auth-roles'
 ```
 
-- [x] ✅ **Step 5: Update `lib/auth.config.ts` — session mapping + RBAC gate**
+- [✅] **Step 5: Update `lib/auth.config.ts` — session mapping + RBAC gate**
 
 Replace the `session(...)` callback in `auth.config.ts` with:
 ```ts
@@ -659,7 +659,7 @@ And replace the admin redirect block inside `authorized(...)` (the `pathname.sta
       }
 ```
 
-- [x] ✅ **Step 6: Update `AuthContext.tsx`**
+- [✅] **Step 6: Update `AuthContext.tsx`**
 
 Replace the `AuthUser` interface and `user` mapping in `context/AuthContext.tsx`:
 ```ts
@@ -684,14 +684,14 @@ and
     : null
 ```
 
-- [x] ✅ **Step 7: Typecheck**
+- [✅] **Step 7: Typecheck**
 
 Run (from web-construct): `npx tsc --noEmit`
 Expected: no errors. (If `app/(protected)/admin/menu-builder/page.tsx` errors on `session.user.role`, that file is deleted in Task 9 — note it and proceed; do not re-add `role`.)
 
 > Because the menu-builder page still references `session.user.role` until Task 9, do Step 8 commit only after confirming the **only** remaining `role` references are in files slated for deletion. Verify with: `grep -rn "user.role\b\|\.role\b" app components lib --include=*.ts --include=*.tsx | grep -v node_modules`.
 
-- [x] ✅ **Step 8: Commit**
+- [✅] **Step 8: Commit**
 
 ```bash
 git add sources/microservices/web-construct/types/next-auth.d.ts sources/microservices/web-construct/lib/auth.ts sources/microservices/web-construct/lib/auth.config.ts sources/microservices/web-construct/context/AuthContext.tsx
@@ -709,7 +709,7 @@ git commit -m "feat(auth): carry roleIds + isAdmin in session; gate RBAC routes"
 - Consumes: `auth` from `@/lib/auth`.
 - Produces: `requireAdmin(): Promise<{ userId: string; roleIds: number[] }>` — throws `Error('Unauthorized')` when not admin. Used by every Phase 1–3 server action.
 
-- [x] ✅ **Step 1: Implement**
+- [✅] **Step 1: Implement**
 
 ```ts
 import { auth } from '@/lib/auth'
@@ -722,7 +722,7 @@ export async function requireAdmin(): Promise<{ userId: string; roleIds: number[
 }
 ```
 
-- [x] ✅ **Step 2: Typecheck & commit**
+- [✅] **Step 2: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → no errors.
 ```bash
@@ -742,7 +742,7 @@ git commit -m "feat(rbac): add requireAdmin server guard"
 - Consumes: `NavigationItemRow`, `RoleItemRow`, `DEFAULT_LOCALE`, `ROOT_ID`, `OPERATIONS_ID`, `ITEM_TYPE_CATEGORY`, `FUNCTYPE_PERMISSION` from `./types`; `MenuItem` from `@/types/menu`.
 - Produces: `resolveAuthorizedItemIds(items, roleItems, roleIds): Set<number>`; `mapNavigationToSidebar(items, authorizedIds, locale?): MenuItem[]`.
 
-- [x] ✅ **Step 1: Write failing tests**
+- [✅] **Step 1: Write failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -810,12 +810,12 @@ describe('mapNavigationToSidebar', () => {
 })
 ```
 
-- [x] ✅ **Step 2: Run, expect fail**
+- [✅] **Step 2: Run, expect fail**
 
 Run: `npm test -- sidebar-adapter`
 Expected: FAIL (module missing).
 
-- [x] ✅ **Step 3: Implement**
+- [✅] **Step 3: Implement**
 
 ```ts
 import type { MenuItem, MenuPosition } from '@/types/menu'
@@ -898,12 +898,12 @@ export function mapNavigationToSidebar(
 }
 ```
 
-- [x] ✅ **Step 4: Run, expect pass**
+- [✅] **Step 4: Run, expect pass**
 
 Run: `npm test -- sidebar-adapter`
 Expected: PASS (all cases).
 
-- [x] ✅ **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/sidebar-adapter.ts sources/microservices/web-construct/lib/rbac/sidebar-adapter.test.ts
@@ -922,7 +922,7 @@ git commit -m "feat(rbac): pure navigation_item -> sidebar adapter"
 - Consumes: `createAdminClient`; `resolveAuthorizedItemIds`, `mapNavigationToSidebar` from `./sidebar-adapter`; types from `./types`.
 - Produces: `getSidebarMenu(roleIds: number[]): Promise<MenuItem[]>`.
 
-- [x] ✅ **Step 1: Implement the service**
+- [✅] **Step 1: Implement the service**
 
 ```ts
 import { cache } from 'react'
@@ -952,7 +952,7 @@ export const getSidebarMenu = cache(async (roleIds: number[]): Promise<MenuItem[
 })
 ```
 
-- [x] ✅ **Step 2: Repoint the protected layout**
+- [✅] **Step 2: Repoint the protected layout**
 
 Replace the entire contents of `app/(protected)/layout.tsx`:
 ```tsx
@@ -968,12 +968,12 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 }
 ```
 
-- [x] ✅ **Step 3: Typecheck**
+- [✅] **Step 3: Typecheck**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors (menu-builder page error from Task 5, if any, persists until Task 9).
 
-- [x] ✅ **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/navigation-service.ts "sources/microservices/web-construct/app/(protected)/layout.tsx"
@@ -992,7 +992,7 @@ git commit -m "feat(rbac): drive sidebar from navigation_item + permissions"
 **Interfaces:**
 - Produces: `isInlineSvg(value?: string): boolean`.
 
-- [x] ✅ **Step 1: Write failing test**
+- [✅] **Step 1: Write failing test**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -1011,12 +1011,12 @@ describe('isInlineSvg', () => {
 })
 ```
 
-- [x] ✅ **Step 2: Run, expect fail**
+- [✅] **Step 2: Run, expect fail**
 
 Run: `npm test -- icon-utils`
 Expected: FAIL.
 
-- [x] ✅ **Step 3: Implement `icon-utils.ts`**
+- [✅] **Step 3: Implement `icon-utils.ts`**
 
 ```ts
 export function isInlineSvg(value?: string): boolean {
@@ -1025,12 +1025,12 @@ export function isInlineSvg(value?: string): boolean {
 }
 ```
 
-- [x] ✅ **Step 4: Run, expect pass**
+- [✅] **Step 4: Run, expect pass**
 
 Run: `npm test -- icon-utils`
 Expected: PASS.
 
-- [x] ✅ **Step 5: Use it in `IconRenderer.tsx`**
+- [✅] **Step 5: Use it in `IconRenderer.tsx`**
 
 In `components/IconRenderer.tsx`, add `import { isInlineSvg } from '@/lib/icon-utils'`, and at the top of the component body (before `useMemo`) add:
 ```tsx
@@ -1046,7 +1046,7 @@ In `components/IconRenderer.tsx`, add `import { isInlineSvg } from '@/lib/icon-u
 ```
 (Keep the existing lucide-name path below it unchanged.)
 
-- [x] ✅ **Step 6: Typecheck & commit**
+- [✅] **Step 6: Typecheck & commit**
 
 Run: `npx tsc --noEmit` → no new errors.
 ```bash
@@ -1066,7 +1066,7 @@ git commit -m "feat(web): render inline SVG icons in IconRenderer"
 **Interfaces:**
 - Produces: `types/menu.ts` keeps `MenuPosition`, `MenuItemType`, `MenuItem`, `ThemeConfig`, `AppSettings`, `defaultThemeConfig`, `defaultSettings` (the latter two still consumed by the theme system).
 
-- [x] ✅ **Step 1: Find every consumer of the deleted modules**
+- [✅] **Step 1: Find every consumer of the deleted modules**
 
 Run (from web-construct):
 ```bash
@@ -1074,7 +1074,7 @@ grep -rn "menu-service\|menu-actions\|menu-utils\|AdminMenuBuilder\|getMenuItems
 ```
 Expected after this task: only matches should be inside `types/menu.ts` itself (none referencing the deleted files). Use this list to confirm nothing else imports them.
 
-- [x] ✅ **Step 2: Move the still-needed defaults into `types/menu.ts`**
+- [✅] **Step 2: Move the still-needed defaults into `types/menu.ts`**
 
 `defaultThemeConfig` and `defaultSettings` currently live in `lib/menu-utils.ts` but are needed by the theme/UI system. Confirm their consumers:
 ```bash
@@ -1102,7 +1102,7 @@ export const defaultSettings: AppSettings = {
 ```
 (If `defaultThemeConfig`/`defaultSettings` are not imported anywhere outside `menu-utils`, skip the import edits but still add them to `types/menu.ts` for the theme actions that reference them.)
 
-- [x] ✅ **Step 3: Delete the old files**
+- [✅] **Step 3: Delete the old files**
 
 ```bash
 git rm "sources/microservices/web-construct/components/AdminMenuBuilder.tsx" \
@@ -1113,7 +1113,7 @@ git rm "sources/microservices/web-construct/components/AdminMenuBuilder.tsx" \
   "sources/tests/e2e/test_menu_builder.py"
 ```
 
-- [x] ✅ **Step 4: Remove the Admin/Menu-Builder seed entries reality-check**
+- [✅] **Step 4: Remove the Admin/Menu-Builder seed entries reality-check**
 
 The Menu Builder + Theme entries were seeded in the old `menu_items` table (already dropped in Task 2). The Theme page (`/admin/theme`) still exists and should remain reachable. Add a navigation_item seed for it so admins keep access. Append to `schema.sql` (in the navigation seed area):
 ```sql
@@ -1130,7 +1130,7 @@ on conflict (id_role, id_item) do update set authorized = true;
 ```
 Re-apply `schema.sql` (idempotent) via the same method as Task 2 Step 8.
 
-- [x] ✅ **Step 5: Typecheck, lint, build**
+- [✅] **Step 5: Typecheck, lint, build**
 
 Run (from web-construct):
 ```bash
@@ -1138,7 +1138,7 @@ npx tsc --noEmit && npm run lint && npm run build
 ```
 Expected: all clean. (No remaining references to `session.user.role` or the deleted modules.)
 
-- [x] ✅ **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1160,7 +1160,7 @@ where u.email in ('<TEST_EMAIL>', '<TEST_EMAIL_USER>') group by u.email;
 ```
 Expected: TEST_EMAIL has `{0,1}`; TEST_EMAIL_USER has `{0}`.
 
-- [x] ✅ **Step 1: Replace `test_rbac.py` route targets**
+- [✅] **Step 1: Replace `test_rbac.py` route targets**
 
 Replace the whole file with tests that target the new RBAC routes:
 ```python
@@ -1213,26 +1213,26 @@ def test_admin_not_locked_out(logged_in_page, base_url):
     assert logged_in_page.locator('[data-testid="sidebar-toggle"]').count() >= 1
 ```
 
-- [x] ✅ **Step 2: Start the dev server**
+- [✅] **Step 2: Start the dev server**
 
 In a separate shell, from `sources/microservices/web-construct/`: `AUTH_TEST_CREDENTIALS=true npm run dev`
 Wait for "Ready" on http://localhost:3000.
 
-- [x] ✅ **Step 3: Run the E2E suite**
+- [✅] **Step 3: Run the E2E suite**
 
 From repo root: `uv run pytest sources/tests/e2e/test_rbac.py -v`
 Expected: all parametrized cases PASS (unauthenticated redirects, non-admin redirects, admin-not-locked-out).
 
-- [x] ✅ **Step 4: Run the full E2E suite for regressions**
+- [✅] **Step 4: Run the full E2E suite for regressions**
 
 Run: `uv run pytest sources/tests/e2e -v`
 Expected: PASS. `test_menu_builder.py` is gone; `test_sidebar.py` still passes (sidebar now sourced from navigation_item — if any sidebar test asserted a label that changed, update the expected label to the seeded translation, e.g. the RBAC entries).
 
-- [x] ✅ **Step 5: Browser verification (per project rule)**
+- [✅] **Step 5: Browser verification (per project rule)**
 
 Manually (or with the `webapp-testing` skill): log in as admin, confirm the sidebar shows **Home** (top) and the **RBAC** container expanding to **Users / Functionalities / Roles & Permissions**, plus **Admin → Theme & Styles** at the bottom. Log in as a non-admin and confirm those entries are absent and the three routes redirect to `/`.
 
-- [x] ✅ **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add sources/tests/e2e/test_rbac.py
