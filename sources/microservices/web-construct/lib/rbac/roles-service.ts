@@ -12,7 +12,7 @@ const NAV_COLUMNS =
 
 const SORT_COLUMN: Record<NonNullable<RolesQuery['sort']>, string> = {
   id: 'id', description: 'description', associatedUsers: 'associated_users',
-  dateIns: 'date_ins', dateMod: 'date_mod',
+  hasPermissions: 'has_permissions', dateIns: 'date_ins', dateMod: 'date_mod',
 }
 
 function applyFilters<T extends {

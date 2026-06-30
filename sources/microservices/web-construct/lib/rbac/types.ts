@@ -88,7 +88,7 @@ export interface RolesQuery {
   page: number
   size: number
   search?: string
-  sort?: 'id' | 'description' | 'associatedUsers' | 'dateIns' | 'dateMod'
+  sort?: 'id' | 'description' | 'associatedUsers' | 'hasPermissions' | 'dateIns' | 'dateMod'
   direction?: 'ASC' | 'DESC'
   hasPermission?: boolean
   startDateIns?: string
