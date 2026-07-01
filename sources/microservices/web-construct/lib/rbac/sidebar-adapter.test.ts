@@ -13,7 +13,7 @@ const fn = (id: number, parent: number | null, name: string, link: string, extra
 })
 
 describe('resolveAuthorizedItemIds', () => {
-  const items: NavigationItemRow[] = [cat(0, null, 'root'), fn(3, 0, 'Users', 'userManagement'), fn(9, 0, 'Secret', 'secret')]
+  const items: NavigationItemRow[] = [cat(0, null, 'root'), fn(3, 0, 'Users', 'user-management'), fn(9, 0, 'Secret', 'secret')]
   const roleItems: RoleItemRow[] = [
     { id_role: 5, id_item: 3, authorized: true },
     { id_role: 5, id_item: 9, authorized: false },
@@ -35,7 +35,7 @@ describe('mapNavigationToSidebar', () => {
     cat(-1, null, 'operations'),
     cat(0, null, 'root'),
     cat(2, 0, 'RBAC', { item_translation: { EN: { name: 'RBAC' } } }),
-    fn(3, 2, 'Users', 'userManagement', { order_position: 0 }),
+    fn(3, 2, 'Users', 'user-management', { order_position: 0 }),
     fn(99, -1, 'USER_READ', '', { id_functionality_type: 5 }),
     cat(100, 99, 'deep ops child'),
     fn(50, 2, 'Hidden', 'hidden', { config_visibility: 1 }),
@@ -59,7 +59,7 @@ describe('mapNavigationToSidebar', () => {
   it('maps a functionality with normalized route + parent', () => {
     const users = result.find(i => i.id === '3')!
     expect(users.type).toBe('link')
-    expect(users.route).toBe('/userManagement')
+    expect(users.route).toBe('/user-management')
     expect(users.parentId).toBe('2')
   })
   it('deeply-nested operations item is excluded', () => {

@@ -1,12 +1,15 @@
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
 import {
-  DndContext, PointerSensor, useSensor, useSensors, pointerWithin,
-  useDraggable, useDroppable, type DragEndEvent,
+  DndContext, DragOverlay, PointerSensor, useSensor, useSensors, pointerWithin,
+  useDraggable, useDroppable, type DragStartEvent, type DragMoveEvent, type DragEndEvent,
 } from '@dnd-kit/core'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
+
+type DropPos = 'before' | 'after' | 'into'
+interface Indicator { id: number; pos: DropPos }
 
 interface DndConfig {
   canDrag: (node: UserNavigationTreeDto) => boolean
@@ -25,44 +28,53 @@ interface RowProps {
   renderTrailing?: (node: UserNavigationTreeDto) => React.ReactNode
   expandedByDefault: boolean
   dnd?: DndConfig
+  activeId: number | null
+  indicator: Indicator | null
 }
 
-const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDefault, dnd }) => {
+const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDefault, dnd, activeId, indicator }) => {
   const isCategory = node.type === 'CATEGORY'
   const hasChildren = node.children.length > 0
   const [open, setOpen] = useState(expandedByDefault)
   const canDrag = dnd ? dnd.canDrag(node) : false
 
   const drag = useDraggable({ id: `item-${node.id}`, disabled: !canDrag })
-  // Drop "before this row" (same parent, at this row's index)
-  const beforeDrop = useDroppable({ id: `before-${node.id}` })
-  // Drop "into this category" (append as child)
-  const intoDrop = useDroppable({ id: `into-${node.id}`, disabled: !isCategory })
+  // One droppable per row; before/after/into is derived from the pointer position in onDragOver.
+  const drop = useDroppable({ id: `row-${node.id}` })
 
   // Extract dnd refs/handlers before JSX to satisfy react-hooks/refs lint rule
   const dragActivatorRef = drag.setActivatorNodeRef
   const dragNodeRef = drag.setNodeRef
   const dragListeners = drag.listeners
   const dragAttributes = drag.attributes
-  const beforeDropRef = beforeDrop.setNodeRef
-  const intoDropRef = intoDrop.setNodeRef
+  const dropRef = drop.setNodeRef
 
-  // The row line is BOTH the draggable node and the "before" droppable.
-  // dnd-kit needs setNodeRef on the draggable element (not just the activator
-  // handle) to measure the active rect; without it closestCenter never resolves
-  // an `over` droppable and onMove is never called. Merge both refs onto the row.
-  const setRowRef = React.useCallback((el: HTMLElement | null) => {
+  // dnd-kit needs setNodeRef on the draggable element (not just the activator handle)
+  // to measure the active rect; merge the draggable + droppable refs onto the row line.
+  const setRowRef = useCallback((el: HTMLElement | null) => {
     dragNodeRef(el)
-    beforeDropRef(el)
-  }, [dragNodeRef, beforeDropRef])
+    dropRef(el)
+  }, [dragNodeRef, dropRef])
+
+  const ind = indicator && indicator.id === node.id ? indicator.pos : null
+  const isDragged = activeId === node.id
 
   return (
     <div>
       <div
         ref={dnd ? setRowRef : undefined}
-        className={`flex items-center gap-2 py-2.5 px-3 border-b border-gray-100 dark:border-gray-800 ${dnd && beforeDrop.isOver ? 'border-t-2 border-t-primary' : ''} ${dnd && intoDrop.isOver ? 'bg-primary/10' : ''}`}
+        className={`relative flex items-center gap-2 py-2.5 px-3 border-b border-gray-100 dark:border-gray-800 ${ind === 'into' ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''} ${isDragged ? 'opacity-40' : ''}`}
         style={{ paddingLeft: 12 + depth * 24 }}
       >
+        {/* Insertion line (F-03) — a clear blue bar with a dot on the left */}
+        {(ind === 'before' || ind === 'after') && (
+          <span
+            data-testid={`drop-line-${ind}`}
+            className={`pointer-events-none absolute left-2 right-2 h-0.5 bg-primary z-10 ${ind === 'before' ? '-top-px' : '-bottom-px'}`}
+          >
+            <span className="absolute -left-1 -top-[3px] w-2 h-2 rounded-full bg-primary" />
+          </span>
+        )}
         {dnd && (
           <button
             // eslint-disable-next-line react-hooks/refs
@@ -73,7 +85,7 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
             {...dragAttributes}
             data-testid="drag-handle"
             disabled={!canDrag}
-            className={`p-0.5 text-gray-400 ${canDrag ? 'cursor-grab' : 'opacity-30 cursor-not-allowed'}`}
+            className={`p-0.5 text-gray-400 touch-none ${canDrag ? 'cursor-grab active:cursor-grabbing hover:text-gray-600' : 'opacity-30 cursor-not-allowed'}`}
           >
             <GripVertical size={14} />
           </button>
@@ -85,16 +97,13 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
         ) : (
           <span className="w-5" />
         )}
-        <span
-          ref={dnd && isCategory ? intoDropRef : undefined}
-          className={`flex-1 text-sm ${isCategory ? 'font-medium' : ''}`}
-        >
+        <span className={`flex-1 text-sm ${isCategory ? 'font-medium' : ''}`}>
           {node.name}
         </span>
         {renderTrailing?.(node)}
       </div>
       {hasChildren && open && node.children.map(c => (
-        <TreeRow key={c.id} node={c} depth={depth + 1} renderTrailing={renderTrailing} expandedByDefault={expandedByDefault} dnd={dnd} />
+        <TreeRow key={c.id} node={c} depth={depth + 1} renderTrailing={renderTrailing} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
       ))}
     </div>
   )
@@ -102,6 +111,12 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
 
 export default function NavigationTree({ nodes, renderTrailing, expandedByDefault = true, dnd }: NavigationTreeProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  const [activeId, setActiveId] = useState<number | null>(null)
+  const [indicator, setIndicator] = useState<Indicator | null>(null)
+  const indicatorRef = useRef<Indicator | null>(null)
+  // Pointer Y at drag start; combined with the live delta it gives the exact pointer
+  // position, which is far more reliable for before/after than the dragged item's rect.
+  const pointerStartY = useRef(0)
 
   const index = React.useMemo(() => {
     const byId = new Map<number, UserNavigationTreeDto>()
@@ -110,42 +125,107 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
     return byId
   }, [nodes])
 
-  const handleDragEnd = useCallback((e: DragEndEvent) => {
-    if (!dnd || !e.over) return
-    const activeId = Number(String(e.active.id).replace('item-', ''))
-    const overId = String(e.over.id)
-    if (overId.startsWith('into-')) {
-      const parentId = Number(overId.replace('into-', ''))
-      const parent = index.get(parentId)
-      dnd.onMove(activeId, parentId, parent ? parent.children.length : 0)
-    } else if (overId.startsWith('before-')) {
-      const beforeId = Number(overId.replace('before-', ''))
-      if (beforeId === activeId) return
-      const before = index.get(beforeId)
-      if (!before) return
-      const targetParent = before.parentId ?? 0
-      // If the target parent is not a real node in the index (e.g. root=0 or operations=-1),
-      // fall back to the top-level nodes list. This handles both root and operations tabs correctly.
-      const siblings = (index.has(targetParent)
-        ? index.get(targetParent)!.children
-        : nodes).filter(n => n.id !== activeId)
-      const idx = siblings.findIndex(n => n.id === beforeId)
-      dnd.onMove(activeId, targetParent, idx < 0 ? siblings.length : idx)
+  // Is `maybeChild` inside the subtree rooted at `ancestorId`? (avoid showing a drop into own subtree)
+  const isInSubtree = useCallback((ancestorId: number, maybeChild: number): boolean => {
+    const root = index.get(ancestorId)
+    if (!root) return false
+    let found = false
+    const walk = (n: UserNavigationTreeDto) => { if (n.id === maybeChild) found = true; n.children.forEach(walk) }
+    root.children.forEach(walk)
+    return found
+  }, [index])
+
+  // Mirror the indicator in a ref so onDragEnd reads the latest computed value even if
+  // the pointer is released before React flushes the onDragMove state update (real race).
+  const setInd = useCallback((v: Indicator | null) => { indicatorRef.current = v; setIndicator(v) }, [])
+
+  const onDragStart = useCallback((e: DragStartEvent) => {
+    const ae = e.activatorEvent as { clientY?: number }
+    pointerStartY.current = ae?.clientY ?? 0
+    setActiveId(Number(String(e.active.id).replace('item-', '')))
+  }, [])
+
+  // onDragMove (not onDragOver) so the indicator updates continuously as the pointer
+  // moves *within* the same row — onDragOver only fires when the over droppable changes.
+  const onDragMove = useCallback((e: DragMoveEvent) => {
+    const { active, over } = e
+    if (!over) { setInd(null); return }
+    const activeNum = Number(String(active.id).replace('item-', ''))
+    const overNum = Number(String(over.id).replace('row-', ''))
+    // No-op when hovering itself or one of its own descendants.
+    if (overNum === activeNum || isInSubtree(activeNum, overNum)) { setInd(null); return }
+
+    const overNode = index.get(overNum)
+    const overRect = over.rect
+    if (!overNode) { setInd(null); return }
+
+    const pointerY = pointerStartY.current + e.delta.y
+    const rel = Math.min(1, Math.max(0, (pointerY - overRect.top) / overRect.height))
+
+    let pos: DropPos
+    if (overNode.type === 'CATEGORY') {
+      // before (top) / into (middle, nest as child) / after (bottom)
+      pos = rel < 0.30 ? 'before' : rel > 0.70 ? 'after' : 'into'
+    } else {
+      pos = rel < 0.5 ? 'before' : 'after'
     }
-  }, [dnd, index, nodes])
+    setInd({ id: overNum, pos })
+  }, [index, isInSubtree, setInd])
+
+  const reset = useCallback(() => { setActiveId(null); setInd(null) }, [setInd])
+
+  const handleDragEnd = useCallback((e: DragEndEvent) => {
+    const ind = indicatorRef.current
+    reset()
+    if (!dnd || !ind) return
+    const activeNum = Number(String(e.active.id).replace('item-', ''))
+    const overNode = index.get(ind.id)
+    if (!overNode) return
+
+    if (ind.pos === 'into') {
+      // Append as the last child of the hovered category.
+      const childCount = overNode.children.filter(n => n.id !== activeNum).length
+      dnd.onMove(activeNum, overNode.id, childCount)
+      return
+    }
+    // before/after: reorder among the hovered row's siblings.
+    const targetParent = overNode.parentId ?? 0
+    const siblings = (index.has(targetParent) ? index.get(targetParent)!.children : nodes)
+      .filter(n => n.id !== activeNum)
+    const overIdx = siblings.findIndex(n => n.id === ind.id)
+    if (overIdx < 0) { dnd.onMove(activeNum, targetParent, siblings.length); return }
+    dnd.onMove(activeNum, targetParent, ind.pos === 'before' ? overIdx : overIdx + 1)
+  }, [dnd, index, nodes, reset])
 
   const tree = (
     <div className="rounded-lg border border-gray-200 dark:border-gray-800">
       {nodes.map(n => (
-        <TreeRow key={n.id} node={n} depth={0} renderTrailing={renderTrailing} expandedByDefault={expandedByDefault} dnd={dnd} />
+        <TreeRow key={n.id} node={n} depth={0} renderTrailing={renderTrailing} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
       ))}
     </div>
   )
 
   if (!dnd) return tree
+
+  const activeNode = activeId != null ? index.get(activeId) : null
   return (
-    <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={onDragStart}
+      onDragMove={onDragMove}
+      onDragEnd={handleDragEnd}
+      onDragCancel={reset}
+    >
       {tree}
+      <DragOverlay dropAnimation={null}>
+        {activeNode ? (
+          <div className="flex items-center gap-2 rounded-lg border border-primary bg-white dark:bg-gray-900 px-3 py-2 text-sm shadow-lg">
+            <GripVertical size={14} className="text-gray-400" />
+            <span className={activeNode.type === 'CATEGORY' ? 'font-medium' : ''}>{activeNode.name}</span>
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   )
 }

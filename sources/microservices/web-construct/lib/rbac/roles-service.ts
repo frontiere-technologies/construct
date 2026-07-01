@@ -12,20 +12,29 @@ const NAV_COLUMNS =
 
 const SORT_COLUMN: Record<NonNullable<RolesQuery['sort']>, string> = {
   id: 'id', description: 'description', associatedUsers: 'associated_users',
-  dateIns: 'date_ins', dateMod: 'date_mod',
+  hasPermissions: 'has_permissions', dateIns: 'date_ins', dateMod: 'date_mod',
 }
 
-function applyFilters<T extends {
+function nextDay(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+export function applyFilters<T extends {
   ilike(column: string, value: string): T
   eq(column: string, value: unknown): T
   gte(column: string, value: unknown): T
   lte(column: string, value: unknown): T
+  lt(column: string, value: unknown): T
 }>(q: T, query: RolesQuery): T {
   let r = q
   if (query.search) r = r.ilike('description', `%${query.search}%`) as T
   if (query.hasPermission) r = r.eq('has_permissions', true) as T
   if (query.startDateIns) r = r.gte('date_ins', query.startDateIns) as T
-  if (query.endDateIns) r = r.lte('date_ins', query.endDateIns) as T
+  if (query.endDateIns) r = r.lt('date_ins', nextDay(query.endDateIns)) as T
+  if (query.minAssociatedUsers != null) r = r.gte('associated_users', query.minAssociatedUsers) as T
+  if (query.maxAssociatedUsers != null) r = r.lte('associated_users', query.maxAssociatedUsers) as T
   return r
 }
 

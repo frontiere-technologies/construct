@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, SlidersHorizontal, Columns3, MoreHorizontal, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
 
 export interface Column<T> {
@@ -36,6 +37,39 @@ export default function DataTable<T>(props: DataTableProps<T>) {
   const [showCols, setShowCols] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [openMenu, setOpenMenu] = useState<string | number | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const closeMenu = useCallback(() => {
+    setOpenMenu(null)
+    setMenuPos(null)
+  }, [])
+
+  const toggleMenu = (e: React.MouseEvent<HTMLButtonElement>, k: string | number) => {
+    if (openMenu === k) {
+      closeMenu()
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+    setOpenMenu(k)
+  }
+
+  useEffect(() => {
+    if (openMenu === null) return
+    const handleOutside = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return
+      closeMenu()
+    }
+    document.addEventListener('mousedown', handleOutside)
+    window.addEventListener('scroll', closeMenu, true)
+    window.addEventListener('resize', closeMenu)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      window.removeEventListener('scroll', closeMenu, true)
+      window.removeEventListener('resize', closeMenu)
+    }
+  }, [openMenu, closeMenu])
 
   const visibleCols = columns.filter(c => !hidden.has(c.key))
   const toggleCol = (key: string) => {
@@ -130,25 +164,28 @@ export default function DataTable<T>(props: DataTableProps<T>) {
                   ))}
                   {rowMenu && (
                     <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                      <div className="relative">
-                        <button data-testid={`row-menu-${k}`} onClick={() => setOpenMenu(openMenu === k ? null : k)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
-                          <MoreHorizontal size={16} />
-                        </button>
-                        {openMenu === k && (
-                          <div className="absolute right-0 mt-1 z-20 w-40 p-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow">
-                            {rowMenu(row).map(item => (
-                              <button
-                                key={item.label}
-                                disabled={item.disabled}
-                                onClick={() => { setOpenMenu(null); item.onClick() }}
-                                className="block w-full text-left px-3 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
-                              >
-                                {item.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      <button data-testid={`row-menu-${k}`} onClick={e => toggleMenu(e, k)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                        <MoreHorizontal size={16} />
+                      </button>
+                      {openMenu === k && menuPos && createPortal(
+                        <div
+                          ref={menuRef}
+                          style={{ top: menuPos.top, right: menuPos.right }}
+                          className="fixed z-50 w-40 p-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
+                        >
+                          {rowMenu(row).map(item => (
+                            <button
+                              key={item.label}
+                              disabled={item.disabled}
+                              onClick={() => { closeMenu(); item.onClick() }}
+                              className="block w-full text-left px-3 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>,
+                        document.body
+                      )}
                     </td>
                   )}
                 </tr>

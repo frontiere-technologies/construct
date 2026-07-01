@@ -1,12 +1,39 @@
+import re
 import time
+from datetime import date
 
 from playwright.sync_api import expect
+from helpers import nav
+
+
+def _create_role(page, base_url, name):
+    """Create a SERVICE role; lands on its detail page. Returns the detail URL."""
+    nav(page, f"{base_url}/roles-permissions")
+    page.get_by_role("button", name="Nuovo ruolo").click()
+    page.get_by_placeholder("Nome ruolo").fill(name)
+    page.get_by_role("button", name="Crea nuovo ruolo").click()
+    # Higher timeout: first hit to the detail route triggers Next.js dev-mode compilation (~3-5s)
+    page.wait_for_url("**/roles-permissions/**", timeout=15_000)
+    return page.url
+
+
+def _delete_role(page, base_url, name):
+    """Delete a role via the list search + row menu, then assert it's gone."""
+    nav(page, f"{base_url}/roles-permissions")
+    page.get_by_placeholder("Cerca").fill(name)
+    row = page.locator("tr").filter(has_text=name)
+    expect(row).to_be_visible()
+    row.locator('[data-testid^="row-menu"]').click()
+    page.once("dialog", lambda d: d.accept())
+    page.get_by_role("button", name="Elimina").click()
+    nav(page, f"{base_url}/roles-permissions")
+    page.get_by_placeholder("Cerca").fill(name)
+    expect(page.get_by_text(name, exact=True)).to_have_count(0)
 
 
 def test_roles_list_loads(logged_in_page, base_url):
     page = logged_in_page
-    page.goto(f"{base_url}/rolesPermissions")
-    page.wait_for_load_state("networkidle")
+    nav(page, f"{base_url}/roles-permissions")
     assert page.get_by_text("Ruoli & permessi").first.is_visible()
     # Administrator (id 1) is seeded and must appear
     assert page.get_by_text("Administrator", exact=True).first.is_visible()
@@ -14,15 +41,8 @@ def test_roles_list_loads(logged_in_page, base_url):
 
 def test_create_rename_delete_role(logged_in_page, base_url):
     page = logged_in_page
-    page.goto(f"{base_url}/rolesPermissions")
-    page.wait_for_load_state("networkidle")
-
     name = f"E2E Role {int(time.time())}"
-    page.get_by_role("button", name="Nuovo ruolo").click()
-    page.get_by_placeholder("Nome ruolo").fill(name)
-    page.get_by_role("button", name="Crea nuovo ruolo").click()
-    # Redirects to the detail page of the new SERVICE role
-    page.wait_for_url("**/rolesPermissions/**", timeout=10_000)
+    _create_role(page, base_url, name)
     assert name in page.inner_text("h1")
 
     # Rename via the pencil (SERVICE roles are renamable)
@@ -33,34 +53,13 @@ def test_create_rename_delete_role(logged_in_page, base_url):
     # Wait for the heading to reflect the rename (retrying assertion)
     expect(page.locator("h1")).to_contain_text(renamed)
 
-    # Back to list, delete it — use search input to avoid URL encoding issues
-    page.goto(f"{base_url}/rolesPermissions")
-    page.wait_for_load_state("networkidle")
-    page.get_by_placeholder("Cerca").fill(renamed)
-    # Wait for the filtered row to appear (debounce ~350ms, default timeout retries)
-    # Use the row that contains the renamed text specifically
-    row = page.locator("tr").filter(has_text=renamed)
-    expect(row).to_be_visible()
-    row.locator('[data-testid^="row-menu"]').click()
-    page.once("dialog", lambda d: d.accept())
-    page.get_by_role("button", name="Elimina").click()
-    # Navigate to list and confirm the role is gone
-    page.goto(f"{base_url}/rolesPermissions")
-    page.wait_for_load_state("networkidle")
-    page.get_by_placeholder("Cerca").fill(renamed)
-    expect(page.get_by_text(renamed, exact=True)).to_have_count(0)
+    _delete_role(page, base_url, renamed)
 
 
 def test_toggle_permission_persists(logged_in_page, base_url):
     page = logged_in_page
     name = f"E2E Perm {int(time.time())}"
-    page.goto(f"{base_url}/rolesPermissions")
-    page.wait_for_load_state("networkidle")
-    page.get_by_role("button", name="Nuovo ruolo").click()
-    page.get_by_placeholder("Nome ruolo").fill(name)
-    page.get_by_role("button", name="Crea nuovo ruolo").click()
-    page.wait_for_url("**/rolesPermissions/**", timeout=10_000)
-    detail_url = page.url
+    detail_url = _create_role(page, base_url, name)
 
     page.get_by_role("button", name="Modifica").click()
     page.locator('[data-testid="perm-toggle"]').first.click()
@@ -70,29 +69,51 @@ def test_toggle_permission_persists(logged_in_page, base_url):
     page.get_by_role("button", name="Modifica").wait_for(state="visible", timeout=10_000)
 
     # Reload and assert at least one permission toggle is ON
-    page.goto(detail_url)
-    page.wait_for_load_state("networkidle")
+    nav(page, detail_url)
     page.wait_for_selector('[data-testid="perm-toggle"][aria-checked="true"]', timeout=10_000)
     assert page.locator('[data-testid="perm-toggle"][aria-checked="true"]').count() >= 1
 
     # Cleanup: delete the role this test created (avoid leaking E2E roles into the DB)
-    page.goto(f"{base_url}/rolesPermissions")
-    page.wait_for_load_state("networkidle")
-    page.get_by_placeholder("Cerca").fill(name)
-    row = page.locator("tr").filter(has_text=name)
-    expect(row).to_be_visible()
-    row.locator('[data-testid^="row-menu"]').click()
-    page.once("dialog", lambda d: d.accept())
-    page.get_by_role("button", name="Elimina").click()
-    page.goto(f"{base_url}/rolesPermissions")
-    page.wait_for_load_state("networkidle")
-    page.get_by_placeholder("Cerca").fill(name)
-    expect(page.get_by_text(name, exact=True)).to_have_count(0)
+    _delete_role(page, base_url, name)
 
 
 def test_system_role_not_editable(logged_in_page, base_url):
     page = logged_in_page
-    page.goto(f"{base_url}/rolesPermissions/1")  # Administrator = SYSTEM
-    page.wait_for_load_state("networkidle")
+    nav(page, f"{base_url}/roles-permissions/1")  # Administrator = SYSTEM
     edit = page.get_by_role("button", name="Modifica")
     assert edit.is_disabled()
+
+
+def test_filter_by_associated_users_range(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/roles-permissions")
+    baseline = page.locator("tbody tr").count()
+    assert baseline > 0
+
+    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("filter-min-associated-users").fill("999999")
+    expect(page.locator("tbody tr")).to_have_count(0)
+
+    page.get_by_test_id("filter-min-associated-users").fill("")
+    expect(page.locator("tbody tr")).to_have_count(baseline)
+
+
+def test_filter_by_creation_date_range(logged_in_page, base_url):
+    page = logged_in_page
+    name = f"E2E DateFilter {int(time.time())}"
+    _create_role(page, base_url, name)
+
+    nav(page, f"{base_url}/roles-permissions")
+    page.get_by_placeholder("Cerca").fill(name)
+    expect(page.locator("tr").filter(has_text=name)).to_have_count(1)
+
+    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("filter-date-start").click()
+    today = date.today()
+    page.locator('[data-testid="date-popover-start"]').get_by_text(str(today.day), exact=True).click()
+
+    # The role we just created was created today, so it must still match startDateIns = today
+    expect(page.locator("tr").filter(has_text=name)).to_have_count(1)
+    expect(page).to_have_url(re.compile("startDateIns="))
+
+    _delete_role(page, base_url, name)

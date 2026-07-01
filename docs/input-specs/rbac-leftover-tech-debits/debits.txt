@@ -1,3 +1,5 @@
+NOTA: 30/Giu/2026 - Tutto quello che segue è stato già analizzato e sistemato (per dettagli cerca i vari commit su git)
+
 Verificato lo stato DB. Ecco il debito tecnico rimasto, dal ledger SDD, ordinato per priorità.
 
 🔴 Bug funzionale (priorità alta)

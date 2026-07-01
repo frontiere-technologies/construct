@@ -29,7 +29,7 @@
 - Consumes: `POST /api/auth/forgot-password` — `{ email: string }` → `{ ok: true }`
 - Produces: route `/forgot-password` rendering `<ForgotPasswordForm />`
 
-- [x] **Step 1: Create `ForgotPasswordForm.tsx`**
+- [✅] **Step 1: Create `ForgotPasswordForm.tsx`**
 
 ```tsx
 // app/forgot-password/ForgotPasswordForm.tsx
@@ -106,7 +106,7 @@ export function ForgotPasswordForm() {
 }
 ```
 
-- [x] **Step 2: Create `page.tsx`**
+- [✅] **Step 2: Create `page.tsx`**
 
 ```tsx
 // app/forgot-password/page.tsx
@@ -129,12 +129,12 @@ export default function ForgotPasswordPage() {
 }
 ```
 
-- [x] **Step 3: Verify the page renders**
+- [✅] **Step 3: Verify the page renders**
 
 Start dev server if not running, then open `http://localhost:3000/forgot-password`.
 Expected: card with dark header "Construct / Reimposta la tua password", email input, "Invia link" button, "← Torna al login" link.
 
-- [x] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add app/forgot-password/
@@ -153,7 +153,7 @@ git commit -m "feat(auth): add dedicated /forgot-password page"
 - Consumes: `POST /api/auth/register` — `{ email: string }` → `{ ok: true }`
 - Produces: route `/register` rendering `<RegisterForm />`
 
-- [x] **Step 1: Create `RegisterForm.tsx`**
+- [✅] **Step 1: Create `RegisterForm.tsx`**
 
 ```tsx
 // app/register/RegisterForm.tsx
@@ -230,7 +230,7 @@ export function RegisterForm() {
 }
 ```
 
-- [x] **Step 2: Create `page.tsx`**
+- [✅] **Step 2: Create `page.tsx`**
 
 ```tsx
 // app/register/page.tsx
@@ -253,12 +253,12 @@ export default function RegisterPage() {
 }
 ```
 
-- [x] **Step 3: Verify the page renders**
+- [✅] **Step 3: Verify the page renders**
 
 Open `http://localhost:3000/register`.
 Expected: card with dark header "Construct / Crea il tuo account", email input, "Registrati" button, "← Torna al login" link.
 
-- [x] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add app/register/
@@ -276,7 +276,7 @@ git commit -m "feat(auth): add dedicated /register page"
 - Consumes: nothing new — removes inline form logic
 - Produces: clean Login component with `<a href="/forgot-password">` and `<a href="/register">`
 
-- [x] **Step 1: Remove inline state and handlers**
+- [✅] **Step 1: Remove inline state and handlers**
 
 In `components/Login.tsx`, remove these lines from the `LoginForm` function:
 
@@ -294,7 +294,7 @@ const handleForgotPassword = async (e: React.FormEvent) => { ... }
 const handleRegister = async (e: React.FormEvent) => { ... }
 ```
 
-- [x] **Step 2: Replace "Password dimenticata?" button with link**
+- [✅] **Step 2: Replace "Password dimenticata?" button with link**
 
 Replace:
 ```tsx
@@ -314,7 +314,7 @@ With:
 </a>
 ```
 
-- [x] **Step 3: Replace "Registrati" link**
+- [✅] **Step 3: Replace "Registrati" link**
 
 Replace (in the footer section):
 ```tsx
@@ -342,11 +342,11 @@ With:
 </a>
 ```
 
-- [x] **Step 4: Remove the two inline form blocks**
+- [✅] **Step 4: Remove the two inline form blocks**
 
 Delete the `{forgotMode && (...)}` block and the `{registerMode && (...)}` block from the footer section entirely.
 
-- [x] **Step 5: Check TypeScript compiles**
+- [✅] **Step 5: Check TypeScript compiles**
 
 ```bash
 npm run build 2>&1 | tail -20
@@ -354,14 +354,14 @@ npm run build 2>&1 | tail -20
 
 Expected: no TypeScript errors. (Dev server hot-reload is sufficient if build is slow — check for red underlines in IDE.)
 
-- [x] **Step 6: Verify login page in browser**
+- [✅] **Step 6: Verify login page in browser**
 
 Open `http://localhost:3000/login`.
 - "Password dimenticata?" should navigate to `/forgot-password`
 - "Registrati" in the footer should navigate to `/register`
 - The login card should no longer grow/expand — footer is now static
 
-- [x] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add components/Login.tsx
@@ -380,7 +380,7 @@ git commit -m "refactor(auth): replace inline forms with dedicated page links"
 
 The existing tests in `test_register.py` test the old inline behavior (expanding forms, Annulla button, mutual exclusion). All five tests need to be replaced with tests for the new page-navigation flow.
 
-- [x] **Step 1: Rewrite `test_register.py`**
+- [✅] **Step 1: Rewrite `test_register.py`**
 
 Replace the entire file with:
 
@@ -485,7 +485,7 @@ def test_forgot_password_submission_shows_confirmation(page, base_url):
     ).is_visible()
 ```
 
-- [x] **Step 2: Run the new tests**
+- [✅] **Step 2: Run the new tests**
 
 From the project root:
 ```bash
@@ -494,7 +494,7 @@ uv run pytest sources/tests/e2e/test_register.py -v
 
 Expected: all 7 tests PASS.
 
-- [x] **Step 3: Run the full E2E suite**
+- [✅] **Step 3: Run the full E2E suite**
 
 ```bash
 uv run pytest sources/tests/e2e/ -v
@@ -502,7 +502,7 @@ uv run pytest sources/tests/e2e/ -v
 
 Expected: all tests PASS (no regressions in `test_auth.py`, `test_sidebar.py`, etc.).
 
-- [x] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add sources/tests/e2e/test_register.py

@@ -41,7 +41,7 @@
 **Interfaces:**
 - Produces: `sources/microservices/web-construct/` available for the build verification in Task 3
 
-- [x] **Step 1: Create the sources/microservices/ parent directory**
+- [✅] **Step 1: Create the sources/microservices/ parent directory**
 
 ```bash
 mkdir -p sources/microservices
@@ -49,7 +49,7 @@ mkdir -p sources/microservices
 
 Expected: no output, directory created.
 
-- [x] **Step 2: Move apps/web to sources/microservices/web-construct**
+- [✅] **Step 2: Move apps/web to sources/microservices/web-construct**
 
 ```bash
 git mv apps/web sources/microservices/web-construct
@@ -57,7 +57,7 @@ git mv apps/web sources/microservices/web-construct
 
 Expected: no output. `git status` should show a long list of renamed files.
 
-- [x] **Step 3: Remove the now-empty apps/ directory from git tracking**
+- [✅] **Step 3: Remove the now-empty apps/ directory from git tracking**
 
 ```bash
 rmdir apps
@@ -65,7 +65,7 @@ rmdir apps
 
 Expected: no output (the directory is now empty after the mv).
 
-- [x] **Step 4: Create sources/libraries/ placeholder**
+- [✅] **Step 4: Create sources/libraries/ placeholder**
 
 ```bash
 mkdir sources/libraries && touch sources/libraries/.gitkeep
@@ -74,7 +74,7 @@ git add sources/libraries/.gitkeep
 
 Expected: no output.
 
-- [x] **Step 5: Delete packages/ and services/ placeholders**
+- [✅] **Step 5: Delete packages/ and services/ placeholders**
 
 ```bash
 git rm packages/.gitkeep
@@ -87,7 +87,7 @@ rm 'packages/.gitkeep'
 rm 'services/.gitkeep'
 ```
 
-- [x] **Step 6: Verify git status looks correct**
+- [✅] **Step 6: Verify git status looks correct**
 
 ```bash
 git status --short | head -20
@@ -108,7 +108,7 @@ Expected: many `R  apps/web/... -> sources/microservices/web-construct/...` line
 - Consumes: directory rename from Task 1
 - Produces: all in-repo references point to `sources/microservices/web-construct`
 
-- [x] **Step 1: Update package.json — all 5 scripts**
+- [✅] **Step 1: Update package.json — all 5 scripts**
 
 Replace the full `scripts` block in `package.json` with:
 
@@ -126,7 +126,7 @@ Replace the full `scripts` block in `package.json` with:
 }
 ```
 
-- [x] **Step 2: Update CLAUDE.md — occurrence 1 (commands header comment)**
+- [✅] **Step 2: Update CLAUDE.md — occurrence 1 (commands header comment)**
 
 Find:
 ```
@@ -137,7 +137,7 @@ Replace with:
 # From sources/microservices/web-construct/
 ```
 
-- [x] **Step 3: Update CLAUDE.md — occurrence 2 (stack line)**
+- [✅] **Step 3: Update CLAUDE.md — occurrence 2 (stack line)**
 
 Find:
 ```
@@ -148,7 +148,7 @@ Replace with:
 sources/microservices/web-construct/ - React 19 + TypeScript + Next.js 15 (App Router) + Tailwind CSS v4 + NextAuth v5 + Supabase (@supabase/supabase-js) + Lucide React
 ```
 
-- [x] **Step 4: Update README.md — architecture diagram**
+- [✅] **Step 4: Update README.md — architecture diagram**
 
 Find:
 ```
@@ -159,7 +159,7 @@ Replace with:
 - sources/microservices/web-construct/  # Next.js 15 application
 ```
 
-- [x] **Step 5: Update README.md — env copy step**
+- [✅] **Step 5: Update README.md — env copy step**
 
 Find:
 ```
@@ -170,7 +170,7 @@ Replace with:
 cp sources/microservices/web-construct/.env.template sources/microservices/web-construct/.env.local
 ```
 
-- [x] **Step 6: Update README.md — cd step in "Run"**
+- [✅] **Step 6: Update README.md — cd step in "Run"**
 
 Find:
 ```
@@ -183,7 +183,7 @@ cd sources/microservices/web-construct
 npm run dev
 ```
 
-- [x] **Step 7: Update README.md — "Adding New Pages" section**
+- [✅] **Step 7: Update README.md — "Adding New Pages" section**
 
 Find:
 ```
@@ -194,7 +194,7 @@ Replace with:
 Create a new file under `sources/microservices/web-construct/app/(protected)/your-page/page.tsx`
 ```
 
-- [x] **Step 8: Verify no remaining references to apps/web**
+- [✅] **Step 8: Verify no remaining references to apps/web**
 
 ```bash
 grep -r "apps/web" . --include="*.md" --include="*.json" --include="*.ts" --include="*.js" --include="*.mjs" --include="*.yaml" --include="*.yml" 2>/dev/null | grep -v node_modules | grep -v .next | grep -v .git | grep -v ".superpowers"
@@ -208,7 +208,7 @@ Expected: no output (zero matches).
 
 **Files:** none modified
 
-- [x] **Step 1: Verify the Next.js app still resolves from the new path**
+- [✅] **Step 1: Verify the Next.js app still resolves from the new path**
 
 ```bash
 ls sources/microservices/web-construct/package.json
@@ -216,7 +216,7 @@ ls sources/microservices/web-construct/package.json
 
 Expected: `sources/microservices/web-construct/package.json`
 
-- [x] **Step 2: Run a build from the new path**
+- [✅] **Step 2: Run a build from the new path**
 
 ```bash
 cd sources/microservices/web-construct && npm run build 2>&1 | tail -10
@@ -224,7 +224,7 @@ cd sources/microservices/web-construct && npm run build 2>&1 | tail -10
 
 Expected: build completes successfully (ends with `✓ Compiled` or similar, no errors).
 
-- [x] **Step 3: Stage all remaining changes and commit**
+- [✅] **Step 3: Stage all remaining changes and commit**
 
 ```bash
 git add package.json CLAUDE.md README.md
@@ -239,7 +239,7 @@ git commit -m "refactor(structure): rename apps/web to sources/microservices/web
 
 Expected: commit created with a summary of renamed + modified files.
 
-- [x] **Step 4: Verify git log shows the rename**
+- [✅] **Step 4: Verify git log shows the rename**
 
 ```bash
 git log --oneline -3

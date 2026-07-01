@@ -46,11 +46,11 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="text-sm text-gray-500 mb-2"><Link href="/rolesPermissions" className="hover:text-gray-700 hover:underline">Ruoli &amp; permessi</Link> / Dettagli</div>
+      <div className="text-sm text-gray-500 mb-2"><Link href="/roles-permissions" className="hover:text-gray-700 hover:underline">Ruoli &amp; permessi</Link> / Dettagli</div>
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">#{role.id} {role.roleName}</h1>
+            <h1 className="text-2xl font-bold">{role.roleName}</h1>
             {canRename && (
               <button data-testid="rename-role-btn" onClick={() => setRenaming(true)} className="text-gray-400 hover:text-gray-700"><Pencil size={18} /></button>
             )}

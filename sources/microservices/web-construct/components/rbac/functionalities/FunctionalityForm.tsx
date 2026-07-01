@@ -2,15 +2,19 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import IconUpload from './IconUpload'
+import IconPicker from './IconPicker'
+import CustomSelect from './CustomSelect'
 import TagInput from './TagInput'
 import TranslationsAccordion from './TranslationsAccordion'
 import { createNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'
 import type { CreateNavItemInput } from '@/lib/rbac/types'
 
-const FUNC_TYPES: { id: number; label: string }[] = [
-  { id: 1, label: 'Pagina incorporata' }, { id: 2, label: 'Link esterno' },
-  { id: 3, label: 'Funzionalità interna' }, { id: 4, label: 'Desktop remoto' }, { id: 5, label: 'Permesso' },
+// Unified item-type options — idItemType 1 = category, 2 = functionality
+const ITEM_TYPES = [
+  { key: 'category', label: 'Category',                        idItemType: 1 as const, idFunctionalityType: null },
+  { key: 'embedded', label: 'Link esterno embedded (iframe)',   idItemType: 2 as const, idFunctionalityType: 1 },
+  { key: 'external', label: 'Link esterno (http[s])',           idItemType: 2 as const, idFunctionalityType: 2 },
+  { key: 'internal', label: 'Link interno (/path)',             idItemType: 2 as const, idFunctionalityType: 3 },
 ]
 
 interface Initial {
@@ -31,6 +35,9 @@ export default function FunctionalityForm(
   const [error, setError] = useState<string | null>(null)
   const set = <K extends keyof Initial>(k: K, v: Initial[K]) => setF(prev => ({ ...prev, [k]: v }))
 
+  const selectedTypeKey = f.idItemType === 1
+    ? 'category'
+    : (ITEM_TYPES.find(t => t.idFunctionalityType === f.idFunctionalityType)?.key ?? 'internal')
   const isFunc = f.idItemType === 2
   const itName = f.translations.IT?.name ?? ''
   const itDesc = f.translations.IT?.description ?? ''
@@ -85,20 +92,22 @@ export default function FunctionalityForm(
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Informazioni generali</h2>
-          <div className="grid grid-cols-[1fr_auto] gap-3">
-            <div className="space-y-3">
+          <div className="flex items-start gap-3">
+            <IconPicker compact value={f.iconPath} onChange={v => set('iconPath', v)} />
+            <div className="flex-1 space-y-3">
               <input value={itName} onChange={e => set('translations', { ...f.translations, IT: { ...f.translations.IT, name: e.target.value } })}
                 placeholder="Nome funzionalità *" maxLength={100}
                 className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent" />
-              <select value={f.idItemParent ?? ''} onChange={e => set('idItemParent', e.target.value ? Number(e.target.value) : null)}
+              <CustomSelect
+                data-testid="select-genitore"
+                value={f.idItemParent ?? ''}
+                onChange={v => set('idItemParent', v !== '' ? Number(v) : null)}
+                options={parents.map(p => ({ value: p.id, label: p.name }))}
+                placeholder="Genitore"
                 disabled={mode === 'edit'}
                 title={mode === 'edit' ? 'Sposta tramite trascinamento nell\'albero' : undefined}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent disabled:opacity-50 disabled:cursor-not-allowed">
-                <option value="">Genitore</option>
-                {parents.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              />
             </div>
-            <div className="w-32"><IconUpload value={f.iconPath} onChange={v => set('iconPath', v)} /></div>
           </div>
           <div>
             <textarea value={itDesc} onChange={e => set('translations', { ...f.translations, IT: { ...f.translations.IT, description: e.target.value } })}
@@ -108,22 +117,22 @@ export default function FunctionalityForm(
           </div>
           <TagInput value={itTags} onChange={t => set('tagTranslations', { ...f.tagTranslations, IT: t })} placeholder="Tags (IT)" />
 
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 pt-2">Impostazioni</h2>
-          <div className="flex items-center gap-6 text-sm">
-            <label className="flex items-center gap-2"><input type="radio" checked={f.idItemType === 1} onChange={() => set('idItemType', 1)} /> Categoria</label>
-            <label className="flex items-center gap-2"><input type="radio" checked={f.idItemType === 2} onChange={() => set('idItemType', 2)} /> Funzionalità</label>
-          </div>
-          {isFunc && (
-            <div className="space-y-3">
-              <select value={f.idFunctionalityType ?? ''} onChange={e => set('idFunctionalityType', e.target.value ? Number(e.target.value) : null)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent">
-                <option value="">Tipologia *</option>
-                {FUNC_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-              </select>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 pt-2">Tipologia</h2>
+          <div className="space-y-3">
+            <CustomSelect
+              data-testid="select-tipologia"
+              value={selectedTypeKey}
+              onChange={v => {
+                const opt = ITEM_TYPES.find(t => t.key === v)
+                if (opt) setF(prev => ({ ...prev, idItemType: opt.idItemType, idFunctionalityType: opt.idFunctionalityType }))
+              }}
+              options={ITEM_TYPES.map(t => ({ value: t.key, label: t.label }))}
+            />
+            {isFunc && (
               <input value={f.functionalityLink} onChange={e => set('functionalityLink', e.target.value)} placeholder="Link *"
                 className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent" />
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">

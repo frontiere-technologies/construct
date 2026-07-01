@@ -14,7 +14,7 @@ export default function CreateRoleModal({ onClose }: { onClose: () => void }) {
     setBusy(true)
     try {
       const { id } = await createRole(name)
-      router.push(`/rolesPermissions/${id}`)
+      router.push(`/roles-permissions/${id}`)
     } finally { setBusy(false) }
   }
 
