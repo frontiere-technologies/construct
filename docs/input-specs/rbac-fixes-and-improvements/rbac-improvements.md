@@ -1,10 +1,10 @@
 Roles
 - R-01 - [✅] Nella sezione Roles, c'è un bug sulla finestrella che si apre sui tre puntini. Vedi docs/input-specs/rbac-fixes-and-improvements/azioni-tre-puntini-non-si-vedono.png e docs/input-specs/rbac-fixes-and-improvements/azioni-tre-puntini-si-vedono.png
 - R-02 - [✅] L'ordinamento deve essere possibile anche per la colonna "Ha permessi"
-- R-03 - [ ] Roles filtri
-  - R-03.01 - [ ] Date specificando in un widget calendario le date iniziali e finali
-  - R-03.02 - [ ] Numero di utenti associati da min a max
-- R-04 - [ ] L'id del ruolo è visibile in modifica ruolo (vedi ./significato-sezioni-e-operationi.png). Non credo serva
+- R-03 - [✅] Roles filtri
+  - R-03.01 - [✅] Date specificando in un widget calendario le date iniziali e finali
+  - R-03.02 - [✅] Numero di utenti associati da min a max
+- R-04 - [✅] L'id del ruolo è visibile in modifica ruolo (vedi ./significato-sezioni-e-operationi.png). Non credo serva
 - R-05 - [ ] Voglio che l'api per i ruoli sia paginata. role?page=1&size=10&sort=associatedUsers&direction=DESC&search=Ad&hasPermissions=true
 
 Functionalities

@@ -624,7 +624,7 @@ git commit -m "feat(rbac): add DateRangeFilter component (react-day-picker) for 
 **Interfaces:**
 - Consumes: `DateRangeFilter` (Task 3); `Props.startDateIns`/`Props.endDateIns` (already added to the `Props` interface in Task 2, Step 4).
 
-- [ ] **Step 1: Write the failing E2E test**
+- [x] **Step 1: Write the failing E2E test**
 
 Add to `sources/tests/e2e/test_roles.py`:
 
@@ -655,12 +655,12 @@ def test_filter_by_creation_date_range(logged_in_page, base_url):
 
 (Move `from datetime import date` to the top of the file with the other imports if the test runner/linter complains about a non-top-level import — keep it grouped with `import time`.)
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run (from the repo root): `uv run pytest sources/tests/e2e/test_roles.py::test_filter_by_creation_date_range -v`
 Expected: FAIL — `get_by_test_id("filter-date-start")` finds no element.
 
-- [ ] **Step 3: Add local state and wire `DateRangeFilter` into `RolesTableClient.tsx`**
+- [x] **Step 3: Add local state and wire `DateRangeFilter` into `RolesTableClient.tsx`**
 
 Add the import near the top of `sources/microservices/web-construct/components/rbac/roles/RolesTableClient.tsx`:
 
@@ -712,22 +712,22 @@ Add `<DateRangeFilter>` inside the `filters` JSX, right after the "Utenti associ
       />
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run (from the repo root): `uv run pytest sources/tests/e2e/test_roles.py::test_filter_by_creation_date_range -v`
 Expected: PASS.
 
-- [ ] **Step 5: Full verification pass**
+- [x] **Step 5: Full verification pass**
 
 Run (from `sources/microservices/web-construct/`): `npx tsc --noEmit && npm run lint && npx vitest run`
 Run (from the repo root): `uv run pytest sources/tests/e2e/test_roles.py -v`
 Expected: 0 type/lint errors; all unit tests pass; all `test_roles.py` E2E tests pass.
 
-- [ ] **Step 6: Manual browser verification**
+- [x] **Step 6: Manual browser verification**
 
 Start the dev server if not already running (`npm run dev` from `sources/microservices/web-construct/`), log in, go to `/roles-permissions`, open "Filtri", and confirm: setting Utenti associati min/max narrows the rows; picking a creation-date range via the calendar popovers narrows the rows; combining both filters with "Ha permessi" and the search box all work together; clearing any filter restores the previous rows.
 
-- [ ] **Step 7: Mark R-03 done in the spec**
+- [x] **Step 7: Mark R-03 done in the spec**
 
 In `docs/input-specs/rbac-fixes-and-improvements/rbac-improvements.md`, change:
 
@@ -745,7 +745,7 @@ to:
   - R-03.02 - [✅] Numero di ruoli da min a max
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add components/rbac/roles/RolesTableClient.tsx ../../tests/e2e/test_roles.py

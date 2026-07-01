@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import DataTable, { type Column } from '@/components/rbac/DataTable'
 import CreateRoleModal from './CreateRoleModal'
 import RenameRoleModal from './RenameRoleModal'
+import DateRangeFilter from './DateRangeFilter'
 import { deleteRole } from '@/lib/rbac/roles-actions'
 import type { RolePageItemDto } from '@/lib/rbac/types'
 
@@ -55,22 +56,34 @@ export default function RolesTableClient(props: Props) {
 
   const [minUsers, setMinUsers] = useState(props.minAssociatedUsers?.toString() ?? '')
   const [maxUsers, setMaxUsers] = useState(props.maxAssociatedUsers?.toString() ?? '')
+  const [startDate, setStartDate] = useState(props.startDateIns)
+  const [endDate, setEndDate] = useState(props.endDateIns)
 
   useEffect(() => {
     setMinUsers(props.minAssociatedUsers?.toString() ?? '')
     setMaxUsers(props.maxAssociatedUsers?.toString() ?? '')
-  }, [props.minAssociatedUsers, props.maxAssociatedUsers])
+    setStartDate(props.startDateIns)
+    setEndDate(props.endDateIns)
+  }, [props.minAssociatedUsers, props.maxAssociatedUsers, props.startDateIns, props.endDateIns])
 
   useEffect(() => {
     const t = setTimeout(() => {
       const prevMin = props.minAssociatedUsers?.toString() ?? ''
       const prevMax = props.maxAssociatedUsers?.toString() ?? ''
-      if (minUsers !== prevMin || maxUsers !== prevMax) {
-        setParam({ minAssociatedUsers: minUsers || null, maxAssociatedUsers: maxUsers || null, page: '0' })
+      const changed = minUsers !== prevMin || maxUsers !== prevMax
+        || startDate !== props.startDateIns || endDate !== props.endDateIns
+      if (changed) {
+        setParam({
+          minAssociatedUsers: minUsers || null,
+          maxAssociatedUsers: maxUsers || null,
+          startDateIns: startDate || null,
+          endDateIns: endDate || null,
+          page: '0',
+        })
       }
     }, 350)
     return () => clearTimeout(t)
-  }, [minUsers, maxUsers, props.minAssociatedUsers, props.maxAssociatedUsers, setParam])
+  }, [minUsers, maxUsers, startDate, endDate, props.minAssociatedUsers, props.maxAssociatedUsers, props.startDateIns, props.endDateIns, setParam])
 
   const onSort = (field: string) => {
     const dir = props.sortField === field && props.sortDir === 'ASC' ? 'DESC' : 'ASC'
@@ -113,6 +126,10 @@ export default function RolesTableClient(props: Props) {
           className="w-20 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
         />
       </div>
+      <DateRangeFilter
+        startDate={startDate} endDate={endDate}
+        onChange={(s, e) => { setStartDate(s); setEndDate(e) }}
+      />
     </div>
   )
 

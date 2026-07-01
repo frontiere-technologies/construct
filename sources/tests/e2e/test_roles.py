@@ -1,4 +1,6 @@
+import re
 import time
+from datetime import date
 
 from playwright.sync_api import expect
 from helpers import nav
@@ -94,3 +96,24 @@ def test_filter_by_associated_users_range(logged_in_page, base_url):
 
     page.get_by_test_id("filter-min-associated-users").fill("")
     expect(page.locator("tbody tr")).to_have_count(baseline)
+
+
+def test_filter_by_creation_date_range(logged_in_page, base_url):
+    page = logged_in_page
+    name = f"E2E DateFilter {int(time.time())}"
+    _create_role(page, base_url, name)
+
+    nav(page, f"{base_url}/roles-permissions")
+    page.get_by_placeholder("Cerca").fill(name)
+    expect(page.locator("tr").filter(has_text=name)).to_have_count(1)
+
+    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("filter-date-start").click()
+    today = date.today()
+    page.locator('[data-testid="date-popover-start"]').get_by_text(str(today.day), exact=True).click()
+
+    # The role we just created was created today, so it must still match startDateIns = today
+    expect(page.locator("tr").filter(has_text=name)).to_have_count(1)
+    expect(page).to_have_url(re.compile("startDateIns="))
+
+    _delete_role(page, base_url, name)
