@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { DayPicker } from 'react-day-picker'
+import { X } from 'lucide-react'
+import { DayPicker, getDefaultClassNames } from 'react-day-picker'
 import { it } from 'react-day-picker/locale'
 import 'react-day-picker/style.css'
 
@@ -26,6 +27,63 @@ function fmtIt(s: string | null): string {
   return d ? d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : ''
 }
 
+const rdpDefaults = getDefaultClassNames()
+const rdpClassNames = {
+  month_caption: `${rdpDefaults.month_caption} px-3 justify-center font-semibold text-base`,
+  nav: `${rdpDefaults.nav} px-2`,
+  button_previous: `${rdpDefaults.button_previous} rounded-full hover:bg-gray-100 dark:hover:bg-gray-800`,
+  button_next: `${rdpDefaults.button_next} rounded-full hover:bg-gray-100 dark:hover:bg-gray-800`,
+  weekdays: `${rdpDefaults.weekdays} text-gray-400`,
+  today: `${rdpDefaults.today} font-semibold text-gray-900 dark:text-white`,
+}
+
+interface DateFieldProps {
+  testId: string
+  popoverTestId: string
+  placeholder: string
+  value: string | null
+  isOpen: boolean
+  onToggle: () => void
+  onSelect: (d: Date | undefined) => void
+  onClear: () => void
+}
+
+function DateField({ testId, popoverTestId, placeholder, value, isOpen, onToggle, onSelect, onClear }: DateFieldProps) {
+  return (
+    <div className="relative">
+      <button
+        type="button" data-testid={testId} onClick={onToggle}
+        className="flex items-center gap-1.5 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 min-w-24 text-left"
+      >
+        <span className="flex-1">{fmtIt(value) || placeholder}</span>
+        {value && (
+          <span
+            role="button" aria-label="Cancella data" data-testid={`${testId}-clear`}
+            onClick={e => { e.stopPropagation(); onClear() }}
+            className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+          >
+            <X size={14} />
+          </span>
+        )}
+      </button>
+      {isOpen && (
+        <div
+          data-testid={popoverTestId}
+          className="absolute z-10 mt-1 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
+        >
+          <DayPicker
+            mode="single" locale={it} showOutsideDays={false}
+            selected={fromIso(value)}
+            defaultMonth={fromIso(value)}
+            onSelect={onSelect}
+            classNames={rdpClassNames}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface Props {
   startDate: string | null
   endDate: string | null
@@ -47,49 +105,21 @@ export default function DateRangeFilter({ startDate, endDate, onChange }: Props)
   return (
     <div ref={ref} className="flex items-center gap-2 text-sm">
       <span>Data di creazione</span>
-      <div className="relative">
-        <button
-          type="button" data-testid="filter-date-start"
-          onClick={() => setOpenField(f => (f === 'start' ? null : 'start'))}
-          className="px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 min-w-20 text-left"
-        >
-          {fmtIt(startDate) || 'Da'}
-        </button>
-        {openField === 'start' && (
-          <div
-            data-testid="date-popover-start"
-            className="absolute z-10 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
-          >
-            <DayPicker
-              mode="single" locale={it} showOutsideDays={false}
-              selected={fromIso(startDate)}
-              onSelect={d => { onChange(toIso(d), endDate); setOpenField(null) }}
-            />
-          </div>
-        )}
-      </div>
+      <DateField
+        testId="filter-date-start" popoverTestId="date-popover-start" placeholder="Da" value={startDate}
+        isOpen={openField === 'start'}
+        onToggle={() => setOpenField(f => (f === 'start' ? null : 'start'))}
+        onSelect={d => { onChange(toIso(d), endDate); setOpenField(null) }}
+        onClear={() => onChange(null, endDate)}
+      />
       <span>—</span>
-      <div className="relative">
-        <button
-          type="button" data-testid="filter-date-end"
-          onClick={() => setOpenField(f => (f === 'end' ? null : 'end'))}
-          className="px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 min-w-20 text-left"
-        >
-          {fmtIt(endDate) || 'A'}
-        </button>
-        {openField === 'end' && (
-          <div
-            data-testid="date-popover-end"
-            className="absolute z-10 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
-          >
-            <DayPicker
-              mode="single" locale={it} showOutsideDays={false}
-              selected={fromIso(endDate)}
-              onSelect={d => { onChange(startDate, toIso(d)); setOpenField(null) }}
-            />
-          </div>
-        )}
-      </div>
+      <DateField
+        testId="filter-date-end" popoverTestId="date-popover-end" placeholder="A" value={endDate}
+        isOpen={openField === 'end'}
+        onToggle={() => setOpenField(f => (f === 'end' ? null : 'end'))}
+        onSelect={d => { onChange(startDate, toIso(d)); setOpenField(null) }}
+        onClear={() => onChange(startDate, null)}
+      />
     </div>
   )
 }
