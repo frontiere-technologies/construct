@@ -13,7 +13,7 @@ Background reading on the "why" behind this setup: the team's internal [Vibe Cod
 3. [ ] Install project agents into `.claude/agents/` or equivalent
 4. [ ] Install project skills into `.claude/skills/` or equivalent
 5. [ ] Verify MCP servers in `.mcp.json`
-6. [ ] Read the AI instructions file for this repo (`CLAUDE.md`) and the conventions below
+6. [ ] Set up the AI instructions file for this repo (`CLAUDE.md`) with the conventions below
 
 ---
 
@@ -98,23 +98,27 @@ MCP servers are configured in `.mcp.json` at the repo root. This project current
 ```json
 {
   "mcpServers": {
-    "supabase": {
-      "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=<project_ref>"
-    }
   }
 }
 ```
 
 To find more MCP servers: https://registry.modelcontextprotocol.io/ or https://mcpservers.com/. Add new entries under `mcpServers` following the same shape.
 
+GitHub, Supabase, Mail, Calendar, Google Drive and others maybe usefull for your project.
+
 ---
 
-## 6. Read the AI instructions file and conventions
+## 6. Setup of the AI instructions file for this repo
 
-Read `CLAUDE.md` (or the equivalent `AGENTS.md`/`GEMINI.md`) at the repo root — it points to `README.md` and lists the commands for this project. It also carries the two conventions below, which apply repo-wide.
+`CLAUDE.md` (or the equivalent `AGENTS.md`/`GEMINI.md` from the table in step 1) is the file every AI coding CLI reads at startup. It must include:
+
+- **A pointer to `README.md`** — so the project overview isn't duplicated across instruction files.
+- **Commands** — how to run dev/build/lint/clean for the app, and how to run the test suite (this repo: `uv run pytest`, never `python`/`pip` directly — see step 1).
+- **Stack** — a one-line summary of the tech stack, so the assistant doesn't have to infer it from `package.json`.
 
 ### Tasks as checkboxes
+
+(NOTE, 27/Jun/2026: no reliable way was found to automate this — checkboxes are currently maintained by hand.)
 
 > **Scope:** applies only to markdown files under `./docs` (`docs/**/*.md`). Markdown files outside `./docs` are exempt.
 
@@ -125,9 +129,9 @@ When generating a markdown file under `./docs` that lists actions, tasks, or ite
 
 ### Mark checkboxes as completed when done
 
-If the originating request came from a `.md` file **under `./docs`** with checkboxes, mark the corresponding checkbox `- [x] ✅` as soon as that work is done — regardless of whether it was done via a Superpowers plan, a direct command, a bug fix, or delegated to a subagent. Do this per item, not in one batch at the end. Only mark items actually completed.
-
 (NOTE, 27/Jun/2026: no reliable way was found to automate this — checkboxes are currently maintained by hand.)
+
+If the originating request came from a `.md` file **under `./docs`** with checkboxes, mark the corresponding checkbox `- [x] ✅` as soon as that work is done — regardless of whether it was done via a Superpowers plan, a direct command, a bug fix, or delegated to a subagent. Do this per item, not in one batch at the end. Only mark items actually completed.
 
 ---
 
