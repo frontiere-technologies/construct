@@ -12,6 +12,7 @@ function makeFakeQuery() {
     eq(column: string, value: unknown) { calls.push({ method: 'eq', column, value }); return q },
     gte(column: string, value: unknown) { calls.push({ method: 'gte', column, value }); return q },
     lte(column: string, value: unknown) { calls.push({ method: 'lte', column, value }); return q },
+    lt(column: string, value: unknown) { calls.push({ method: 'lt', column, value }); return q },
   }
   return q
 }
@@ -54,5 +55,32 @@ describe('applyFilters', () => {
       { method: 'eq', column: 'has_permissions', value: true },
       { method: 'gte', column: 'associated_users', value: 1 },
     ])
+  })
+
+  it('applies gte on date_ins when startDateIns is set', () => {
+    const q = makeFakeQuery()
+    applyFilters(q, { ...baseQuery, startDateIns: '2026-06-01' })
+    expect(q.calls).toEqual([{ method: 'gte', column: 'date_ins', value: '2026-06-01' }])
+  })
+
+  it('applies lt on date_ins with next-day value when endDateIns is set, to include the full end day', () => {
+    const q = makeFakeQuery()
+    applyFilters(q, { ...baseQuery, endDateIns: '2026-06-30' })
+    expect(q.calls).toEqual([{ method: 'lt', column: 'date_ins', value: '2026-07-01' }])
+  })
+
+  it('applies both gte and lt in order when startDateIns and endDateIns are both set', () => {
+    const q = makeFakeQuery()
+    applyFilters(q, { ...baseQuery, startDateIns: '2026-06-01', endDateIns: '2026-06-30' })
+    expect(q.calls).toEqual([
+      { method: 'gte', column: 'date_ins', value: '2026-06-01' },
+      { method: 'lt', column: 'date_ins', value: '2026-07-01' },
+    ])
+  })
+
+  it('rolls over to the next year when endDateIns is the last day of the year', () => {
+    const q = makeFakeQuery()
+    applyFilters(q, { ...baseQuery, endDateIns: '2026-12-31' })
+    expect(q.calls).toEqual([{ method: 'lt', column: 'date_ins', value: '2027-01-01' }])
   })
 })

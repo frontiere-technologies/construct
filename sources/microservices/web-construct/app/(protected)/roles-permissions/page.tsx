@@ -5,7 +5,7 @@ import type { RolesQuery } from '@/lib/rbac/types'
 function parseIntParam(v?: string): number | undefined {
   if (!v) return undefined
   const n = Number(v)
-  return Number.isFinite(n) ? n : undefined
+  return Number.isInteger(n) && n >= 0 ? n : undefined
 }
 
 export default async function RolesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
