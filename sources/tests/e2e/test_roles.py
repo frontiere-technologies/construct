@@ -80,3 +80,17 @@ def test_system_role_not_editable(logged_in_page, base_url):
     nav(page, f"{base_url}/roles-permissions/1")  # Administrator = SYSTEM
     edit = page.get_by_role("button", name="Modifica")
     assert edit.is_disabled()
+
+
+def test_filter_by_associated_users_range(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/roles-permissions")
+    baseline = page.locator("tbody tr").count()
+    assert baseline > 0
+
+    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("filter-min-associated-users").fill("999999")
+    expect(page.locator("tbody tr")).to_have_count(0)
+
+    page.get_by_test_id("filter-min-associated-users").fill("")
+    expect(page.locator("tbody tr")).to_have_count(baseline)

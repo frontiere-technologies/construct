@@ -21,6 +21,10 @@ interface Props {
   sortDir: 'ASC' | 'DESC'
   search: string
   hasPermission: boolean
+  minAssociatedUsers: number | null
+  maxAssociatedUsers: number | null
+  startDateIns: string | null
+  endDateIns: string | null
 }
 
 export default function RolesTableClient(props: Props) {
@@ -49,6 +53,25 @@ export default function RolesTableClient(props: Props) {
     return () => clearTimeout(t)
   }, [search, props.search, setParam])
 
+  const [minUsers, setMinUsers] = useState(props.minAssociatedUsers?.toString() ?? '')
+  const [maxUsers, setMaxUsers] = useState(props.maxAssociatedUsers?.toString() ?? '')
+
+  useEffect(() => {
+    setMinUsers(props.minAssociatedUsers?.toString() ?? '')
+    setMaxUsers(props.maxAssociatedUsers?.toString() ?? '')
+  }, [props.minAssociatedUsers, props.maxAssociatedUsers])
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const prevMin = props.minAssociatedUsers?.toString() ?? ''
+      const prevMax = props.maxAssociatedUsers?.toString() ?? ''
+      if (minUsers !== prevMin || maxUsers !== prevMax) {
+        setParam({ minAssociatedUsers: minUsers || null, maxAssociatedUsers: maxUsers || null, page: '0' })
+      }
+    }, 350)
+    return () => clearTimeout(t)
+  }, [minUsers, maxUsers, props.minAssociatedUsers, props.maxAssociatedUsers, setParam])
+
   const onSort = (field: string) => {
     const dir = props.sortField === field && props.sortDir === 'ASC' ? 'DESC' : 'ASC'
     setParam({ sort: field, direction: dir })
@@ -68,13 +91,29 @@ export default function RolesTableClient(props: Props) {
   ]
 
   const filters = (
-    <label className="flex items-center gap-2 text-sm">
-      <input
-        type="checkbox" checked={props.hasPermission}
-        onChange={e => setParam({ hasPermission: e.target.checked ? 'true' : null, page: '0' })}
-      />
-      Ha permessi
-    </label>
+    <div className="flex flex-col gap-3">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox" checked={props.hasPermission}
+          onChange={e => setParam({ hasPermission: e.target.checked ? 'true' : null, page: '0' })}
+        />
+        Ha permessi
+      </label>
+      <div className="flex items-center gap-2 text-sm">
+        <span>Utenti associati</span>
+        <input
+          type="number" min={0} placeholder="Min" data-testid="filter-min-associated-users"
+          value={minUsers} onChange={e => setMinUsers(e.target.value)}
+          className="w-20 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+        />
+        <span>—</span>
+        <input
+          type="number" min={0} placeholder="Max" data-testid="filter-max-associated-users"
+          value={maxUsers} onChange={e => setMaxUsers(e.target.value)}
+          className="w-20 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+        />
+      </div>
+    </div>
   )
 
   return (
