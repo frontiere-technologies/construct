@@ -10,7 +10,7 @@ export default async function RolesPage({ searchParams }: { searchParams: Promis
     search: sp.search,
     sort: (sp.sort as RolesQuery['sort']) ?? 'id',
     direction: (sp.direction as 'ASC' | 'DESC') ?? 'ASC',
-    hasPermission: sp.hasPermission === 'true' || undefined,
+    hasPermission: sp.hasPermission === 'true' ? true : sp.hasPermission === 'false' ? false : undefined,
     startDateIns: sp.startDateIns,
     endDateIns: sp.endDateIns,
   }
@@ -26,7 +26,7 @@ export default async function RolesPage({ searchParams }: { searchParams: Promis
         sortField={query.sort ?? 'id'}
         sortDir={query.direction ?? 'ASC'}
         search={query.search ?? ''}
-        hasPermission={Boolean(query.hasPermission)}
+        hasPermission={query.hasPermission ?? null}
         startDateIns={query.startDateIns ?? null}
         endDateIns={query.endDateIns ?? null}
       />

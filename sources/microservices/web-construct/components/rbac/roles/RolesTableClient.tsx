@@ -6,6 +6,7 @@ import DataTable, { type Column } from '@/components/rbac/DataTable'
 import CreateRoleModal from './CreateRoleModal'
 import RenameRoleModal from './RenameRoleModal'
 import DateRangeFilter from './DateRangeFilter'
+import CustomSelect from '@/components/rbac/CustomSelect'
 import { deleteRole } from '@/lib/rbac/roles-actions'
 import type { RolePageItemDto } from '@/lib/rbac/types'
 
@@ -21,7 +22,7 @@ interface Props {
   sortField: string
   sortDir: 'ASC' | 'DESC'
   search: string
-  hasPermission: boolean
+  hasPermission: boolean | null
   startDateIns: string | null
   endDateIns: string | null
 }
@@ -52,27 +53,31 @@ export default function RolesTableClient(props: Props) {
     return () => clearTimeout(t)
   }, [search, props.search, setParam])
 
+  const [hasPermission, setHasPermission] = useState<string>(props.hasPermission == null ? '' : String(props.hasPermission))
   const [startDate, setStartDate] = useState(props.startDateIns)
   const [endDate, setEndDate] = useState(props.endDateIns)
 
   useEffect(() => {
+    setHasPermission(props.hasPermission == null ? '' : String(props.hasPermission))
     setStartDate(props.startDateIns)
     setEndDate(props.endDateIns)
-  }, [props.startDateIns, props.endDateIns])
+  }, [props.hasPermission, props.startDateIns, props.endDateIns])
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const changed = startDate !== props.startDateIns || endDate !== props.endDateIns
-      if (changed) {
-        setParam({
-          startDateIns: startDate || null,
-          endDateIns: endDate || null,
-          page: '0',
-        })
-      }
-    }, 350)
-    return () => clearTimeout(t)
-  }, [startDate, endDate, props.startDateIns, props.endDateIns, setParam])
+  const applyFilters = useCallback(() => {
+    setParam({
+      hasPermission: hasPermission || null,
+      startDateIns: startDate || null,
+      endDateIns: endDate || null,
+      page: '0',
+    })
+  }, [hasPermission, startDate, endDate, setParam])
+
+  const resetFilters = useCallback(() => {
+    setHasPermission('')
+    setStartDate(null)
+    setEndDate(null)
+    setParam({ hasPermission: null, startDateIns: null, endDateIns: null, page: '0' })
+  }, [setParam])
 
   const onSort = (field: string) => {
     const dir = props.sortField === field && props.sortDir === 'ASC' ? 'DESC' : 'ASC'
@@ -93,14 +98,17 @@ export default function RolesTableClient(props: Props) {
   ]
 
   const filters = (
-    <div className="flex flex-col gap-3">
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox" checked={props.hasPermission}
-          onChange={e => setParam({ hasPermission: e.target.checked ? 'true' : null, page: '0' })}
+    <div className="flex flex-col gap-4">
+      <div className="space-y-1">
+        <label className="text-sm font-medium block">Ha permessi</label>
+        <CustomSelect
+          data-testid="filter-has-permission"
+          value={hasPermission}
+          onChange={v => setHasPermission(String(v))}
+          options={[{ value: 'true', label: 'Sì' }, { value: 'false', label: 'No' }]}
+          placeholder="Tutti"
         />
-        Ha permessi
-      </label>
+      </div>
       <DateRangeFilter
         startDate={startDate} endDate={endDate}
         onChange={(s, e) => { setStartDate(s); setEndDate(e) }}
@@ -122,6 +130,8 @@ export default function RolesTableClient(props: Props) {
         search={search}
         onSearchChange={setSearch}
         filtersSlot={filters}
+        onApplyFilters={applyFilters}
+        onResetFilters={resetFilters}
         actionButton={<button onClick={() => setShowCreate(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Nuovo ruolo</button>}
         onRowClick={r => router.push(`/roles-permissions/${r.id}`)}
         rowMenu={r => [
