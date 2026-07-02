@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, SlidersHorizontal, Columns3, MoreHorizontal, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
+import FilterDrawer from './FilterDrawer'
 
 export interface Column<T> {
   key: string
@@ -25,6 +26,8 @@ interface DataTableProps<T> {
   search: string
   onSearchChange: (v: string) => void
   filtersSlot?: React.ReactNode
+  onApplyFilters?: () => void
+  onResetFilters?: () => void
   actionButton?: React.ReactNode
   rowMenu?: (row: T) => RowMenuItem[]
   onRowClick?: (row: T) => void
@@ -32,7 +35,7 @@ interface DataTableProps<T> {
 
 export default function DataTable<T>(props: DataTableProps<T>) {
   const { columns, rows, rowKey, sort, onSortChange, page, totalPages, onPageChange,
-    search, onSearchChange, filtersSlot, actionButton, rowMenu, onRowClick } = props
+    search, onSearchChange, filtersSlot, onApplyFilters, onResetFilters, actionButton, rowMenu, onRowClick } = props
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [showCols, setShowCols] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
@@ -127,8 +130,15 @@ export default function DataTable<T>(props: DataTableProps<T>) {
         </div>
       </div>
 
-      {showFilters && filtersSlot && (
-        <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">{filtersSlot}</div>
+      {filtersSlot && (
+        <FilterDrawer
+          open={showFilters}
+          onClose={() => setShowFilters(false)}
+          onApply={() => { onApplyFilters?.(); setShowFilters(false) }}
+          onReset={() => onResetFilters?.()}
+        >
+          {filtersSlot}
+        </FilterDrawer>
       )}
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
