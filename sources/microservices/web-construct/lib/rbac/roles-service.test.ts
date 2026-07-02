@@ -20,6 +20,18 @@ function makeFakeQuery() {
 const baseQuery: RolesQuery = { page: 0, size: 10 }
 
 describe('applyFilters', () => {
+  it('applies eq(has_permissions, false) when hasPermission is explicitly false', () => {
+    const q = makeFakeQuery()
+    applyFilters(q, { ...baseQuery, hasPermission: false })
+    expect(q.calls).toEqual([{ method: 'eq', column: 'has_permissions', value: false }])
+  })
+
+  it('omits the has_permissions filter when hasPermission is undefined', () => {
+    const q = makeFakeQuery()
+    applyFilters(q, baseQuery)
+    expect(q.calls).toEqual([])
+  })
+
   it('applies gte/lte on associated_users when min and max are set', () => {
     const q = makeFakeQuery()
     applyFilters(q, { ...baseQuery, minAssociatedUsers: 5, maxAssociatedUsers: 20 })

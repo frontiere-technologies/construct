@@ -25,7 +25,7 @@ export function applyFilters<T extends {
 }>(q: T, query: RolesQuery): T {
   let r = q
   if (query.search) r = r.ilike('description', `%${query.search}%`) as T
-  if (query.hasPermission) r = r.eq('has_permissions', true) as T
+  if (query.hasPermission != null) r = r.eq('has_permissions', query.hasPermission) as T
   if (query.startDateIns) r = r.gte('date_ins', query.startDateIns) as T
   if (query.endDateIns) r = r.lt('date_ins', nextDay(query.endDateIns)) as T
   if (query.minAssociatedUsers != null) r = r.gte('associated_users', query.minAssociatedUsers) as T
