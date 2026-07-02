@@ -13,6 +13,8 @@ export default async function UserManagementPage({ searchParams }: { searchParam
     direction: (sp.direction as 'ASC' | 'DESC') ?? 'DESC',
     roleIds: sp.roleIds ? sp.roleIds.split(',').map(Number) : undefined,
     statuses: sp.statuses ? (sp.statuses.split(',').map(Number) as UserStatusId[]) : undefined,
+    createdFrom: sp.createdFrom,
+    createdTo: sp.createdTo,
   }
   const [{ users, total }, allRolesRaw] = await Promise.all([listUsers(query), getAllRoles()])
   const totalPages = Math.max(1, Math.ceil(total / query.size))
@@ -29,6 +31,10 @@ export default async function UserManagementPage({ searchParams }: { searchParam
         sortDir={query.direction ?? 'DESC'}
         search={query.search ?? ''}
         allRoles={allRoles}
+        roleId={query.roleIds?.[0] ?? null}
+        statusId={query.statuses?.[0] ?? null}
+        createdFrom={query.createdFrom ?? null}
+        createdTo={query.createdTo ?? null}
       />
     </div>
   )
