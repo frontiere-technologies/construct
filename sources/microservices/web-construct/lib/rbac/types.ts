@@ -93,8 +93,6 @@ export interface RolesQuery {
   hasPermission?: boolean
   startDateIns?: string
   endDateIns?: string
-  minAssociatedUsers?: number
-  maxAssociatedUsers?: number
 }
 
 export interface RolesPage {

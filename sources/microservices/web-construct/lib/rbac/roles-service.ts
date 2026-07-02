@@ -28,8 +28,6 @@ export function applyFilters<T extends {
   if (query.hasPermission != null) r = r.eq('has_permissions', query.hasPermission) as T
   if (query.startDateIns) r = r.gte('date_ins', query.startDateIns) as T
   if (query.endDateIns) r = r.lt('date_ins', nextDay(query.endDateIns)) as T
-  if (query.minAssociatedUsers != null) r = r.gte('associated_users', query.minAssociatedUsers) as T
-  if (query.maxAssociatedUsers != null) r = r.lte('associated_users', query.maxAssociatedUsers) as T
   return r
 }
 
