@@ -111,6 +111,7 @@ def test_filter_by_has_permission_and_reset(logged_in_page, base_url):
     nav(page, f"{base_url}/roles-permissions")
     baseline = page.locator("tbody tr").count()
     assert baseline > 0
+    assert page.get_by_text("Sì", exact=True).count() > 0
 
     page.get_by_role("button", name="Filtri").click()
     page.get_by_test_id("filter-has-permission").click()
