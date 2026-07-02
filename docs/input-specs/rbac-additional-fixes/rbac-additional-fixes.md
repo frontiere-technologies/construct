@@ -8,4 +8,4 @@ Functionalities
 - F-01 - [ ] xxx
 
 Varie
-- V-01 - [ ] Cambiare e uniformare la pagina sui filtri
+- V-01 - [x] ✅ Cambiare e uniformare la pagina sui filtri e metterla come in questi due esempi a destra. Vedi qui: docs/input-specs/rbac-additional-fixes/images/roles-filters.png e docs/input-specs/rbac-additional-fixes/images/users-filters.png
