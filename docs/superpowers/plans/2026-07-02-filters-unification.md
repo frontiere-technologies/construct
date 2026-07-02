@@ -30,7 +30,7 @@
 **Interfaces:**
 - Produces: `nextDay(dateStr: string): string` — given `'YYYY-MM-DD'`, returns the next calendar day as `'YYYY-MM-DD'` (UTC-based, matches existing `roles-service.ts` behavior exactly). Used by Task 9 to fix the Users `createdTo` filter the same way Roles' `endDateIns` was already fixed.
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Create `sources/microservices/web-construct/lib/rbac/date-utils.test.ts`:
 
@@ -53,12 +53,12 @@ describe('nextDay', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [✅] **Step 2: Run test to verify it fails**
 
 Run: `cd sources/microservices/web-construct && npm run test -- lib/rbac/date-utils.test.ts`
 Expected: FAIL — `Cannot find module './date-utils'`
 
-- [ ] **Step 3: Create the shared helper**
+- [✅] **Step 3: Create the shared helper**
 
 Create `sources/microservices/web-construct/lib/rbac/date-utils.ts`:
 
@@ -70,12 +70,12 @@ export function nextDay(dateStr: string): string {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [✅] **Step 4: Run test to verify it passes**
 
 Run: `cd sources/microservices/web-construct && npm run test -- lib/rbac/date-utils.test.ts`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Point `roles-service.ts` at the shared helper**
+- [✅] **Step 5: Point `roles-service.ts` at the shared helper**
 
 In `sources/microservices/web-construct/lib/rbac/roles-service.ts`, remove the local `nextDay` function (lines 18-22):
 
@@ -93,12 +93,12 @@ and add an import at the top of the file (after the existing imports, e.g. after
 import { nextDay } from './date-utils'
 ```
 
-- [ ] **Step 6: Run the existing roles-service tests to confirm no regression**
+- [✅] **Step 6: Run the existing roles-service tests to confirm no regression**
 
 Run: `cd sources/microservices/web-construct && npm run test -- lib/rbac/roles-service.test.ts`
 Expected: PASS (all existing tests, including the `endDateIns`/next-day-rollover ones, still pass unchanged)
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/date-utils.ts sources/microservices/web-construct/lib/rbac/date-utils.test.ts sources/microservices/web-construct/lib/rbac/roles-service.ts
@@ -117,7 +117,7 @@ git commit -m "refactor(rbac): extract nextDay into shared date-utils"
 - Consumes: `RolesQuery.hasPermission?: boolean` (type unchanged — `undefined` still means "no filter", but now `false` is distinguishable from `undefined`).
 - Produces: `applyFilters` now calls `.eq('has_permissions', query.hasPermission)` whenever `hasPermission` is `true` or `false` (only skips when `undefined`). Task 7 will be the first caller to actually send `false`.
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 In `sources/microservices/web-construct/lib/rbac/roles-service.test.ts`, replace the existing `'combines with existing search and hasPermission filters'` test's expectations are unaffected, but add a new test right after the `hasPermission` usage. Insert this new `it` block right after the `describe('applyFilters', () => {` line (i.e. as the new first test, before `'applies gte/lte on associated_users...'`):
 
@@ -135,12 +135,12 @@ In `sources/microservices/web-construct/lib/rbac/roles-service.test.ts`, replace
   })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [✅] **Step 2: Run test to verify it fails**
 
 Run: `cd sources/microservices/web-construct && npm run test -- lib/rbac/roles-service.test.ts`
 Expected: FAIL on `'applies eq(has_permissions, false)...'` — actual calls is `[]` because `if (query.hasPermission)` is falsy for `false`.
 
-- [ ] **Step 3: Fix `applyFilters`**
+- [✅] **Step 3: Fix `applyFilters`**
 
 In `sources/microservices/web-construct/lib/rbac/roles-service.ts`, change line 33:
 
@@ -154,12 +154,12 @@ to:
   if (query.hasPermission != null) r = r.eq('has_permissions', query.hasPermission) as T
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [✅] **Step 4: Run tests to verify they pass**
 
 Run: `cd sources/microservices/web-construct && npm run test -- lib/rbac/roles-service.test.ts`
 Expected: PASS (all tests, including the two new ones and the pre-existing `hasPermission: true` case inside `'combines with existing search...'`)
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/roles-service.ts sources/microservices/web-construct/lib/rbac/roles-service.test.ts
@@ -182,7 +182,7 @@ Per the approved design (DEC-3), this filter is dropped entirely — UI, query p
 **Interfaces:**
 - Produces: `RolesTableClient`'s `Props` interface drops `minAssociatedUsers: number | null` and `maxAssociatedUsers: number | null`. `associatedUsers` remains a normal (sortable, displayed) column — only the filter goes away.
 
-- [ ] **Step 1: Remove from `RolesQuery`**
+- [✅] **Step 1: Remove from `RolesQuery`**
 
 In `sources/microservices/web-construct/lib/rbac/types.ts`, in the `RolesQuery` interface, remove:
 
@@ -191,7 +191,7 @@ In `sources/microservices/web-construct/lib/rbac/types.ts`, in the `RolesQuery` 
   maxAssociatedUsers?: number
 ```
 
-- [ ] **Step 2: Remove from `applyFilters`**
+- [✅] **Step 2: Remove from `applyFilters`**
 
 In `sources/microservices/web-construct/lib/rbac/roles-service.ts`, remove lines 36-37:
 
@@ -200,7 +200,7 @@ In `sources/microservices/web-construct/lib/rbac/roles-service.ts`, remove lines
   if (query.maxAssociatedUsers != null) r = r.lte('associated_users', query.maxAssociatedUsers) as T
 ```
 
-- [ ] **Step 3: Remove the obsolete tests**
+- [✅] **Step 3: Remove the obsolete tests**
 
 In `sources/microservices/web-construct/lib/rbac/roles-service.test.ts`, delete these four `it` blocks entirely:
 - `'applies gte/lte on associated_users when min and max are set'`
@@ -221,12 +221,12 @@ And update the `'combines with existing search and hasPermission filters'` test 
   })
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [✅] **Step 4: Run tests to verify they pass**
 
 Run: `cd sources/microservices/web-construct && npm run test -- lib/rbac/roles-service.test.ts`
 Expected: PASS (7 remaining tests: 2 from Task 2 + this file's date-range tests + the updated combined test)
 
-- [ ] **Step 5: Remove from `roles-permissions/page.tsx`**
+- [✅] **Step 5: Remove from `roles-permissions/page.tsx`**
 
 In `sources/microservices/web-construct/app/(protected)/roles-permissions/page.tsx`, remove the now-unused `parseIntParam` helper (lines 5-9) and its two call sites. The file becomes:
 
@@ -270,7 +270,7 @@ export default async function RolesPage({ searchParams }: { searchParams: Promis
 
 (Note: `hasPermission` parsing here stays two-way for now — Task 7 upgrades it to three-way alongside the frontend "Ha permessi" redesign.)
 
-- [ ] **Step 6: Remove from `RolesTableClient.tsx`**
+- [✅] **Step 6: Remove from `RolesTableClient.tsx`**
 
 In `sources/microservices/web-construct/components/rbac/roles/RolesTableClient.tsx`:
 
@@ -324,16 +324,16 @@ In `sources/microservices/web-construct/components/rbac/roles/RolesTableClient.t
 
 (This debounce effect is itself replaced in Task 7 with the Applica/Reset pattern — this step just keeps the file in a working, type-correct state for now.)
 
-- [ ] **Step 7: Type-check and lint**
+- [✅] **Step 7: Type-check and lint**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint`
 Expected: no errors
 
-- [ ] **Step 8: Manual browser check**
+- [✅] **Step 8: Manual browser check**
 
 Run `npm run dev`, log in, open `/roles-permissions`, open "Filtri": confirm only "Ha permessi" and "Data di creazione" remain, and both still filter the table (auto-apply, unchanged behavior at this point).
 
-- [ ] **Step 9: Commit**
+- [✅] **Step 9: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/types.ts sources/microservices/web-construct/lib/rbac/roles-service.ts sources/microservices/web-construct/lib/rbac/roles-service.test.ts sources/microservices/web-construct/app/\(protected\)/roles-permissions/page.tsx sources/microservices/web-construct/components/rbac/roles/RolesTableClient.tsx
@@ -352,14 +352,14 @@ git commit -m "feat(rbac): drop Utenti associati filter (V-01, DEC-3)"
 **Interfaces:**
 - Produces: `CustomSelect` (default export) and `SelectOption` (named export) from `@/components/rbac/CustomSelect`, same API as today: `{ value, onChange, options, placeholder?, disabled?, title?, 'data-testid'?, className? }`.
 
-- [ ] **Step 1: Move the file**
+- [✅] **Step 1: Move the file**
 
 ```bash
 cd sources/microservices/web-construct
 git mv components/rbac/functionalities/CustomSelect.tsx components/rbac/CustomSelect.tsx
 ```
 
-- [ ] **Step 2: Update the one existing import**
+- [✅] **Step 2: Update the one existing import**
 
 In `sources/microservices/web-construct/components/rbac/functionalities/FunctionalityForm.tsx`, change line 6:
 
@@ -373,16 +373,16 @@ to:
 import CustomSelect from '../CustomSelect'
 ```
 
-- [ ] **Step 3: Type-check and lint**
+- [✅] **Step 3: Type-check and lint**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint`
 Expected: no errors
 
-- [ ] **Step 4: Manual browser check**
+- [✅] **Step 4: Manual browser check**
 
 Run `npm run dev`, open the Functionalities editor for any item, confirm the two `CustomSelect` dropdowns there (e.g. type/parent pickers) still render and work.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add -A sources/microservices/web-construct/components/rbac/CustomSelect.tsx sources/microservices/web-construct/components/rbac/functionalities/CustomSelect.tsx sources/microservices/web-construct/components/rbac/functionalities/FunctionalityForm.tsx
@@ -399,7 +399,7 @@ git commit -m "refactor(rbac): move CustomSelect to shared components/rbac/"
 **Interfaces:**
 - Produces: `export default function FilterDrawer({ open, onClose, onApply, onReset, children }: { open: boolean; onClose: () => void; onApply: () => void; onReset: () => void; children: React.ReactNode })`. Task 6 wires this into `DataTable`.
 
-- [ ] **Step 1: Create the component**
+- [✅] **Step 1: Create the component**
 
 Create `sources/microservices/web-construct/components/rbac/FilterDrawer.tsx`:
 
@@ -454,12 +454,12 @@ export default function FilterDrawer({ open, onClose, onApply, onReset, children
 }
 ```
 
-- [ ] **Step 2: Type-check and lint**
+- [✅] **Step 2: Type-check and lint**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint`
 Expected: no errors (component isn't wired up anywhere yet, so nothing renders it — this just confirms it compiles cleanly)
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/rbac/FilterDrawer.tsx
@@ -477,7 +477,7 @@ git commit -m "feat(rbac): add FilterDrawer component (V-01)"
 - Consumes: `FilterDrawer` from Task 5.
 - Produces: `DataTableProps<T>` gains `onApplyFilters?: () => void` and `onResetFilters?: () => void`. Tasks 7 and 10 (`RolesTableClient`, `UsersTableClient`) pass these.
 
-- [ ] **Step 1: Add the import and new props**
+- [✅] **Step 1: Add the import and new props**
 
 In `sources/microservices/web-construct/components/rbac/DataTable.tsx`, add after the existing `lucide-react` import (line 5):
 
@@ -499,7 +499,7 @@ In the function's destructuring (line 34-35), add `onApplyFilters, onResetFilter
     search, onSearchChange, filtersSlot, actionButton, rowMenu, onRowClick, onApplyFilters, onResetFilters } = props
 ```
 
-- [ ] **Step 2: Replace the inline filter panel with the drawer**
+- [✅] **Step 2: Replace the inline filter panel with the drawer**
 
 Replace lines 130-132:
 
@@ -524,16 +524,16 @@ with:
       )}
 ```
 
-- [ ] **Step 3: Type-check and lint**
+- [✅] **Step 3: Type-check and lint**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint`
 Expected: no errors
 
-- [ ] **Step 4: Manual browser check**
+- [✅] **Step 4: Manual browser check**
 
 Run `npm run dev`, open `/roles-permissions`, click "Filtri": confirm the panel now slides in from the right as a full-height overlay with a backdrop, showing "Ha permessi" and "Data di creazione", with "Reset"/"Applica" buttons at the bottom (buttons aren't wired to anything meaningful yet — that's Task 7 — but they must render and be clickable without erroring, and clicking Applica or the X should close the drawer).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/rbac/DataTable.tsx
@@ -552,7 +552,7 @@ git commit -m "feat(rbac): wire FilterDrawer into DataTable (V-01)"
 - Consumes: `CustomSelect` (Task 4) from `@/components/rbac/CustomSelect`; `DataTable`'s `onApplyFilters`/`onResetFilters` (Task 6).
 - Produces: `RolesTableClient`'s `hasPermission` prop becomes `boolean | null` (`null` = unset, was previously always `boolean` via `Boolean(...)`).
 
-- [ ] **Step 1: Three-way `hasPermission` parsing in `page.tsx`**
+- [✅] **Step 1: Three-way `hasPermission` parsing in `page.tsx`**
 
 In `sources/microservices/web-construct/app/(protected)/roles-permissions/page.tsx`, change:
 
@@ -578,7 +578,7 @@ to:
         hasPermission={query.hasPermission ?? null}
 ```
 
-- [ ] **Step 2: Update `RolesTableClient`'s `Props` interface**
+- [✅] **Step 2: Update `RolesTableClient`'s `Props` interface**
 
 In `sources/microservices/web-construct/components/rbac/roles/RolesTableClient.tsx`, change:
 
@@ -592,7 +592,7 @@ to:
   hasPermission: boolean | null
 ```
 
-- [ ] **Step 3: Add the `CustomSelect` import and draft `hasPermission` state**
+- [✅] **Step 3: Add the `CustomSelect` import and draft `hasPermission` state**
 
 Add near the top imports:
 
@@ -626,7 +626,7 @@ with:
   }, [props.hasPermission, props.startDateIns, props.endDateIns])
 ```
 
-- [ ] **Step 4: Replace the auto-apply debounce effect with explicit Applica/Reset handlers**
+- [✅] **Step 4: Replace the auto-apply debounce effect with explicit Applica/Reset handlers**
 
 Remove the filter-debounce `useEffect` entirely (the one introduced/adjusted in Task 3 Step 6.5, starting `useEffect(() => { const t = setTimeout(() => { const changed = startDate...`).
 
@@ -650,7 +650,7 @@ Add in its place:
   }, [setParam])
 ```
 
-- [ ] **Step 5: Replace the "Ha permessi" checkbox with `CustomSelect`, restyle as full-width rows**
+- [✅] **Step 5: Replace the "Ha permessi" checkbox with `CustomSelect`, restyle as full-width rows**
 
 Replace the `filters` JSX block:
 
@@ -695,7 +695,7 @@ with:
   )
 ```
 
-- [ ] **Step 6: Wire `onApplyFilters`/`onResetFilters` into `<DataTable>`**
+- [✅] **Step 6: Wire `onApplyFilters`/`onResetFilters` into `<DataTable>`**
 
 In the `<DataTable ... />` JSX, add:
 
@@ -707,16 +707,16 @@ In the `<DataTable ... />` JSX, add:
 
 (insert right after the existing `filtersSlot={filters}` line).
 
-- [ ] **Step 7: Add `useCallback` to the React import if not already present**
+- [✅] **Step 7: Add `useCallback` to the React import if not already present**
 
 Confirm the top of the file imports `useCallback` — it already does (`import React, { useState, useEffect, useCallback } from 'react'`), no change needed.
 
-- [ ] **Step 8: Type-check and lint**
+- [✅] **Step 8: Type-check and lint**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint`
 Expected: no errors
 
-- [ ] **Step 9: Manual browser check**
+- [✅] **Step 9: Manual browser check**
 
 Run `npm run dev`, log in, open `/roles-permissions`:
 - Open "Filtri": set "Ha permessi" to "Sì" and pick a "Data di creazione" range, click "Applica" → drawer closes, URL gains `hasPermission=true&startDateIns=...&endDateIns=...`, table narrows.
@@ -724,7 +724,7 @@ Run `npm run dev`, log in, open `/roles-permissions`:
 - Set "Ha permessi" to "No", click "Applica" → only roles without permissions show; confirm this actually narrows the list (this exercises the Task 2 fix).
 - Click the backdrop or the X while a field is changed but not yet applied → drawer closes, URL/table unchanged (pending edit discarded).
 
-- [ ] **Step 10: Commit**
+- [✅] **Step 10: Commit**
 
 ```bash
 git add sources/microservices/web-construct/app/\(protected\)/roles-permissions/page.tsx sources/microservices/web-construct/components/rbac/roles/RolesTableClient.tsx
@@ -741,11 +741,11 @@ git commit -m "feat(rbac): redesign Roles filters as drawer with Applica/Reset (
 **Interfaces:**
 - Consumes: `get_by_role("button", name="Applica")`, `get_by_role("button", name="Reset")`, existing `data-testid="filter-date-start"`/`"date-popover-start"` (unchanged, from `DateRangeFilter`), new `data-testid="filter-has-permission"` (from `CustomSelect`, Task 7).
 
-- [ ] **Step 1: Remove the obsolete associated-users test**
+- [✅] **Step 1: Remove the obsolete associated-users test**
 
 Delete `test_filter_by_associated_users_range` entirely (lines 87-98 in the original file) — the filter no longer exists (Task 3).
 
-- [ ] **Step 2: Update the date-range test to use the drawer's Applica button**
+- [✅] **Step 2: Update the date-range test to use the drawer's Applica button**
 
 Replace `test_filter_by_creation_date_range`:
 
@@ -774,7 +774,7 @@ def test_filter_by_creation_date_range(logged_in_page, base_url):
 
 (Only change from the original: added `page.get_by_role("button", name="Applica").click()` after picking the date, since filters no longer auto-apply.)
 
-- [ ] **Step 3: Add a test for "Ha permessi" via the new dropdown + Reset**
+- [✅] **Step 3: Add a test for "Ha permessi" via the new dropdown + Reset**
 
 Add a new test at the end of the file:
 
@@ -798,12 +798,12 @@ def test_filter_by_has_permission_and_reset(logged_in_page, base_url):
     expect(page.locator("tbody tr")).to_have_count(baseline)
 ```
 
-- [ ] **Step 4: Run the updated e2e suite**
+- [✅] **Step 4: Run the updated e2e suite**
 
 Run: `uv run pytest sources/tests/e2e/test_roles.py -v`
 Expected: all tests PASS (requires `npm run dev` running against `BASE_URL`, and `TEST_EMAIL` configured per `sources/tests/e2e/.env.test` — same preconditions as before this change)
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/tests/e2e/test_roles.py
@@ -822,7 +822,7 @@ git commit -m "test(rbac): update Roles e2e for filter drawer + Applica/Reset"
 - Consumes: `nextDay` from `./date-utils` (Task 1).
 - Produces: `export function applyUserFilters<T extends FilterableQuery>(q: T, query: UsersQuery, ids: string[] | null): T` (was previously unexported — Task 10's frontend work doesn't need this export, but it makes the fix unit-testable, matching the `roles-service.ts` convention).
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Create `sources/microservices/web-construct/lib/rbac/users-service.test.ts`:
 
@@ -882,12 +882,12 @@ describe('applyUserFilters', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [✅] **Step 2: Run test to verify it fails**
 
 Run: `cd sources/microservices/web-construct && npm run test -- lib/rbac/users-service.test.ts`
 Expected: FAIL — `applyUserFilters` is not exported from `./users-service`.
 
-- [ ] **Step 3: Export `applyUserFilters`, add `lt`, and fix `createdTo`**
+- [✅] **Step 3: Export `applyUserFilters`, add `lt`, and fix `createdTo`**
 
 In `sources/microservices/web-construct/lib/rbac/users-service.ts`:
 
@@ -929,22 +929,22 @@ export function applyUserFilters<T extends FilterableQuery>(q: T, query: UsersQu
 
 (Only functional change from today: `lte('created_at', query.createdTo)` → `lt('created_at', nextDay(query.createdTo))`, matching the Roles fix from commit `65997d3`.)
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [✅] **Step 4: Run tests to verify they pass**
 
 Run: `cd sources/microservices/web-construct && npm run test -- lib/rbac/users-service.test.ts`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Run the full unit suite to confirm no regressions elsewhere**
+- [✅] **Step 5: Run the full unit suite to confirm no regressions elsewhere**
 
 Run: `cd sources/microservices/web-construct && npm run test`
 Expected: all tests PASS
 
-- [ ] **Step 6: Type-check and lint**
+- [✅] **Step 6: Type-check and lint**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint`
 Expected: no errors
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/users-service.ts sources/microservices/web-construct/lib/rbac/users-service.test.ts
@@ -963,7 +963,7 @@ git commit -m "fix(rbac): make Users createdTo filter inclusive of the full end 
 - Consumes: `CustomSelect` (Task 4), `DateRangeFilter` (existing, from `@/components/rbac/roles/DateRangeFilter`), `DataTable`'s `onApplyFilters`/`onResetFilters` (Task 6), `USER_STATUS_ACTIVE`/`USER_STATUS_DEACTIVATED` (existing, from `@/lib/rbac/types`).
 - Produces: `UsersTableClient`'s `Props` gains `roleId: number | null`, `statusId: number | null`, `createdFrom: string | null`, `createdTo: string | null`.
 
-- [ ] **Step 1: Parse the new query params in `page.tsx`**
+- [✅] **Step 1: Parse the new query params in `page.tsx`**
 
 In `sources/microservices/web-construct/app/(protected)/user-management/page.tsx`, add `createdFrom`/`createdTo` to the `UsersQuery` object:
 
@@ -1006,7 +1006,7 @@ export default async function UserManagementPage({ searchParams }: { searchParam
 }
 ```
 
-- [ ] **Step 2: Rewrite `UsersTableClient.tsx`**
+- [✅] **Step 2: Rewrite `UsersTableClient.tsx`**
 
 Replace the full contents of `sources/microservices/web-construct/components/rbac/users/UsersTableClient.tsx`:
 
@@ -1167,12 +1167,12 @@ export default function UsersTableClient(props: Props) {
 
 Note the `setParam` signature changes from `(k: string, v: string | null)` to `(updates: Record<string, string | null>)` to match `RolesTableClient`'s pattern (needed since Applica now commits four fields at once) — the `onSortChange`/`onPageChange`/`onSearchChange` call sites above are updated accordingly to pass an object.
 
-- [ ] **Step 3: Type-check and lint**
+- [✅] **Step 3: Type-check and lint**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint`
 Expected: no errors
 
-- [ ] **Step 4: Manual browser check**
+- [✅] **Step 4: Manual browser check**
 
 Run `npm run dev`, log in, open `/user-management`:
 - Confirm the "Filtri" button now appears (it didn't before) and opens the drawer with "Ruolo", "Stato", "Data di creazione".
@@ -1182,7 +1182,7 @@ Run `npm run dev`, log in, open `/user-management`:
 - Click "Reset" → all three fields clear and the URL/table reset immediately, drawer stays open.
 - Confirm the free-text search box still works as before (unaffected).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/app/\(protected\)/user-management/page.tsx sources/microservices/web-construct/components/rbac/users/UsersTableClient.tsx
@@ -1199,7 +1199,7 @@ git commit -m "feat(rbac): add Users filter drawer — Ruolo, Stato, Data di cre
 **Interfaces:**
 - Consumes: `data-testid="filter-role"`, `filter-role-option-<id>`, `filter-status`, `filter-status-option-<id>` (from `CustomSelect`, Task 10), `get_by_role("button", name="Filtri"|"Applica"|"Reset")`.
 
-- [ ] **Step 1: Add filter tests**
+- [✅] **Step 1: Add filter tests**
 
 Append to `sources/tests/e2e/test_users.py`:
 
@@ -1236,12 +1236,12 @@ def test_filter_by_role(logged_in_page, base_url):
 
 Add `import re` at the top of the file if not already present (it is not, in the current file) — insert it as the first line.
 
-- [ ] **Step 2: Run the updated e2e suite**
+- [✅] **Step 2: Run the updated e2e suite**
 
 Run: `uv run pytest sources/tests/e2e/test_users.py -v`
 Expected: all tests PASS
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add sources/tests/e2e/test_users.py
@@ -1254,27 +1254,27 @@ git commit -m "test(rbac): add e2e coverage for Users filter drawer (V-01)"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Full type-check**
+- [✅] **Step 1: Full type-check**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit`
 Expected: no errors
 
-- [ ] **Step 2: Full lint**
+- [✅] **Step 2: Full lint**
 
 Run: `cd sources/microservices/web-construct && npm run lint`
 Expected: no errors
 
-- [ ] **Step 3: Full unit test suite**
+- [✅] **Step 3: Full unit test suite**
 
 Run: `cd sources/microservices/web-construct && npm run test`
 Expected: all tests PASS
 
-- [ ] **Step 4: Full e2e suite**
+- [✅] **Step 4: Full e2e suite**
 
 Run: `uv run pytest sources/tests/e2e/`
 Expected: all tests PASS
 
-- [ ] **Step 5: Manual end-to-end browser walkthrough**
+- [✅] **Step 5: Manual end-to-end browser walkthrough**
 
 Run `npm run dev`, log in, and confirm on both `/roles-permissions` and `/user-management`:
 - "Filtri" opens a right-side drawer titled "Filtri" with a close (X), each with its own field set, and a "Reset"/"Applica" footer.
@@ -1283,7 +1283,7 @@ Run `npm run dev`, log in, and confirm on both `/roles-permissions` and `/user-m
 - The free-text search box on both pages still works exactly as before.
 - No console errors in the browser dev tools while exercising the above.
 
-- [ ] **Step 6: Update the source input-spec checkbox**
+- [✅] **Step 6: Update the source input-spec checkbox**
 
 In `docs/input-specs/rbac-additional-fixes/rbac-additional-fixes.md`, change:
 
@@ -1294,10 +1294,10 @@ In `docs/input-specs/rbac-additional-fixes/rbac-additional-fixes.md`, change:
 to:
 
 ```markdown
-- V-01 - [x] Cambiare e uniformare la pagina sui filtri
+- V-01 - [✅] Cambiare e uniformare la pagina sui filtri
 ```
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add docs/input-specs/rbac-additional-fixes/rbac-additional-fixes.md
