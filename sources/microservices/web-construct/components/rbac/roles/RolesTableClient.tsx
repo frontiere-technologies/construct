@@ -57,11 +57,15 @@ export default function RolesTableClient(props: Props) {
   const [startDate, setStartDate] = useState(props.startDateIns)
   const [endDate, setEndDate] = useState(props.endDateIns)
 
-  useEffect(() => {
+  const syncDraftFromProps = useCallback(() => {
     setHasPermission(props.hasPermission == null ? '' : String(props.hasPermission))
     setStartDate(props.startDateIns)
     setEndDate(props.endDateIns)
   }, [props.hasPermission, props.startDateIns, props.endDateIns])
+
+  useEffect(() => {
+    syncDraftFromProps()
+  }, [syncDraftFromProps])
 
   const applyFilters = useCallback(() => {
     setParam({
@@ -130,6 +134,7 @@ export default function RolesTableClient(props: Props) {
         search={search}
         onSearchChange={setSearch}
         filtersSlot={filters}
+        onOpenFilters={syncDraftFromProps}
         onApplyFilters={applyFilters}
         onResetFilters={resetFilters}
         actionButton={<button onClick={() => setShowCreate(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Nuovo ruolo</button>}

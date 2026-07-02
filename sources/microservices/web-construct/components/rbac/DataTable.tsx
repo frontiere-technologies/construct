@@ -26,6 +26,7 @@ interface DataTableProps<T> {
   search: string
   onSearchChange: (v: string) => void
   filtersSlot?: React.ReactNode
+  onOpenFilters?: () => void
   onApplyFilters?: () => void
   onResetFilters?: () => void
   actionButton?: React.ReactNode
@@ -35,7 +36,7 @@ interface DataTableProps<T> {
 
 export default function DataTable<T>(props: DataTableProps<T>) {
   const { columns, rows, rowKey, sort, onSortChange, page, totalPages, onPageChange,
-    search, onSearchChange, filtersSlot, onApplyFilters, onResetFilters, actionButton, rowMenu, onRowClick } = props
+    search, onSearchChange, filtersSlot, onOpenFilters, onApplyFilters, onResetFilters, actionButton, rowMenu, onRowClick } = props
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [showCols, setShowCols] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
@@ -122,7 +123,10 @@ export default function DataTable<T>(props: DataTableProps<T>) {
             )}
           </div>
           {filtersSlot && (
-            <button onClick={() => setShowFilters(s => !s)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
+            <button onClick={() => {
+              if (!showFilters) onOpenFilters?.()
+              setShowFilters(s => !s)
+            }} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
               <SlidersHorizontal size={16} /> Filtri
             </button>
           )}
