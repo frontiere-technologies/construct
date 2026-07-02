@@ -1,3 +1,5 @@
+import re
+
 from playwright.sync_api import expect
 from helpers import nav
 
@@ -41,3 +43,48 @@ def test_non_admin_denied(non_admin_page, base_url):
     nav(non_admin_page, f"{base_url}/user-management")
     # non-admin must NOT see the Utenti management heading
     expect(non_admin_page.get_by_role("heading", name="Utenti")).to_have_count(0)
+
+
+def test_filter_by_status_and_reset(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/user-management")
+    baseline = page.locator('[data-testid="status-badge"]').count()
+    assert baseline > 0
+    # Non-vacuous baseline: at least one Attivo user exists, so filtering down to
+    # Disattivato-only has something real to exclude.
+    assert page.get_by_text("Attivo", exact=True).count() > 0
+
+    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("filter-status").click()
+    page.get_by_test_id("filter-status-option-1").click()  # 1 = Disattivato
+    page.get_by_role("button", name="Applica").click()
+    expect(page).to_have_url(re.compile("statuses=1"))
+    # Every visible row must now be Disattivato: no Attivo badge should remain.
+    expect(page.get_by_text("Attivo", exact=True)).to_have_count(0)
+    expect(page.get_by_text("Disattivato", exact=True).first).to_be_visible()
+
+    page.get_by_role("button", name="Filtri").click()
+    page.get_by_role("button", name="Reset").click()
+    expect(page).not_to_have_url(re.compile("statuses="))
+    # Reset must restore the true baseline count, not just "some" rows.
+    expect(page.locator('[data-testid="status-badge"]')).to_have_count(baseline)
+
+
+def test_filter_by_role(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/user-management")
+    rows = page.locator("tbody tr")
+    baseline = rows.count()
+    assert baseline > 0
+    # Non-vacuous baseline: at least one visible user does NOT have the
+    # Administrator role, so filtering to Administrator-only has something to exclude.
+    assert rows.filter(has_text="Administrator").count() < baseline
+
+    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("filter-role").click()
+    page.get_by_test_id("filter-role-option-1").click()  # 1 = Administrator
+    page.get_by_role("button", name="Applica").click()
+    expect(page).to_have_url(re.compile("roleIds=1"))
+    expect(rows.first).to_be_visible()
+    # Every remaining row must carry the Administrator role.
+    expect(rows.filter(has_text="Administrator")).to_have_count(rows.count())
