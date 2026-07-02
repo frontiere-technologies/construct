@@ -6,6 +6,7 @@ import {
   type RoleType, type UserNavigationTreeDto, type NavigationItemRow,
   ROOT_ID, OPERATIONS_ID,
 } from './types'
+import { nextDay } from './date-utils'
 
 const NAV_COLUMNS =
   'id_item,name,id_item_type,id_functionality_type,functionality_link,icon_path,id_item_parent,order_position,navbar_position,item_translation,is_immutable,config_visibility,no_permission_need_for_navigation'
@@ -13,12 +14,6 @@ const NAV_COLUMNS =
 const SORT_COLUMN: Record<NonNullable<RolesQuery['sort']>, string> = {
   id: 'id', description: 'description', associatedUsers: 'associated_users',
   hasPermissions: 'has_permissions', dateIns: 'date_ins', dateMod: 'date_mod',
-}
-
-function nextDay(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + 1)
-  return d.toISOString().slice(0, 10)
 }
 
 export function applyFilters<T extends {
