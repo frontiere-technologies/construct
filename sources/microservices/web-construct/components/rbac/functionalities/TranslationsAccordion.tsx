@@ -21,7 +21,7 @@ export default function TranslationsAccordion(
   return (
     <div className="space-y-2">
       {SUPPORTED_LOCALES.map(loc => (
-        <div key={loc} className="rounded-lg border border-gray-200 dark:border-gray-700">
+        <div key={loc} className="rounded-lg border border-border">
           <button type="button" onClick={() => setOpen(o => ({ ...o, [loc]: !o[loc] }))} className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium">
             {LABELS[loc]}
             {open[loc] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -32,14 +32,14 @@ export default function TranslationsAccordion(
                 value={translations[loc]?.name ?? ''}
                 onChange={e => setField(loc, 'name', e.target.value)}
                 placeholder="Nome funzionalità"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent"
               />
               <textarea
                 value={translations[loc]?.description ?? ''}
                 onChange={e => setField(loc, 'description', e.target.value)}
                 placeholder="Descrizione"
                 rows={2}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent"
               />
               <TagInput value={tags[loc] ?? []} onChange={t => onTags({ ...tags, [loc]: t })} />
             </div>

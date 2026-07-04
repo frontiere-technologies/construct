@@ -133,13 +133,13 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
 
       {/* ── Popover ──────────────────────────────────────────────── */}
       {open && (
-        <div className="absolute left-0 top-full mt-1.5 z-50 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl overflow-hidden">
+        <div className="absolute left-0 top-full mt-1.5 z-50 w-72 rounded-xl border border-border bg-surface-overlay shadow-2xl overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
             <div className="flex gap-4">
               {(['library', 'upload'] as const).map(t => (
                 <button key={t} type="button" onClick={() => setTab(t)}
-                  className={`text-xs font-medium pb-1 border-b-2 transition-colors ${tab === t ? 'border-gray-900 dark:border-white text-gray-900 dark:text-white' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                  className={`text-xs font-medium pb-1 border-b-2 transition-colors ${tab === t ? 'border-gray-900 dark:border-white text-foreground' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
                   {t === 'library' ? 'Libreria' : 'Carica SVG'}
                 </button>
               ))}
@@ -154,7 +154,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
           {tab === 'library' && (
             <>
               <div className="px-2.5 pt-2 pb-1.5">
-                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border bg-gray-50 dark:bg-gray-800">
                   <Search size={11} className="text-gray-400 shrink-0" />
                   <input
                     autoFocus
@@ -172,7 +172,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                     type="button"
                     title="Nessuna icona"
                     onClick={() => pick('')}
-                    className={`flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${noIconSelected ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
+                    className={`flex items-center justify-center p-2 rounded-lg hover:bg-surface-hover transition-colors ${noIconSelected ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
                   >
                     <ImageOff size={15} className="text-gray-400" />
                   </button>
@@ -181,7 +181,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                   <button
                     key={name} type="button" title={name}
                     onClick={() => pick(name)}
-                    className={`flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${value === name ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
+                    className={`flex items-center justify-center p-2 rounded-lg hover:bg-surface-hover transition-colors ${value === name ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
                   >
                     <IconRenderer name={name} size={15} />
                   </button>
@@ -213,7 +213,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
               </div>
               {/* SVG requirements hint */}
               <div className="rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2 text-[10px] text-gray-500 leading-relaxed space-y-0.5">
-                <p className="font-medium text-gray-600 dark:text-gray-400">Requisiti SVG</p>
+                <p className="font-medium text-foreground-muted">Requisiti SVG</p>
                 <p>• Dimensioni: <code className="font-mono">viewBox=&quot;0 0 24 24&quot;</code> (24×24 px)</p>
                 <p>• Colori: usa <code className="font-mono">currentColor</code>, evita valori hardcoded</p>
                 <p>• Stroke: <code className="font-mono">stroke-width=&quot;2&quot;</code>, stile outline</p>

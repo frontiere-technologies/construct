@@ -40,7 +40,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Profile</h1>
-        <p className="text-gray-500 dark:text-gray-400">Manage your account settings</p>
+        <p className="text-foreground-muted">Manage your account settings</p>
       </div>
 
       <div className={`grid gap-6 ${provider === 'credentials' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
@@ -57,66 +57,66 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
                 className="w-16 h-16 rounded-full ring-2 ring-primary/30"
               />
             ) : (
-              <CircleUser size={64} className="text-gray-400 dark:text-gray-500" />
+              <CircleUser size={64} className="text-foreground-faint" />
             )}
           </div>
 
           <div className="space-y-4">
             {/* Email — read-only */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground-secondary mb-1">
                 Email
               </label>
               <input
                 type="email"
                 value={email}
                 disabled
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed text-sm"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-gray-100 dark:bg-gray-700 text-foreground-faint cursor-not-allowed text-sm"
               />
             </div>
 
             {/* First name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground-secondary mb-1">
                 First name
               </label>
               <input
                 type="text"
                 value={profile.first_name ?? ''}
                 onChange={handleChange('first_name')}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
 
             {/* Last name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground-secondary mb-1">
                 Last name
               </label>
               <input
                 type="text"
                 value={profile.last_name ?? ''}
                 onChange={handleChange('last_name')}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
 
             {/* Username */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground-secondary mb-1">
                 Username
               </label>
               <input
                 type="text"
                 value={profile.username ?? ''}
                 onChange={handleChange('username')}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
 
             {/* Phone */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground-secondary mb-1">
                 Phone{' '}
                 <span className="font-normal text-gray-400">(optional)</span>
               </label>
@@ -124,7 +124,8 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
                 type="tel"
                 value={profile.phone ?? ''}
                 onChange={handleChange('phone')}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                placeholder="+391234567890"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm placeholder:text-foreground-faint focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
           </div>

@@ -62,7 +62,7 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
               if (!showFilters) setSearchDraft(search)
               setShowFilters(s => !s)
             }}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-border"
           >
             <SlidersHorizontal size={16} /> Filtri
             {search.trim() !== '' && (
@@ -94,15 +94,15 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
               value={searchDraft}
               onChange={e => setSearchDraft(e.target.value)}
               placeholder="Cerca"
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-surface-overlay"
             />
           </div>
         </div>
       </FilterDrawer>
-      <div className="flex gap-6 border-b border-gray-200 dark:border-gray-800 mb-4">
+      <div className="flex gap-6 border-b border-border-subtle mb-4">
         {(['root', 'operations'] as const).map(t => (
           <button key={t} onClick={() => { setTab(t); setSearch(''); setSearchDraft('') }}
-            className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-gray-900 text-gray-900 dark:text-white dark:border-white' : 'border-transparent text-gray-500'}`}>
+            className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-gray-900 text-foreground dark:border-white' : 'border-transparent text-gray-500'}`}>
             {t === 'root' ? 'Tutto' : 'Operazioni'}
           </button>
         ))}

@@ -2,8 +2,9 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import type { AppSettings } from '@/types/menu'
-import { defaultSettings, defaultThemeConfig } from '@/types/menu'
+import { defaultSettings, defaultThemeConfig, mergeThemeConfig } from '@/types/menu'
 import { loadThemeConfig } from '@/lib/theme-actions'
+import { resolveThemeVars } from '@/lib/theme-vars'
 
 interface UIContextType {
   settings: AppSettings
@@ -25,7 +26,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
         base = {
           language: parsed?.language || 'en',
           theme: parsed?.theme || 'light',
-          themeConfig: { ...defaultThemeConfig, ...parsed?.themeConfig },
+          themeConfig: mergeThemeConfig(parsed?.themeConfig),
         }
       } catch {}
     }
@@ -33,7 +34,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
 
     loadThemeConfig().then(serverConfig => {
       if (serverConfig) {
-        setSettings(prev => ({ ...prev, themeConfig: serverConfig }))
+        setSettings(prev => ({ ...prev, themeConfig: mergeThemeConfig(serverConfig) }))
       }
     }).catch(() => {/* ignore — localStorage values remain */})
   }, [])
@@ -47,15 +48,10 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
       document.documentElement.classList.remove('dark')
     }
     const root = document.documentElement
-    const tc = settings.themeConfig || defaultThemeConfig
-    const dtc = defaultThemeConfig
-    const isHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v)
-    const safeColor = (v: string, fb: string) => isHex(v) ? v : fb
-    root.style.setProperty('--theme-primary', safeColor(tc.primaryColor, dtc.primaryColor))
-    root.style.setProperty('--theme-sidebar-bg', safeColor(isDark ? tc.sidebarBgDark : tc.sidebarBgLight, isDark ? dtc.sidebarBgDark : dtc.sidebarBgLight))
-    root.style.setProperty('--theme-sidebar-text', safeColor(isDark ? tc.sidebarTextDark : tc.sidebarTextLight, isDark ? dtc.sidebarTextDark : dtc.sidebarTextLight))
-    root.style.setProperty('--theme-active-bg', safeColor(isDark ? tc.activeItemBgDark : tc.activeItemBgLight, isDark ? dtc.activeItemBgDark : dtc.activeItemBgLight))
-    root.style.setProperty('--theme-active-text', safeColor(isDark ? tc.activeItemTextDark : tc.activeItemTextLight, isDark ? dtc.activeItemTextDark : dtc.activeItemTextLight))
+    const vars = resolveThemeVars(settings.themeConfig || defaultThemeConfig, isDark)
+    for (const [cssVar, value] of Object.entries(vars)) {
+      root.style.setProperty(cssVar, value)
+    }
   }, [settings])
 
   return (

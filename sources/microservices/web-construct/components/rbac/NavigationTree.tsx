@@ -63,7 +63,7 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
     <div>
       <div
         ref={dnd ? setRowRef : undefined}
-        className={`relative flex items-center gap-2 py-2.5 px-3 border-b border-gray-100 dark:border-gray-800 ${ind === 'into' ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''} ${isDragged ? 'opacity-40' : ''}`}
+        className={`relative flex items-center gap-2 py-2.5 px-3 border-b border-border-subtle ${ind === 'into' ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''} ${isDragged ? 'opacity-40' : ''}`}
         style={{ paddingLeft: 12 + depth * 24 }}
       >
         {/* Insertion line (F-03) — a clear blue bar with a dot on the left */}
@@ -198,7 +198,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
   }, [dnd, index, nodes, reset])
 
   const tree = (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-800">
+    <div className="rounded-lg border border-border-subtle">
       {nodes.map(n => (
         <TreeRow key={n.id} node={n} depth={0} renderTrailing={renderTrailing} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
       ))}
@@ -221,7 +221,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
       {tree}
       <DragOverlay dropAnimation={null}>
         {activeNode ? (
-          <div className="flex items-center gap-2 rounded-lg border border-primary bg-white dark:bg-gray-900 px-3 py-2 text-sm shadow-lg">
+          <div className="flex items-center gap-2 rounded-lg border border-primary bg-surface-overlay px-3 py-2 text-sm shadow-lg">
             <GripVertical size={14} className="text-gray-400" />
             <span className={activeNode.type === 'CATEGORY' ? 'font-medium' : ''}>{activeNode.name}</span>
           </div>

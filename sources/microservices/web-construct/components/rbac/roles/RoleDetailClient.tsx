@@ -60,7 +60,7 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
         <div className="flex items-center gap-2">
           {editing ? (
             <>
-              <button onClick={cancel} className="px-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">Annulla</button>
+              <button onClick={cancel} className="px-4 py-2 text-sm rounded-lg border border-border">Annulla</button>
               <button onClick={save} disabled={busy} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40">Salva</button>
             </>
           ) : (
@@ -73,12 +73,12 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
         </div>
       </div>
 
-      <div className="flex gap-6 border-b border-gray-200 dark:border-gray-800 mb-4">
+      <div className="flex gap-6 border-b border-border-subtle mb-4">
         {(['sezioni', 'operazioni'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-gray-900 text-gray-900 dark:text-white dark:border-white' : 'border-transparent text-gray-500'}`}
+            className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-gray-900 text-foreground dark:border-white' : 'border-transparent text-gray-500'}`}
           >{t === 'sezioni' ? 'Sezioni' : 'Operazioni'}</button>
         ))}
       </div>

@@ -17,8 +17,8 @@ export default function FilterDrawer({ open, onClose, onApply, onReset, children
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <div className="fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-white dark:bg-gray-900 shadow-xl flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-surface-overlay shadow-xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 className="text-lg font-semibold">Filtri</h2>
           <button
             type="button" onClick={onClose} aria-label="Chiudi filtri"
@@ -28,10 +28,10 @@ export default function FilterDrawer({ open, onClose, onApply, onReset, children
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">{children}</div>
-        <div className="flex items-center justify-between gap-2 px-5 py-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between gap-2 px-5 py-4 border-t border-border">
           <button
             type="button" onClick={onReset}
-            className="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700"
+            className="px-3 py-2 text-sm rounded-lg border border-border"
           >
             Reset
           </button>

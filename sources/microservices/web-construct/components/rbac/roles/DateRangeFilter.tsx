@@ -32,10 +32,10 @@ const rdpDefaults = getDefaultClassNames()
 const rdpClassNames = {
   month_caption: `${rdpDefaults.month_caption} px-3 justify-center font-semibold text-base`,
   nav: `${rdpDefaults.nav} px-2`,
-  button_previous: `${rdpDefaults.button_previous} rounded-full hover:bg-gray-100 dark:hover:bg-gray-800`,
-  button_next: `${rdpDefaults.button_next} rounded-full hover:bg-gray-100 dark:hover:bg-gray-800`,
+  button_previous: `${rdpDefaults.button_previous} rounded-full hover:bg-surface-hover`,
+  button_next: `${rdpDefaults.button_next} rounded-full hover:bg-surface-hover`,
   weekdays: `${rdpDefaults.weekdays} text-gray-400`,
-  today: `${rdpDefaults.today} font-semibold text-gray-900 dark:text-white`,
+  today: `${rdpDefaults.today} font-semibold text-foreground`,
 }
 
 interface DateFieldProps {
@@ -62,7 +62,7 @@ function DateField({ testId, popoverTestId, placeholder, value, isOpen, popoverR
           setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
           onToggle()
         }}
-        className="flex items-center gap-1.5 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 min-w-24 text-left"
+        className="flex items-center gap-1.5 px-2 py-1 rounded border border-border bg-surface-overlay min-w-24 text-left"
       >
         <span className="flex-1">{fmtIt(value) || placeholder}</span>
         {value && (
@@ -80,7 +80,7 @@ function DateField({ testId, popoverTestId, placeholder, value, isOpen, popoverR
           ref={popoverRef}
           data-testid={popoverTestId}
           style={{ top: pos.top, right: pos.right }}
-          className="fixed z-50 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
+          className="fixed z-50 p-3 rounded-lg border border-border bg-surface-overlay shadow-lg"
         >
           <DayPicker
             mode="single" locale={it} showOutsideDays={false}

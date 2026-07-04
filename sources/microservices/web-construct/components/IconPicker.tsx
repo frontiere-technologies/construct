@@ -49,7 +49,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center space-x-2 p-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-left"
+        className="w-full flex items-center space-x-2 p-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 hover:bg-surface-hover text-left"
       >
         <div className="w-6 h-6 flex items-center justify-center">
           <IconRenderer name={value} size={18} />
@@ -58,7 +58,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg">
+        <div className="absolute z-50 mt-1 w-full bg-surface-overlay border border-border rounded-xl shadow-lg">
           <div className="p-2 border-b dark:border-gray-700">
             <input
               autoFocus
