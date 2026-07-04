@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, SlidersHorizontal, Search } from 'lucide-react'
 import NavigationTree from '@/components/rbac/NavigationTree'
+import FilterDrawer from '@/components/rbac/FilterDrawer'
 import { moveNavigationItem, deleteNavigationItem } from '@/lib/rbac/navigation-actions'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 
@@ -13,6 +14,8 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
   const router = useRouter()
   const [tab, setTab] = useState<'root' | 'operations'>('root')
   const [search, setSearch] = useState('')
+  const [searchDraft, setSearchDraft] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
 
   const activeTree = tab === 'root' ? rootTree : operationsTree
 
@@ -48,15 +51,42 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Funzionalità</h1>
+      <h1 className="text-2xl font-bold mb-4">Funzionalità</h1>
+      <div className="flex items-center justify-end gap-2 mb-4">
+        <button
+          onClick={() => {
+            if (!showFilters) setSearchDraft(search)
+            setShowFilters(s => !s)
+          }}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700"
+        >
+          <SlidersHorizontal size={16} /> Filtri
+        </button>
         <button onClick={() => router.push(`/functionalities/create?root=${tab}`)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Crea nuovo</button>
       </div>
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca"
-        className="w-full max-w-sm mb-4 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent" />
+      <FilterDrawer
+        open={showFilters}
+        onClose={() => setShowFilters(false)}
+        onApply={() => { setSearch(searchDraft); setShowFilters(false) }}
+        onReset={() => { setSearchDraft(''); setSearch('') }}
+      >
+        <div className="space-y-1">
+          <label className="text-sm font-medium block">Cerca</label>
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              data-testid="filter-search"
+              value={searchDraft}
+              onChange={e => setSearchDraft(e.target.value)}
+              placeholder="Cerca"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+            />
+          </div>
+        </div>
+      </FilterDrawer>
       <div className="flex gap-6 border-b border-gray-200 dark:border-gray-800 mb-4">
         {(['root', 'operations'] as const).map(t => (
-          <button key={t} onClick={() => { setTab(t); setSearch('') }}
+          <button key={t} onClick={() => { setTab(t); setSearch(''); setSearchDraft('') }}
             className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-gray-900 text-gray-900 dark:text-white dark:border-white' : 'border-transparent text-gray-500'}`}>
             {t === 'root' ? 'Tutto' : 'Operazioni'}
           </button>
@@ -65,7 +95,6 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
       <NavigationTree
         nodes={filterTree(activeTree)}
         renderTrailing={trailing}
-        // drag disabled while filtering — reorder indices would be computed over the filtered subset
         dnd={search.trim() ? undefined : { canDrag: n => !n.isImmutable, onMove }}
       />
     </div>
