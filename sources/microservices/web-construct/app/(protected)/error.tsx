@@ -15,9 +15,9 @@ export default function Error({
 
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[200px] gap-4">
-      <p className="text-sm text-gray-500 dark:text-gray-400">Something went wrong.</p>
+      <p className="text-sm text-foreground-muted">Something went wrong.</p>
       {error.digest && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">Error ID: {error.digest}</p>
+        <p className="text-xs text-foreground-faint font-mono">Error ID: {error.digest}</p>
       )}
       <button
         onClick={reset}

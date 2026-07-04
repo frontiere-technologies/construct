@@ -54,12 +54,12 @@ export function ChangePasswordForm() {
     }
   }
 
-  const inputCls = 'w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
-  const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'
+  const inputCls = 'w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
+  const labelCls = 'block text-sm font-medium text-foreground-secondary mb-1'
 
   return (
     <Card className="w-full">
-      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+      <h2 className="text-sm font-semibold text-foreground-secondary mb-4">
         Cambia password
       </h2>
       <form onSubmit={handleSubmit} className="space-y-4">
