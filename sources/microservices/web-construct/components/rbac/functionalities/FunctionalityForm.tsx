@@ -90,14 +90,14 @@ export default function FunctionalityForm(
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-4 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+        <div className="space-y-4 rounded-xl border border-border-subtle p-4">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Informazioni generali</h2>
           <div className="flex items-start gap-3">
             <IconPicker compact value={f.iconPath} onChange={v => set('iconPath', v)} />
             <div className="flex-1 space-y-3">
               <input value={itName} onChange={e => set('translations', { ...f.translations, IT: { ...f.translations.IT, name: e.target.value } })}
                 placeholder="Nome funzionalità *" maxLength={100}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent" />
+                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent" />
               <CustomSelect
                 data-testid="select-genitore"
                 value={f.idItemParent ?? ''}
@@ -112,7 +112,7 @@ export default function FunctionalityForm(
           <div>
             <textarea value={itDesc} onChange={e => set('translations', { ...f.translations, IT: { ...f.translations.IT, description: e.target.value } })}
               placeholder="Descrizione *" maxLength={500} rows={3}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent" />
+              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent" />
             <div className="text-right text-[10px] text-gray-400">{itDesc.length}/500</div>
           </div>
           <TagInput value={itTags} onChange={t => set('tagTranslations', { ...f.tagTranslations, IT: t })} placeholder="Tags (IT)" />
@@ -130,12 +130,12 @@ export default function FunctionalityForm(
             />
             {isFunc && (
               <input value={f.functionalityLink} onChange={e => set('functionalityLink', e.target.value)} placeholder="Link *"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent" />
+                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent" />
             )}
           </div>
         </div>
 
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+        <div className="rounded-xl border border-border-subtle p-4">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Gestione traduzioni</h2>
           <TranslationsAccordion
             translations={f.translations} tags={f.tagTranslations}

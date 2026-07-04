@@ -24,7 +24,7 @@ export default function RoleMultiSelect({ options, selected, onToggle, lockedId,
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 focus-within:border-gray-400 dark:focus-within:border-gray-500">
+      <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 rounded-lg border border-border focus-within:border-gray-400 dark:focus-within:border-gray-500">
         {selectedRoles.map(r => (
           <span key={r.id} className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-sm">
             {r.name}
@@ -53,7 +53,7 @@ export default function RoleMultiSelect({ options, selected, onToggle, lockedId,
           return (
             <label
               key={r.id}
-              className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-gray-50 dark:hover:bg-gray-800 ${locked ? 'opacity-60' : 'cursor-pointer'}`}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-surface-hover ${locked ? 'opacity-60' : 'cursor-pointer'}`}
             >
               <input
                 type="checkbox"
