@@ -7,6 +7,16 @@
   --theme-sidebar-text: #4b5563;
   --theme-active-bg: #f3f4f6;
   --theme-active-text: #111827;
+  --theme-page: #f9fafb;
+  --theme-surface: #ffffff;
+  --theme-surface-overlay: #ffffff;
+  --theme-surface-hover: #f3f4f6;
+  --theme-border: #e5e7eb;
+  --theme-border-subtle: #f3f4f6;
+  --theme-foreground: #111827;
+  --theme-foreground-secondary: #374151;
+  --theme-foreground-muted: #6b7280;
+  --theme-foreground-faint: #9ca3af;
 }
 
 @theme {
@@ -16,4 +26,14 @@
   --color-sidebar-active-bg: var(--theme-active-bg);
   --color-sidebar-active-text: var(--theme-active-text);
   --color-brand-blue: #0f5a8a;
+  --color-page: var(--theme-page);
+  --color-surface: var(--theme-surface);
+  --color-surface-overlay: var(--theme-surface-overlay);
+  --color-surface-hover: var(--theme-surface-hover);
+  --color-border: var(--theme-border);
+  --color-border-subtle: var(--theme-border-subtle);
+  --color-foreground: var(--theme-foreground);
+  --color-foreground-secondary: var(--theme-foreground-secondary);
+  --color-foreground-muted: var(--theme-foreground-muted);
+  --color-foreground-faint: var(--theme-foreground-faint);
 }
