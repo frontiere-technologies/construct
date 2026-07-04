@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, SlidersHorizontal, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, SlidersHorizontal, Search, X } from 'lucide-react'
 import NavigationTree from '@/components/rbac/NavigationTree'
 import FilterDrawer from '@/components/rbac/FilterDrawer'
 import { moveNavigationItem, deleteNavigationItem } from '@/lib/rbac/navigation-actions'
@@ -71,8 +71,8 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
           )}
         </button>
         {search.trim() !== '' && (
-          <button data-testid="clear-filters" onClick={clearFilters} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline-offset-2 hover:underline">
-            Rimuovi filtri
+          <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={clearFilters} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            <X size={14} />
           </button>
         )}
         <button onClick={() => router.push(`/functionalities/create?root=${tab}`)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Crea nuovo</button>

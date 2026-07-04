@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { SlidersHorizontal, Columns3, MoreHorizontal, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
+import { SlidersHorizontal, Columns3, MoreHorizontal, ChevronUp, ChevronDown, ChevronRight, X } from 'lucide-react'
 import FilterDrawer from './FilterDrawer'
 
 export interface Column<T> {
@@ -127,8 +127,8 @@ export default function DataTable<T>(props: DataTableProps<T>) {
             </button>
           )}
           {!!activeFilterCount && (
-            <button data-testid="clear-filters" onClick={onClearFilters} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline-offset-2 hover:underline">
-              Rimuovi filtri
+            <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={onClearFilters} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+              <X size={14} />
             </button>
           )}
           {actionButton}
