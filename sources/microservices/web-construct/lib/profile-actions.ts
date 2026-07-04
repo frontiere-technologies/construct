@@ -2,6 +2,7 @@
 
 import { auth } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase-server'
+import { phoneSchema } from '@/lib/validations'
 
 export interface UserProfile {
   first_name: string | null
@@ -13,6 +14,11 @@ export interface UserProfile {
 export async function saveProfile(profile: UserProfile): Promise<{ error: string | null }> {
   const session = await auth()
   if (!session?.user?.id) return { error: 'Not authenticated' }
+
+  if (profile.phone) {
+    const parsed = phoneSchema.safeParse(profile.phone)
+    if (!parsed.success) return { error: parsed.error.issues[0].message }
+  }
 
   const supabase = createAdminClient()
   const { error } = await supabase.from('users').upsert({
