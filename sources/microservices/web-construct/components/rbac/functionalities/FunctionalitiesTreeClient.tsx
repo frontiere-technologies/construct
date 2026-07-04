@@ -55,26 +55,28 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
     <div className="max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Funzionalità</h1>
       <div className="flex items-center justify-end gap-2 mb-4">
-        <button
-          data-testid="open-filters"
-          onClick={() => {
-            if (!showFilters) setSearchDraft(search)
-            setShowFilters(s => !s)
-          }}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700"
-        >
-          <SlidersHorizontal size={16} /> Filtri
-          {search.trim() !== '' && (
-            <span data-testid="filters-badge" className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[11px] leading-none">
-              1
-            </span>
-          )}
-        </button>
-        {search.trim() !== '' && (
-          <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={clearFilters} className="flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500">
-            <X size={9} />
+        <div className="relative">
+          <button
+            data-testid="open-filters"
+            onClick={() => {
+              if (!showFilters) setSearchDraft(search)
+              setShowFilters(s => !s)
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700"
+          >
+            <SlidersHorizontal size={16} /> Filtri
+            {search.trim() !== '' && (
+              <span data-testid="filters-badge" className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[11px] leading-none">
+                1
+              </span>
+            )}
           </button>
-        )}
+          {search.trim() !== '' && (
+            <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={clearFilters} className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 z-10">
+              <X size={9} />
+            </button>
+          )}
+        </div>
         <button onClick={() => router.push(`/functionalities/create?root=${tab}`)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Crea nuovo</button>
       </div>
       <FilterDrawer

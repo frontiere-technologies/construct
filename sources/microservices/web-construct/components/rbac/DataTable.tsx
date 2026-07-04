@@ -114,22 +114,24 @@ export default function DataTable<T>(props: DataTableProps<T>) {
             )}
           </div>
           {filtersSlot && (
-            <button data-testid="open-filters" onClick={() => {
-              if (!showFilters) onOpenFilters?.()
-              setShowFilters(s => !s)
-            }} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
-              <SlidersHorizontal size={16} /> Filtri
+            <div className="relative">
+              <button data-testid="open-filters" onClick={() => {
+                if (!showFilters) onOpenFilters?.()
+                setShowFilters(s => !s)
+              }} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
+                <SlidersHorizontal size={16} /> Filtri
+                {!!activeFilterCount && (
+                  <span data-testid="filters-badge" className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[11px] leading-none">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
               {!!activeFilterCount && (
-                <span data-testid="filters-badge" className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[11px] leading-none">
-                  {activeFilterCount}
-                </span>
+                <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={onClearFilters} className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 z-10">
+                  <X size={9} />
+                </button>
               )}
-            </button>
-          )}
-          {!!activeFilterCount && (
-            <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={onClearFilters} className="flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500">
-              <X size={9} />
-            </button>
+            </div>
           )}
           {actionButton}
         </div>
