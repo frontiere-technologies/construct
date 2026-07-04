@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, SlidersHorizontal, Columns3, MoreHorizontal, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
+import { SlidersHorizontal, Columns3, MoreHorizontal, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
 import FilterDrawer from './FilterDrawer'
 
 export interface Column<T> {
@@ -23,8 +23,6 @@ interface DataTableProps<T> {
   page: number
   totalPages: number
   onPageChange: (page: number) => void
-  search: string
-  onSearchChange: (v: string) => void
   filtersSlot?: React.ReactNode
   onOpenFilters?: () => void
   onApplyFilters?: () => void
@@ -36,7 +34,7 @@ interface DataTableProps<T> {
 
 export default function DataTable<T>(props: DataTableProps<T>) {
   const { columns, rows, rowKey, sort, onSortChange, page, totalPages, onPageChange,
-    search, onSearchChange, filtersSlot, onOpenFilters, onApplyFilters, onResetFilters, actionButton, rowMenu, onRowClick } = props
+    filtersSlot, onOpenFilters, onApplyFilters, onResetFilters, actionButton, rowMenu, onRowClick } = props
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [showCols, setShowCols] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
@@ -97,15 +95,6 @@ export default function DataTable<T>(props: DataTableProps<T>) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            value={search}
-            onChange={e => onSearchChange(e.target.value)}
-            placeholder="Cerca"
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-          />
-        </div>
         <div className="ml-auto flex items-center gap-2">
           <div className="relative">
             <button onClick={() => setShowCols(s => !s)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">

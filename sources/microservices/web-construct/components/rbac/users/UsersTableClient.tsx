@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { Search } from 'lucide-react'
 import DataTable, { type Column } from '@/components/rbac/DataTable'
 import CustomSelect from '@/components/rbac/CustomSelect'
 import DateRangeFilter from '@/components/rbac/roles/DateRangeFilter'
@@ -42,13 +43,15 @@ export default function UsersTableClient(props: Props) {
   const [statusId, setStatusId] = useState<string>(props.statusId == null ? '' : String(props.statusId))
   const [createdFrom, setCreatedFrom] = useState(props.createdFrom)
   const [createdTo, setCreatedTo] = useState(props.createdTo)
+  const [search, setSearch] = useState(props.search)
 
   const syncDraftFromProps = useCallback(() => {
     setRoleId(props.roleId == null ? '' : String(props.roleId))
     setStatusId(props.statusId == null ? '' : String(props.statusId))
     setCreatedFrom(props.createdFrom)
     setCreatedTo(props.createdTo)
-  }, [props.roleId, props.statusId, props.createdFrom, props.createdTo])
+    setSearch(props.search)
+  }, [props.roleId, props.statusId, props.createdFrom, props.createdTo, props.search])
 
   useEffect(() => {
     syncDraftFromProps()
@@ -60,16 +63,18 @@ export default function UsersTableClient(props: Props) {
       statuses: statusId || null,
       createdFrom: createdFrom || null,
       createdTo: createdTo || null,
+      search: search || null,
       page: '0',
     })
-  }, [roleId, statusId, createdFrom, createdTo, setParam])
+  }, [roleId, statusId, createdFrom, createdTo, search, setParam])
 
   const resetFilters = useCallback(() => {
     setRoleId('')
     setStatusId('')
     setCreatedFrom(null)
     setCreatedTo(null)
-    setParam({ roleIds: null, statuses: null, createdFrom: null, createdTo: null, page: '0' })
+    setSearch('')
+    setParam({ roleIds: null, statuses: null, createdFrom: null, createdTo: null, search: null, page: '0' })
   }, [setParam])
 
   const toggleStatus = async (u: UserDTO) => {
@@ -92,6 +97,19 @@ export default function UsersTableClient(props: Props) {
 
   const filters = (
     <div className="flex flex-col gap-4">
+      <div className="space-y-1">
+        <label className="text-sm font-medium block">Cerca</label>
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            data-testid="filter-search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Cerca"
+            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+          />
+        </div>
+      </div>
       <div className="space-y-1">
         <label className="text-sm font-medium block">Ruolo</label>
         <CustomSelect
@@ -136,8 +154,6 @@ export default function UsersTableClient(props: Props) {
         page={props.page}
         totalPages={props.totalPages}
         onPageChange={n => setParam({ page: String(n) })}
-        search={props.search}
-        onSearchChange={v => setParam({ search: v || null })}
         rowMenu={u => [{ label: 'Gestisci ruoli', onClick: () => setManaging(u) }]}
         filtersSlot={filters}
         onOpenFilters={syncDraftFromProps}

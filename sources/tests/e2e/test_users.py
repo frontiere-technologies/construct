@@ -20,8 +20,9 @@ def test_search_narrows_users(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/user-management")
     before = page.locator('[data-testid="status-badge"]').count()
+    page.get_by_role("button", name="Filtri").click()
     page.get_by_placeholder("Cerca").fill("zzz-no-such-user-zzz")
-    page.wait_for_timeout(800)
+    page.get_by_role("button", name="Applica").click()
     page.wait_for_load_state("networkidle")
     after = page.locator('[data-testid="status-badge"]').count()
     assert after <= before
