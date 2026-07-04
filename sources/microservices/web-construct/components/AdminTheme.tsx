@@ -15,7 +15,7 @@ interface ColorPickerProps {
 
 const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange }) => (
   <div className="flex items-center justify-between">
-    <label className="text-sm text-gray-700 dark:text-gray-300">{label}</label>
+    <label className="text-sm text-foreground-secondary">{label}</label>
     <div className="flex items-center space-x-2">
       <span className="text-xs text-gray-500 font-mono uppercase w-16 text-right">{value}</span>
       <input
@@ -27,6 +27,61 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange }) => 
     </div>
   </div>
 )
+
+interface TokenRowProps {
+  label: string
+  lightValue: string
+  darkValue: string
+  onChangeLight: (v: string) => void
+  onChangeDark: (v: string) => void
+}
+
+const TokenRow: React.FC<TokenRowProps> = ({ label, lightValue, darkValue, onChangeLight, onChangeDark }) => (
+  <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4">
+    <span className="text-sm text-foreground-secondary">{label}</span>
+    <div className="flex items-center gap-1">
+      <span className="text-[10px] uppercase text-foreground-faint w-8">Light</span>
+      <input type="color" value={lightValue} onChange={e => onChangeLight(e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent" />
+    </div>
+    <div className="flex items-center gap-1">
+      <span className="text-[10px] uppercase text-foreground-faint w-8">Dark</span>
+      <input type="color" value={darkValue} onChange={e => onChangeDark(e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent" />
+    </div>
+  </div>
+)
+
+interface TokenGroup {
+  title: string
+  rows: { label: string; lightKey: keyof ThemeConfig; darkKey: keyof ThemeConfig }[]
+}
+
+const TOKEN_GROUPS: TokenGroup[] = [
+  {
+    title: 'Sfondi',
+    rows: [
+      { label: 'Page Background', lightKey: 'pageLight', darkKey: 'pageDark' },
+      { label: 'Surface', lightKey: 'surfaceLight', darkKey: 'surfaceDark' },
+      { label: 'Surface Overlay', lightKey: 'surfaceOverlayLight', darkKey: 'surfaceOverlayDark' },
+      { label: 'Surface Hover', lightKey: 'surfaceHoverLight', darkKey: 'surfaceHoverDark' },
+    ],
+  },
+  {
+    title: 'Border',
+    rows: [
+      { label: 'Border', lightKey: 'borderLight', darkKey: 'borderDark' },
+      { label: 'Border Subtle', lightKey: 'borderSubtleLight', darkKey: 'borderSubtleDark' },
+    ],
+  },
+  {
+    title: 'Testo',
+    rows: [
+      { label: 'Foreground', lightKey: 'foregroundLight', darkKey: 'foregroundDark' },
+      { label: 'Foreground Secondary', lightKey: 'foregroundSecondaryLight', darkKey: 'foregroundSecondaryDark' },
+      { label: 'Foreground Muted', lightKey: 'foregroundMutedLight', darkKey: 'foregroundMutedDark' },
+      { label: 'Foreground Faint', lightKey: 'foregroundFaintLight', darkKey: 'foregroundFaintDark' },
+    ],
+  },
+]
 
 export const AdminTheme: React.FC = () => {
   const { settings, setSettings } = useUI()
@@ -44,24 +99,42 @@ export const AdminTheme: React.FC = () => {
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Theme & Styles</h1>
-        <p className="text-gray-500 dark:text-gray-400">Customize your application appearance</p>
+        <p className="text-foreground-muted">Customize your application appearance</p>
       </div>
 
-      <Card>
+      <Card className="space-y-8">
+        <div className="space-y-4">
+          <h3 className="font-medium text-foreground border-b pb-2 border-border">Global</h3>
+          <ColorPicker
+            label="Primary Color (Active Icons, Buttons)"
+            value={settings.themeConfig.primaryColor}
+            onChange={v => updateTheme('primaryColor', v)}
+          />
+        </div>
+
+        {TOKEN_GROUPS.map(group => (
+          <details key={group.title} open>
+            <summary className="cursor-pointer font-medium text-foreground border-b pb-2 border-border">
+              {group.title}
+            </summary>
+            <div className="space-y-3 mt-4">
+              {group.rows.map(row => (
+                <TokenRow
+                  key={row.label}
+                  label={row.label}
+                  lightValue={settings.themeConfig[row.lightKey]}
+                  darkValue={settings.themeConfig[row.darkKey]}
+                  onChangeLight={v => updateTheme(row.lightKey, v)}
+                  onChangeDark={v => updateTheme(row.darkKey, v)}
+                />
+              ))}
+            </div>
+          </details>
+        ))}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
           <div className="space-y-4">
-            <h3 className="font-medium text-gray-900 dark:text-white border-b pb-2 dark:border-gray-700">Global</h3>
-            <ColorPicker
-              label="Primary Color (Active Icons, Buttons)"
-              value={settings.themeConfig.primaryColor}
-              onChange={v => updateTheme('primaryColor', v)}
-            />
-          </div>
-
-          <div className="hidden md:block"></div>
-
-          <div className="space-y-4">
-            <h3 className="font-medium text-gray-900 dark:text-white border-b pb-2 dark:border-gray-700">Light Theme</h3>
+            <h3 className="font-medium text-foreground border-b pb-2 border-border">Light Theme — Sidebar & Active Item</h3>
             <ColorPicker label="Sidebar Background" value={settings.themeConfig.sidebarBgLight} onChange={v => updateTheme('sidebarBgLight', v)} />
             <ColorPicker label="Sidebar Text" value={settings.themeConfig.sidebarTextLight} onChange={v => updateTheme('sidebarTextLight', v)} />
             <ColorPicker label="Active Item Background" value={settings.themeConfig.activeItemBgLight} onChange={v => updateTheme('activeItemBgLight', v)} />
@@ -69,7 +142,7 @@ export const AdminTheme: React.FC = () => {
           </div>
 
           <div className="space-y-4">
-            <h3 className="font-medium text-gray-900 dark:text-white border-b pb-2 dark:border-gray-700">Dark Theme</h3>
+            <h3 className="font-medium text-foreground border-b pb-2 border-border">Dark Theme — Sidebar & Active Item</h3>
             <ColorPicker label="Sidebar Background" value={settings.themeConfig.sidebarBgDark} onChange={v => updateTheme('sidebarBgDark', v)} />
             <ColorPicker label="Sidebar Text" value={settings.themeConfig.sidebarTextDark} onChange={v => updateTheme('sidebarTextDark', v)} />
             <ColorPicker label="Active Item Background" value={settings.themeConfig.activeItemBgDark} onChange={v => updateTheme('activeItemBgDark', v)} />
@@ -77,7 +150,7 @@ export const AdminTheme: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-8 pt-4 border-t dark:border-gray-700 flex items-center justify-between">
+        <div className="pt-4 border-t border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
             {saveStatus === 'success' && (
               <span className="text-sm text-green-600 dark:text-green-400">Theme saved.</span>
