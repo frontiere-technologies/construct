@@ -2,7 +2,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, SlidersHorizontal, Columns3, MoreHorizontal, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
+import { SlidersHorizontal, Columns3, MoreHorizontal, ChevronUp, ChevronDown, ChevronRight, X } from 'lucide-react'
+import FilterDrawer from './FilterDrawer'
 
 export interface Column<T> {
   key: string
@@ -22,9 +23,12 @@ interface DataTableProps<T> {
   page: number
   totalPages: number
   onPageChange: (page: number) => void
-  search: string
-  onSearchChange: (v: string) => void
   filtersSlot?: React.ReactNode
+  onOpenFilters?: () => void
+  onApplyFilters?: () => void
+  onResetFilters?: () => void
+  activeFilterCount?: number
+  onClearFilters?: () => void
   actionButton?: React.ReactNode
   rowMenu?: (row: T) => RowMenuItem[]
   onRowClick?: (row: T) => void
@@ -32,7 +36,7 @@ interface DataTableProps<T> {
 
 export default function DataTable<T>(props: DataTableProps<T>) {
   const { columns, rows, rowKey, sort, onSortChange, page, totalPages, onPageChange,
-    search, onSearchChange, filtersSlot, actionButton, rowMenu, onRowClick } = props
+    filtersSlot, onOpenFilters, onApplyFilters, onResetFilters, activeFilterCount, onClearFilters, actionButton, rowMenu, onRowClick } = props
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [showCols, setShowCols] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
@@ -93,15 +97,6 @@ export default function DataTable<T>(props: DataTableProps<T>) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            value={search}
-            onChange={e => onSearchChange(e.target.value)}
-            placeholder="Cerca"
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-          />
-        </div>
         <div className="ml-auto flex items-center gap-2">
           <div className="relative">
             <button onClick={() => setShowCols(s => !s)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
@@ -119,16 +114,38 @@ export default function DataTable<T>(props: DataTableProps<T>) {
             )}
           </div>
           {filtersSlot && (
-            <button onClick={() => setShowFilters(s => !s)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
-              <SlidersHorizontal size={16} /> Filtri
-            </button>
+            <div className="relative">
+              <button data-testid="open-filters" onClick={() => {
+                if (!showFilters) onOpenFilters?.()
+                setShowFilters(s => !s)
+              }} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
+                <SlidersHorizontal size={16} /> Filtri
+                {!!activeFilterCount && (
+                  <span data-testid="filters-badge" className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[11px] leading-none">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+              {!!activeFilterCount && (
+                <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={onClearFilters} className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 z-10">
+                  <X size={9} />
+                </button>
+              )}
+            </div>
           )}
           {actionButton}
         </div>
       </div>
 
-      {showFilters && filtersSlot && (
-        <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">{filtersSlot}</div>
+      {filtersSlot && (
+        <FilterDrawer
+          open={showFilters}
+          onClose={() => setShowFilters(false)}
+          onApply={() => { onApplyFilters?.(); setShowFilters(false) }}
+          onReset={() => onResetFilters?.()}
+        >
+          {filtersSlot}
+        </FilterDrawer>
       )}
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">

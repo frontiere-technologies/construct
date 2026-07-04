@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import IconPicker from './IconPicker'
-import CustomSelect from './CustomSelect'
+import CustomSelect from '../CustomSelect'
 import TagInput from './TagInput'
 import TranslationsAccordion from './TranslationsAccordion'
 import { createNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'

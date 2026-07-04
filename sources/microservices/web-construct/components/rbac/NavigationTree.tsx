@@ -210,6 +210,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
   const activeNode = activeId != null ? index.get(activeId) : null
   return (
     <DndContext
+      id="navigation-tree"
       sensors={sensors}
       collisionDetection={pointerWithin}
       onDragStart={onDragStart}

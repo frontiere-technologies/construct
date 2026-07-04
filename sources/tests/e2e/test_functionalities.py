@@ -40,6 +40,57 @@ def test_tree_loads_with_tabs(logged_in_page, base_url):
     expect(page.get_by_text("Admin", exact=True).first).to_be_visible()
 
 
+def test_create_button_aligned_with_filtri(logged_in_page, base_url):
+    """F-01: 'Crea nuovo' must sit at toolbar height (next to Filtri), not at title height."""
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities")
+    title_box = page.get_by_role("heading", name="Funzionalità").bounding_box()
+    filtri_box = page.get_by_test_id("open-filters").bounding_box()
+    create_box = page.get_by_role("button", name="Crea nuovo").bounding_box()
+    assert create_box["y"] != title_box["y"]
+    assert abs(create_box["y"] - filtri_box["y"]) < 2
+
+
+def test_filter_drawer_search(logged_in_page, base_url):
+    """V-02: Cerca lives inside the Filtri drawer, gated behind Applica/Reset."""
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities")
+    expect(page.get_by_role("heading", name="Funzionalità")).to_be_visible()
+    expect(page.get_by_placeholder("Cerca")).to_have_count(0)
+
+    page.get_by_test_id("open-filters").click()
+    page.get_by_placeholder("Cerca").fill("Admin")
+    page.get_by_role("button", name="Applica").click()
+    # Wait for drawer to close and filter to apply
+    expect(page.get_by_text("Admin", exact=True).first).to_be_visible()
+    expect(page.get_by_text("Home", exact=True)).to_have_count(0)
+
+    page.get_by_test_id("open-filters").click()
+    page.get_by_role("button", name="Reset").click()
+    # Wait for drawer to close and filter to reset
+    expect(page.get_by_text("Home", exact=True).first).to_be_visible()
+
+
+def test_filters_badge_and_clear(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities")
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_count(0)
+    expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
+
+    page.get_by_test_id("open-filters").click()
+    page.get_by_placeholder("Cerca").fill("Admin")
+    page.get_by_role("button", name="Applica").click()
+    expect(page.get_by_text("Admin", exact=True).first).to_be_visible()
+
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_text("1")
+    expect(page.locator('[data-testid="clear-filters"]')).to_be_visible()
+
+    page.get_by_test_id("clear-filters").click()
+    expect(page.get_by_text("Home", exact=True).first).to_be_visible()
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_count(0)
+    expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
+
+
 def test_create_edit_delete_functionality(logged_in_page, base_url):
     page = logged_in_page
     name = f"E2E Func {int(time.time())}"

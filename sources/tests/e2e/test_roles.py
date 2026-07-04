@@ -20,14 +20,18 @@ def _create_role(page, base_url, name):
 def _delete_role(page, base_url, name):
     """Delete a role via the list search + row menu, then assert it's gone."""
     nav(page, f"{base_url}/roles-permissions")
+    page.get_by_test_id("open-filters").click()
     page.get_by_placeholder("Cerca").fill(name)
+    page.get_by_role("button", name="Applica").click()
     row = page.locator("tr").filter(has_text=name)
     expect(row).to_be_visible()
     row.locator('[data-testid^="row-menu"]').click()
     page.once("dialog", lambda d: d.accept())
     page.get_by_role("button", name="Elimina").click()
     nav(page, f"{base_url}/roles-permissions")
+    page.get_by_test_id("open-filters").click()
     page.get_by_placeholder("Cerca").fill(name)
+    page.get_by_role("button", name="Applica").click()
     expect(page.get_by_text(name, exact=True)).to_have_count(0)
 
 
@@ -84,36 +88,70 @@ def test_system_role_not_editable(logged_in_page, base_url):
     assert edit.is_disabled()
 
 
-def test_filter_by_associated_users_range(logged_in_page, base_url):
-    page = logged_in_page
-    nav(page, f"{base_url}/roles-permissions")
-    baseline = page.locator("tbody tr").count()
-    assert baseline > 0
-
-    page.get_by_role("button", name="Filtri").click()
-    page.get_by_test_id("filter-min-associated-users").fill("999999")
-    expect(page.locator("tbody tr")).to_have_count(0)
-
-    page.get_by_test_id("filter-min-associated-users").fill("")
-    expect(page.locator("tbody tr")).to_have_count(baseline)
-
-
 def test_filter_by_creation_date_range(logged_in_page, base_url):
     page = logged_in_page
     name = f"E2E DateFilter {int(time.time())}"
     _create_role(page, base_url, name)
 
     nav(page, f"{base_url}/roles-permissions")
+    page.get_by_test_id("open-filters").click()
     page.get_by_placeholder("Cerca").fill(name)
+    page.get_by_role("button", name="Applica").click()
     expect(page.locator("tr").filter(has_text=name)).to_have_count(1)
 
-    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("open-filters").click()
     page.get_by_test_id("filter-date-start").click()
     today = date.today()
     page.locator('[data-testid="date-popover-start"]').get_by_text(str(today.day), exact=True).click()
+    page.get_by_role("button", name="Applica").click()
 
     # The role we just created was created today, so it must still match startDateIns = today
     expect(page.locator("tr").filter(has_text=name)).to_have_count(1)
     expect(page).to_have_url(re.compile("startDateIns="))
 
     _delete_role(page, base_url, name)
+
+
+def test_filter_by_has_permission_and_reset(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/roles-permissions")
+    baseline = page.locator("tbody tr").count()
+    assert baseline > 0
+    assert page.get_by_text("Sì", exact=True).count() > 0
+
+    page.get_by_test_id("open-filters").click()
+    page.get_by_test_id("filter-has-permission").click()
+    page.get_by_test_id("filter-has-permission-option-false").click()
+    page.get_by_role("button", name="Applica").click()
+    expect(page).to_have_url(re.compile("hasPermission=false"))
+    # Every visible row must now be a role without permissions: the "Sì" badge
+    # (shown only for hasPermissions=true) must not appear on the filtered page.
+    # (Row-count comparison against baseline is not used here: with page size 10,
+    # the filtered set can coincidentally fill a full page just like the baseline.)
+    assert page.locator("tbody tr").count() > 0
+    expect(page.get_by_text("Sì", exact=True)).to_have_count(0)
+
+    page.get_by_test_id("open-filters").click()
+    page.get_by_role("button", name="Reset").click()
+    expect(page.locator("tbody tr")).to_have_count(baseline)
+
+
+def test_filters_badge_and_clear(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/roles-permissions")
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_count(0)
+    expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
+
+    page.get_by_test_id("open-filters").click()
+    page.get_by_test_id("filter-has-permission").click()
+    page.get_by_test_id("filter-has-permission-option-false").click()
+    page.get_by_role("button", name="Applica").click()
+    expect(page).to_have_url(re.compile("hasPermission=false"))
+
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_text("1")
+    expect(page.locator('[data-testid="clear-filters"]')).to_be_visible()
+
+    page.get_by_test_id("clear-filters").click()
+    expect(page).not_to_have_url(re.compile("hasPermission="))
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_count(0)
+    expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)

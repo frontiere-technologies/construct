@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { X } from 'lucide-react'
 import { updateUserRoles } from '@/lib/rbac/users-actions'
 import { ROLE_REGISTERED, type UserDTO } from '@/lib/rbac/types'
+import RoleMultiSelect from './RoleMultiSelect'
 
 export default function ManageRolesModal(
   { user, allRoles, onClose, onSaved }:
@@ -40,23 +41,14 @@ export default function ManageRolesModal(
           <h2 className="text-lg font-semibold">Gestisci ruoli — {user.firstName ?? user.email}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
-        <div className="space-y-2 max-h-72 overflow-y-auto">
-          {allRoles.map(r => {
-            const locked = r.id === ROLE_REGISTERED
-            return (
-              <label key={r.id} className={`flex items-center gap-2 text-sm ${locked ? 'opacity-60' : ''}`}>
-                <input
-                  type="checkbox"
-                  data-testid={`role-checkbox-${r.id}`}
-                  checked={selected.has(r.id)}
-                  disabled={locked}
-                  onChange={() => toggle(r.id)}
-                />
-                {r.name}{locked && ' (sempre assegnato)'}
-              </label>
-            )
-          })}
-        </div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Ruoli</label>
+        <RoleMultiSelect
+          options={allRoles}
+          selected={selected}
+          onToggle={toggle}
+          lockedId={ROLE_REGISTERED}
+          lockedLabel="sempre assegnato"
+        />
         {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">Annulla</button>

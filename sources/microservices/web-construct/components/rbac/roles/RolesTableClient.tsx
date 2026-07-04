@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Search } from 'lucide-react'
 import DataTable, { type Column } from '@/components/rbac/DataTable'
 import CreateRoleModal from './CreateRoleModal'
 import RenameRoleModal from './RenameRoleModal'
 import DateRangeFilter from './DateRangeFilter'
+import CustomSelect from '@/components/rbac/CustomSelect'
 import { deleteRole } from '@/lib/rbac/roles-actions'
 import type { RolePageItemDto } from '@/lib/rbac/types'
 
@@ -21,9 +23,7 @@ interface Props {
   sortField: string
   sortDir: 'ASC' | 'DESC'
   search: string
-  hasPermission: boolean
-  minAssociatedUsers: number | null
-  maxAssociatedUsers: number | null
+  hasPermission: boolean | null
   startDateIns: string | null
   endDateIns: string | null
 }
@@ -31,7 +31,6 @@ interface Props {
 export default function RolesTableClient(props: Props) {
   const router = useRouter()
   const params = useSearchParams()
-  const [search, setSearch] = useState(props.search)
   const [showCreate, setShowCreate] = useState(false)
   const [renaming, setRenaming] = useState<RolePageItemDto | null>(null)
 
@@ -41,49 +40,39 @@ export default function RolesTableClient(props: Props) {
     router.push(`/roles-permissions?${next.toString()}`)
   }, [params, router])
 
-  // Sync local search with URL on navigation (back/forward)
-  useEffect(() => {
-    setSearch(props.search)
-  }, [props.search])
-
-  // Debounced search → URL
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if (search !== props.search) setParam({ search: search || null, page: '0' })
-    }, 350)
-    return () => clearTimeout(t)
-  }, [search, props.search, setParam])
-
-  const [minUsers, setMinUsers] = useState(props.minAssociatedUsers?.toString() ?? '')
-  const [maxUsers, setMaxUsers] = useState(props.maxAssociatedUsers?.toString() ?? '')
+  const [hasPermission, setHasPermission] = useState<string>(props.hasPermission == null ? '' : String(props.hasPermission))
   const [startDate, setStartDate] = useState(props.startDateIns)
   const [endDate, setEndDate] = useState(props.endDateIns)
+  const [search, setSearch] = useState(props.search)
 
-  useEffect(() => {
-    setMinUsers(props.minAssociatedUsers?.toString() ?? '')
-    setMaxUsers(props.maxAssociatedUsers?.toString() ?? '')
+  const syncDraftFromProps = useCallback(() => {
+    setHasPermission(props.hasPermission == null ? '' : String(props.hasPermission))
     setStartDate(props.startDateIns)
     setEndDate(props.endDateIns)
-  }, [props.minAssociatedUsers, props.maxAssociatedUsers, props.startDateIns, props.endDateIns])
+    setSearch(props.search)
+  }, [props.hasPermission, props.startDateIns, props.endDateIns, props.search])
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      const prevMin = props.minAssociatedUsers?.toString() ?? ''
-      const prevMax = props.maxAssociatedUsers?.toString() ?? ''
-      const changed = minUsers !== prevMin || maxUsers !== prevMax
-        || startDate !== props.startDateIns || endDate !== props.endDateIns
-      if (changed) {
-        setParam({
-          minAssociatedUsers: minUsers || null,
-          maxAssociatedUsers: maxUsers || null,
-          startDateIns: startDate || null,
-          endDateIns: endDate || null,
-          page: '0',
-        })
-      }
-    }, 350)
-    return () => clearTimeout(t)
-  }, [minUsers, maxUsers, startDate, endDate, props.minAssociatedUsers, props.maxAssociatedUsers, props.startDateIns, props.endDateIns, setParam])
+    syncDraftFromProps()
+  }, [syncDraftFromProps])
+
+  const applyFilters = useCallback(() => {
+    setParam({
+      hasPermission: hasPermission || null,
+      startDateIns: startDate || null,
+      endDateIns: endDate || null,
+      search: search || null,
+      page: '0',
+    })
+  }, [hasPermission, startDate, endDate, search, setParam])
+
+  const resetFilters = useCallback(() => {
+    setHasPermission('')
+    setStartDate(null)
+    setEndDate(null)
+    setSearch('')
+    setParam({ hasPermission: null, startDateIns: null, endDateIns: null, search: null, page: '0' })
+  }, [setParam])
 
   const onSort = (field: string) => {
     const dir = props.sortField === field && props.sortDir === 'ASC' ? 'DESC' : 'ASC'
@@ -103,27 +92,34 @@ export default function RolesTableClient(props: Props) {
     { key: 'dateMod', header: 'Ultimo aggiornamento', sortable: true, render: r => fmtDate(r.dateMod) },
   ]
 
+  const activeFilterCount =
+    (props.hasPermission != null ? 1 : 0) +
+    (props.search?.trim() ? 1 : 0) +
+    (props.startDateIns || props.endDateIns ? 1 : 0)
+
   const filters = (
-    <div className="flex flex-col gap-3">
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox" checked={props.hasPermission}
-          onChange={e => setParam({ hasPermission: e.target.checked ? 'true' : null, page: '0' })}
-        />
-        Ha permessi
-      </label>
-      <div className="flex items-center gap-2 text-sm">
-        <span>Utenti associati</span>
-        <input
-          type="number" min={0} placeholder="Min" data-testid="filter-min-associated-users"
-          value={minUsers} onChange={e => setMinUsers(e.target.value)}
-          className="w-20 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-        />
-        <span>—</span>
-        <input
-          type="number" min={0} placeholder="Max" data-testid="filter-max-associated-users"
-          value={maxUsers} onChange={e => setMaxUsers(e.target.value)}
-          className="w-20 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+    <div className="flex flex-col gap-4">
+      <div className="space-y-1">
+        <label className="text-sm font-medium block">Cerca</label>
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            data-testid="filter-search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Cerca"
+            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <label className="text-sm font-medium block">Ha permessi</label>
+        <CustomSelect
+          data-testid="filter-has-permission"
+          value={hasPermission}
+          onChange={v => setHasPermission(String(v))}
+          options={[{ value: 'true', label: 'Sì' }, { value: 'false', label: 'No' }]}
+          placeholder="Tutti"
         />
       </div>
       <DateRangeFilter
@@ -144,9 +140,12 @@ export default function RolesTableClient(props: Props) {
         page={props.page}
         totalPages={props.totalPages}
         onPageChange={p => setParam({ page: String(p) })}
-        search={search}
-        onSearchChange={setSearch}
         filtersSlot={filters}
+        onOpenFilters={syncDraftFromProps}
+        onApplyFilters={applyFilters}
+        onResetFilters={resetFilters}
+        activeFilterCount={activeFilterCount}
+        onClearFilters={resetFilters}
         actionButton={<button onClick={() => setShowCreate(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Nuovo ruolo</button>}
         onRowClick={r => router.push(`/roles-permissions/${r.id}`)}
         rowMenu={r => [

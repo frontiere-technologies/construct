@@ -1,6 +1,6 @@
 # Roles & Permissions Filters (R-03) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
 
 **Goal:** Add two filters to the Roles & Permissions list's "Filtri" drawer — a min/max range on "Utenti associati" (associated users) and a creation-date range picked via a calendar widget.
 
@@ -29,7 +29,7 @@
 - Produces: `RolesQuery.minAssociatedUsers?: number`, `RolesQuery.maxAssociatedUsers?: number` — consumed by Task 2's `page.tsx` changes.
 - Produces: `export function applyFilters<T>(q: T, query: RolesQuery): T` (currently unexported) — consumed only by this task's own test.
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Create `sources/microservices/web-construct/lib/rbac/roles-service.test.ts`:
 
@@ -94,12 +94,12 @@ describe('applyFilters', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [✅] **Step 2: Run test to verify it fails**
 
 Run (from `sources/microservices/web-construct/`): `npx vitest run lib/rbac/roles-service.test.ts`
 Expected: FAIL — `applyFilters` is not exported from `./roles-service` (or `minAssociatedUsers`/`maxAssociatedUsers` don't exist on `RolesQuery`, a TS error).
 
-- [ ] **Step 3: Add the new query fields**
+- [✅] **Step 3: Add the new query fields**
 
 In `sources/microservices/web-construct/lib/rbac/types.ts`, change:
 
@@ -133,7 +133,7 @@ export interface RolesQuery {
 }
 ```
 
-- [ ] **Step 4: Export and extend `applyFilters`**
+- [✅] **Step 4: Export and extend `applyFilters`**
 
 In `sources/microservices/web-construct/lib/rbac/roles-service.ts`, change:
 
@@ -173,17 +173,17 @@ export function applyFilters<T extends {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [✅] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run lib/rbac/roles-service.test.ts`
 Expected: PASS — 5 tests passing.
 
-- [ ] **Step 6: Type-check and lint**
+- [✅] **Step 6: Type-check and lint**
 
 Run: `npx tsc --noEmit && npm run lint`
 Expected: 0 errors (pre-existing warnings in unrelated files are fine).
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add lib/rbac/types.ts lib/rbac/roles-service.ts lib/rbac/roles-service.test.ts
@@ -203,7 +203,7 @@ git commit -m "feat(rbac): add associatedUsers min/max filter to listRoles (R-03
 - Consumes: `RolesQuery.minAssociatedUsers?: number`, `RolesQuery.maxAssociatedUsers?: number` (Task 1).
 - Produces: `RolesTableClientProps.minAssociatedUsers: number | null`, `RolesTableClientProps.maxAssociatedUsers: number | null` — Task 4 will add sibling props for the date filter to this same `Props` interface.
 
-- [ ] **Step 1: Write the failing E2E test**
+- [✅] **Step 1: Write the failing E2E test**
 
 Add to `sources/tests/e2e/test_roles.py` (after the existing tests, keep the `time` and `nav`/`expect` imports already there):
 
@@ -222,12 +222,12 @@ def test_filter_by_associated_users_range(logged_in_page, base_url):
     expect(page.locator("tbody tr")).to_have_count(baseline)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [✅] **Step 2: Run test to verify it fails**
 
 Run (from the repo root): `uv run pytest sources/tests/e2e/test_roles.py::test_filter_by_associated_users_range -v`
 Expected: FAIL — `get_by_test_id("filter-min-associated-users")` finds no element (the filter doesn't exist yet) or `get_by_role("button", name="Filtri")` times out because there's no second filter to make "Filtri" panel meaningfully different — actually "Filtri" button already exists from the "Ha permessi" filter, so the failure will be specifically the missing `filter-min-associated-users` test id, timing out after the default Playwright timeout.
 
-- [ ] **Step 3: Read the new params in `page.tsx`**
+- [✅] **Step 3: Read the new params in `page.tsx`**
 
 In `sources/microservices/web-construct/app/(protected)/roles-permissions/page.tsx`, change:
 
@@ -317,7 +317,7 @@ export default async function RolesPage({ searchParams }: { searchParams: Promis
 
 (`startDateIns`/`endDateIns` are wired here now too, even though the date-picker UI itself lands in Task 4, so `page.tsx` only needs touching once.)
 
-- [ ] **Step 4: Add the new props and filter UI to `RolesTableClient.tsx`**
+- [✅] **Step 4: Add the new props and filter UI to `RolesTableClient.tsx`**
 
 In `sources/microservices/web-construct/components/rbac/roles/RolesTableClient.tsx`, change the `Props` interface:
 
@@ -418,18 +418,18 @@ to:
   )
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [✅] **Step 5: Run test to verify it passes**
 
 Run (from the repo root): `uv run pytest sources/tests/e2e/test_roles.py::test_filter_by_associated_users_range -v`
 Expected: PASS.
 
-- [ ] **Step 6: Type-check, lint, and run the full Roles E2E file**
+- [✅] **Step 6: Type-check, lint, and run the full Roles E2E file**
 
 Run (from `sources/microservices/web-construct/`): `npx tsc --noEmit && npm run lint`
 Run (from the repo root): `uv run pytest sources/tests/e2e/test_roles.py -v`
 Expected: 0 type/lint errors; all tests in `test_roles.py` pass.
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add app/\(protected\)/roles-permissions/page.tsx components/rbac/roles/RolesTableClient.tsx
@@ -450,12 +450,12 @@ git commit -m "feat(rbac): add Utenti associati min/max filter UI (R-03.02)"
 - Produces: `export default function DateRangeFilter(props: { startDate: string | null; endDate: string | null; onChange: (startDate: string | null, endDate: string | null) => void }): JSX.Element` — consumed by Task 4's `RolesTableClient.tsx` change.
 - Internal pure helpers `toIso(d: Date | undefined): string | null` and `fromIso(s: string | null): Date | undefined` are exported from the same file for the unit test.
 
-- [ ] **Step 1: Install the dependency**
+- [✅] **Step 1: Install the dependency**
 
 Run (from `sources/microservices/web-construct/`): `npm install react-day-picker@^10.0.1`
 Expected: `package.json`/`package-lock.json` updated, install succeeds with no peer-dependency conflicts (it declares `react: >=16.8.0`, compatible with React 19).
 
-- [ ] **Step 2: Write the failing unit test for the date helpers**
+- [✅] **Step 2: Write the failing unit test for the date helpers**
 
 Create `sources/microservices/web-construct/components/rbac/roles/DateRangeFilter.test.tsx`:
 
@@ -489,12 +489,12 @@ describe('fromIso', () => {
 })
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [✅] **Step 3: Run test to verify it fails**
 
 Run: `npx vitest run components/rbac/roles/DateRangeFilter.test.tsx`
 Expected: FAIL — `./DateRangeFilter` doesn't exist yet.
 
-- [ ] **Step 4: Create `DateRangeFilter.tsx`**
+- [✅] **Step 4: Create `DateRangeFilter.tsx`**
 
 Create `sources/microservices/web-construct/components/rbac/roles/DateRangeFilter.tsx`:
 
@@ -596,17 +596,17 @@ export default function DateRangeFilter({ startDate, endDate, onChange }: Props)
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [✅] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run components/rbac/roles/DateRangeFilter.test.tsx`
 Expected: PASS — 5 tests passing.
 
-- [ ] **Step 6: Type-check and lint**
+- [✅] **Step 6: Type-check and lint**
 
 Run: `npx tsc --noEmit && npm run lint`
 Expected: 0 errors. (If `react-day-picker/locale` doesn't resolve a named export `it` under the installed version, swap to no `locale` prop — English-labeled calendar — and note it in the commit message; this is a cosmetic fallback, not a blocker.)
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add package.json package-lock.json components/rbac/roles/DateRangeFilter.tsx components/rbac/roles/DateRangeFilter.test.tsx
@@ -732,9 +732,9 @@ Start the dev server if not already running (`npm run dev` from `sources/microse
 In `docs/input-specs/rbac-fixes-and-improvements/rbac-improvements.md`, change:
 
 ```
-- R-03 - [ ] Filtri
-  - R-03.01 - [ ] Date specificando in un widget calendario le date iniziali e finali
-  - R-03.02 - [ ] Numero di ruoli da min a max
+- R-03 - [✅] Filtri
+  - R-03.01 - [✅] Date specificando in un widget calendario le date iniziali e finali
+  - R-03.02 - [✅] Numero di ruoli da min a max
 ```
 
 to:

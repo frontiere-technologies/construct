@@ -20,28 +20,13 @@ function makeFakeQuery() {
 const baseQuery: RolesQuery = { page: 0, size: 10 }
 
 describe('applyFilters', () => {
-  it('applies gte/lte on associated_users when min and max are set', () => {
+  it('applies eq(has_permissions, false) when hasPermission is explicitly false', () => {
     const q = makeFakeQuery()
-    applyFilters(q, { ...baseQuery, minAssociatedUsers: 5, maxAssociatedUsers: 20 })
-    expect(q.calls).toEqual([
-      { method: 'gte', column: 'associated_users', value: 5 },
-      { method: 'lte', column: 'associated_users', value: 20 },
-    ])
+    applyFilters(q, { ...baseQuery, hasPermission: false })
+    expect(q.calls).toEqual([{ method: 'eq', column: 'has_permissions', value: false }])
   })
 
-  it('applies only gte when only min is set', () => {
-    const q = makeFakeQuery()
-    applyFilters(q, { ...baseQuery, minAssociatedUsers: 5 })
-    expect(q.calls).toEqual([{ method: 'gte', column: 'associated_users', value: 5 }])
-  })
-
-  it('applies only lte when only max is set', () => {
-    const q = makeFakeQuery()
-    applyFilters(q, { ...baseQuery, maxAssociatedUsers: 20 })
-    expect(q.calls).toEqual([{ method: 'lte', column: 'associated_users', value: 20 }])
-  })
-
-  it('omits associated_users filters when neither min nor max is set', () => {
+  it('omits the has_permissions filter when hasPermission is undefined', () => {
     const q = makeFakeQuery()
     applyFilters(q, baseQuery)
     expect(q.calls).toEqual([])
@@ -49,11 +34,10 @@ describe('applyFilters', () => {
 
   it('combines with existing search and hasPermission filters', () => {
     const q = makeFakeQuery()
-    applyFilters(q, { ...baseQuery, search: 'Admin', hasPermission: true, minAssociatedUsers: 1 })
+    applyFilters(q, { ...baseQuery, search: 'Admin', hasPermission: true })
     expect(q.calls).toEqual([
       { method: 'ilike', column: 'description', value: '%Admin%' },
       { method: 'eq', column: 'has_permissions', value: true },
-      { method: 'gte', column: 'associated_users', value: 1 },
     ])
   })
 

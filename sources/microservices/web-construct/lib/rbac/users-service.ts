@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase-server'
 import { getAllRoles } from './roles-service'
+import { nextDay } from './date-utils'
 import { USER_SORT_COLUMN, buildUserDtos, type UserRow, type UserRoleRow } from './user-mappers'
 import type { UserDTO, UsersQuery } from './types'
 
@@ -12,6 +13,7 @@ type FilterableQuery = {
   in(column: string, values: readonly unknown[]): FilterableQuery
   gte(column: string, value: unknown): FilterableQuery
   lte(column: string, value: unknown): FilterableQuery
+  lt(column: string, value: unknown): FilterableQuery
 }
 
 async function candidateUserIds(roleIds: number[] | undefined): Promise<string[] | null> {
@@ -22,7 +24,7 @@ async function candidateUserIds(roleIds: number[] | undefined): Promise<string[]
   return Array.from(new Set((data ?? []).map((r: { user_id: string }) => r.user_id)))
 }
 
-function applyUserFilters<T extends FilterableQuery>(q: T, query: UsersQuery, ids: string[] | null): T {
+export function applyUserFilters<T extends FilterableQuery>(q: T, query: UsersQuery, ids: string[] | null): T {
   let r = q
   if (query.search) {
     const s = query.search.replace(/[%,()&]/g, '')
@@ -30,7 +32,7 @@ function applyUserFilters<T extends FilterableQuery>(q: T, query: UsersQuery, id
   }
   if (query.statuses?.length) r = r.in('id_user_status', query.statuses) as T
   if (query.createdFrom) r = r.gte('created_at', query.createdFrom) as T
-  if (query.createdTo) r = r.lte('created_at', query.createdTo) as T
+  if (query.createdTo) r = r.lt('created_at', nextDay(query.createdTo)) as T
   if (ids) r = r.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']) as T
   return r
 }
