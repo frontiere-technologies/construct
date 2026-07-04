@@ -30,7 +30,7 @@
 - Consumes: nothing new from other tasks.
 - Produces: `DataTable<T>` accepts two new optional props — `activeFilterCount?: number` and `onClearFilters?: () => void` — that Task 2 (Roles) will also pass. The badge/button markup and `data-testid`s established here (`filters-badge`, `clear-filters`) are the pattern Task 3 (Functionalities) replicates without a `DataTable`.
 
-- [ ] **Step 1: Write the failing e2e test**
+- [✅] **Step 1: Write the failing e2e test**
 
 Add to `sources/tests/e2e/test_users.py` (after `test_filter_by_role`):
 
@@ -64,12 +64,12 @@ def test_filters_badge_and_clear(logged_in_page, base_url):
     expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [✅] **Step 2: Run the test to verify it fails**
 
 Run: `uv run pytest sources/tests/e2e/test_users.py::test_filters_badge_and_clear -v`
 Expected: FAIL — `page.locator('[data-testid="filters-badge"]')` and `[data-testid="clear-filters"]` don't exist yet anywhere in the DOM, so the "no badge" assertions pass vacuously but the later `to_have_text("2")` assertion times out because no element matches.
 
-- [ ] **Step 3: Add the props, badge, and clear button to `DataTable.tsx`**
+- [✅] **Step 3: Add the props, badge, and clear button to `DataTable.tsx`**
 
 1. Add two new optional props to the interface (after `onResetFilters?: () => void`, before `actionButton?: React.ReactNode`):
 
@@ -111,7 +111,7 @@ Expected: FAIL — `page.locator('[data-testid="filters-badge"]')` and `[data-te
           {actionButton}
 ```
 
-- [ ] **Step 4: Compute the count and wire `onClearFilters` in `UsersTableClient.tsx`**
+- [✅] **Step 4: Compute the count and wire `onClearFilters` in `UsersTableClient.tsx`**
 
 1. Add the count calculation right after the `columns` array definition (after the closing `]` of `columns`, before `const filters = (`):
 
@@ -131,12 +131,12 @@ Expected: FAIL — `page.locator('[data-testid="filters-badge"]')` and `[data-te
         onClearFilters={resetFilters}
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [✅] **Step 5: Run the test to verify it passes**
 
 Run: `uv run pytest sources/tests/e2e/test_users.py -v`
 Expected: all tests PASS, including `test_filters_badge_and_clear` and the pre-existing `test_filter_by_status_and_reset`/`test_filter_by_role` (unaffected — they don't touch the badge/clear button).
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/rbac/DataTable.tsx sources/microservices/web-construct/components/rbac/users/UsersTableClient.tsx sources/tests/e2e/test_users.py
@@ -155,7 +155,7 @@ git commit -m "feat(rbac): show active-filters badge + quick clear on Users"
 - Consumes: `DataTable<T>`'s `activeFilterCount`/`onClearFilters` props from Task 1 (already merged, unchanged here).
 - Produces: nothing consumed by later tasks (Task 3 is independent).
 
-- [ ] **Step 1: Write the failing e2e test**
+- [✅] **Step 1: Write the failing e2e test**
 
 Add to `sources/tests/e2e/test_roles.py` (after `test_filter_by_has_permission_and_reset`):
 
@@ -181,12 +181,12 @@ def test_filters_badge_and_clear(logged_in_page, base_url):
     expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [✅] **Step 2: Run the test to verify it fails**
 
 Run: `uv run pytest sources/tests/e2e/test_roles.py::test_filters_badge_and_clear -v`
 Expected: FAIL — no `data-testid="filters-badge"`/`"clear-filters"` element exists on this page yet (Task 1 only wired Users).
 
-- [ ] **Step 3: Compute the count and wire `onClearFilters` in `RolesTableClient.tsx`**
+- [✅] **Step 3: Compute the count and wire `onClearFilters` in `RolesTableClient.tsx`**
 
 1. Add the count calculation right after the `columns` array definition (after its closing `]`, before `const filters = (`):
 
@@ -205,12 +205,12 @@ Expected: FAIL — no `data-testid="filters-badge"`/`"clear-filters"` element ex
         onClearFilters={resetFilters}
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [✅] **Step 4: Run the test to verify it passes**
 
 Run: `uv run pytest sources/tests/e2e/test_roles.py -v`
 Expected: all tests PASS, including `test_filters_badge_and_clear` and every pre-existing test in the file.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/rbac/roles/RolesTableClient.tsx sources/tests/e2e/test_roles.py
@@ -229,7 +229,7 @@ git commit -m "feat(rbac): show active-filters badge + quick clear on Roles"
 - Consumes: nothing from Tasks 1-2 (Functionalities has no `DataTable`) — replicates the same `data-testid`s and visual pattern independently.
 - Produces: nothing consumed elsewhere.
 
-- [ ] **Step 1: Write the failing e2e test**
+- [✅] **Step 1: Write the failing e2e test**
 
 Add to `sources/tests/e2e/test_functionalities.py` (after `test_filter_drawer_search`):
 
@@ -254,12 +254,12 @@ def test_filters_badge_and_clear(logged_in_page, base_url):
     expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [✅] **Step 2: Run the test to verify it fails**
 
 Run: `uv run pytest sources/tests/e2e/test_functionalities.py::test_filters_badge_and_clear -v`
 Expected: FAIL — no `data-testid="filters-badge"`/`"clear-filters"` element exists yet on this page.
 
-- [ ] **Step 3: Add the badge + clear button to the toolbar row**
+- [✅] **Step 3: Add the badge + clear button to the toolbar row**
 
 Replace the toolbar `<div>` block:
 
@@ -307,12 +307,12 @@ with:
 
 Note this reads and writes the same `search`/`setSearchDraft`/`setSearch` state already defined earlier in the component (`useState` calls near the top) — no new state is introduced.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [✅] **Step 4: Run the test to verify it passes**
 
 Run: `uv run pytest sources/tests/e2e/test_functionalities.py -v`
 Expected: all tests PASS, including the two pre-existing F-01/V-02 tests (`test_create_button_aligned_with_filtri`, `test_filter_drawer_search`) and the new `test_filters_badge_and_clear`.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/rbac/functionalities/FunctionalitiesTreeClient.tsx sources/tests/e2e/test_functionalities.py
@@ -329,16 +329,16 @@ git commit -m "feat(rbac): show active-filters badge + quick clear on Functional
 **Interfaces:**
 - Consumes: nothing new — verifies Tasks 1-3 together.
 
-- [ ] **Step 1: Run ESLint**
+- [✅] **Step 1: Run ESLint**
 
 Run: `cd sources/microservices/web-construct && npm run lint`
 Expected: no new errors (no unused-import or unused-var errors introduced by the badge/clear-button markup).
 
-- [ ] **Step 2: Run the full RBAC e2e suite**
+- [✅] **Step 2: Run the full RBAC e2e suite**
 
 Run: `uv run pytest sources/tests/e2e/test_users.py sources/tests/e2e/test_roles.py sources/tests/e2e/test_functionalities.py -v`
 Expected: all tests PASS (23 total: 7 in test_users.py, 7 in test_roles.py, 9 in test_functionalities.py, after the 3 new tests added across Tasks 1-3).
 
-- [ ] **Step 3: Manual browser check**
+- [✅] **Step 3: Manual browser check**
 
 Take screenshots of `/user-management`, `/roles-permissions`, and `/functionalities` with a filter applied on each, confirming: the "Filtri" button shows the numeric badge, "Rimuovi filtri" appears next to it, and clicking it restores the unfiltered list and hides both the badge and the button.
