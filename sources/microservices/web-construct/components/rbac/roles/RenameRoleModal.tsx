@@ -18,11 +18,11 @@ export default function RenameRoleModal({ roleId, currentName, onClose }: { role
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white dark:bg-gray-900 p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-xl bg-surface-overlay p-6 shadow-xl" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold mb-4">Rinomina ruolo</h2>
         <input
           autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Nome ruolo"
-          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 mb-6"
+          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface-overlay mb-6"
         />
         <div className="flex items-center justify-between">
           <button onClick={onClose} className="text-sm font-medium">Annulla</button>

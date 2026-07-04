@@ -108,7 +108,7 @@ export default function RolesTableClient(props: Props) {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Cerca"
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-surface-overlay"
           />
         </div>
       </div>
