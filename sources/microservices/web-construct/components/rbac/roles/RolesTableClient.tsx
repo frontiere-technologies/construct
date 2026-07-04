@@ -92,6 +92,11 @@ export default function RolesTableClient(props: Props) {
     { key: 'dateMod', header: 'Ultimo aggiornamento', sortable: true, render: r => fmtDate(r.dateMod) },
   ]
 
+  const activeFilterCount =
+    (props.hasPermission != null ? 1 : 0) +
+    (props.search ? 1 : 0) +
+    (props.startDateIns || props.endDateIns ? 1 : 0)
+
   const filters = (
     <div className="flex flex-col gap-4">
       <div className="space-y-1">
@@ -139,6 +144,8 @@ export default function RolesTableClient(props: Props) {
         onOpenFilters={syncDraftFromProps}
         onApplyFilters={applyFilters}
         onResetFilters={resetFilters}
+        activeFilterCount={activeFilterCount}
+        onClearFilters={resetFilters}
         actionButton={<button onClick={() => setShowCreate(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Nuovo ruolo</button>}
         onRowClick={r => router.push(`/roles-permissions/${r.id}`)}
         rowMenu={r => [

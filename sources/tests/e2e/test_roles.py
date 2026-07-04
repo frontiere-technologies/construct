@@ -134,3 +134,24 @@ def test_filter_by_has_permission_and_reset(logged_in_page, base_url):
     page.get_by_role("button", name="Filtri").click()
     page.get_by_role("button", name="Reset").click()
     expect(page.locator("tbody tr")).to_have_count(baseline)
+
+
+def test_filters_badge_and_clear(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/roles-permissions")
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_count(0)
+    expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
+
+    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("filter-has-permission").click()
+    page.get_by_test_id("filter-has-permission-option-false").click()
+    page.get_by_role("button", name="Applica").click()
+    expect(page).to_have_url(re.compile("hasPermission=false"))
+
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_text("1")
+    expect(page.locator('[data-testid="clear-filters"]')).to_be_visible()
+
+    page.get_by_test_id("clear-filters").click()
+    expect(page).not_to_have_url(re.compile("hasPermission="))
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_count(0)
+    expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
