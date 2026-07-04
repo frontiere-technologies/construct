@@ -59,16 +59,14 @@ def test_filter_drawer_search(logged_in_page, base_url):
     expect(page.get_by_placeholder("Cerca")).to_have_count(0)
 
     page.get_by_role("button", name="Filtri").click()
-    page.wait_for_timeout(300)  # Wait for drawer animation
     page.get_by_placeholder("Cerca").fill("Admin")
-    page.get_by_role("button", name="Applica").click(force=True)
+    page.get_by_role("button", name="Applica").click()
     # Wait for drawer to close and filter to apply
     expect(page.get_by_text("Admin", exact=True).first).to_be_visible()
     expect(page.get_by_text("Home", exact=True)).to_have_count(0)
 
     page.get_by_role("button", name="Filtri").click()
-    page.wait_for_timeout(300)  # Wait for drawer animation
-    page.get_by_role("button", name="Reset").click(force=True)
+    page.get_by_role("button", name="Reset").click()
     # Wait for drawer to close and filter to reset
     expect(page.get_by_text("Home", exact=True).first).to_be_visible()
 
