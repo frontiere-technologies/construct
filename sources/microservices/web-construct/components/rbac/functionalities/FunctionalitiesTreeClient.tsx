@@ -61,7 +61,17 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
           className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700"
         >
           <SlidersHorizontal size={16} /> Filtri
+          {search.trim() !== '' && (
+            <span data-testid="filters-badge" className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[11px] leading-none">
+              1
+            </span>
+          )}
         </button>
+        {search.trim() !== '' && (
+          <button data-testid="clear-filters" aria-label="Rimuovi tutto" onClick={() => { setSearchDraft(''); setSearch('') }} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline-offset-2 hover:underline">
+            Rimuovi filtri
+          </button>
+        )}
         <button onClick={() => router.push(`/functionalities/create?root=${tab}`)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Crea nuovo</button>
       </div>
       <FilterDrawer
