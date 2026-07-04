@@ -34,7 +34,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
 
     loadThemeConfig().then(serverConfig => {
       if (serverConfig) {
-        setSettings(prev => ({ ...prev, themeConfig: serverConfig }))
+        setSettings(prev => ({ ...prev, themeConfig: { ...defaultThemeConfig, ...serverConfig } }))
       }
     }).catch(() => {/* ignore — localStorage values remain */})
   }, [])

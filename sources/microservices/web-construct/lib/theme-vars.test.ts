@@ -24,6 +24,13 @@ describe('resolveThemeVars', () => {
     expect(vars['--theme-surface']).toBe(defaultThemeConfig.surfaceLight)
   })
 
+  it('falls back to the default color when a saved value is undefined (old config missing new fields)', () => {
+    const partial = { ...defaultThemeConfig } as any
+    delete partial.surfaceLight
+    const vars = resolveThemeVars(partial, false)
+    expect(vars['--theme-surface']).toBe(defaultThemeConfig.surfaceLight)
+  })
+
   it('falls back to the default primary color when invalid', () => {
     const broken = { ...defaultThemeConfig, primaryColor: 'nope' }
     const vars = resolveThemeVars(broken, false)
