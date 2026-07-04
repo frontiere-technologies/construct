@@ -99,11 +99,11 @@ export default function DataTable<T>(props: DataTableProps<T>) {
       <div className="flex items-center gap-2">
         <div className="ml-auto flex items-center gap-2">
           <div className="relative">
-            <button onClick={() => setShowCols(s => !s)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
+            <button onClick={() => setShowCols(s => !s)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-border">
               <Columns3 size={16} /> Colonne
             </button>
             {showCols && (
-              <div className="absolute right-0 mt-1 z-20 w-48 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow">
+              <div className="absolute right-0 mt-1 z-20 w-48 p-2 rounded-lg border border-border bg-surface-overlay shadow">
                 {columns.map(c => (
                   <label key={c.key} className="flex items-center gap-2 py-1 text-sm cursor-pointer">
                     <input type="checkbox" checked={!hidden.has(c.key)} onChange={() => toggleCol(c.key)} />
@@ -118,7 +118,7 @@ export default function DataTable<T>(props: DataTableProps<T>) {
               <button data-testid="open-filters" onClick={() => {
                 if (!showFilters) onOpenFilters?.()
                 setShowFilters(s => !s)
-              }} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
+              }} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-border">
                 <SlidersHorizontal size={16} /> Filtri
                 {!!activeFilterCount && (
                   <span data-testid="filters-badge" className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[11px] leading-none">
@@ -148,7 +148,7 @@ export default function DataTable<T>(props: DataTableProps<T>) {
         </FilterDrawer>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
+      <div className="overflow-x-auto rounded-lg border border-border-subtle">
         <table className="w-full text-sm">
           <thead className="bg-gray-900 text-white">
             <tr>
@@ -174,28 +174,28 @@ export default function DataTable<T>(props: DataTableProps<T>) {
                 <tr
                   key={k}
                   onClick={() => onRowClick?.(row)}
-                  className={`border-t border-gray-100 dark:border-gray-800 ${onRowClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50' : ''}`}
+                  className={`border-t border-border-subtle ${onRowClick ? 'cursor-pointer hover:bg-surface-hover/50' : ''}`}
                 >
                   {visibleCols.map(c => (
                     <td key={c.key} className="px-4 py-3">{c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? '')}</td>
                   ))}
                   {rowMenu && (
                     <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                      <button data-testid={`row-menu-${k}`} onClick={e => toggleMenu(e, k)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                      <button data-testid={`row-menu-${k}`} onClick={e => toggleMenu(e, k)} className="p-1 rounded hover:bg-surface-hover">
                         <MoreHorizontal size={16} />
                       </button>
                       {openMenu === k && menuPos && createPortal(
                         <div
                           ref={menuRef}
                           style={{ top: menuPos.top, right: menuPos.right }}
-                          className="fixed z-50 w-40 p-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
+                          className="fixed z-50 w-40 p-1 rounded-lg border border-border bg-surface-overlay shadow-lg"
                         >
                           {rowMenu(row).map(item => (
                             <button
                               key={item.label}
                               disabled={item.disabled}
                               onClick={() => { closeMenu(); item.onClick() }}
-                              className="block w-full text-left px-3 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="block w-full text-left px-3 py-1.5 text-sm rounded hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               {item.label}
                             </button>
@@ -218,13 +218,13 @@ export default function DataTable<T>(props: DataTableProps<T>) {
           : <button
               key={p}
               onClick={() => onPageChange(p)}
-              className={`min-w-8 h-8 px-2 rounded-lg text-sm ${p === page ? 'bg-gray-900 text-white' : 'border border-gray-200 dark:border-gray-700'}`}
+              className={`min-w-8 h-8 px-2 rounded-lg text-sm ${p === page ? 'bg-gray-900 text-white' : 'border border-border'}`}
             >{p + 1}</button>
         )}
         <button
           onClick={() => onPageChange(Math.min(totalPages - 1, page + 1))}
           disabled={page >= totalPages - 1}
-          className="min-w-8 h-8 px-2 rounded-lg text-sm border border-gray-200 dark:border-gray-700 disabled:opacity-40"
+          className="min-w-8 h-8 px-2 rounded-lg text-sm border border-border disabled:opacity-40"
         ><ChevronRight size={16} /></button>
       </div>
     </div>
