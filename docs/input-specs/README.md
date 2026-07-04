@@ -1,3 +1,3 @@
-Normalmente l'input nel processo canonico di sviluppo arriverà dai task segnati sulla board Scrum oppure dalla cartella dove sono contenuti gli output delle review, quindi questa directory sarà quasi sempre inutilizzata se il processo di sviluppo viene usato In modo corretto.
+Normalmente l'input nel processo di sviluppo arriverà dai task segnati sulla board Scrum oppure dalla cartella dove sono contenuti gli output delle review, quindi questa directory sarà quasi sempre inutilizzata se il processo di sviluppo viene usato In modo corretto.
 
 Per casi particolari, in ogni caso, può essere utile utilizzare questa directory per iniziare a far lavorare la modalità brainstorming di Superpowers (ad esempio), leggendo l'input proprio da qui. 
