@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import type { AppSettings } from '@/types/menu'
-import { defaultSettings, defaultThemeConfig } from '@/types/menu'
+import { defaultSettings, defaultThemeConfig, mergeThemeConfig } from '@/types/menu'
 import { loadThemeConfig } from '@/lib/theme-actions'
 import { resolveThemeVars } from '@/lib/theme-vars'
 
@@ -26,7 +26,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
         base = {
           language: parsed?.language || 'en',
           theme: parsed?.theme || 'light',
-          themeConfig: { ...defaultThemeConfig, ...parsed?.themeConfig },
+          themeConfig: mergeThemeConfig(parsed?.themeConfig),
         }
       } catch {}
     }
@@ -34,7 +34,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
 
     loadThemeConfig().then(serverConfig => {
       if (serverConfig) {
-        setSettings(prev => ({ ...prev, themeConfig: { ...defaultThemeConfig, ...serverConfig } }))
+        setSettings(prev => ({ ...prev, themeConfig: mergeThemeConfig(serverConfig) }))
       }
     }).catch(() => {/* ignore — localStorage values remain */})
   }, [])

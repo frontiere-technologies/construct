@@ -94,3 +94,7 @@ export const defaultSettings: AppSettings = {
   theme: 'light',
   themeConfig: defaultThemeConfig,
 }
+
+export function mergeThemeConfig(saved?: Partial<ThemeConfig> | null): ThemeConfig {
+  return { ...defaultThemeConfig, ...saved }
+}
