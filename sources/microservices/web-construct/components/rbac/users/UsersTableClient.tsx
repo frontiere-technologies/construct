@@ -98,7 +98,7 @@ export default function UsersTableClient(props: Props) {
   const activeFilterCount =
     (props.roleId != null ? 1 : 0) +
     (props.statusId != null ? 1 : 0) +
-    (props.search ? 1 : 0) +
+    (props.search?.trim() ? 1 : 0) +
     (props.createdFrom || props.createdTo ? 1 : 0)
 
   const filters = (

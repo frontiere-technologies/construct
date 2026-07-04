@@ -33,6 +33,8 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
     catch (e) { alert(e instanceof Error ? e.message : 'Move failed') }
   }
 
+  const clearFilters = () => { setSearchDraft(''); setSearch('') }
+
   const trailing = (node: UserNavigationTreeDto) => {
     if (node.isImmutable) return null
     return (
@@ -54,6 +56,7 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
       <h1 className="text-2xl font-bold mb-4">Funzionalità</h1>
       <div className="flex items-center justify-end gap-2 mb-4">
         <button
+          data-testid="open-filters"
           onClick={() => {
             if (!showFilters) setSearchDraft(search)
             setShowFilters(s => !s)
@@ -68,7 +71,7 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
           )}
         </button>
         {search.trim() !== '' && (
-          <button data-testid="clear-filters" aria-label="Rimuovi tutto" onClick={() => { setSearchDraft(''); setSearch('') }} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline-offset-2 hover:underline">
+          <button data-testid="clear-filters" onClick={clearFilters} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline-offset-2 hover:underline">
             Rimuovi filtri
           </button>
         )}
@@ -78,7 +81,7 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
         open={showFilters}
         onClose={() => setShowFilters(false)}
         onApply={() => { setSearch(searchDraft); setShowFilters(false) }}
-        onReset={() => { setSearchDraft(''); setSearch('') }}
+        onReset={clearFilters}
       >
         <div className="space-y-1">
           <label className="text-sm font-medium block">Cerca</label>

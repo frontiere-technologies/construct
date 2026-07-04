@@ -114,7 +114,7 @@ export default function DataTable<T>(props: DataTableProps<T>) {
             )}
           </div>
           {filtersSlot && (
-            <button onClick={() => {
+            <button data-testid="open-filters" onClick={() => {
               if (!showFilters) onOpenFilters?.()
               setShowFilters(s => !s)
             }} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
@@ -127,7 +127,7 @@ export default function DataTable<T>(props: DataTableProps<T>) {
             </button>
           )}
           {!!activeFilterCount && (
-            <button aria-label="Rimuovi tutto" data-testid="clear-filters" onClick={onClearFilters} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline-offset-2 hover:underline">
+            <button data-testid="clear-filters" onClick={onClearFilters} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline-offset-2 hover:underline">
               Rimuovi filtri
             </button>
           )}

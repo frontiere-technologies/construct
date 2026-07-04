@@ -94,7 +94,7 @@ export default function RolesTableClient(props: Props) {
 
   const activeFilterCount =
     (props.hasPermission != null ? 1 : 0) +
-    (props.search ? 1 : 0) +
+    (props.search?.trim() ? 1 : 0) +
     (props.startDateIns || props.endDateIns ? 1 : 0)
 
   const filters = (

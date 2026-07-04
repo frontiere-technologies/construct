@@ -20,7 +20,7 @@ def test_search_narrows_users(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/user-management")
     before = page.locator('[data-testid="status-badge"]').count()
-    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("open-filters").click()
     page.get_by_placeholder("Cerca").fill("zzz-no-such-user-zzz")
     page.get_by_role("button", name="Applica").click()
     page.wait_for_load_state("networkidle")
@@ -55,7 +55,7 @@ def test_filter_by_status_and_reset(logged_in_page, base_url):
     # Disattivato-only has something real to exclude.
     assert page.get_by_text("Attivo", exact=True).count() > 0
 
-    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("open-filters").click()
     page.get_by_test_id("filter-status").click()
     page.get_by_test_id("filter-status-option-1").click()  # 1 = Disattivato
     page.get_by_role("button", name="Applica").click()
@@ -64,7 +64,7 @@ def test_filter_by_status_and_reset(logged_in_page, base_url):
     expect(page.get_by_text("Attivo", exact=True)).to_have_count(0)
     expect(page.get_by_text("Disattivato", exact=True).first).to_be_visible()
 
-    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("open-filters").click()
     page.get_by_role("button", name="Reset").click()
     expect(page).not_to_have_url(re.compile("statuses="))
     # Reset must restore the true baseline count, not just "some" rows.
@@ -81,7 +81,7 @@ def test_filter_by_role(logged_in_page, base_url):
     # Administrator role, so filtering to Administrator-only has something to exclude.
     assert rows.filter(has_text="Administrator").count() < baseline
 
-    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("open-filters").click()
     page.get_by_test_id("filter-role").click()
     page.get_by_test_id("filter-role-option-1").click()  # 1 = Administrator
     page.get_by_role("button", name="Applica").click()
@@ -99,7 +99,7 @@ def test_filters_badge_and_clear(logged_in_page, base_url):
     expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
 
     # Apply two filters: Ruolo + Stato
-    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("open-filters").click()
     page.get_by_test_id("filter-role").click()
     page.get_by_test_id("filter-role-option-1").click()  # 1 = Administrator
     page.get_by_test_id("filter-status").click()
