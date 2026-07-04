@@ -127,7 +127,7 @@ export default function DataTable<T>(props: DataTableProps<T>) {
             </button>
           )}
           {!!activeFilterCount && (
-            <button aria-label="Cancella" data-testid="clear-filters" onClick={onClearFilters} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline-offset-2 hover:underline">
+            <button aria-label="Rimuovi tutto" data-testid="clear-filters" onClick={onClearFilters} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline-offset-2 hover:underline">
               Rimuovi filtri
             </button>
           )}
