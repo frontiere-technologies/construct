@@ -125,7 +125,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
                 value={profile.phone ?? ''}
                 onChange={handleChange('phone')}
                 placeholder="+391234567890"
-                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm placeholder:text-foreground-faint focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
           </div>
