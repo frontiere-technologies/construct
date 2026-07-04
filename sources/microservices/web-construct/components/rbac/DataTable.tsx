@@ -27,6 +27,8 @@ interface DataTableProps<T> {
   onOpenFilters?: () => void
   onApplyFilters?: () => void
   onResetFilters?: () => void
+  activeFilterCount?: number
+  onClearFilters?: () => void
   actionButton?: React.ReactNode
   rowMenu?: (row: T) => RowMenuItem[]
   onRowClick?: (row: T) => void
@@ -34,7 +36,7 @@ interface DataTableProps<T> {
 
 export default function DataTable<T>(props: DataTableProps<T>) {
   const { columns, rows, rowKey, sort, onSortChange, page, totalPages, onPageChange,
-    filtersSlot, onOpenFilters, onApplyFilters, onResetFilters, actionButton, rowMenu, onRowClick } = props
+    filtersSlot, onOpenFilters, onApplyFilters, onResetFilters, activeFilterCount, onClearFilters, actionButton, rowMenu, onRowClick } = props
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [showCols, setShowCols] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
@@ -117,6 +119,16 @@ export default function DataTable<T>(props: DataTableProps<T>) {
               setShowFilters(s => !s)
             }} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700">
               <SlidersHorizontal size={16} /> Filtri
+              {!!activeFilterCount && (
+                <span data-testid="filters-badge" className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[11px] leading-none">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          )}
+          {!!activeFilterCount && (
+            <button aria-label="Cancella" data-testid="clear-filters" onClick={onClearFilters} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline-offset-2 hover:underline">
+              Rimuovi filtri
             </button>
           )}
           {actionButton}

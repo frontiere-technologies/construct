@@ -95,6 +95,12 @@ export default function UsersTableClient(props: Props) {
     { key: 'dateMod', header: 'Aggiornato', sortable: true, render: u => u.updatedAt ? new Date(u.updatedAt).toLocaleDateString() : '—' },
   ]
 
+  const activeFilterCount =
+    (props.roleId != null ? 1 : 0) +
+    (props.statusId != null ? 1 : 0) +
+    (props.search ? 1 : 0) +
+    (props.createdFrom || props.createdTo ? 1 : 0)
+
   const filters = (
     <div className="flex flex-col gap-4">
       <div className="space-y-1">
@@ -159,6 +165,8 @@ export default function UsersTableClient(props: Props) {
         onOpenFilters={syncDraftFromProps}
         onApplyFilters={applyFilters}
         onResetFilters={resetFilters}
+        activeFilterCount={activeFilterCount}
+        onClearFilters={resetFilters}
       />
       {managing && (
         <ManageRolesModal

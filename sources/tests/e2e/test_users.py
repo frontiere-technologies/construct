@@ -89,3 +89,32 @@ def test_filter_by_role(logged_in_page, base_url):
     expect(rows.first).to_be_visible()
     # Every remaining row must carry the Administrator role.
     expect(rows.filter(has_text="Administrator")).to_have_count(rows.count())
+
+
+def test_filters_badge_and_clear(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/user-management")
+    # No filters applied: no badge, no clear button
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_count(0)
+    expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
+
+    # Apply two filters: Ruolo + Stato
+    page.get_by_role("button", name="Filtri").click()
+    page.get_by_test_id("filter-role").click()
+    page.get_by_test_id("filter-role-option-1").click()  # 1 = Administrator
+    page.get_by_test_id("filter-status").click()
+    page.get_by_test_id("filter-status-option-1").click()  # 1 = Disattivato
+    page.get_by_role("button", name="Applica").click()
+    expect(page).to_have_url(re.compile("roleIds=1"))
+    expect(page).to_have_url(re.compile("statuses=1"))
+
+    # Badge shows 2, clear button visible
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_text("2")
+    expect(page.locator('[data-testid="clear-filters"]')).to_be_visible()
+
+    # Clicking it clears everything in one shot
+    page.get_by_test_id("clear-filters").click()
+    expect(page).not_to_have_url(re.compile("roleIds="))
+    expect(page).not_to_have_url(re.compile("statuses="))
+    expect(page.locator('[data-testid="filters-badge"]')).to_have_count(0)
+    expect(page.locator('[data-testid="clear-filters"]')).to_have_count(0)
