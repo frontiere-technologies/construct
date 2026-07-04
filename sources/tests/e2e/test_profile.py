@@ -80,3 +80,24 @@ def test_profile_phone_accepts_e164_format(profile_page):
     page.locator('input[type="tel"]').fill("")
     page.get_by_role("button", name="Save Profile").click()
     page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
+
+
+def test_profile_phone_trims_whitespace_on_persist(profile_page):
+    page = profile_page
+
+    phone_input = page.locator('input[type="tel"]')
+    # Submit a whitespace-padded valid E.164 number
+    phone_input.fill("  +14155552671  ")
+    page.get_by_role("button", name="Save Profile").click()
+    page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
+
+    page.reload()
+    page.wait_for_load_state("networkidle")
+    reloaded_value = page.locator('input[type="tel"]').input_value()
+    # Assert the persisted value is trimmed, not the padded original
+    assert reloaded_value == "+14155552671", f"Phone number not trimmed on persist: '{reloaded_value}'"
+
+    # Cleanup
+    page.locator('input[type="tel"]').fill("")
+    page.get_by_role("button", name="Save Profile").click()
+    page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)

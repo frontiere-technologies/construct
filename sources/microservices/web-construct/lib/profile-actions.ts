@@ -15,9 +15,11 @@ export async function saveProfile(profile: UserProfile): Promise<{ error: string
   const session = await auth()
   if (!session?.user?.id) return { error: 'Not authenticated' }
 
-  if (profile.phone) {
-    const parsed = phoneSchema.safeParse(profile.phone)
+  let phone = profile.phone
+  if (phone) {
+    const parsed = phoneSchema.safeParse(phone)
     if (!parsed.success) return { error: parsed.error.issues[0].message }
+    phone = parsed.data
   }
 
   const supabase = createAdminClient()
@@ -26,7 +28,7 @@ export async function saveProfile(profile: UserProfile): Promise<{ error: string
     first_name: profile.first_name,
     last_name: profile.last_name,
     username: profile.username,
-    phone: profile.phone,
+    phone,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'id' })
 
