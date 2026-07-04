@@ -20,14 +20,18 @@ def _create_role(page, base_url, name):
 def _delete_role(page, base_url, name):
     """Delete a role via the list search + row menu, then assert it's gone."""
     nav(page, f"{base_url}/roles-permissions")
+    page.get_by_role("button", name="Filtri").click()
     page.get_by_placeholder("Cerca").fill(name)
+    page.get_by_role("button", name="Applica").click()
     row = page.locator("tr").filter(has_text=name)
     expect(row).to_be_visible()
     row.locator('[data-testid^="row-menu"]').click()
     page.once("dialog", lambda d: d.accept())
     page.get_by_role("button", name="Elimina").click()
     nav(page, f"{base_url}/roles-permissions")
+    page.get_by_role("button", name="Filtri").click()
     page.get_by_placeholder("Cerca").fill(name)
+    page.get_by_role("button", name="Applica").click()
     expect(page.get_by_text(name, exact=True)).to_have_count(0)
 
 
@@ -90,7 +94,9 @@ def test_filter_by_creation_date_range(logged_in_page, base_url):
     _create_role(page, base_url, name)
 
     nav(page, f"{base_url}/roles-permissions")
+    page.get_by_role("button", name="Filtri").click()
     page.get_by_placeholder("Cerca").fill(name)
+    page.get_by_role("button", name="Applica").click()
     expect(page.locator("tr").filter(has_text=name)).to_have_count(1)
 
     page.get_by_role("button", name="Filtri").click()
