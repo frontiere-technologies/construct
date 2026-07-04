@@ -29,7 +29,7 @@
 - Consumes: existing `FilterDrawer` (`components/rbac/FilterDrawer.tsx`, unchanged), existing `CustomSelect`/`DateRangeFilter` patterns already in `UsersTableClient.tsx`.
 - Produces: `DataTable<T>` no longer accepts/renders `search`/`onSearchChange` — `RolesTableClient` (Task 2) must stop passing them too, or the build fails with an excess-props TS error.
 
-- [ ] **Step 1: Update the e2e test to open Filtri before searching (it will fail against current code)**
+- [✅] **Step 1: Update the e2e test to open Filtri before searching (it will fail against current code)**
 
 Replace `test_search_narrows_users` in `sources/tests/e2e/test_users.py`:
 
@@ -46,12 +46,12 @@ def test_search_narrows_users(logged_in_page, base_url):
     assert after <= before
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [✅] **Step 2: Run the test to verify it fails**
 
 Run: `uv run pytest sources/tests/e2e/test_users.py::test_search_narrows_users -v`
 Expected: FAIL — today "Cerca" lives in the main toolbar, outside any drawer opened by the "Filtri" button, so `page.get_by_placeholder("Cerca").fill(...)` still succeeds (it's always on screen) but the test now also depends on an "Applica" click doing nothing useful yet — run it anyway to confirm current baseline behavior before your change, then proceed; the real failure signal for this task is the **manual/browser check** in Step 4 (there is no Filtri-drawer version of Cerca until you build it in Step 3). If the test happens to pass by coincidence (loose `<=` assertion), that's fine — Step 4's browser check is the real gate for this task.
 
-- [ ] **Step 3: Remove the search box from `DataTable.tsx`, add it to `UsersTableClient.tsx`'s filters**
+- [✅] **Step 3: Remove the search box from `DataTable.tsx`, add it to `UsersTableClient.tsx`'s filters**
 
 In `sources/microservices/web-construct/components/rbac/DataTable.tsx`:
 
@@ -174,14 +174,14 @@ import { Search } from 'lucide-react'
         rowMenu={u => [{ label: 'Gestisci ruoli', onClick: () => setManaging(u) }]}
 ```
 
-- [ ] **Step 4: Run the test to verify it passes, then manually confirm in the browser**
+- [✅] **Step 4: Run the test to verify it passes, then manually confirm in the browser**
 
 Run: `uv run pytest sources/tests/e2e/test_users.py -v`
 Expected: all tests in the file PASS, including `test_search_narrows_users`, `test_filter_by_status_and_reset`, `test_filter_by_role` (these two must still pass unchanged — they don't touch search).
 
 Also run `uv run pytest sources/tests/e2e/test_users.py::test_search_narrows_users -v -s` and confirm no leftover "Cerca" input exists outside the drawer: add a temporary assertion is not needed — the existing test already exercises the real flow (open Filtri → fill → Applica).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/rbac/DataTable.tsx sources/microservices/web-construct/components/rbac/users/UsersTableClient.tsx sources/tests/e2e/test_users.py
@@ -200,7 +200,7 @@ git commit -m "feat(rbac): move Users Cerca into the Filtri drawer (V-02)"
 - Consumes: `DataTable<T>` from Task 1 (no longer accepts `search`/`onSearchChange` — passing them is now a TypeScript error, so they must be removed here too).
 - Produces: none consumed by later tasks (Task 3 is independent).
 
-- [ ] **Step 1: Update the e2e tests to gate search behind Filtri/Applica (they will fail against current code)**
+- [✅] **Step 1: Update the e2e tests to gate search behind Filtri/Applica (they will fail against current code)**
 
 In `sources/tests/e2e/test_roles.py`, replace `_delete_role`:
 
@@ -250,12 +250,12 @@ def test_filter_by_creation_date_range(logged_in_page, base_url):
     _delete_role(page, base_url, name)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [✅] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest sources/tests/e2e/test_roles.py::test_create_rename_delete_role sources/tests/e2e/test_roles.py::test_filter_by_creation_date_range -v`
 Expected: FAIL — today "Cerca" lives outside the drawer and filters live on every keystroke; the new "Filtri" click + "Applica" click add no value yet against unmodified `RolesTableClient.tsx`, but more importantly the redundant `Filtri`-toggle-open/close sequence in `_delete_role` (open, then open again later) may leave the drawer in an unexpected state without the Task 2 changes. Confirm current behavior, then proceed to Step 3.
 
-- [ ] **Step 3: Replace the debounced search with a draft field in `RolesTableClient.tsx`**
+- [✅] **Step 3: Replace the debounced search with a draft field in `RolesTableClient.tsx`**
 
 1. Add the `Search` import (new import line near the top, after line 1's imports):
 ```tsx
@@ -355,12 +355,12 @@ Remove:
         filtersSlot={filters}
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [✅] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest sources/tests/e2e/test_roles.py -v`
 Expected: all tests PASS — `test_roles_list_loads`, `test_create_rename_delete_role`, `test_toggle_permission_persists`, `test_system_role_not_editable`, `test_filter_by_creation_date_range`, `test_filter_by_has_permission_and_reset`.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/rbac/roles/RolesTableClient.tsx sources/tests/e2e/test_roles.py
@@ -379,7 +379,7 @@ git commit -m "feat(rbac): move Roles Cerca into the Filtri drawer, drop debounc
 - Consumes: `components/rbac/FilterDrawer.tsx` (`open`, `onClose`, `onApply`, `onReset`, `children` — unchanged, same shape as Tasks 1-2 use).
 - Produces: none consumed elsewhere.
 
-- [ ] **Step 1: Write the two new failing e2e tests**
+- [✅] **Step 1: Write the two new failing e2e tests**
 
 Add to `sources/tests/e2e/test_functionalities.py` (after `test_tree_loads_with_tabs`):
 
@@ -413,12 +413,12 @@ def test_filter_drawer_search(logged_in_page, base_url):
     expect(page.get_by_text("Home", exact=True).first).to_be_visible()
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [✅] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest sources/tests/e2e/test_functionalities.py::test_create_button_aligned_with_filtri sources/tests/e2e/test_functionalities.py::test_filter_drawer_search -v`
 Expected: FAIL — `test_create_button_aligned_with_filtri` fails because there is no "Filtri" button yet (`get_by_role("button", name="Filtri")` finds nothing, `bounding_box()` raises/returns `None`); `test_filter_drawer_search` fails the same way.
 
-- [ ] **Step 3: Add the Filtri drawer and reposition Crea nuovo in `FunctionalitiesTreeClient.tsx`**
+- [✅] **Step 3: Add the Filtri drawer and reposition Crea nuovo in `FunctionalitiesTreeClient.tsx`**
 
 1. Update the imports:
 ```tsx
@@ -539,12 +539,12 @@ The full return block should now read (for reference, showing where the tabs/tre
   )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [✅] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest sources/tests/e2e/test_functionalities.py -v`
 Expected: all tests PASS, including the two new ones and the pre-existing `test_tree_loads_with_tabs`, `test_create_edit_delete_functionality`, `test_immutable_item_has_no_actions`, `test_immutable_item_has_no_add_button`, `test_mutable_item_has_all_action_buttons`, `test_drag_moves_item_after_last`.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/rbac/functionalities/FunctionalitiesTreeClient.tsx sources/tests/e2e/test_functionalities.py
@@ -561,21 +561,21 @@ git commit -m "feat(rbac): add Filtri drawer to Functionalities, align Crea nuov
 **Interfaces:**
 - Consumes: nothing new — this task only verifies Tasks 1-3 and updates tracking docs.
 
-- [ ] **Step 1: Run ESLint**
+- [✅] **Step 1: Run ESLint**
 
 Run: `cd sources/microservices/web-construct && npm run lint`
 Expected: no errors (specifically: no unused-import errors for `Search` in `DataTable.tsx`, no unused-var errors in the three modified client components).
 
-- [ ] **Step 2: Run the full RBAC e2e suite**
+- [✅] **Step 2: Run the full RBAC e2e suite**
 
 Run: `uv run pytest sources/tests/e2e/test_users.py sources/tests/e2e/test_roles.py sources/tests/e2e/test_functionalities.py -v`
 Expected: all tests PASS.
 
-- [ ] **Step 3: Manual browser check with the webapp-testing skill**
+- [✅] **Step 3: Manual browser check with the webapp-testing skill**
 
 Take screenshots of `/user-management`, `/roles-permissions`, and `/functionalities` with their Filtri drawers open, confirming: Cerca is the first field in each drawer, no stray "Cerca" input remains in any main toolbar, and Functionalities' "Filtri"/"Crea nuovo" row sits below the title at the same height (matching Roles' layout).
 
-- [ ] **Step 4: Update the source spec checkboxes**
+- [✅] **Step 4: Update the source spec checkboxes**
 
 In `docs/input-specs/rbac-additional-fixes/rbac-additional-fixes.md`, change:
 ```
@@ -594,7 +594,7 @@ to:
 - V-02 - [✅] Metti il "Cerca" di ogni pagina (Users", "Functionalities", Ruoli e permessi") dentro Filtro come prima voce
 ```
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add docs/input-specs/rbac-additional-fixes/rbac-additional-fixes.md
