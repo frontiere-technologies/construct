@@ -127,8 +127,8 @@ export default function DataTable<T>(props: DataTableProps<T>) {
             </button>
           )}
           {!!activeFilterCount && (
-            <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={onClearFilters} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-              <X size={14} />
+            <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={onClearFilters} className="flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500">
+              <X size={9} />
             </button>
           )}
           {actionButton}

@@ -71,8 +71,8 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
           )}
         </button>
         {search.trim() !== '' && (
-          <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={clearFilters} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-            <X size={14} />
+          <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={clearFilters} className="flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500">
+            <X size={9} />
           </button>
         )}
         <button onClick={() => router.push(`/functionalities/create?root=${tab}`)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Crea nuovo</button>

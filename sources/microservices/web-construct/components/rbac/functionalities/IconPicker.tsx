@@ -101,9 +101,13 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
   return (
     <div ref={containerRef} className="relative shrink-0">
       {/* ── Trigger ─────────────────────────────────────────────── */}
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen(o => !o)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o) }
+        }}
         aria-label={value ? `Icona selezionata: ${value.startsWith('<svg') ? 'SVG personalizzato' : value}` : 'Seleziona icona'}
         className={`group relative flex items-center justify-center rounded-lg border border-dashed cursor-pointer transition-colors hover:border-gray-400 dark:hover:border-gray-500
           ${compact
@@ -120,12 +124,12 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
             type="button"
             onClick={clear}
             aria-label="Rimuovi icona"
-            className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 z-10"
+            className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 z-10"
           >
             <X size={9} />
           </button>
         )}
-      </button>
+      </div>
 
       {/* ── Popover ──────────────────────────────────────────────── */}
       {open && (

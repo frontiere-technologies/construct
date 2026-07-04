@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { DayPicker, getDefaultClassNames } from 'react-day-picker'
 import { it } from 'react-day-picker/locale'
@@ -43,16 +44,24 @@ interface DateFieldProps {
   placeholder: string
   value: string | null
   isOpen: boolean
+  popoverRef: React.RefObject<HTMLDivElement | null>
   onToggle: () => void
   onSelect: (d: Date | undefined) => void
   onClear: () => void
 }
 
-function DateField({ testId, popoverTestId, placeholder, value, isOpen, onToggle, onSelect, onClear }: DateFieldProps) {
+function DateField({ testId, popoverTestId, placeholder, value, isOpen, popoverRef, onToggle, onSelect, onClear }: DateFieldProps) {
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+
   return (
     <div className="relative">
       <button
-        type="button" data-testid={testId} onClick={onToggle}
+        type="button" data-testid={testId}
+        onClick={e => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+          onToggle()
+        }}
         className="flex items-center gap-1.5 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 min-w-24 text-left"
       >
         <span className="flex-1">{fmtIt(value) || placeholder}</span>
@@ -60,16 +69,18 @@ function DateField({ testId, popoverTestId, placeholder, value, isOpen, onToggle
           <span
             role="button" aria-label="Cancella data" data-testid={`${testId}-clear`}
             onClick={e => { e.stopPropagation(); onClear() }}
-            className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+            className="flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500"
           >
-            <X size={14} />
+            <X size={9} />
           </span>
         )}
       </button>
-      {isOpen && (
+      {isOpen && pos && createPortal(
         <div
+          ref={popoverRef}
           data-testid={popoverTestId}
-          className="absolute z-10 mt-1 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
+          style={{ top: pos.top, right: pos.right }}
+          className="fixed z-50 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
         >
           <DayPicker
             mode="single" locale={it} showOutsideDays={false}
@@ -78,7 +89,8 @@ function DateField({ testId, popoverTestId, placeholder, value, isOpen, onToggle
             onSelect={onSelect}
             classNames={rdpClassNames}
           />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -93,10 +105,14 @@ interface Props {
 export default function DateRangeFilter({ startDate, endDate, onChange }: Props) {
   const [openField, setOpenField] = useState<'start' | 'end' | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpenField(null)
+      const target = e.target as Node
+      if (ref.current?.contains(target)) return
+      if (popoverRef.current?.contains(target)) return
+      setOpenField(null)
     }
     document.addEventListener('mousedown', onClickOutside)
     return () => document.removeEventListener('mousedown', onClickOutside)
@@ -107,7 +123,7 @@ export default function DateRangeFilter({ startDate, endDate, onChange }: Props)
       <span>Data di creazione</span>
       <DateField
         testId="filter-date-start" popoverTestId="date-popover-start" placeholder="Da" value={startDate}
-        isOpen={openField === 'start'}
+        isOpen={openField === 'start'} popoverRef={popoverRef}
         onToggle={() => setOpenField(f => (f === 'start' ? null : 'start'))}
         onSelect={d => { onChange(toIso(d), endDate); setOpenField(null) }}
         onClear={() => onChange(null, endDate)}
@@ -115,7 +131,7 @@ export default function DateRangeFilter({ startDate, endDate, onChange }: Props)
       <span>—</span>
       <DateField
         testId="filter-date-end" popoverTestId="date-popover-end" placeholder="A" value={endDate}
-        isOpen={openField === 'end'}
+        isOpen={openField === 'end'} popoverRef={popoverRef}
         onToggle={() => setOpenField(f => (f === 'end' ? null : 'end'))}
         onSelect={d => { onChange(startDate, toIso(d)); setOpenField(null) }}
         onClear={() => onChange(startDate, null)}
