@@ -81,6 +81,15 @@ const TOKEN_GROUPS: TokenGroup[] = [
       { label: 'Foreground Faint', lightKey: 'foregroundFaintLight', darkKey: 'foregroundFaintDark' },
     ],
   },
+  {
+    title: 'Sidebar & Active Item',
+    rows: [
+      { label: 'Sidebar Background', lightKey: 'sidebarBgLight', darkKey: 'sidebarBgDark' },
+      { label: 'Sidebar Text', lightKey: 'sidebarTextLight', darkKey: 'sidebarTextDark' },
+      { label: 'Active Item Background', lightKey: 'activeItemBgLight', darkKey: 'activeItemBgDark' },
+      { label: 'Active Item Text', lightKey: 'activeItemTextLight', darkKey: 'activeItemTextDark' },
+    ],
+  },
 ]
 
 export const AdminTheme: React.FC = () => {
@@ -131,24 +140,6 @@ export const AdminTheme: React.FC = () => {
             </div>
           </details>
         ))}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-          <div className="space-y-4">
-            <h3 className="font-medium text-foreground border-b pb-2 border-border">Light Theme — Sidebar & Active Item</h3>
-            <ColorPicker label="Sidebar Background" value={settings.themeConfig.sidebarBgLight} onChange={v => updateTheme('sidebarBgLight', v)} />
-            <ColorPicker label="Sidebar Text" value={settings.themeConfig.sidebarTextLight} onChange={v => updateTheme('sidebarTextLight', v)} />
-            <ColorPicker label="Active Item Background" value={settings.themeConfig.activeItemBgLight} onChange={v => updateTheme('activeItemBgLight', v)} />
-            <ColorPicker label="Active Item Text" value={settings.themeConfig.activeItemTextLight} onChange={v => updateTheme('activeItemTextLight', v)} />
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="font-medium text-foreground border-b pb-2 border-border">Dark Theme — Sidebar & Active Item</h3>
-            <ColorPicker label="Sidebar Background" value={settings.themeConfig.sidebarBgDark} onChange={v => updateTheme('sidebarBgDark', v)} />
-            <ColorPicker label="Sidebar Text" value={settings.themeConfig.sidebarTextDark} onChange={v => updateTheme('sidebarTextDark', v)} />
-            <ColorPicker label="Active Item Background" value={settings.themeConfig.activeItemBgDark} onChange={v => updateTheme('activeItemBgDark', v)} />
-            <ColorPicker label="Active Item Text" value={settings.themeConfig.activeItemTextDark} onChange={v => updateTheme('activeItemTextDark', v)} />
-          </div>
-        </div>
 
         <div className="pt-4 border-t border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
