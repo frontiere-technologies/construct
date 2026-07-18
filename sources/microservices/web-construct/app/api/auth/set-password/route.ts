@@ -50,14 +50,20 @@ export async function POST(req: NextRequest) {
   // Consume the token only after a successful password update.
   // The optimistic lock (usedAt is null) handles concurrent requests;
   // if it fails here the password is already set, so we treat it as success.
-  const [claimed] = await db
-    .update(passwordSetTokens)
-    .set({ usedAt: new Date().toISOString() })
-    .where(and(eq(passwordSetTokens.id, tokenRow.id), isNull(passwordSetTokens.usedAt)))
-    .returning({ id: passwordSetTokens.id })
+  try {
+    const [claimed] = await db
+      .update(passwordSetTokens)
+      .set({ usedAt: new Date().toISOString() })
+      .where(and(eq(passwordSetTokens.id, tokenRow.id), isNull(passwordSetTokens.usedAt)))
+      .returning({ id: passwordSetTokens.id })
 
-  if (!claimed) {
-    log.warn({ userId: tokenRow.userId }, 'token already consumed by concurrent request')
+    if (!claimed) {
+      log.warn({ userId: tokenRow.userId }, 'token already consumed by concurrent request')
+    }
+  } catch (err) {
+    // The password was already set above; a DB error here just means the token
+    // may remain usable, so we still treat this as success.
+    log.warn({ err, userId: tokenRow.userId }, 'failed to mark token as used')
   }
 
   return NextResponse.json({ ok: true })

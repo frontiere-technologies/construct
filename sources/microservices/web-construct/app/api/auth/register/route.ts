@@ -59,7 +59,11 @@ export async function POST(req: NextRequest) {
     await db.insert(passwordSetTokens).values({ userId: newUser.id, token, expiresAt })
   } catch (err) {
     log.error({ err }, 'failed to create password token')
-    await db.delete(users).where(eq(users.id, newUser.id))
+    try {
+      await db.delete(users).where(eq(users.id, newUser.id))
+    } catch (cleanupErr) {
+      log.warn({ err: cleanupErr, userId: newUser.id }, 'failed to clean up user after password token creation failure')
+    }
     return NextResponse.json({ ok: true })
   }
   log.info({ userId: newUser.id }, 'password token created')
