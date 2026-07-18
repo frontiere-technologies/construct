@@ -72,7 +72,12 @@ async function loadItems(): Promise<NavigationItemRow[]> {
 }
 
 async function assertMutable(id: number) {
-  const [row] = await db.select({ isImmutable: navigationItem.isImmutable }).from(navigationItem).where(eq(navigationItem.idItem, id)).limit(1)
+  let row: { isImmutable: number } | undefined
+  try {
+    ;[row] = await db.select({ isImmutable: navigationItem.isImmutable }).from(navigationItem).where(eq(navigationItem.idItem, id)).limit(1)
+  } catch (err) {
+    throw new Error(`Item not found: ${err instanceof Error ? err.message : String(err)}`)
+  }
   if (!row) throw new Error('Item not found: no rows')
   if (row.isImmutable === 1) throw new Error('This item is immutable')
 }
