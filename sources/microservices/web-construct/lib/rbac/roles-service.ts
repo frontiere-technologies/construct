@@ -1,58 +1,63 @@
 import { cache } from 'react'
-import { createAdminClient } from '@/lib/supabase-server'
+import { and, asc, count, desc, eq, gte, ilike, inArray, lt, type SQL } from 'drizzle-orm'
+import { db } from '@/lib/db'
+import { navigationItem, roleItem, roleListView } from '@/lib/db/schema'
+import { toNavigationItemRow } from './nav-row-mapper'
 import { buildAuthTree } from './permission-tree'
 import {
   type RolesQuery, type RolesPage, type RolePageItemDto, type RoleInformationDto,
-  type RoleType, type UserNavigationTreeDto, type NavigationItemRow,
+  type RoleType, type UserNavigationTreeDto,
   ROOT_ID, OPERATIONS_ID,
 } from './types'
 import { nextDay } from './date-utils'
 
-const NAV_COLUMNS =
-  'id_item,name,id_item_type,id_functionality_type,functionality_link,icon_path,id_item_parent,order_position,navbar_position,item_translation,is_immutable,config_visibility,no_permission_need_for_navigation'
+const SORT_COLUMN = {
+  id: roleListView.id,
+  description: roleListView.description,
+  associatedUsers: roleListView.associatedUsers,
+  hasPermissions: roleListView.hasPermissions,
+  dateIns: roleListView.dateIns,
+  dateMod: roleListView.dateMod,
+} as const
 
-const SORT_COLUMN: Record<NonNullable<RolesQuery['sort']>, string> = {
-  id: 'id', description: 'description', associatedUsers: 'associated_users',
-  hasPermissions: 'has_permissions', dateIns: 'date_ins', dateMod: 'date_mod',
-}
-
-export function applyFilters<T extends {
-  ilike(column: string, value: string): T
-  eq(column: string, value: unknown): T
-  gte(column: string, value: unknown): T
-  lte(column: string, value: unknown): T
-  lt(column: string, value: unknown): T
-}>(q: T, query: RolesQuery): T {
-  let r = q
-  if (query.search) r = r.ilike('description', `%${query.search}%`) as T
-  if (query.hasPermission != null) r = r.eq('has_permissions', query.hasPermission) as T
-  if (query.startDateIns) r = r.gte('date_ins', query.startDateIns) as T
-  if (query.endDateIns) r = r.lt('date_ins', nextDay(query.endDateIns)) as T
-  return r
+export function applyFilters(query: RolesQuery): SQL[] {
+  const conditions: SQL[] = []
+  if (query.search) conditions.push(ilike(roleListView.description, `%${query.search}%`))
+  if (query.hasPermission != null) conditions.push(eq(roleListView.hasPermissions, query.hasPermission))
+  if (query.startDateIns) conditions.push(gte(roleListView.dateIns, query.startDateIns))
+  if (query.endDateIns) conditions.push(lt(roleListView.dateIns, nextDay(query.endDateIns)))
+  return conditions
 }
 
 export const listRoles = cache(async (query: RolesQuery): Promise<RolesPage> => {
-  const supabase = createAdminClient()
+  const conditions = applyFilters(query)
+  const where = conditions.length ? and(...conditions) : undefined
   const sortCol = SORT_COLUMN[query.sort ?? 'id']
   const ascending = (query.direction ?? 'ASC') === 'ASC'
   const from = query.page * query.size
-  const to = from + query.size - 1
 
-  let q = supabase.from('role_list_view').select('*', { count: 'exact' })
-  q = applyFilters(q, query)
-  const { data, error, count } = await q.order(sortCol, { ascending }).range(from, to)
-  if (error) throw new Error(`Failed to list roles: ${error.message}`)
+  let rows: (typeof roleListView.$inferSelect)[]
+  let total: number
+  try {
+    const [r, [{ value }]] = await Promise.all([
+      db.select().from(roleListView).where(where).orderBy(ascending ? asc(sortCol) : desc(sortCol)).limit(query.size).offset(from),
+      db.select({ value: count() }).from(roleListView).where(where),
+    ])
+    rows = r
+    total = value
+  } catch (err) {
+    throw new Error(`Failed to list roles: ${err instanceof Error ? err.message : String(err)}`)
+  }
 
-  const elements: RolePageItemDto[] = (data ?? []).map((r: Record<string, unknown>) => ({
+  const elements: RolePageItemDto[] = rows.map(r => ({
     id: Number(r.id),
     description: String(r.description ?? ''),
-    associatedUsers: Number(r.associated_users ?? 0),
-    hasPermissions: Boolean(r.has_permissions),
-    dateIns: (r.date_ins as string) ?? null,
-    dateMod: (r.date_mod as string) ?? null,
-    roleType: (r.role_type as RoleType) ?? 'SERVICE',
+    associatedUsers: Number(r.associatedUsers ?? 0),
+    hasPermissions: Boolean(r.hasPermissions),
+    dateIns: r.dateIns ?? null,
+    dateMod: r.dateMod ?? null,
+    roleType: (r.roleType as RoleType) ?? 'SERVICE',
   }))
-  const total = count ?? 0
   return {
     pagination: {
       currentElements: elements.length,
@@ -64,50 +69,59 @@ export const listRoles = cache(async (query: RolesQuery): Promise<RolesPage> => 
 })
 
 export const countRoles = cache(async (query: RolesQuery): Promise<number> => {
-  const supabase = createAdminClient()
-  let q = supabase.from('role_list_view').select('id', { count: 'exact', head: true })
-  q = applyFilters(q, query)
-  const { count, error } = await q
-  if (error) throw new Error(`Failed to count roles: ${error.message}`)
-  return count ?? 0
+  const conditions = applyFilters(query)
+  const where = conditions.length ? and(...conditions) : undefined
+  try {
+    const [{ value }] = await db.select({ value: count() }).from(roleListView).where(where)
+    return value
+  } catch (err) {
+    throw new Error(`Failed to count roles: ${err instanceof Error ? err.message : String(err)}`)
+  }
 })
 
 export const getAllRoles = cache(async (roleTypes?: RoleType[]): Promise<{ id: number; description: string }[]> => {
-  const supabase = createAdminClient()
-  let q = supabase.from('role_list_view').select('id,description,role_type').order('description')
-  if (roleTypes?.length) q = q.in('role_type', roleTypes)
-  const { data, error } = await q
-  if (error) throw new Error(`Failed to load roles: ${error.message}`)
-  return (data ?? []).map((r: Record<string, unknown>) => ({ id: Number(r.id), description: String(r.description ?? '') }))
+  const where = roleTypes?.length ? inArray(roleListView.roleType, roleTypes) : undefined
+  try {
+    const rows = await db
+      .select({ id: roleListView.id, description: roleListView.description })
+      .from(roleListView)
+      .where(where)
+      .orderBy(asc(roleListView.description))
+    return rows.map(r => ({ id: Number(r.id), description: String(r.description ?? '') }))
+  } catch (err) {
+    throw new Error(`Failed to load roles: ${err instanceof Error ? err.message : String(err)}`)
+  }
 })
 
 export const getRole = cache(async (roleId: number): Promise<RoleInformationDto> => {
-  const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('role_list_view').select('id,description,role_type,associated_users')
-    .eq('id', roleId).single()
-  if (error) throw new Error(`Failed to load role: ${error.message}`)
+  const [row] = await db
+    .select({ id: roleListView.id, description: roleListView.description, roleType: roleListView.roleType, associatedUsers: roleListView.associatedUsers })
+    .from(roleListView)
+    .where(eq(roleListView.id, roleId))
+    .limit(1)
+  if (!row) throw new Error('Failed to load role: not found')
   return {
-    id: Number(data.id),
-    roleName: String(data.description ?? ''),
-    associatedUsersCount: Number(data.associated_users ?? 0),
-    roleType: (data.role_type as RoleType) ?? 'SERVICE',
+    id: Number(row.id),
+    roleName: String(row.description ?? ''),
+    associatedUsersCount: Number(row.associatedUsers ?? 0),
+    roleType: (row.roleType as RoleType) ?? 'SERVICE',
   }
 })
 
 export const getRoleAuthorizationTree = cache(
   async (roleId: number, rootName: 'ROOT' | 'OPERATIONS'): Promise<UserNavigationTreeDto[]> => {
-    const supabase = createAdminClient()
-    const [{ data: navRows, error: navErr }, { data: riRows, error: riErr }] = await Promise.all([
-      supabase.from('navigation_item').select(NAV_COLUMNS).order('order_position'),
-      supabase.from('role_item').select('id_item,authorized').eq('id_role', roleId),
-    ])
-    if (navErr) throw new Error(`Failed to load navigation: ${navErr.message}`)
-    if (riErr) throw new Error(`Failed to load permissions: ${riErr.message}`)
-    const authorized = new Set<number>(
-      (riRows ?? []).filter((r: { authorized: boolean }) => r.authorized).map((r: { id_item: number }) => r.id_item)
-    )
+    let navRows: (typeof navigationItem.$inferSelect)[]
+    let riRows: { idItem: number; authorized: boolean }[]
+    try {
+      ;[navRows, riRows] = await Promise.all([
+        db.select().from(navigationItem).orderBy(asc(navigationItem.orderPosition)),
+        db.select({ idItem: roleItem.idItem, authorized: roleItem.authorized }).from(roleItem).where(eq(roleItem.idRole, roleId)),
+      ])
+    } catch (err) {
+      throw new Error(`Failed to load navigation: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    const authorized = new Set<number>(riRows.filter(r => r.authorized).map(r => r.idItem))
     const rootId = rootName === 'ROOT' ? ROOT_ID : OPERATIONS_ID
-    return buildAuthTree((navRows ?? []) as NavigationItemRow[], authorized, rootId)
+    return buildAuthTree(navRows.map(toNavigationItemRow), authorized, rootId)
   }
 )
