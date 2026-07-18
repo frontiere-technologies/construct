@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
+import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { createAdminClient } from '@/lib/supabase-server'
+import { db } from '@/lib/db'
+import { users } from '@/lib/db/schema'
 import ProfileForm from '@/components/ProfileForm'
 import type { UserProfile } from '@/lib/profile-actions'
 
@@ -8,17 +10,15 @@ export default async function ProfilePage() {
   const session = await auth()
   if (!session?.user?.id) redirect('/login')
 
-  const supabase = createAdminClient()
-
-  const { data: profile } = await supabase
-    .from('users')
-    .select('first_name, last_name, username, phone')
-    .eq('id', session.user.id)
-    .single()
+  const [profile] = await db
+    .select({ firstName: users.firstName, lastName: users.lastName, username: users.username, phone: users.phone })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1)
 
   const initialProfile: UserProfile = {
-    first_name: profile?.first_name ?? null,
-    last_name: profile?.last_name ?? null,
+    first_name: profile?.firstName ?? null,
+    last_name: profile?.lastName ?? null,
     username: profile?.username ?? null,
     phone: profile?.phone ?? null,
   }
