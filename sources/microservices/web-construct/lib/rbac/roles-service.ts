@@ -94,11 +94,16 @@ export const getAllRoles = cache(async (roleTypes?: RoleType[]): Promise<{ id: n
 })
 
 export const getRole = cache(async (roleId: number): Promise<RoleInformationDto> => {
-  const [row] = await db
-    .select({ id: roleListView.id, description: roleListView.description, roleType: roleListView.roleType, associatedUsers: roleListView.associatedUsers })
-    .from(roleListView)
-    .where(eq(roleListView.id, roleId))
-    .limit(1)
+  let row
+  try {
+    ;[row] = await db
+      .select({ id: roleListView.id, description: roleListView.description, roleType: roleListView.roleType, associatedUsers: roleListView.associatedUsers })
+      .from(roleListView)
+      .where(eq(roleListView.id, roleId))
+      .limit(1)
+  } catch (err) {
+    throw new Error(`Failed to load role: ${err instanceof Error ? err.message : String(err)}`)
+  }
   if (!row) throw new Error('Failed to load role: not found')
   return {
     id: Number(row.id),
