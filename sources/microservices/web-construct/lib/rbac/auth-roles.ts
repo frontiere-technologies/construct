@@ -1,4 +1,6 @@
-import { createAdminClient } from '@/lib/supabase-server'
+import { eq } from 'drizzle-orm'
+import { db } from '@/lib/db'
+import { userRole } from '@/lib/db/schema'
 import { ROLE_ADMINISTRATOR, ROLE_REGISTERED } from './types'
 
 export function computeIsAdmin(roleIds: number[]): boolean {
@@ -10,14 +12,11 @@ export function computeIsAdmin(roleIds: number[]): boolean {
  * Called from the NextAuth jwt callback once the user id is known.
  */
 export async function resolveUserRoleIds(userId: string): Promise<number[]> {
-  const supabase = createAdminClient()
-  await supabase
-    .from('user_role')
-    .upsert({ user_id: userId, id_role: ROLE_REGISTERED }, { onConflict: 'user_id,id_role', ignoreDuplicates: true })
-  const { data, error } = await supabase
-    .from('user_role')
-    .select('id_role')
-    .eq('user_id', userId)
-  if (error) throw new Error(`Failed to resolve roles: ${error.message}`)
-  return (data ?? []).map((r: { id_role: number }) => r.id_role)
+  await db.insert(userRole).values({ userId, idRole: ROLE_REGISTERED }).onConflictDoNothing()
+  try {
+    const rows = await db.select({ idRole: userRole.idRole }).from(userRole).where(eq(userRole.userId, userId))
+    return rows.map(r => r.idRole)
+  } catch (err) {
+    throw new Error(`Failed to resolve roles: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
