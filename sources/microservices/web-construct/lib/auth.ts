@@ -4,7 +4,9 @@ import Google from 'next-auth/providers/google'
 import Keycloak from 'next-auth/providers/keycloak'
 import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
-import { createAdminClient } from '@/lib/supabase-server'
+import { eq } from 'drizzle-orm'
+import { db } from '@/lib/db'
+import { users, allowedDomains } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { authConfig } from '@/lib/auth.config'
 import { resolveUserRoleIds, computeIsAdmin } from '@/lib/rbac/auth-roles'
@@ -17,18 +19,15 @@ let domainCache: { domains: string[]; expiresAt: number } | null = null
 async function getAllowedDomains(): Promise<string[]> {
   const now = Date.now()
   if (domainCache && domainCache.expiresAt > now) return domainCache.domains
-  const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('allowed_domains')
-    .select('domain')
-    .eq('active', true)
-  if (error) {
-    log.error({ err: error }, 'failed to retrieve allowed domains')
+  try {
+    const rows = await db.select({ domain: allowedDomains.domain }).from(allowedDomains).where(eq(allowedDomains.active, true))
+    const domains = rows.map(r => r.domain)
+    domainCache = { domains, expiresAt: now + 60_000 }
+    return domains
+  } catch (err) {
+    log.error({ err }, 'failed to retrieve allowed domains')
     return domainCache?.domains ?? []
   }
-  const domains = (data ?? []).map((r: { domain: string }) => r.domain)
-  domainCache = { domains, expiresAt: now + 60_000 }
-  return domains
 }
 
 function buildProviders() {
@@ -82,12 +81,11 @@ function buildProviders() {
           typeof credentials.password !== 'string'
         ) return null
 
-        const supabase = createAdminClient()
-        const { data: user } = await supabase
-          .from('users')
-          .select('id, email, name, password_hash')
-          .eq('email', (credentials.email as string).toLowerCase().trim())
-          .single()
+        const [user] = await db
+          .select({ id: users.id, email: users.email, name: users.name, passwordHash: users.passwordHash })
+          .from(users)
+          .where(eq(users.email, (credentials.email as string).toLowerCase().trim()))
+          .limit(1)
 
         if (!user) {
           // Prevent timing-based user enumeration
@@ -95,19 +93,16 @@ function buildProviders() {
           return null
         }
 
-        if (!user.password_hash) {
+        if (!user.passwordHash) {
           const err = new CredentialsSignin('Password not set')
           err.code = 'PasswordNotSet'
           throw err
         }
 
-        const valid = await bcrypt.compare(credentials.password, user.password_hash)
+        const valid = await bcrypt.compare(credentials.password, user.passwordHash)
         if (!valid) return null
 
-        await supabase
-          .from('users')
-          .update({ auth_provider: 'credentials' })
-          .eq('id', user.id)
+        await db.update(users).set({ authProvider: 'credentials' }).where(eq(users.id, user.id))
 
         return { id: user.id, email: user.email, name: user.name ?? user.email }
       },
@@ -125,18 +120,8 @@ function buildProviders() {
         },
         async authorize(credentials) {
           if (!credentials?.email || typeof credentials.email !== 'string') return null
-          const supabase = createAdminClient()
-          await supabase
-            .from('users')
-            .upsert(
-              { email: credentials.email, auth_provider: 'test' },
-              { onConflict: 'email', ignoreDuplicates: true }
-            )
-          const { data } = await supabase
-            .from('users')
-            .select('id, email, name')
-            .eq('email', credentials.email)
-            .single()
+          await db.insert(users).values({ email: credentials.email, authProvider: 'test' }).onConflictDoNothing({ target: users.email })
+          const [data] = await db.select({ id: users.id, email: users.email, name: users.name }).from(users).where(eq(users.email, credentials.email)).limit(1)
           if (!data) return null
           return { id: data.id, email: data.email, name: data.name ?? data.email }
         },
@@ -172,21 +157,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           userId = user.id as string
         } else {
           try {
-            const supabase = createAdminClient()
-            const { data } = await supabase
-              .from('users')
-              .upsert(
-                {
-                  email: user.email,
+            const [data] = await db
+              .insert(users)
+              .values({
+                email: user.email!,
+                name: user.name,
+                authProvider: account.provider,
+                ...(user.image ? { avatar: user.image } : {}),
+              })
+              .onConflictDoUpdate({
+                target: users.email,
+                set: {
                   name: user.name,
-                  auth_provider: account.provider,
+                  authProvider: account.provider,
                   ...(user.image ? { avatar: user.image } : {}),
                 },
-                { onConflict: 'email', ignoreDuplicates: false }
-              )
-              .select('id')
-              .single()
-            userId = (data?.id as string) ?? ''
+              })
+              .returning({ id: users.id })
+            userId = data?.id ?? ''
           } catch (err) {
             log.error({ err }, 'failed to provision user in Supabase')
             throw err
