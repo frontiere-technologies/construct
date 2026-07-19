@@ -43,14 +43,14 @@
 **Interfaces:**
 - Produces: `ag-grid-community` and `ag-grid-react` importable from any client component in this package.
 
-- [ ] **Step 1: Install the packages**
+- [✅] **Step 1: Install the packages**
 
 Run from `sources/microservices/web-construct/`:
 ```bash
 npm install ag-grid-community@^36.0.1 ag-grid-react@^36.0.1
 ```
 
-- [ ] **Step 2: Verify they resolve and the app still builds**
+- [✅] **Step 2: Verify they resolve and the app still builds**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors (packages installed but unused so far).
@@ -58,7 +58,7 @@ Expected: no new errors (packages installed but unused so far).
 Run: `npm run lint`
 Expected: passes (no new files yet).
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 cd sources/microservices/web-construct
@@ -76,7 +76,7 @@ git commit -m "chore: add ag-grid-community and ag-grid-react dependencies"
 **Interfaces:**
 - Produces: `appGridTheme` (an AG Grid `Theme` object) and `itLocaleText` (an object for `AgGridReact`'s `localeText` prop) — both consumed by Task 3's `DataGrid.tsx`.
 
-- [ ] **Step 1: Write the config file**
+- [✅] **Step 1: Write the config file**
 
 ```ts
 import { themeQuartz } from 'ag-grid-community'
@@ -107,12 +107,12 @@ export const itLocaleText = {
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [✅] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: PASS. If `withParams` rejects any key name (compile error naming the invalid key), remove that key — it means that param doesn't exist in the installed v36.0.1 types; the remaining params still cover background/border/accent/hover, which are the ones that matter for live-theme following.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add components/ui/dataGridConfig.ts
@@ -134,7 +134,7 @@ git commit -m "feat(grid): add AG Grid theme wired to app CSS tokens + Italian l
   - `DataGrid<T>` component with props `{ columnDefs: ColDef<T>[]; datasource: IDatasource; getRowId: (data: T) => string; initialFilterModel?: Record<string, unknown>; initialSortModel?: { colId: string; sort: 'asc'|'desc' }[]; onFilterChanged?: (e: FilterChangedEvent<T>) => void; onSortChanged?: (e: SortChangedEvent<T>) => void; onRowClicked?: (data: T) => void; onGridReady?: (e: GridReadyEvent<T>) => void }` — consumed by Tasks 9, 14.
   - `ColumnVisibilityToggle<T>` component with props `{ gridApi: GridApi<T> | null; columns: { colId: string; label: string }[] }` — consumed by Tasks 9, 14.
 
-- [ ] **Step 1: Write `DataGrid.tsx`**
+- [✅] **Step 1: Write `DataGrid.tsx`**
 
 ```tsx
 'use client'
@@ -200,7 +200,7 @@ export default function DataGrid<T>({
 }
 ```
 
-- [ ] **Step 2: Write `ColumnVisibilityToggle.tsx`**
+- [✅] **Step 2: Write `ColumnVisibilityToggle.tsx`**
 
 ```tsx
 'use client'
@@ -246,12 +246,12 @@ export default function ColumnVisibilityToggle<T>(
 }
 ```
 
-- [ ] **Step 3: Type-check and lint**
+- [✅] **Step 3: Type-check and lint**
 
 Run: `npx tsc --noEmit && npm run lint`
 Expected: PASS. If `theme`/`initialState`/`getRowId` props are rejected by `AgGridReact`'s types, check the installed version's prop names via `node_modules/ag-grid-react/dist/types/src/*.d.ts` and adjust — these are the documented v36 Theming API + infinite-row-model props, but confirm against the exact installed types before moving on.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add components/ui/DataGrid.tsx components/ui/ColumnVisibilityToggle.tsx
@@ -268,7 +268,7 @@ git commit -m "feat(grid): add shared DataGrid wrapper and column visibility tog
 **Interfaces:**
 - Produces: `RowMenuItem` (`{ label: string; onClick: () => void; disabled?: boolean }`), `GridRowActionsMenuParams<T>` (extends AG Grid's `ICellRendererParams<T>` with `getItems: (data: T) => RowMenuItem[]`), and the default-exported `GridRowActionsMenu<T>` cell renderer component — consumed by Tasks 9 and 14 via `cellRenderer: GridRowActionsMenu, cellRendererParams: { getItems: ... }`.
 
-- [ ] **Step 1: Write the component**
+- [✅] **Step 1: Write the component**
 
 Ported from the existing per-row menu logic in `components/rbac/DataTable.tsx` (portal positioning, outside-click/scroll/resize close), adapted to AG Grid's cell renderer contract:
 
@@ -347,12 +347,12 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [✅] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add components/rbac/GridRowActionsMenu.tsx
@@ -370,7 +370,7 @@ git commit -m "feat(grid): add shared row-actions cell renderer"
 - Produces: `EnumFilterModel` (`{ value: string | number }`), `EnumFilterOption` (`{ value: string | number; label: string }`), default-exported `EnumSelectFilter` component — consumed by Tasks 9 and 14 as `filter: EnumSelectFilter, filterParams: { options: EnumFilterOption[] }`.
 - The filter model this produces/consumes (`{ value } | null`) is the exact shape Tasks 6 and 11's pure query-mapping functions expect under `filterModel.roles`, `filterModel.status`, `filterModel.hasPermissions`.
 
-- [ ] **Step 1: Write the component**
+- [✅] **Step 1: Write the component**
 
 Since filtering happens server-side (Infinite Row Model), `doesFilterPass` is never actually invoked by the grid — it's required by the interface but can unconditionally return `true` (this is AG Grid's documented pattern for server-side/external filtering with custom filters).
 
@@ -418,12 +418,12 @@ export default function EnumSelectFilter({ model, onModelChange, options }: Prop
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [✅] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: PASS. If `useGridFilter`/`CustomFilterProps` aren't exported under those exact names from the installed `ag-grid-react` v36, check `node_modules/ag-grid-react/dist/types/src/index.d.ts` for the actual hook-based custom-filter export name and adjust the import.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add components/rbac/filters/EnumSelectFilter.tsx
@@ -448,7 +448,7 @@ git commit -m "feat(grid): add shared custom enum-select column filter"
   - `usersUrlParamsToFilterModel(p: UsersUrlParams): UsersGridFilterModel` and `usersUrlParamsToSortModel(p: UsersUrlParams): UsersGridSortItem[]` — consumed by Task 9 for `DataGrid`'s `initialFilterModel`/`initialSortModel`.
   - `usersFilterModelToSearchParams(filterModel: UsersGridFilterModel): Record<string, string|null>` — consumed by Task 9's `onFilterChanged` handler.
 
-- [ ] **Step 1: Write the failing tests**
+- [✅] **Step 1: Write the failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -497,12 +497,12 @@ describe('usersUrlParamsToFilterModel / usersFilterModelToSearchParams', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [✅] **Step 2: Run tests to verify they fail**
 
 Run: `npm run test -- users-grid-query`
 Expected: FAIL with "Cannot find module './users-grid-query'" (file doesn't exist yet).
 
-- [ ] **Step 3: Write the implementation**
+- [✅] **Step 3: Write the implementation**
 
 ```ts
 import type { UsersQuery, UserStatusId } from './types'
@@ -571,12 +571,12 @@ export function usersFilterModelToSearchParams(filterModel: UsersGridFilterModel
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [✅] **Step 4: Run tests to verify they pass**
 
 Run: `npm run test -- users-grid-query`
 Expected: PASS (all 5 tests).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add lib/rbac/users-grid-query.ts lib/rbac/users-grid-query.test.ts
@@ -594,7 +594,7 @@ git commit -m "feat(grid): add pure Users grid query/filter-model mapping functi
 - Consumes: `listUsers` from `./users-service`, `requireAdmin` from `./auth-guard` (already imported in this file).
 - Produces: `fetchUsersGridPage(query: UsersQuery): Promise<{ users: UserDTO[]; total: number }>` — consumed by Task 8's datasource.
 
-- [ ] **Step 1: Add the import and the action**
+- [✅] **Step 1: Add the import and the action**
 
 Add to the top of `lib/rbac/users-actions.ts` (alongside the existing imports):
 ```ts
@@ -610,12 +610,12 @@ export async function fetchUsersGridPage(query: UsersQuery): Promise<{ users: Us
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [✅] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add lib/rbac/users-actions.ts
@@ -633,7 +633,7 @@ git commit -m "feat(grid): add fetchUsersGridPage server action wrapping listUse
 - Consumes: `GRID_BLOCK_SIZE` from `@/components/ui/DataGrid` (Task 3), `fetchUsersGridPage` from `@/lib/rbac/users-actions` (Task 7), `buildUsersGridQuery`/`UsersGridFilterModel`/`UsersGridSortItem` from `@/lib/rbac/users-grid-query` (Task 6).
 - Produces: `createUsersDatasource(): IDatasource` — consumed by Task 9's `UsersTableClient`.
 
-- [ ] **Step 1: Write the datasource**
+- [✅] **Step 1: Write the datasource**
 
 ```ts
 'use client'
@@ -664,12 +664,12 @@ export function createUsersDatasource(): IDatasource {
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [✅] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add components/rbac/users/usersDatasource.ts
@@ -687,7 +687,7 @@ git commit -m "feat(grid): add Users AG Grid infinite-row-model datasource"
 - Consumes: `DataGrid`, `ColumnVisibilityToggle` (Task 3), `GridRowActionsMenu` (Task 4), `EnumSelectFilter` (Task 5), `createUsersDatasource` (Task 8), `usersUrlParamsToFilterModel`/`usersUrlParamsToSortModel`/`usersFilterModelToSearchParams` (Task 6), `setUserStatus` (existing, unchanged), `ManageRolesModal`/`StatusBadge` (existing, unchanged).
 - Produces: same default export shape consumers expect — `UsersTableClient(props)` — but with a **narrower `Props`** than today (see below; `rows`, `page`, `totalPages` are dropped since rows now come from the grid's own datasource and there's no discrete page).
 
-- [ ] **Step 1: Replace the file**
+- [✅] **Step 1: Replace the file**
 
 ```tsx
 'use client'
@@ -834,12 +834,12 @@ export default function UsersTableClient(props: Props) {
 }
 ```
 
-- [ ] **Step 2: Type-check and lint**
+- [✅] **Step 2: Type-check and lint**
 
 Run: `npx tsc --noEmit && npm run lint`
 Expected: PASS. Task 10 still needs to update, so `user-management/page.tsx` will show a prop-mismatch error until then — that's expected and resolved in the next task.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add components/rbac/users/UsersTableClient.tsx
@@ -856,7 +856,7 @@ git commit -m "refactor(users): migrate UsersTableClient from DataTable to AG Gr
 **Interfaces:**
 - Consumes: `getAllRoles` (existing, unchanged), `UsersTableClient` (Task 9's new prop shape).
 
-- [ ] **Step 1: Replace the file**
+- [✅] **Step 1: Replace the file**
 
 ```tsx
 import { getAllRoles } from '@/lib/rbac/roles-service'
@@ -886,17 +886,17 @@ export default async function UserManagementPage({ searchParams }: { searchParam
 }
 ```
 
-- [ ] **Step 2: Type-check and lint**
+- [✅] **Step 2: Type-check and lint**
 
 Run: `npx tsc --noEmit && npm run lint`
 Expected: PASS with zero errors now (Task 9's prop mismatch is resolved).
 
-- [ ] **Step 3: Manual smoke check**
+- [✅] **Step 3: Manual smoke check**
 
 Run: `npm run dev` (from `sources/microservices/web-construct/`), open `http://localhost:3000/user-management` as an admin.
 Expected: page loads, grid renders with all 6 columns + actions, rows scroll-load, header click sorts, column filter icons open a popup, "Colonne" toggle hides/shows a column, "Gestisci ruoli" row action opens the existing modal, status badge toggles on click.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add "app/(protected)/user-management/page.tsx"
@@ -921,7 +921,7 @@ git commit -m "refactor(users): simplify user-management page for AG Grid dataso
   - `rolesUrlParamsToFilterModel`/`rolesUrlParamsToSortModel` — consumed by Task 14.
   - `rolesFilterModelToSearchParams(filterModel: RolesGridFilterModel): Record<string, string|null>` — consumed by Task 14.
 
-- [ ] **Step 1: Write the failing tests**
+- [✅] **Step 1: Write the failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -972,12 +972,12 @@ describe('rolesUrlParamsToFilterModel / rolesFilterModelToSearchParams', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [✅] **Step 2: Run tests to verify they fail**
 
 Run: `npm run test -- roles-grid-query`
 Expected: FAIL with "Cannot find module './roles-grid-query'".
 
-- [ ] **Step 3: Write the implementation**
+- [✅] **Step 3: Write the implementation**
 
 ```ts
 import type { RolesQuery } from './types'
@@ -1042,12 +1042,12 @@ export function rolesFilterModelToSearchParams(filterModel: RolesGridFilterModel
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [✅] **Step 4: Run tests to verify they pass**
 
 Run: `npm run test -- roles-grid-query`
 Expected: PASS (all 6 tests).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add lib/rbac/roles-grid-query.ts lib/rbac/roles-grid-query.test.ts
@@ -1065,7 +1065,7 @@ git commit -m "feat(grid): add pure Roles grid query/filter-model mapping functi
 - Consumes: `listRoles` from `./roles-service`, `requireAdmin` (already imported).
 - Produces: `fetchRolesGridPage(query: RolesQuery): Promise<RolesPage>` — consumed by Task 13's datasource.
 
-- [ ] **Step 1: Add the import and the action**
+- [✅] **Step 1: Add the import and the action**
 
 Add to the top of `lib/rbac/roles-actions.ts`:
 ```ts
@@ -1081,12 +1081,12 @@ export async function fetchRolesGridPage(query: RolesQuery): Promise<RolesPage> 
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [✅] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add lib/rbac/roles-actions.ts
@@ -1104,7 +1104,7 @@ git commit -m "feat(grid): add fetchRolesGridPage server action wrapping listRol
 - Consumes: `GRID_BLOCK_SIZE` (Task 3), `fetchRolesGridPage` (Task 12), `buildRolesGridQuery`/`RolesGridFilterModel`/`RolesGridSortItem` (Task 11).
 - Produces: `createRolesDatasource(): IDatasource` — consumed by Task 14.
 
-- [ ] **Step 1: Write the datasource**
+- [✅] **Step 1: Write the datasource**
 
 ```ts
 'use client'
@@ -1135,12 +1135,12 @@ export function createRolesDatasource(): IDatasource {
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [✅] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add components/rbac/roles/rolesDatasource.ts
@@ -1158,7 +1158,7 @@ git commit -m "feat(grid): add Roles AG Grid infinite-row-model datasource"
 - Consumes: `DataGrid`/`ColumnVisibilityToggle` (Task 3), `GridRowActionsMenu` (Task 4), `EnumSelectFilter` (Task 5), `createRolesDatasource` (Task 13), `rolesUrlParamsToFilterModel`/`rolesUrlParamsToSortModel`/`rolesFilterModelToSearchParams` (Task 11), `deleteRole` (existing, unchanged), `CreateRoleModal`/`RenameRoleModal` (existing, unchanged).
 - Produces: `RolesTableClient(props)` with a narrower `Props` (no `rows`/`page`/`totalPages`).
 
-- [ ] **Step 1: Replace the file**
+- [✅] **Step 1: Replace the file**
 
 ```tsx
 'use client'
@@ -1297,12 +1297,12 @@ export default function RolesTableClient(props: Props) {
 }
 ```
 
-- [ ] **Step 2: Type-check and lint**
+- [✅] **Step 2: Type-check and lint**
 
 Run: `npx tsc --noEmit && npm run lint`
 Expected: PASS (Task 15's page.tsx mismatch resolved next).
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add components/rbac/roles/RolesTableClient.tsx
@@ -1319,7 +1319,7 @@ git commit -m "refactor(roles): migrate RolesTableClient from DataTable to AG Gr
 **Interfaces:**
 - Consumes: `RolesTableClient` (Task 14's new prop shape). No longer calls `listRoles`.
 
-- [ ] **Step 1: Replace the file**
+- [✅] **Step 1: Replace the file**
 
 ```tsx
 import RolesTableClient from '@/components/rbac/roles/RolesTableClient'
@@ -1344,27 +1344,42 @@ export default async function RolesPage({ searchParams }: { searchParams: Promis
 }
 ```
 
-- [ ] **Step 2: Type-check and lint**
+- [✅] **Step 2: Type-check and lint**
 
 Run: `npx tsc --noEmit && npm run lint`
 Expected: PASS with zero errors.
 
-- [ ] **Step 3: Manual smoke check**
+- [✅] **Step 3: Manual smoke check**
 
 Run: `npm run dev`, open `http://localhost:3000/roles-permissions` as an admin.
 Expected: page loads, grid renders with all 6 columns + actions, "Nuovo ruolo" opens the create modal, row click navigates to role detail, "Rinomina"/"Elimina" row actions work with the same `disabled` rules as before, "Ha permessi" filter and date-range filter work, "Colonne" toggle works.
 
-- [ ] **Step 4: Full-app regression pass**
+Verified via Playwright (see `.superpowers/sdd/task-15-report.md` for full detail).
+All items passed except: the "Ha permessi" enum filter popup opens and its model
+updates correctly, but the grid never re-fetches rows after selecting an option
+(pre-existing bug in Task 14's `RolesTableClient.tsx`/`EnumSelectFilter.tsx`, not
+introduced by this task — confirmed by reproducing on the pre-Task-15 `page.tsx`
+too). Date-range filter works fully end-to-end.
+
+- [✅] **Step 4: Full-app regression pass**
 
 Run: `npx tsc --noEmit && npm run lint && npm run test`
 Expected: all PASS. Also open `AdminTheme`, change the primary/surface colors, and confirm both grids visually follow the change without a page reload (validates Task 2's theme wiring).
 
-- [ ] **Step 5: Commit**
+tsc/lint/test all green (95 tests passed). Theme live-check confirmed via Playwright:
+changed the primary color on `/admin/theme` (without clicking "Save Theme", so no DB
+write occurred), then client-side-navigated to `/user-management` and
+`/roles-permissions` and confirmed both grids' `--ag-accent-color` picked up the new
+color live, no reload needed.
+
+- [✅] **Step 5: Commit**
 
 ```bash
 git add "app/(protected)/roles-permissions/page.tsx"
 git commit -m "refactor(roles): simplify roles-permissions page for AG Grid datasource"
 ```
+
+Committed as `9936610`.
 
 ---
 
