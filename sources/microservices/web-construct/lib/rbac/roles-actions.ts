@@ -5,6 +5,8 @@ import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { role, roleType } from '@/lib/db/schema'
 import type { PermissionDelta, RoleType as RoleTypeStr } from './types'
+import { listRoles } from './roles-service'
+import type { RolesPage, RolesQuery } from './types'
 
 const ROLE_TYPE_SERVICE = 2
 
@@ -78,4 +80,9 @@ export async function deleteRole(roleId: number): Promise<void> {
   } catch (err) {
     throw new Error(`Failed to delete role: ${err instanceof Error ? err.message : String(err)}`)
   }
+}
+
+export async function fetchRolesGridPage(query: RolesQuery): Promise<RolesPage> {
+  await requireAdmin()
+  return listRoles(query)
 }
