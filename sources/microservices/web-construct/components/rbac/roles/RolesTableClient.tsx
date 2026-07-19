@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import DataGrid from '@/components/ui/DataGrid'
@@ -47,6 +47,11 @@ export default function RolesTableClient(props: Props) {
   const [showCreate, setShowCreate] = useState(false)
   const [renaming, setRenaming] = useState<RolePageItemDto | null>(null)
   const [gridApi, setGridApi] = useState<GridApi<RolePageItemDto> | null>(null)
+  // Kept alongside the `gridApi` state: `columnDefs` below is memoized and its "Elimina"
+  // row-action closure captures `gridApi`, so a ref (always current, regardless of when
+  // the memo last recomputed) is used inside that closure instead of the state value,
+  // which could otherwise stay stale at `null` from before onGridReady fired.
+  const gridApiRef = useRef<GridApi<RolePageItemDto> | null>(null)
 
   const setParam = (updates: Record<string, string | null>) => {
     const next = new URLSearchParams(sp.toString())
@@ -89,7 +94,7 @@ export default function RolesTableClient(props: Props) {
         getItems: (r: RolePageItemDto) => [
           { label: 'Rinomina', disabled: r.roleType !== 'SERVICE', onClick: () => setRenaming(r) },
           { label: 'Elimina', disabled: r.roleType === 'SYSTEM', onClick: async () => {
-              if (confirm(`Eliminare il ruolo "${r.description}"?`)) { await deleteRole(r.id); router.refresh() }
+              if (confirm(`Eliminare il ruolo "${r.description}"?`)) { await deleteRole(r.id); router.refresh(); gridApiRef.current?.refreshInfiniteCache() }
             } },
         ],
       },
@@ -107,6 +112,7 @@ export default function RolesTableClient(props: Props) {
   }
 
   const onGridReady = (event: GridReadyEvent<RolePageItemDto>) => {
+    gridApiRef.current = event.api
     setGridApi(event.api)
   }
 
@@ -128,7 +134,7 @@ export default function RolesTableClient(props: Props) {
         onGridReady={onGridReady}
       />
       {showCreate && <CreateRoleModal onClose={() => setShowCreate(false)} />}
-      {renaming && <RenameRoleModal roleId={renaming.id} currentName={renaming.description} onClose={() => setRenaming(null)} />}
+      {renaming && <RenameRoleModal roleId={renaming.id} currentName={renaming.description} onClose={() => { setRenaming(null); gridApi?.refreshInfiniteCache() }} />}
     </>
   )
 }

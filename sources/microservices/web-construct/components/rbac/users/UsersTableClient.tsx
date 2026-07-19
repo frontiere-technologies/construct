@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import DataGrid from '@/components/ui/DataGrid'
@@ -44,6 +44,11 @@ export default function UsersTableClient(props: Props) {
   const sp = useSearchParams()
   const [managing, setManaging] = useState<UserDTO | null>(null)
   const [gridApi, setGridApi] = useState<GridApi<UserDTO> | null>(null)
+  // Kept alongside the `gridApi` state: `columnDefs` below is memoized and its cell
+  // renderers close over `toggleStatus`, so a ref (always current, regardless of when
+  // the memo last recomputed) is used inside those closures instead of the state value,
+  // which could otherwise stay stale at `null` from before onGridReady fired.
+  const gridApiRef = useRef<GridApi<UserDTO> | null>(null)
 
   const setParam = (updates: Record<string, string | null>) => {
     const p = new URLSearchParams(sp.toString())
@@ -55,7 +60,7 @@ export default function UsersTableClient(props: Props) {
   const toggleStatus = async (u: UserDTO) => {
     const next = u.status.idUserStatus === USER_STATUS_ACTIVE ? USER_STATUS_DEACTIVATED : USER_STATUS_ACTIVE
     if (!confirm(next === USER_STATUS_DEACTIVATED ? `Disattivare ${u.email}?` : `Attivare ${u.email}?`)) return
-    try { await setUserStatus(u.id, next); router.refresh() }
+    try { await setUserStatus(u.id, next); router.refresh(); gridApiRef.current?.refreshInfiniteCache() }
     catch (e) { alert(e instanceof Error ? e.message : 'Errore') }
   }
 
@@ -111,6 +116,7 @@ export default function UsersTableClient(props: Props) {
   }
 
   const onGridReady = (event: GridReadyEvent<UserDTO>) => {
+    gridApiRef.current = event.api
     setGridApi(event.api)
   }
 
@@ -134,7 +140,7 @@ export default function UsersTableClient(props: Props) {
           user={managing}
           allRoles={props.allRoles}
           onClose={() => setManaging(null)}
-          onSaved={() => { setManaging(null); router.refresh() }}
+          onSaved={() => { setManaging(null); router.refresh(); gridApi?.refreshInfiniteCache() }}
         />
       )}
     </>
