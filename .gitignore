@@ -55,5 +55,8 @@ __pycache__/
 # Temporary
 tmp/
 
+# Superpowers scratch (session tokens, sdd review diffs) — docs/superpowers/ is tracked separately
+.superpowers/
+
 # Kubernetes secrets (valori reali — mai committare)
 sources/devops/k8s/*/secret.env
