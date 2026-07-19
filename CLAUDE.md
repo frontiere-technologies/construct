@@ -10,6 +10,8 @@ npm run dev
 npm run build
 npm run lint         # ESLint (eslint.config.mjs — next/core-web-vitals + next/typescript)
 npm run clean        # Remove .next/
+npm run test         # Vitest unit tests
+npm run test:watch   # Vitest watch mode
 
 # E2E tests (Python — use uv, never python/python3 directly)
 uv run pytest                              # tutti i test
@@ -18,7 +20,9 @@ uv run pytest sources/tests/e2e/test_sidebar.py    # singolo gruppo
 
 ## Stack
 
-sources/microservices/web-construct/ - React 19 + TypeScript + Next.js 15 (App Router) + Tailwind CSS v4 + NextAuth v5 + Supabase (@supabase/supabase-js) + Lucide React
+sources/microservices/web-construct/ - React 19 + TypeScript + Next.js 16 (App Router) + Tailwind CSS v4 + NextAuth v5 (Auth.js) + Supabase (@supabase/supabase-js) + Lucide React + Zod
+
+Altre dipendenze rilevanti: `@dnd-kit/*` (drag & drop), `bcryptjs` (hashing), `isomorphic-dompurify` (sanitizzazione HTML), `nodemailer` + `resend` (email), `pino` (logging), Vitest (unit test) + Playwright/pytest (E2E).
 
 ### Commit AI-tooling folders to Git
 

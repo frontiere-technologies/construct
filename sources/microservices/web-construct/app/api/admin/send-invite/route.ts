@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { createAdminClient } from '@/lib/supabase-server'
+import { db } from '@/lib/db'
+import { users, passwordSetTokens } from '@/lib/db/schema'
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
 
@@ -19,13 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'userId mancante.' }, { status: 400 })
   }
 
-  const supabase = createAdminClient()
-
-  const { data: user } = await supabase
-    .from('users')
-    .select('id, email, name')
-    .eq('id', userId)
-    .single()
+  const [user] = await db.select({ id: users.id, email: users.email, name: users.name }).from(users).where(eq(users.id, userId)).limit(1)
 
   if (!user?.email) {
     return NextResponse.json({ error: 'Utente non trovato.' }, { status: 404 })
@@ -34,12 +30,10 @@ export async function POST(req: NextRequest) {
   const token = crypto.randomUUID()
   const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
 
-  const { error: insertErr } = await supabase
-    .from('password_set_tokens')
-    .insert({ user_id: user.id, token, expires_at: expiresAt })
-
-  if (insertErr) {
-    log.error({ err: insertErr }, 'failed to create invite token')
+  try {
+    await db.insert(passwordSetTokens).values({ userId: user.id, token, expiresAt })
+  } catch (err) {
+    log.error({ err }, 'failed to create invite token')
     return NextResponse.json({ error: 'Errore interno.' }, { status: 500 })
   }
 

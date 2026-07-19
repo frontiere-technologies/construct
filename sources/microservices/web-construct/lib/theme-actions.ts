@@ -1,28 +1,29 @@
 'use server'
 
+import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { createAdminClient } from '@/lib/supabase-server'
+import { db } from '@/lib/db'
+import { users } from '@/lib/db/schema'
 import type { ThemeConfig } from '@/types/menu'
 
 export async function saveThemeConfig(config: ThemeConfig): Promise<{ error: string | null }> {
   const session = await auth()
   if (!session?.user?.id) return { error: 'Not authenticated' }
-  const supabase = createAdminClient()
-  const { error } = await supabase
-    .from('users')
-    .update({ theme_config: config })
-    .eq('id', session.user.id)
-  return { error: error?.message ?? null }
+  try {
+    await db.update(users).set({ themeConfig: config }).where(eq(users.id, session.user.id))
+    return { error: null }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 export async function loadThemeConfig(): Promise<ThemeConfig | null> {
   const session = await auth()
   if (!session?.user?.id) return null
-  const supabase = createAdminClient()
-  const { data } = await supabase
-    .from('users')
-    .select('theme_config')
-    .eq('id', session.user.id)
-    .single()
-  return (data?.theme_config as ThemeConfig) ?? null
+  const [row] = await db
+    .select({ themeConfig: users.themeConfig })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1)
+  return (row?.themeConfig as ThemeConfig) ?? null
 }

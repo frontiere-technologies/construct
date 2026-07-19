@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
-import { createAdminClient } from '@/lib/supabase-server'
+import { and, eq, isNull } from 'drizzle-orm'
+import { db } from '@/lib/db'
+import { users, passwordSetTokens } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { passwordSchema } from '@/lib/validations'
 
@@ -19,50 +21,49 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
-  const supabase = createAdminClient()
-
-  const { data: tokenRow } = await supabase
-    .from('password_set_tokens')
-    .select('id, user_id, expires_at, used_at')
-    .eq('token', token)
-    .single()
+  const [tokenRow] = await db
+    .select({ id: passwordSetTokens.id, userId: passwordSetTokens.userId, expiresAt: passwordSetTokens.expiresAt, usedAt: passwordSetTokens.usedAt })
+    .from(passwordSetTokens)
+    .where(eq(passwordSetTokens.token, token))
+    .limit(1)
 
   if (!tokenRow) {
     return NextResponse.json({ error: 'Link non valido.' }, { status: 410 })
   }
-  if (tokenRow.used_at) {
+  if (tokenRow.usedAt) {
     return NextResponse.json({ error: 'Link già utilizzato.' }, { status: 410 })
   }
-  if (new Date(tokenRow.expires_at) < new Date()) {
+  if (new Date(tokenRow.expiresAt) < new Date()) {
     return NextResponse.json({ error: 'Link scaduto. Chiedi un nuovo invito.' }, { status: 410 })
   }
 
   const hash = await bcrypt.hash(password, 12)
 
   // Update password first — if this fails the token is still valid and the user can retry
-  const { error: updateErr } = await supabase
-    .from('users')
-    .update({ password_hash: hash })
-    .eq('id', tokenRow.user_id)
-
-  if (updateErr) {
-    log.error({ err: updateErr }, 'failed to update password_hash')
+  try {
+    await db.update(users).set({ passwordHash: hash }).where(eq(users.id, tokenRow.userId))
+  } catch (err) {
+    log.error({ err }, 'failed to update password_hash')
     return NextResponse.json({ error: 'Errore interno. Riprova.' }, { status: 500 })
   }
 
   // Consume the token only after a successful password update.
-  // The optimistic lock (.is('used_at', null)) handles concurrent requests;
+  // The optimistic lock (usedAt is null) handles concurrent requests;
   // if it fails here the password is already set, so we treat it as success.
-  const { data: claimed } = await supabase
-    .from('password_set_tokens')
-    .update({ used_at: new Date().toISOString() })
-    .eq('id', tokenRow.id)
-    .is('used_at', null)
-    .select('id')
-    .single()
+  try {
+    const [claimed] = await db
+      .update(passwordSetTokens)
+      .set({ usedAt: new Date().toISOString() })
+      .where(and(eq(passwordSetTokens.id, tokenRow.id), isNull(passwordSetTokens.usedAt)))
+      .returning({ id: passwordSetTokens.id })
 
-  if (!claimed) {
-    log.warn({ userId: tokenRow.user_id }, 'token already consumed by concurrent request')
+    if (!claimed) {
+      log.warn({ userId: tokenRow.userId }, 'token already consumed by concurrent request')
+    }
+  } catch (err) {
+    // The password was already set above; a DB error here just means the token
+    // may remain usable, so we still treat this as success.
+    log.warn({ err, userId: tokenRow.userId }, 'failed to mark token as used')
   }
 
   return NextResponse.json({ ok: true })

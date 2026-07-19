@@ -1,77 +1,104 @@
 import { cache } from 'react'
-import { createAdminClient } from '@/lib/supabase-server'
+import { and, asc, desc, count, gte, ilike, inArray, lt, or, type SQL } from 'drizzle-orm'
+import { db } from '@/lib/db'
+import { users, userRole } from '@/lib/db/schema'
 import { getAllRoles } from './roles-service'
 import { nextDay } from './date-utils'
 import { USER_SORT_COLUMN, buildUserDtos, type UserRow, type UserRoleRow } from './user-mappers'
 import type { UserDTO, UsersQuery } from './types'
 
-const USER_COLUMNS = 'id,first_name,last_name,email,created_at,updated_at,id_user_status'
-
-type FilterableQuery = {
-  ilike(column: string, value: string): FilterableQuery
-  or(filters: string): FilterableQuery
-  in(column: string, values: readonly unknown[]): FilterableQuery
-  gte(column: string, value: unknown): FilterableQuery
-  lte(column: string, value: unknown): FilterableQuery
-  lt(column: string, value: unknown): FilterableQuery
-}
+const SORT_COLUMNS = {
+  first_name: users.firstName,
+  last_name: users.lastName,
+  email: users.email,
+  created_at: users.createdAt,
+  updated_at: users.updatedAt,
+  id_user_status: users.idUserStatus,
+} as const
 
 async function candidateUserIds(roleIds: number[] | undefined): Promise<string[] | null> {
   if (!roleIds?.length) return null
-  const supabase = createAdminClient()
-  const { data, error } = await supabase.from('user_role').select('user_id').in('id_role', roleIds)
-  if (error) throw new Error(`Failed to filter by role: ${error.message}`)
-  return Array.from(new Set((data ?? []).map((r: { user_id: string }) => r.user_id)))
+  try {
+    const rows = await db.select({ userId: userRole.userId }).from(userRole).where(inArray(userRole.idRole, roleIds))
+    return Array.from(new Set(rows.map(r => r.userId)))
+  } catch (err) {
+    throw new Error(`Failed to filter by role: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
-export function applyUserFilters<T extends FilterableQuery>(q: T, query: UsersQuery, ids: string[] | null): T {
-  let r = q
+export function applyUserFilters(query: UsersQuery, ids: string[] | null): SQL[] {
+  const conditions: SQL[] = []
   if (query.search) {
     const s = query.search.replace(/[%,()&]/g, '')
-    r = r.or(`first_name.ilike.%${s}%,last_name.ilike.%${s}%,email.ilike.%${s}%`) as T
+    conditions.push(or(
+      ilike(users.firstName, `%${s}%`),
+      ilike(users.lastName, `%${s}%`),
+      ilike(users.email, `%${s}%`),
+    )!)
   }
-  if (query.statuses?.length) r = r.in('id_user_status', query.statuses) as T
-  if (query.createdFrom) r = r.gte('created_at', query.createdFrom) as T
-  if (query.createdTo) r = r.lt('created_at', nextDay(query.createdTo)) as T
-  if (ids) r = r.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']) as T
-  return r
+  if (query.statuses?.length) conditions.push(inArray(users.idUserStatus, query.statuses))
+  if (query.createdFrom) conditions.push(gte(users.createdAt, query.createdFrom))
+  if (query.createdTo) conditions.push(lt(users.createdAt, nextDay(query.createdTo)))
+  if (ids) conditions.push(inArray(users.id, ids.length ? ids : ['00000000-0000-0000-0000-000000000000']))
+  return conditions
 }
 
 export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserDTO[]; total: number }> => {
-  const supabase = createAdminClient()
   const ids = await candidateUserIds(query.roleIds)
-  const sortCol = USER_SORT_COLUMN[query.sort ?? 'dateIns'] ?? 'created_at'
+  const conditions = applyUserFilters(query, ids)
+  const where = conditions.length ? and(...conditions) : undefined
   const ascending = (query.direction ?? 'DESC') === 'ASC'
   const from = query.page * query.size
-  const to = from + query.size - 1
+  const sortCol = SORT_COLUMNS[USER_SORT_COLUMN[query.sort ?? 'dateIns'] as keyof typeof SORT_COLUMNS]
+  const orderBy = query.sort === 'firstName'
+    ? [ascending ? asc(users.firstName) : desc(users.firstName), ascending ? asc(users.lastName) : desc(users.lastName), ascending ? asc(users.email) : desc(users.email)]
+    : [ascending ? asc(sortCol) : desc(sortCol)]
 
-  let q = supabase.from('users').select(USER_COLUMNS, { count: 'exact' })
-  q = applyUserFilters(q as unknown as FilterableQuery, query, ids) as unknown as typeof q
-  const ordered = query.sort === 'firstName'
-    ? q.order('first_name', { ascending }).order('last_name', { ascending }).order('email', { ascending })
-    : q.order(sortCol, { ascending })
-  const { data, error, count } = await ordered.range(from, to)
-  if (error) throw new Error(`Failed to list users: ${error.message}`)
-  const userRows = (data ?? []) as unknown as UserRow[]
+  let userRows: UserRow[]
+  let total: number
+  try {
+    const [rows, [{ value }]] = await Promise.all([
+      db
+        .select({
+          id: users.id, first_name: users.firstName, last_name: users.lastName, email: users.email,
+          created_at: users.createdAt, updated_at: users.updatedAt, id_user_status: users.idUserStatus,
+        })
+        .from(users)
+        .where(where)
+        .orderBy(...orderBy)
+        .limit(query.size)
+        .offset(from),
+      db.select({ value: count() }).from(users).where(where),
+    ])
+    userRows = rows as unknown as UserRow[]
+    total = value
+  } catch (err) {
+    throw new Error(`Failed to list users: ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   const pageIds = userRows.map(u => u.id)
   let userRoleRows: UserRoleRow[] = []
   if (pageIds.length) {
-    const { data: ur, error: urErr } = await supabase.from('user_role').select('user_id,id_role').in('user_id', pageIds)
-    if (urErr) throw new Error(`Failed to load user roles: ${urErr.message}`)
-    userRoleRows = (ur ?? []) as UserRoleRow[]
+    try {
+      const ur = await db.select({ user_id: userRole.userId, id_role: userRole.idRole }).from(userRole).where(inArray(userRole.userId, pageIds))
+      userRoleRows = ur as UserRoleRow[]
+    } catch (err) {
+      throw new Error(`Failed to load user roles: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
   const allRoles = await getAllRoles()
   const roleNameById = new Map<number, string>(allRoles.map(r => [r.id, r.description]))
-  return { users: buildUserDtos(userRows, userRoleRows, roleNameById), total: count ?? 0 }
+  return { users: buildUserDtos(userRows, userRoleRows, roleNameById), total }
 })
 
 export const countUsers = cache(async (query: UsersQuery): Promise<number> => {
-  const supabase = createAdminClient()
   const ids = await candidateUserIds(query.roleIds)
-  let q = supabase.from('users').select('id', { count: 'exact', head: true })
-  q = applyUserFilters(q as unknown as FilterableQuery, query, ids) as unknown as typeof q
-  const { count, error } = await q
-  if (error) throw new Error(`Failed to count users: ${error.message}`)
-  return count ?? 0
+  const conditions = applyUserFilters(query, ids)
+  const where = conditions.length ? and(...conditions) : undefined
+  try {
+    const [{ value }] = await db.select({ value: count() }).from(users).where(where)
+    return value
+  } catch (err) {
+    throw new Error(`Failed to count users: ${err instanceof Error ? err.message : String(err)}`)
+  }
 })

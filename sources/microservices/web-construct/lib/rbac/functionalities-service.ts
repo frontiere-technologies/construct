@@ -1,29 +1,26 @@
 import { cache } from 'react'
-import { createAdminClient } from '@/lib/supabase-server'
+import { asc } from 'drizzle-orm'
+import { db } from '@/lib/db'
+import { navigationItem, navigationItemTag } from '@/lib/db/schema'
+import { toNavigationItemRow } from './nav-row-mapper'
 import { buildNavTree, mapRowToDto } from './nav-tree-builder'
 import {
   type UserNavigationTreeDto, type NavigationItemRow,
   DEFAULT_LOCALE, ROOT_ID, OPERATIONS_ID, ITEM_TYPE_CATEGORY,
 } from './types'
 
-const NAV_COLUMNS =
-  'id_item,name,id_item_type,id_functionality_type,functionality_link,icon_path,id_item_parent,order_position,navbar_position,item_translation,is_immutable,config_visibility,no_permission_need_for_navigation'
-
 async function loadNavAndTags() {
-  const supabase = createAdminClient()
-  const [{ data: nav, error: navErr }, { data: tags, error: tagErr }] = await Promise.all([
-    supabase.from('navigation_item').select(NAV_COLUMNS).order('order_position'),
-    supabase.from('navigation_item_tag').select('id_item,tag_lan,tag'),
+  const [navRows, tagRows] = await Promise.all([
+    db.select().from(navigationItem).orderBy(asc(navigationItem.orderPosition)),
+    db.select().from(navigationItemTag),
   ])
-  if (navErr) throw new Error(`Failed to load navigation: ${navErr.message}`)
-  if (tagErr) throw new Error(`Failed to load tags: ${tagErr.message}`)
   const tagsByItem = new Map<number, { tag_lan: string; tag: string }[]>()
-  for (const t of (tags ?? []) as { id_item: number; tag_lan: string; tag: string }[]) {
-    const arr = tagsByItem.get(t.id_item) ?? []
-    arr.push({ tag_lan: t.tag_lan, tag: t.tag })
-    tagsByItem.set(t.id_item, arr)
+  for (const t of tagRows) {
+    const arr = tagsByItem.get(t.idItem) ?? []
+    arr.push({ tag_lan: t.tagLan, tag: t.tag })
+    tagsByItem.set(t.idItem, arr)
   }
-  return { items: (nav ?? []) as NavigationItemRow[], tagsByItem }
+  return { items: navRows.map(toNavigationItemRow), tagsByItem }
 }
 
 export const getNavigationSubtree = cache(async (root: 'root' | 'operations'): Promise<UserNavigationTreeDto[]> => {
@@ -43,6 +40,6 @@ export const getNavigationItem = cache(async (id: number): Promise<UserNavigatio
 export const getParentList = cache(async (): Promise<{ id: number; name: string }[]> => {
   const { items } = await loadNavAndTags()
   return items
-    .filter(i => i.id_item_type === ITEM_TYPE_CATEGORY && i.id_item !== ROOT_ID && i.id_item !== OPERATIONS_ID)
-    .map(i => ({ id: i.id_item, name: i.item_translation?.[DEFAULT_LOCALE]?.name ?? i.name ?? '' }))
+    .filter((i: NavigationItemRow) => i.id_item_type === ITEM_TYPE_CATEGORY && i.id_item !== ROOT_ID && i.id_item !== OPERATIONS_ID)
+    .map((i: NavigationItemRow) => ({ id: i.id_item, name: i.item_translation?.[DEFAULT_LOCALE]?.name ?? i.name ?? '' }))
 })

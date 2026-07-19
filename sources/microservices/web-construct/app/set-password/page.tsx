@@ -1,4 +1,6 @@
-import { createAdminClient } from '@/lib/supabase-server'
+import { eq } from 'drizzle-orm'
+import { db } from '@/lib/db'
+import { passwordSetTokens } from '@/lib/db/schema'
 import { SetPasswordForm } from './SetPasswordForm'
 
 interface Props {
@@ -11,17 +13,16 @@ export default async function SetPasswordPage({ searchParams }: Props) {
   const invalid = !token || typeof token !== 'string'
 
   if (!invalid) {
-    const supabase = createAdminClient()
-    const { data: tokenRow } = await supabase
-      .from('password_set_tokens')
-      .select('id, expires_at, used_at')
-      .eq('token', token)
-      .single()
+    const [tokenRow] = await db
+      .select({ id: passwordSetTokens.id, expiresAt: passwordSetTokens.expiresAt, usedAt: passwordSetTokens.usedAt })
+      .from(passwordSetTokens)
+      .where(eq(passwordSetTokens.token, token))
+      .limit(1)
 
     const isValid =
       tokenRow &&
-      !tokenRow.used_at &&
-      new Date(tokenRow.expires_at) >= new Date()
+      !tokenRow.usedAt &&
+      new Date(tokenRow.expiresAt) >= new Date()
 
     if (!isValid) {
       return (

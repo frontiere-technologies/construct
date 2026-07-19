@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { createAdminClient } from '@/lib/supabase-server'
+import { db } from '@/lib/db'
+import { users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { passwordSchema } from '@/lib/validations'
 
@@ -31,30 +33,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
-  const supabase = createAdminClient()
-  const { data: user } = await supabase
-    .from('users')
-    .select('password_hash')
-    .eq('id', session.user.id)
-    .single()
+  const [user] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, session.user.id)).limit(1)
 
-  if (!user?.password_hash) {
+  if (!user?.passwordHash) {
     return NextResponse.json({ error: 'Nessuna password impostata per questo account.' }, { status: 400 })
   }
 
-  const valid = await bcrypt.compare(currentPassword, user.password_hash)
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash)
   if (!valid) {
     return NextResponse.json({ error: 'Password attuale non corretta.' }, { status: 400 })
   }
 
   const newHash = await bcrypt.hash(newPassword, 12)
-  const { error: updateErr } = await supabase
-    .from('users')
-    .update({ password_hash: newHash })
-    .eq('id', session.user.id)
-
-  if (updateErr) {
-    log.error({ err: updateErr }, 'failed to update password hash')
+  try {
+    await db.update(users).set({ passwordHash: newHash }).where(eq(users.id, session.user.id))
+  } catch (err) {
+    log.error({ err }, 'failed to update password hash')
     return NextResponse.json({ error: 'Errore interno. Riprova.' }, { status: 500 })
   }
 

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase-server'
+import { eq } from 'drizzle-orm'
+import { db } from '@/lib/db'
+import { users, passwordSetTokens } from '@/lib/db/schema'
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
 
@@ -13,27 +15,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Email mancante.' }, { status: 400 })
   }
 
-  const supabase = createAdminClient()
-
-  const { data: user } = await supabase
-    .from('users')
-    .select('id, email, password_hash')
-    .eq('email', email.toLowerCase().trim())
-    .single()
+  const [user] = await db
+    .select({ id: users.id, email: users.email, passwordHash: users.passwordHash })
+    .from(users)
+    .where(eq(users.email, email.toLowerCase().trim()))
+    .limit(1)
 
   // Always return 200 — do not leak whether the email exists
-  // Only issue reset tokens for credentials users (those with a password_hash)
-  if (!user?.id || !user.password_hash) return NextResponse.json({ ok: true })
+  // Only issue reset tokens for credentials users (those with a passwordHash)
+  if (!user?.id || !user.passwordHash) return NextResponse.json({ ok: true })
 
   const token = crypto.randomUUID()
   const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() // 2 hours
 
-  const { error: insertErr } = await supabase
-    .from('password_set_tokens')
-    .insert({ user_id: user.id, token, expires_at: expiresAt })
-
-  if (insertErr) {
-    log.error({ err: insertErr }, 'failed to create reset token')
+  try {
+    await db.insert(passwordSetTokens).values({ userId: user.id, token, expiresAt })
+  } catch (err) {
+    log.error({ err }, 'failed to create reset token')
     return NextResponse.json({ ok: true })
   }
 
@@ -50,7 +48,7 @@ export async function POST(req: NextRequest) {
 
   try {
     await sendEmail({
-      to: user.email,
+      to: user.email!,
       subject: 'Reimposta la tua password — Construct',
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">

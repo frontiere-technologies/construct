@@ -1,7 +1,9 @@
 'use server'
 
+import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { createAdminClient } from '@/lib/supabase-server'
+import { db } from '@/lib/db'
+import { users } from '@/lib/db/schema'
 import { phoneSchema } from '@/lib/validations'
 
 export interface UserProfile {
@@ -22,15 +24,29 @@ export async function saveProfile(profile: UserProfile): Promise<{ error: string
     phone = parsed.data
   }
 
-  const supabase = createAdminClient()
-  const { error } = await supabase.from('users').upsert({
-    id: session.user.id,
-    first_name: profile.first_name,
-    last_name: profile.last_name,
-    username: profile.username,
-    phone,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'id' })
-
-  return { error: error?.message ?? null }
+  try {
+    await db
+      .insert(users)
+      .values({
+        id: session.user.id,
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        username: profile.username,
+        phone,
+        updatedAt: new Date().toISOString(),
+      })
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          firstName: profile.first_name,
+          lastName: profile.last_name,
+          username: profile.username,
+          phone,
+          updatedAt: new Date().toISOString(),
+        },
+      })
+    return { error: null }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
 }
