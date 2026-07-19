@@ -2,7 +2,7 @@
 
 import type { IDatasource, IGetRowsParams } from 'ag-grid-community'
 import { GRID_BLOCK_SIZE } from '@/components/ui/DataGrid'
-import { fetchRolesGridPage } from '@/lib/rbac/roles-actions'
+import type { RolesPage } from '@/lib/rbac/types'
 import { buildRolesGridQuery, type RolesGridFilterModel, type RolesGridSortItem } from '@/lib/rbac/roles-grid-query'
 
 export function createRolesDatasource(): IDatasource {
@@ -14,7 +14,15 @@ export function createRolesDatasource(): IDatasource {
         params.sortModel as RolesGridSortItem[],
         params.filterModel as RolesGridFilterModel,
       )
-      fetchRolesGridPage(query)
+      fetch('/api/rbac/roles-grid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(query),
+      })
+        .then(res => {
+          if (!res.ok) throw new Error(`Request failed with status ${res.status}`)
+          return res.json() as Promise<RolesPage>
+        })
         .then(({ elements }) => {
           const from = query.page * GRID_BLOCK_SIZE
           const lastRow = elements.length < GRID_BLOCK_SIZE ? from + elements.length : undefined

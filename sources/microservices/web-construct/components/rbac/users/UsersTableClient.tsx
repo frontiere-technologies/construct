@@ -100,21 +100,14 @@ export default function UsersTableClient(props: Props) {
     },
   ], [props.allRoles])
 
-  // Deferring the URL sync with setTimeout(0) avoids a race with AG Grid's
-  // infinite-row-model refetch: router.push() runs a Next.js App Router
-  // transition, and if it starts while the grid's own Server-Action-backed
-  // getRows() fetch is being dispatched in the same tick, the Server Action
-  // request is silently dropped (never sent, promise never settles) and the
-  // grid is left stuck. Pushing the URL update to the next macrotask lets the
-  // datasource's fetch actually go out first. See fix-enum-filter-refresh-report.md.
   const onFilterChanged = (event: FilterChangedEvent<UserDTO>) => {
     const model = event.api.getFilterModel() as UsersGridFilterModel
-    setTimeout(() => setParam(usersFilterModelToSearchParams(model)), 0)
+    setParam(usersFilterModelToSearchParams(model))
   }
 
   const onSortChanged = (event: SortChangedEvent<UserDTO>) => {
     const active = event.api.getColumnState().find(c => c.sort)
-    setTimeout(() => setParam({ sort: active?.colId ?? null, direction: active ? (active.sort === 'asc' ? 'ASC' : 'DESC') : null }), 0)
+    setParam({ sort: active?.colId ?? null, direction: active ? (active.sort === 'asc' ? 'ASC' : 'DESC') : null })
   }
 
   const onGridReady = (event: GridReadyEvent<UserDTO>) => {
