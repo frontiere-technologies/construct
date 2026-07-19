@@ -5,7 +5,8 @@ import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { users, userRole } from '@/lib/db/schema'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
-import { ROLE_ADMINISTRATOR, ROLE_REGISTERED, type UserStatusId } from './types'
+import { ROLE_ADMINISTRATOR, ROLE_REGISTERED, type UserStatusId, type UserDTO, type UsersQuery } from './types'
+import { listUsers } from './users-service'
 
 async function userIsAdmin(userId: string): Promise<boolean> {
   try {
@@ -82,4 +83,9 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
   } catch (err) {
     throw new Error(`Failed to update status: ${err instanceof Error ? err.message : String(err)}`)
   }
+}
+
+export async function fetchUsersGridPage(query: UsersQuery): Promise<{ users: UserDTO[]; total: number }> {
+  await requireAdmin()
+  return listUsers(query)
 }
