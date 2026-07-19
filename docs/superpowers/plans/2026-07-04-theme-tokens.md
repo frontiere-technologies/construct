@@ -1,6 +1,6 @@
 # Theme Tokens Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
 
 **Goal:** Centralize the light/dark color combinations that are currently hardcoded as Tailwind `dark:` classes across 25 components into 10 new semantic CSS tokens, expose them as customizable color pickers on the "Theme & Styles" page, and migrate every affected component to use the new tokens.
 
@@ -70,7 +70,7 @@ sed -i '' \
 **Interfaces:**
 - Produces: 20 new `ThemeConfig` fields (`pageLight`, `pageDark`, `surfaceLight`, `surfaceDark`, `surfaceOverlayLight`, `surfaceOverlayDark`, `surfaceHoverLight`, `surfaceHoverDark`, `borderLight`, `borderDark`, `borderSubtleLight`, `borderSubtleDark`, `foregroundLight`, `foregroundDark`, `foregroundSecondaryLight`, `foregroundSecondaryDark`, `foregroundMutedLight`, `foregroundMutedDark`, `foregroundFaintLight`, `foregroundFaintDark`), each a hex string, all present on `defaultThemeConfig`. Later tasks (2, 4, and the migration tasks) rely on these exact field names and on the Tailwind utilities `bg-page`, `bg-surface`, `bg-surface-overlay`, `bg-surface-hover`, `border-border`, `border-border-subtle`, `text-foreground`, `text-foreground-secondary`, `text-foreground-muted`, `text-foreground-faint`.
 
-- [ ] **Step 1: Extend `ThemeConfig` and `defaultThemeConfig` in `types/menu.ts`**
+- [✅] **Step 1: Extend `ThemeConfig` and `defaultThemeConfig` in `types/menu.ts`**
 
 Replace the interface and default object:
 
@@ -152,7 +152,7 @@ export const defaultSettings: AppSettings = {
 }
 ```
 
-- [ ] **Step 2: Add the new CSS variables to `app/globals.css`**
+- [✅] **Step 2: Add the new CSS variables to `app/globals.css`**
 
 Replace the file with:
 
@@ -198,12 +198,12 @@ Replace the file with:
 }
 ```
 
-- [ ] **Step 3: Verify the build**
+- [✅] **Step 3: Verify the build**
 
 Run: `npm run build`
 Expected: build succeeds with no TypeScript or CSS errors.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add types/menu.ts app/globals.css
@@ -222,7 +222,7 @@ git commit -m "feat(theme): add 10 new semantic color tokens to ThemeConfig and 
 - Consumes: `ThemeConfig`, `defaultThemeConfig` from `types/menu.ts` (Task 1).
 - Produces: `resolveThemeVars(config: ThemeConfig, isDark: boolean): Record<string, string>` — used by Task 3.
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Create `lib/theme-vars.test.ts`:
 
@@ -282,12 +282,12 @@ describe('resolveThemeVars', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [✅] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run lib/theme-vars.test.ts`
 Expected: FAIL — `Cannot find module './theme-vars'`
 
-- [ ] **Step 3: Implement `lib/theme-vars.ts`**
+- [✅] **Step 3: Implement `lib/theme-vars.ts`**
 
 ```ts
 import { defaultThemeConfig, type ThemeConfig } from '@/types/menu'
@@ -330,12 +330,12 @@ export function resolveThemeVars(config: ThemeConfig, isDark: boolean): Record<s
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [✅] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run lib/theme-vars.test.ts`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add lib/theme-vars.ts lib/theme-vars.test.ts
@@ -352,7 +352,7 @@ git commit -m "feat(theme): add resolveThemeVars pure function with tests"
 **Interfaces:**
 - Consumes: `resolveThemeVars(config, isDark)` from Task 2.
 
-- [ ] **Step 1: Replace the manual `setProperty` block**
+- [✅] **Step 1: Replace the manual `setProperty` block**
 
 In `context/UIContext.tsx`, replace the second `useEffect` body (the one that currently does `isHex`/`safeColor`/five `root.style.setProperty` calls) with:
 
@@ -379,16 +379,16 @@ Add the import at the top of the file:
 import { resolveThemeVars } from '@/lib/theme-vars'
 ```
 
-- [ ] **Step 2: Verify the build and existing tests**
+- [✅] **Step 2: Verify the build and existing tests**
 
 Run: `npm run build && npx vitest run`
 Expected: build succeeds; all vitest suites pass (including `lib/theme-vars.test.ts` from Task 2).
 
-- [ ] **Step 3: Manual smoke check**
+- [✅] **Step 3: Manual smoke check**
 
 Run: `npm run dev`, open the app in a browser, toggle Theme Mode in the sidebar. Expected: sidebar and active-item colors still switch correctly between light and dark (unchanged behavior — this task only refactors *how* they're computed).
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add context/UIContext.tsx
@@ -405,7 +405,7 @@ git commit -m "refactor(theme): drive UIContext CSS variables from resolveThemeV
 **Interfaces:**
 - Consumes: `ThemeConfig` fields from Task 1, `useUI()` from `context/UIContext.tsx` (unchanged), `saveThemeConfig` from `lib/theme-actions.ts` (unchanged).
 
-- [ ] **Step 1: Replace `components/AdminTheme.tsx` in full**
+- [✅] **Step 1: Replace `components/AdminTheme.tsx` in full**
 
 ```tsx
 'use client'
@@ -600,12 +600,12 @@ export const AdminTheme: React.FC = () => {
 
 Note: `border-b`/`border-t` here rely on Tailwind's `border` width utilities plus the new `border-border` *color* utility (same pattern Tailwind already uses elsewhere in this codebase, e.g. `border-b border-gray-200 dark:border-gray-700` before this refactor).
 
-- [ ] **Step 2: Verify the build**
+- [✅] **Step 2: Verify the build**
 
 Run: `npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Manual verification in the browser**
+- [✅] **Step 3: Manual verification in the browser**
 
 Run: `npm run dev`, log in, go to Admin → Theme. Expected:
 - "Global", "Sfondi", "Border", "Testo" and the Sidebar/Active Item sections are all visible; "Sfondi"/"Border"/"Testo" are collapsible via the native `<details>` disclosure triangle.
@@ -614,7 +614,7 @@ Run: `npm run dev`, log in, go to Admin → Theme. Expected:
 - "Save Theme" persists without error; reloading the page keeps the customized values.
 - "Reset to Defaults" restores every one of the 29 fields (including the 20 new ones) to `defaultThemeConfig`.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add components/AdminTheme.tsx
@@ -628,7 +628,7 @@ git commit -m "feat(theme): expose 10 new color tokens on the Theme & Styles pag
 **Files:**
 - Modify: `components/Layout.tsx`, `components/Card.tsx`, `components/Home.tsx`, `components/IconPicker.tsx`
 
-- [ ] **Step 1: Apply the replacement rules**
+- [✅] **Step 1: Apply the replacement rules**
 
 ```bash
 sed -i '' \
@@ -649,7 +649,7 @@ sed -i '' \
   components/Layout.tsx components/Card.tsx components/Home.tsx components/IconPicker.tsx
 ```
 
-- [ ] **Step 2: Verify — only expected `dark:` classes remain**
+- [✅] **Step 2: Verify — only expected `dark:` classes remain**
 
 Run: `grep -n "dark:" components/Layout.tsx components/Card.tsx components/Home.tsx components/IconPicker.tsx`
 
@@ -664,12 +664,12 @@ components/IconPicker.tsx:88:                  className={`flex flex-col items-c
 ```
 (`Layout.tsx`, `Card.tsx`, `Home.tsx` should have zero `dark:` matches left.)
 
-- [ ] **Step 3: Build**
+- [✅] **Step 3: Build**
 
 Run: `npm run build`
 Expected: succeeds.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add components/Layout.tsx components/Card.tsx components/Home.tsx components/IconPicker.tsx
@@ -683,7 +683,7 @@ git commit -m "refactor(theme): migrate global chrome components to semantic col
 **Files:**
 - Modify: `components/ProfileForm.tsx`, `components/ChangePasswordForm.tsx`, `app/(protected)/error.tsx`
 
-- [ ] **Step 1: Apply the replacement rules**
+- [✅] **Step 1: Apply the replacement rules**
 
 ```bash
 sed -i '' \
@@ -704,7 +704,7 @@ sed -i '' \
   components/ProfileForm.tsx components/ChangePasswordForm.tsx "app/(protected)/error.tsx"
 ```
 
-- [ ] **Step 2: Verify — only expected `dark:` classes remain**
+- [✅] **Step 2: Verify — only expected `dark:` classes remain**
 
 Run: `grep -n "dark:" components/ProfileForm.tsx components/ChangePasswordForm.tsx "app/(protected)/error.tsx"`
 
@@ -718,12 +718,12 @@ components/ChangePasswordForm.tsx:110:              ? 'text-green-600 dark:text-
 components/ChangePasswordForm.tsx:111:              : 'text-red-600 dark:text-red-400'
 ```
 
-- [ ] **Step 3: Build**
+- [✅] **Step 3: Build**
 
 Run: `npm run build`
 Expected: succeeds.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add components/ProfileForm.tsx components/ChangePasswordForm.tsx "app/(protected)/error.tsx"
@@ -737,7 +737,7 @@ git commit -m "refactor(theme): migrate form components to semantic color tokens
 **Files:**
 - Modify: `components/rbac/DataTable.tsx`, `components/rbac/CustomSelect.tsx`, `components/rbac/FilterDrawer.tsx`, `components/rbac/roles/DateRangeFilter.tsx`, `components/rbac/NavigationTree.tsx`
 
-- [ ] **Step 1: Apply the replacement rules**
+- [✅] **Step 1: Apply the replacement rules**
 
 ```bash
 sed -i '' \
@@ -758,7 +758,7 @@ sed -i '' \
   components/rbac/DataTable.tsx components/rbac/CustomSelect.tsx components/rbac/FilterDrawer.tsx components/rbac/roles/DateRangeFilter.tsx components/rbac/NavigationTree.tsx
 ```
 
-- [ ] **Step 2: Verify — only expected `dark:` classes remain**
+- [✅] **Step 2: Verify — only expected `dark:` classes remain**
 
 Run: `grep -n "dark:" components/rbac/DataTable.tsx components/rbac/CustomSelect.tsx components/rbac/FilterDrawer.tsx components/rbac/roles/DateRangeFilter.tsx components/rbac/NavigationTree.tsx`
 
@@ -772,12 +772,12 @@ components/rbac/FilterDrawer.tsx:25:            className="text-gray-400 hover:t
 
 `DataTable.tsx` lines 184 and 198 (`hover:bg-gray-100 dark:hover:bg-gray-800`) are matched and replaced by R4, so they must NOT appear in the grep output — confirm they now read `hover:bg-surface-hover`.
 
-- [ ] **Step 3: Build**
+- [✅] **Step 3: Build**
 
 Run: `npm run build`
 Expected: succeeds.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add components/rbac/DataTable.tsx components/rbac/CustomSelect.tsx components/rbac/FilterDrawer.tsx components/rbac/roles/DateRangeFilter.tsx components/rbac/NavigationTree.tsx
@@ -791,7 +791,7 @@ git commit -m "refactor(theme): migrate RBAC shared/list components to semantic 
 **Files:**
 - Modify: `components/rbac/roles/RenameRoleModal.tsx`, `components/rbac/roles/CreateRoleModal.tsx`, `components/rbac/roles/RolesTableClient.tsx`, `components/rbac/roles/RoleDetailClient.tsx`, `components/rbac/users/ManageRolesModal.tsx`, `components/rbac/users/UsersTableClient.tsx`
 
-- [ ] **Step 1: Apply the replacement rules**
+- [✅] **Step 1: Apply the replacement rules**
 
 ```bash
 sed -i '' \
@@ -812,7 +812,7 @@ sed -i '' \
   components/rbac/roles/RenameRoleModal.tsx components/rbac/roles/CreateRoleModal.tsx components/rbac/roles/RolesTableClient.tsx components/rbac/roles/RoleDetailClient.tsx components/rbac/users/ManageRolesModal.tsx components/rbac/users/UsersTableClient.tsx
 ```
 
-- [ ] **Step 2: Verify — only expected `dark:` classes remain**
+- [✅] **Step 2: Verify — only expected `dark:` classes remain**
 
 Run: `grep -n "dark:" components/rbac/roles/RenameRoleModal.tsx components/rbac/roles/CreateRoleModal.tsx components/rbac/roles/RolesTableClient.tsx components/rbac/roles/RoleDetailClient.tsx components/rbac/users/ManageRolesModal.tsx components/rbac/users/UsersTableClient.tsx`
 
@@ -822,12 +822,12 @@ Expected output (untouched one-off active-tab border indicator, left as-is on pu
 components/rbac/roles/RoleDetailClient.tsx:81:            className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-gray-900 text-foreground dark:border-white' : 'border-transparent text-gray-500'}`}
 ```
 
-- [ ] **Step 3: Build**
+- [✅] **Step 3: Build**
 
 Run: `npm run build`
 Expected: succeeds.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add components/rbac/roles/RenameRoleModal.tsx components/rbac/roles/CreateRoleModal.tsx components/rbac/roles/RolesTableClient.tsx components/rbac/roles/RoleDetailClient.tsx components/rbac/users/ManageRolesModal.tsx components/rbac/users/UsersTableClient.tsx
@@ -841,7 +841,7 @@ git commit -m "refactor(theme): migrate RBAC roles/users components to semantic 
 **Files:**
 - Modify: `components/rbac/functionalities/FunctionalitiesTreeClient.tsx`, `components/rbac/functionalities/FunctionalityForm.tsx`, `components/rbac/functionalities/TranslationsAccordion.tsx`, `components/rbac/functionalities/IconPicker.tsx`, `components/rbac/functionalities/TagInput.tsx`, `components/rbac/users/RoleMultiSelect.tsx`
 
-- [ ] **Step 1: Apply the replacement rules**
+- [✅] **Step 1: Apply the replacement rules**
 
 ```bash
 sed -i '' \
@@ -862,7 +862,7 @@ sed -i '' \
   components/rbac/functionalities/FunctionalitiesTreeClient.tsx components/rbac/functionalities/FunctionalityForm.tsx components/rbac/functionalities/TranslationsAccordion.tsx components/rbac/functionalities/IconPicker.tsx components/rbac/functionalities/TagInput.tsx components/rbac/users/RoleMultiSelect.tsx
 ```
 
-- [ ] **Step 2: Verify — only expected `dark:` classes remain**
+- [✅] **Step 2: Verify — only expected `dark:` classes remain**
 
 Run: `grep -n "dark:" components/rbac/functionalities/FunctionalitiesTreeClient.tsx components/rbac/functionalities/FunctionalityForm.tsx components/rbac/functionalities/TranslationsAccordion.tsx components/rbac/functionalities/IconPicker.tsx components/rbac/functionalities/TagInput.tsx components/rbac/users/RoleMultiSelect.tsx`
 
@@ -883,12 +883,12 @@ components/rbac/users/RoleMultiSelect.tsx:29:          <span key={r.id} classNam
 components/rbac/functionalities/TagInput.tsx:16:        <span key={t} className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs">
 ```
 
-- [ ] **Step 3: Build**
+- [✅] **Step 3: Build**
 
 Run: `npm run build`
 Expected: succeeds.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add components/rbac/functionalities/FunctionalitiesTreeClient.tsx components/rbac/functionalities/FunctionalityForm.tsx components/rbac/functionalities/TranslationsAccordion.tsx components/rbac/functionalities/IconPicker.tsx components/rbac/functionalities/TagInput.tsx components/rbac/users/RoleMultiSelect.tsx
@@ -901,12 +901,12 @@ git commit -m "refactor(theme): migrate RBAC functionalities components to seman
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Full lint, build, and unit test run**
+- [✅] **Step 1: Full lint, build, and unit test run**
 
 Run: `npm run lint && npm run build && npx vitest run`
 Expected: all three succeed with zero errors/failures.
 
-- [ ] **Step 2: Confirm no unintended leftover matches repo-wide**
+- [✅] **Step 2: Confirm no unintended leftover matches repo-wide**
 
 Run:
 ```bash
@@ -914,7 +914,7 @@ grep -rn "text-gray-900 dark:text-white\|text-gray-900 dark:text-gray-100\|borde
 ```
 Expected: no output (every occurrence of these 6 rules was migrated across Tasks 5–9).
 
-- [ ] **Step 3: Manual browser check — light and dark mode**
+- [✅] **Step 3: Manual browser check — light and dark mode**
 
 Run: `npm run dev`, then in the browser check both Theme Mode settings on:
 - `/` (Home) — stat cards use `bg-surface`/`border-border-subtle`.
@@ -925,12 +925,12 @@ Run: `npm run dev`, then in the browser check both Theme Mode settings on:
 
 Expected: no visual regressions; colors match what was hardcoded before (aside from the three documented micro-consistency fixes: `border-gray-200`→`border-gray-100`-equivalent on 6 borders, `text-gray-600`→`text-gray-500`-equivalent on 3 texts, `hover:bg-gray-50`→`hover:bg-gray-100`-equivalent on 3 hovers — all described in the spec).
 
-- [ ] **Step 4: Existing e2e suite (unrelated flows must still pass)**
+- [✅] **Step 4: Existing e2e suite (unrelated flows must still pass)**
 
 Run: `cd /Users/mario.stefanutti/mario/programming/github-frontiere/construct && uv run pytest sources/tests/e2e/test_sidebar.py`
 Expected: PASS (confirms the sidebar theme toggle and navigation still work end-to-end after the `UIContext` refactor in Task 3).
 
-- [ ] **Step 5: Update the design spec's status and commit**
+- [✅] **Step 5: Update the design spec's status and commit**
 
 ```bash
 cd sources/microservices/web-construct

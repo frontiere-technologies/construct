@@ -1,6 +1,6 @@
 # Profile Phone Validation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [✅]`) syntax for tracking.
 
 **Goal:** Validate the profile Phone field against E.164 format server-side, while keeping the field optional.
 
@@ -31,7 +31,7 @@
 - Consumes: nothing new from other tasks (this is the only task).
 - Produces: `phoneSchema` (exported `ZodString`) in `lib/validations.ts`, consumed by `saveProfile()` in `lib/profile-actions.ts`. `saveProfile()`'s signature and `{ error: string | null }` return type are unchanged.
 
-- [ ] **Step 1: Write the failing e2e tests**
+- [✅] **Step 1: Write the failing e2e tests**
 
 Append to `sources/tests/e2e/test_profile.py`:
 
@@ -67,13 +67,13 @@ def test_profile_phone_accepts_e164_format(profile_page):
     page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [✅] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest sources/tests/e2e/test_profile.py -v -k phone`
 
 Expected: `test_profile_phone_rejects_invalid_format` FAILS (no "Numero di telefono non valido" text ever appears — the current code saves "123" without validation, so the input times out waiting for that text). `test_profile_phone_accepts_e164_format` PASSES already (no validation exists yet, so this establishes the baseline before checking it still passes after implementation).
 
-- [ ] **Step 3: Add `phoneSchema` to `lib/validations.ts`**
+- [✅] **Step 3: Add `phoneSchema` to `lib/validations.ts`**
 
 Current content of `sources/microservices/web-construct/lib/validations.ts`:
 
@@ -99,7 +99,7 @@ export const phoneSchema = z
   .regex(/^\+[1-9]\d{1,14}$/, 'Numero di telefono non valido. Usa il formato internazionale, es. +391234567890.')
 ```
 
-- [ ] **Step 4: Integrate `phoneSchema` into `saveProfile()`**
+- [✅] **Step 4: Integrate `phoneSchema` into `saveProfile()`**
 
 In `sources/microservices/web-construct/lib/profile-actions.ts`, current content:
 
@@ -173,7 +173,7 @@ export async function saveProfile(profile: UserProfile): Promise<{ error: string
 }
 ```
 
-- [ ] **Step 5: Add format-hint placeholder to the Phone input**
+- [✅] **Step 5: Add format-hint placeholder to the Phone input**
 
 In `sources/microservices/web-construct/components/ProfileForm.tsx`, current Phone block (lines 117-129):
 
@@ -212,25 +212,25 @@ Replace with:
             </div>
 ```
 
-- [ ] **Step 6: Run lint**
+- [✅] **Step 6: Run lint**
 
 Run: `cd sources/microservices/web-construct && npm run lint`
 
 Expected: no new errors.
 
-- [ ] **Step 7: Run the e2e tests to verify they pass**
+- [✅] **Step 7: Run the e2e tests to verify they pass**
 
 Run: `uv run pytest sources/tests/e2e/test_profile.py -v -k phone`
 
 Expected: both `test_profile_phone_rejects_invalid_format` and `test_profile_phone_accepts_e164_format` PASS.
 
-- [ ] **Step 8: Run the full profile test file to check for regressions**
+- [✅] **Step 8: Run the full profile test file to check for regressions**
 
 Run: `uv run pytest sources/tests/e2e/test_profile.py -v`
 
 Expected: all tests PASS (including the pre-existing `test_profile_save_and_persist`, `test_profile_has_editable_fields`, etc.).
 
-- [ ] **Step 9: Commit**
+- [✅] **Step 9: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/validations.ts \

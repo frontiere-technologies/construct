@@ -25,13 +25,18 @@ Read also the ./CLAUDE.md file.
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 15 (App Router), React 19, TypeScript |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript |
 | Styling | Tailwind CSS v4, CSS custom properties |
 | Icons | Lucide React |
+| Drag & Drop | dnd-kit (`@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`) |
 | Authentication | Auth.js v5 (NextAuth) — OIDC providers |
+| Password hashing | bcryptjs |
+| HTML sanitization | isomorphic-dompurify |
 | Database | PostgreSQL via Supabase (database only, not Supabase Auth) |
 | Validation | Zod |
-| Testing | Python + Playwright (E2E), via `uv` |
+| Email | Nodemailer + Resend |
+| Logging | Pino |
+| Testing | Vitest (unit) + Python/Playwright via `uv` (E2E) |
 | Deployment | Kubernetes — self-contained manifest directories per environment |
 
 ---

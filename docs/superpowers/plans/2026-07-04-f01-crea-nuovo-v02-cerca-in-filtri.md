@@ -579,7 +579,7 @@ Take screenshots of `/user-management`, `/roles-permissions`, and `/functionalit
 
 In `docs/input-specs/rbac-additional-fixes/rbac-additional-fixes.md`, change:
 ```
-- F-01 - [ ] Il "Crea nuovo" all'interno di Funzionalità, sta all'altezza del titolo, mentre nella pagina "Ruoli & permessi" è sotto, all'altezza di "Colonne" e "Filtri"
+- F-01 - [✅] Il "Crea nuovo" all'interno di Funzionalità, sta all'altezza del titolo, mentre nella pagina "Ruoli & permessi" è sotto, all'altezza di "Colonne" e "Filtri"
 ```
 to:
 ```
@@ -587,7 +587,7 @@ to:
 ```
 and:
 ```
-- V-02 - [ ] Metti il "Cerca" di ogni pagina (Users", "Functionalities", Ruoli e permessi") dentro Filtro come prima voce
+- V-02 - [✅] Metti il "Cerca" di ogni pagina (Users", "Functionalities", Ruoli e permessi") dentro Filtro come prima voce
 ```
 to:
 ```
