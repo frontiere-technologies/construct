@@ -46,6 +46,16 @@ New generic wrapper around `<AgGridReact<T> />`, the component future tables wil
 
 ## 3. Data layer — Infinite Row Model + Server Actions
 
+> **Addendum (post-implementation, Task 18):** row-fetching ended up going through plain
+> Route Handlers (`app/api/rbac/users-grid`, `app/api/rbac/roles-grid`) called via `fetch()`
+> from the datasources, **not** the `'use server'` Server Actions originally planned below.
+> Root cause: Server Actions share the App Router's action queue with `router.push()` (used
+> for URL sync, §3 "URL sync (DEC-5)"); a `router.push()` firing close to a pending grid-fetch
+> action could mark it `discarded`, silently hanging the datasource forever (see commit
+> `d1955a3`, "fix(rbac): route AG Grid row-fetching through Route Handlers, not Server
+> Actions"). Route Handlers never touch that queue, closing the race by construction. This is
+> an implementation-detail change only — it doesn't affect DEC-1..DEC-7 themselves.
+
 - New server actions wrapping the existing service calls — no change to `listUsers`/`listRoles`/`applyUserFilters`/`applyFilters`/Drizzle query logic itself:
   - `lib/rbac/users-actions.ts`: `fetchUsersGridPage(params)` → calls `listUsers(query)`.
   - `lib/rbac/roles-actions.ts`: `fetchRolesGridPage(params)` → calls `listRoles(query)` (or equivalent existing roles list function).
@@ -75,6 +85,17 @@ New generic wrapper around `<AgGridReact<T> />`, the component future tables wil
 - Status toggle (Users) stays an inline control inside the Stato cell renderer, same as today.
 
 ## 5. Theming
+
+> **Addendum (post-implementation, Task 18):** the remap ended up living in
+> `components/ui/dataGridConfig.ts` as `themeQuartz.withParams({ backgroundColor:
+> 'var(--theme-surface)', accentColor: 'var(--theme-primary)', ... })`, passed through
+> `DataGrid`'s `theme` prop — **not** a separate `app/ag-grid-theme.css` remap file as
+> originally sketched below. Same outcome (DEC-6 unaffected): AG Grid's Theming API params
+> reference the app's `--theme-*` custom properties directly, so `AdminTheme` edits and
+> light/dark switching still apply live with no extra JS or a reload (verified in Task 18's
+> manual pass — changing the primary/surface color pickers updates both grids immediately).
+> It's just a simpler single-file mechanism than the two-file (JS params + remap CSS) split
+> described below.
 
 - Base theme: `themeQuartz` via AG Grid's Theming API, passed through the `theme` prop on `DataGrid` — no legacy `ag-theme-*` CSS imports.
 - A small CSS block (new `app/ag-grid-theme.css`, imported once globally) remaps AG Grid's generated custom properties to the app's existing tokens, e.g.:
