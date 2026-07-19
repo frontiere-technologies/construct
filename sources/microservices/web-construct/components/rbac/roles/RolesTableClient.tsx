@@ -96,14 +96,21 @@ export default function RolesTableClient(props: Props) {
     },
   ], [router])
 
+  // Deferring the URL sync with setTimeout(0) avoids a race with AG Grid's
+  // infinite-row-model refetch: router.push() runs a Next.js App Router
+  // transition, and if it starts while the grid's own Server-Action-backed
+  // getRows() fetch is being dispatched in the same tick, the Server Action
+  // request is silently dropped (never sent, promise never settles) and the
+  // grid is left stuck. Pushing the URL update to the next macrotask lets the
+  // datasource's fetch actually go out first. See fix-enum-filter-refresh-report.md.
   const onFilterChanged = (event: FilterChangedEvent<RolePageItemDto>) => {
     const model = event.api.getFilterModel() as RolesGridFilterModel
-    setParam(rolesFilterModelToSearchParams(model))
+    setTimeout(() => setParam(rolesFilterModelToSearchParams(model)), 0)
   }
 
   const onSortChanged = (event: SortChangedEvent<RolePageItemDto>) => {
     const active = event.api.getColumnState().find(c => c.sort)
-    setParam({ sort: active?.colId ?? null, direction: active ? (active.sort === 'asc' ? 'ASC' : 'DESC') : null })
+    setTimeout(() => setParam({ sort: active?.colId ?? null, direction: active ? (active.sort === 'asc' ? 'ASC' : 'DESC') : null }), 0)
   }
 
   const onGridReady = (event: GridReadyEvent<RolePageItemDto>) => {
