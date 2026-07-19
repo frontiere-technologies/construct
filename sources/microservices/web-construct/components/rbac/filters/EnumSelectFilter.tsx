@@ -8,8 +8,16 @@ export interface EnumFilterOption { value: string | number; label: string }
 
 type Props = CustomFilterProps<unknown, unknown, EnumFilterModel> & { options: EnumFilterOption[] }
 
+// Must be a stable reference across renders: ag-grid-react's FilterComponentWrapper
+// compares `doesFilterPass` by identity on every re-render once the filter has been
+// active, and schedules another filterChangedCallback() whenever it differs. An inline
+// arrow function here is a new reference on every render, which — once a model is set —
+// causes an infinite refetch loop (each refetch re-renders this component, which changes
+// doesFilterPass identity again, which schedules another filterChanged, forever).
+const alwaysPass = () => true
+
 export default function EnumSelectFilter({ model, onModelChange, options }: Props) {
-  useGridFilter({ doesFilterPass: () => true })
+  useGridFilter({ doesFilterPass: alwaysPass })
 
   return (
     <div className="w-48 p-1">
