@@ -72,6 +72,8 @@ def test_non_admin_denied(non_admin_page, base_url):
 def test_filter_by_status_and_reset(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/user-management")
+    rows = _rows(page)
+    baseline = rows.count()
     assert page.get_by_text("Attivo", exact=True).count() > 0
 
     _open_column_filter(page, "status")
@@ -86,6 +88,7 @@ def test_filter_by_status_and_reset(logged_in_page, base_url):
     page.wait_for_load_state("networkidle")
     expect(page).not_to_have_url(re.compile("statuses="))
     expect(page.get_by_text("Attivo", exact=True).first).to_be_visible()
+    expect(rows).to_have_count(baseline)
 
 
 def test_filter_by_role(logged_in_page, base_url):
