@@ -149,3 +149,47 @@ def test_master_collapse_persists_after_reload(logged_in_page):
     page.wait_for_load_state("networkidle")
     page.locator('[data-testid="sidebar-collapsed-rail"]').wait_for(state="visible", timeout=5_000)
     assert page.locator("aside").count() == 1, "Master-collapsed state did not persist after reload"
+
+
+def test_narrow_viewport_forces_col1_icons(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    assert l1.bounding_box()["width"] >= 100, "L1 was not in text mode before narrowing"
+
+    page.set_viewport_size({"width": 600, "height": 900})
+    page.wait_for_function(
+        "() => document.querySelector('aside').getBoundingClientRect().width < 100",
+        timeout=5_000,
+    )
+    assert l1.bounding_box()["width"] < 100, "L1 did not force icon mode below 768px"
+    assert l1.locator('[data-testid="sidebar-toggle"]').count() == 0, "Toggle should not render below 768px"
+
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.wait_for_function(
+        "() => document.querySelector('aside').getBoundingClientRect().width >= 100",
+        timeout=5_000,
+    )
+    assert l1.bounding_box()["width"] >= 100, "L1 did not restore saved (text) preference above 768px"
+    assert l1.locator('[data-testid="sidebar-toggle"]').is_visible()
+
+
+def test_narrow_viewport_forces_col2_icons(logged_in_page):
+    page = logged_in_page
+    ensure_l2_open(page)
+    l2 = page.locator("aside").nth(1)
+    assert l2.bounding_box()["width"] >= 100, "L2 was not in text mode before narrowing"
+
+    page.set_viewport_size({"width": 600, "height": 900})
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside')[1].getBoundingClientRect().width < 100",
+        timeout=5_000,
+    )
+    assert l2.bounding_box()["width"] < 100, "L2 did not force icon mode below 768px"
+
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside')[1].getBoundingClientRect().width >= 100",
+        timeout=5_000,
+    )
+    assert l2.bounding_box()["width"] >= 100, "L2 did not restore saved (text) preference above 768px"

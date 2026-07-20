@@ -44,17 +44,20 @@ const COLLAPSE_KEY = 'sidebarCollapseState'
 
 interface TooltipState { text: string; top: number; left: number }
 
-const ColToggle: React.FC<{ collapsed: boolean; onToggle: () => void }> = ({ collapsed, onToggle }) => (
-  <button
-    data-testid="sidebar-toggle"
-    onClick={onToggle}
-    className="absolute -right-3 bottom-4 bg-sidebar-bg border border-sidebar-text/10 rounded-full p-1 shadow-sm hover:bg-sidebar-active-bg z-10"
-  >
-    {collapsed
-      ? <ChevronRight size={14} className="text-sidebar-text/60" />
-      : <ChevronLeft size={14} className="text-sidebar-text/60" />}
-  </button>
-)
+const ColToggle: React.FC<{ collapsed: boolean; onToggle: () => void; disabled?: boolean }> = ({ collapsed, onToggle, disabled }) => {
+  if (disabled) return null
+  return (
+    <button
+      data-testid="sidebar-toggle"
+      onClick={onToggle}
+      className="absolute -right-3 bottom-4 bg-sidebar-bg border border-sidebar-text/10 rounded-full p-1 shadow-sm hover:bg-sidebar-active-bg z-10"
+    >
+      {collapsed
+        ? <ChevronRight size={14} className="text-sidebar-text/60" />
+        : <ChevronLeft size={14} className="text-sidebar-text/60" />}
+    </button>
+  )
+}
 
 interface L1ItemProps {
   item: MenuItem
@@ -229,6 +232,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     } catch { /* ignore quota errors */ }
   }, [col1Collapsed, col2Collapsed, col3Collapsed, masterCollapsed])
 
+  // Below this viewport width, force all three columns to icon-only mode so the
+  // fixed-width text columns never squeeze the layout. This never touches the
+  // persisted col1/col2/col3 preference — it's a pure render-time override.
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    setIsNarrowViewport(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsNarrowViewport(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  const effCol1Collapsed = isNarrowViewport || col1Collapsed
+  const effCol2Collapsed = isNarrowViewport || col2Collapsed
+  const effCol3Collapsed = isNarrowViewport || col3Collapsed
+
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const showTooltip = useCallback((e: React.MouseEvent, text: string) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -338,7 +358,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
 
   const userPanelItemCls = clsx(
     'w-full flex items-center rounded-lg py-2 px-3 transition-colors duration-200 text-sm',
-    col2Collapsed ? 'justify-center' : 'gap-3',
+    effCol2Collapsed ? 'justify-center' : 'gap-3',
     'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
   )
 
@@ -358,9 +378,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
       <>
       <aside className={clsx(
         'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
-        col1Collapsed ? ICON_COL_W : TEXT_COL_W
+        effCol1Collapsed ? ICON_COL_W : TEXT_COL_W
       )}>
-        <ColToggle collapsed={col1Collapsed} onToggle={() => setCol1Collapsed(c => !c)} />
+        <ColToggle collapsed={effCol1Collapsed} onToggle={() => setCol1Collapsed(c => !c)} disabled={isNarrowViewport} />
 
         <div className="p-2 border-b border-sidebar-text/10">
           <button
@@ -369,11 +389,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             title="Collassa menu"
             className={clsx(
               'w-full flex items-center rounded-lg py-2 px-3 text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text transition-colors duration-200',
-              col1Collapsed ? 'justify-center' : 'gap-3'
+              effCol1Collapsed ? 'justify-center' : 'gap-3'
             )}
           >
             <PanelLeftClose size={20} className="flex-shrink-0" />
-            {!col1Collapsed && <span className="text-sm">Collassa menu</span>}
+            {!effCol1Collapsed && <span className="text-sm">Collassa menu</span>}
           </button>
         </div>
 
@@ -382,7 +402,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             {topItems.map(item => (
               <L1Item key={item.id} item={item} isSelected={selectedL1Id === item.id}
                 isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
-                isCollapsed={col1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
+                isCollapsed={effCol1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
                 onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
                 onClick={() => handleL1Click(item)} />
             ))}
@@ -393,7 +413,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           {mainItems.map(item => (
             <L1Item key={item.id} item={item} isSelected={selectedL1Id === item.id}
               isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
-              isCollapsed={col1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
+              isCollapsed={effCol1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
               onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
               onClick={() => handleL1Click(item)} />
           ))}
@@ -403,7 +423,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           {bottomItems.map(item => (
             <L1Item key={item.id} item={item} isSelected={selectedL1Id === item.id}
               isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
-              isCollapsed={col1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
+              isCollapsed={effCol1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
               onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
               onClick={() => handleL1Click(item)} />
           ))}
@@ -411,11 +431,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           {/* User section — clickable, opens user panel in col2 */}
           <button
             onClick={handleUserClick}
-            onMouseEnter={col1Collapsed ? e => showTooltip(e, authUser?.email?.split('@')[0] ?? 'Account') : undefined}
-            onMouseLeave={col1Collapsed ? hideTooltip : undefined}
+            onMouseEnter={effCol1Collapsed ? e => showTooltip(e, authUser?.email?.split('@')[0] ?? 'Account') : undefined}
+            onMouseLeave={effCol1Collapsed ? hideTooltip : undefined}
             className={clsx(
               'w-full flex items-center gap-2 rounded-lg py-2 px-2 mt-1 border-t border-sidebar-text/10 pt-3 transition-colors duration-200',
-              col1Collapsed ? 'justify-center' : '',
+              effCol1Collapsed ? 'justify-center' : '',
               userPanelOpen
                 ? 'text-sidebar-active-text'
                 : 'text-sidebar-text hover:text-sidebar-active-text'
@@ -425,7 +445,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               ? <Image src={authUser.image} alt="" width={26} height={26} className="rounded-full flex-shrink-0" />
               : <CircleUser size={26} className={clsx('flex-shrink-0 transition-colors', userPanelOpen ? 'text-primary' : 'opacity-60')} />
             }
-            {!col1Collapsed && (
+            {!effCol1Collapsed && (
               <div className="flex flex-col min-w-0 flex-1 text-left">
                 <TruncatedSpan text={authUser?.email?.split('@')[0] ?? ''} className="text-xs font-medium truncate" onShowTooltip={showTooltip} onHideTooltip={hideTooltip} />
                 <TruncatedSpan text={authUser?.email ?? ''} className="text-xs opacity-50 truncate" onShowTooltip={showTooltip} onHideTooltip={hideTooltip} />
@@ -438,10 +458,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
       {showCol2 && (
         <aside className={clsx(
           'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
-          col2Collapsed ? ICON_SUB_W : TEXT_SUB_W
+          effCol2Collapsed ? ICON_SUB_W : TEXT_SUB_W
         )}>
-          <ColToggle collapsed={col2Collapsed} onToggle={() => setCol2Collapsed(c => !c)} />
-          {!col2Collapsed && (
+          <ColToggle collapsed={effCol2Collapsed} onToggle={() => setCol2Collapsed(c => !c)} disabled={isNarrowViewport} />
+          {!effCol2Collapsed && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
               <TruncatedSpan
                 text={userPanelOpen ? (authUser?.email?.split('@')[0] ?? 'Account') : (menuItems.find(i => i.id === selectedL1Id)?.label ?? '')}
@@ -458,19 +478,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                 {/* Profile */}
                 <Link
                   href="/profile"
-                  onMouseEnter={col2Collapsed ? e => showTooltip(e, 'Profile') : undefined}
-                  onMouseLeave={col2Collapsed ? hideTooltip : undefined}
+                  onMouseEnter={effCol2Collapsed ? e => showTooltip(e, 'Profile') : undefined}
+                  onMouseLeave={effCol2Collapsed ? hideTooltip : undefined}
                   className={clsx(
                     userPanelItemCls,
                     pathname === '/profile' ? 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70' : ''
                   )}
                 >
                   <User size={16} className={pathname === '/profile' ? 'text-primary' : ''} />
-                  {!col2Collapsed && <span>Profile</span>}
+                  {!effCol2Collapsed && <span>Profile</span>}
                 </Link>
 
                 {/* Theme Mode */}
-                {col2Collapsed ? (
+                {effCol2Collapsed ? (
                   <button
                     onClick={toggleTheme}
                     onMouseEnter={e => showTooltip(e, settings.theme === 'light' ? 'Switch to Dark' : 'Switch to Light')}
@@ -501,7 +521,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             ) : (
               l1Children.map(item => (
                 <SubItem key={item.id} item={item} menuItems={menuItems}
-                  isCollapsed={col2Collapsed} isSelected={selectedL2Id === item.id}
+                  isCollapsed={effCol2Collapsed} isSelected={selectedL2Id === item.id}
                   isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
                   onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
                   onContainerClick={() => handleL2Click(item)} />
@@ -514,12 +534,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             <div className="p-2 border-t border-sidebar-text/10">
               <button
                 onClick={signOut}
-                onMouseEnter={col2Collapsed ? e => showTooltip(e, 'Logout') : undefined}
-                onMouseLeave={col2Collapsed ? hideTooltip : undefined}
+                onMouseEnter={effCol2Collapsed ? e => showTooltip(e, 'Logout') : undefined}
+                onMouseLeave={effCol2Collapsed ? hideTooltip : undefined}
                 className={userPanelItemCls}
               >
                 <LogOut size={16} />
-                {!col2Collapsed && <span>Logout</span>}
+                {!effCol2Collapsed && <span>Logout</span>}
               </button>
             </div>
           )}
@@ -529,10 +549,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
       {l2Children.length > 0 && (
         <aside className={clsx(
           'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
-          col3Collapsed ? ICON_SUB_W : TEXT_SUB_W
+          effCol3Collapsed ? ICON_SUB_W : TEXT_SUB_W
         )}>
-          <ColToggle collapsed={col3Collapsed} onToggle={() => setCol3Collapsed(c => !c)} />
-          {!col3Collapsed && (
+          <ColToggle collapsed={effCol3Collapsed} onToggle={() => setCol3Collapsed(c => !c)} disabled={isNarrowViewport} />
+          {!effCol3Collapsed && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
               <TruncatedSpan
                 text={menuItems.find(i => i.id === selectedL2Id)?.label ?? ''}
@@ -545,7 +565,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1 scrollbar-hide">
             {l2Children.map(item => (
               <SubItem key={item.id} item={item} menuItems={menuItems}
-                isCollapsed={col3Collapsed} isSelected={false}
+                isCollapsed={effCol3Collapsed} isSelected={false}
                 isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
                 onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
                 onContainerClick={() => handleL2Click(item)} />
