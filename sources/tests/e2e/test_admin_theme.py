@@ -6,7 +6,11 @@ PRIMARY_DEFAULT = '#6366f1'
 
 def _set_color(locator, value):
     locator.evaluate(
-        "(el, val) => { el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })) }",
+        """(el, val) => {
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            nativeSetter.call(el, val);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        }""",
         value,
     )
 
