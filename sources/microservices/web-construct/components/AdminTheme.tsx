@@ -5,7 +5,7 @@ import { useUI } from '@/context/UIContext'
 import { defaultThemeConfig } from '@/types/menu'
 import { saveThemeConfig } from '@/lib/theme-actions'
 import type { ThemeConfig } from '@/types/menu'
-import { Card } from '@/components/Card'
+import { PageContainer } from '@/components/PageContainer'
 
 interface ColorPickerProps {
   label: string
@@ -105,13 +105,7 @@ export const AdminTheme: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold">Theme & Styles</h1>
-        <p className="text-foreground-muted">Customize your application appearance</p>
-      </div>
-
-      <Card className="space-y-8">
+    <PageContainer title="Theme & Styles" subtitle="Customize your application appearance">
         <div className="space-y-4">
           <h3 className="font-medium text-foreground border-b pb-2 border-border">Global</h3>
           <ColorPicker
@@ -173,7 +167,6 @@ export const AdminTheme: React.FC = () => {
             </button>
           </div>
         </div>
-      </Card>
-    </div>
+    </PageContainer>
   )
 }
