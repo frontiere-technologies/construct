@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useUI } from '@/context/UIContext'
 import { defaultThemeConfig } from '@/types/menu'
 import { saveThemeConfig } from '@/lib/theme-actions'
@@ -94,14 +94,45 @@ const TOKEN_GROUPS: TokenGroup[] = [
 
 export const AdminTheme: React.FC = () => {
   const { settings, setSettings } = useUI()
+  const [draftThemeConfig, setDraftThemeConfig] = useState<ThemeConfig>(settings.themeConfig)
+  const hasPendingEdits = useRef(false)
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
+  // Keep the draft in sync with the applied theme (e.g. once UIContext finishes
+  // loading the DB-saved config) as long as the user hasn't started editing.
+  useEffect(() => {
+    if (!hasPendingEdits.current) {
+      setDraftThemeConfig(settings.themeConfig)
+    }
+  }, [settings.themeConfig])
+
   const updateTheme = (key: keyof ThemeConfig, value: string) => {
-    setSettings({
-      ...settings,
-      themeConfig: { ...settings.themeConfig, [key]: value }
-    })
+    hasPendingEdits.current = true
+    setDraftThemeConfig(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleReset = () => {
+    hasPendingEdits.current = true
+    setDraftThemeConfig(defaultThemeConfig)
+  }
+
+  const handleCancel = () => {
+    hasPendingEdits.current = false
+    setDraftThemeConfig(settings.themeConfig)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaveStatus('idle')
+    const { error } = await saveThemeConfig(draftThemeConfig)
+    setSaving(false)
+    setSaveStatus(error ? 'error' : 'success')
+    if (!error) {
+      hasPendingEdits.current = false
+      setSettings({ ...settings, themeConfig: draftThemeConfig })
+    }
+    setTimeout(() => setSaveStatus('idle'), 3000)
   }
 
   return (
@@ -110,7 +141,7 @@ export const AdminTheme: React.FC = () => {
           <h3 className="font-medium text-foreground border-b pb-2 border-border">Global</h3>
           <ColorPicker
             label="Primary Color (Active Icons, Buttons)"
-            value={settings.themeConfig.primaryColor}
+            value={draftThemeConfig.primaryColor}
             onChange={v => updateTheme('primaryColor', v)}
           />
         </div>
@@ -125,8 +156,8 @@ export const AdminTheme: React.FC = () => {
                 <TokenRow
                   key={row.label}
                   label={row.label}
-                  lightValue={settings.themeConfig[row.lightKey]}
-                  darkValue={settings.themeConfig[row.darkKey]}
+                  lightValue={draftThemeConfig[row.lightKey]}
+                  darkValue={draftThemeConfig[row.darkKey]}
                   onChangeLight={v => updateTheme(row.lightKey, v)}
                   onChangeDark={v => updateTheme(row.darkKey, v)}
                 />
@@ -146,24 +177,23 @@ export const AdminTheme: React.FC = () => {
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => setSettings({ ...settings, themeConfig: defaultThemeConfig })}
+              onClick={handleReset}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg"
             >
-              Reset to Defaults
+              Reset
             </button>
             <button
-              onClick={async () => {
-                setSaving(true)
-                setSaveStatus('idle')
-                const { error } = await saveThemeConfig(settings.themeConfig)
-                setSaving(false)
-                setSaveStatus(error ? 'error' : 'success')
-                setTimeout(() => setSaveStatus('idle'), 3000)
-              }}
+              onClick={handleCancel}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg"
+            >
+              Annulla
+            </button>
+            <button
+              onClick={handleSave}
               disabled={saving}
               className="px-4 py-2 text-sm text-white bg-[var(--theme-primary)] hover:opacity-90 disabled:opacity-50 rounded-lg transition-opacity"
             >
-              {saving ? 'Saving…' : 'Save Theme'}
+              {saving ? 'Saving…' : 'Salva'}
             </button>
           </div>
         </div>
