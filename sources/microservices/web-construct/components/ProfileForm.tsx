@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import Image from 'next/image'
 import { CircleUser } from 'lucide-react'
 import { saveProfile, type UserProfile } from '@/lib/profile-actions'
-import { Card } from '@/components/Card'
+import { PageContainer } from '@/components/PageContainer'
 import { ChangePasswordForm } from '@/components/ChangePasswordForm'
 
 interface ProfileFormProps {
@@ -37,14 +37,9 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold">Profile</h1>
-        <p className="text-foreground-muted">Manage your account settings</p>
-      </div>
-
+    <PageContainer title="Profile" subtitle="Manage your account settings">
       <div className={`grid gap-6 ${provider === 'credentials' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-        <Card className="w-full">
+        <div className="w-full rounded-xl border border-border-subtle p-6">
 
           {/* Avatar */}
           <div className="flex justify-center mb-6">
@@ -150,9 +145,9 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
             </p>
           )}
 
-        </Card>
+        </div>
         {provider === 'credentials' && <ChangePasswordForm />}
       </div>
-    </div>
+    </PageContainer>
   )
 }
