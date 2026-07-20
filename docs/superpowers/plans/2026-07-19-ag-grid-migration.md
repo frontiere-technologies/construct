@@ -1392,7 +1392,7 @@ Committed as `9936610`.
 - Consumes: `nav` from `helpers.py` (unchanged), `logged_in_page`/`non_admin_page`/`base_url` fixtures from `conftest.py` (unchanged).
 - Relies on: `data-testid="status-badge"` (unchanged, from `StatusBadge.tsx`), `data-testid="row-menu-{id}"` (Task 4's `GridRowActionsMenu`), `data-testid="save-roles"`/`data-testid="role-checkbox-0"` (unchanged, inside `ManageRolesModal`/`RoleMultiSelect`), `data-testid="filter-option-{value}"` (Task 5's `EnumSelectFilter`), AG Grid's own `[col-id="..."]` attribute on header/cell elements and `.ag-header-icon.ag-filter-icon`/`.ag-filter`/`.ag-center-cols-container .ag-row` structural classes, and the Italian `localeText` button label "Applica" (Task 2).
 
-- [ ] **Step 1: Replace the file**
+- [✅] **Step 1: Replace the file**
 
 ```python
 import re
@@ -1495,7 +1495,7 @@ def test_column_visibility_toggle(logged_in_page, base_url):
     expect(page.locator('.ag-header-cell[col-id="email"]')).to_have_count(0)
 ```
 
-- [ ] **Step 2: Run against the dev server**
+- [✅] **Step 2: Run against the dev server**
 
 Start the app in one terminal (`npm run dev` from `sources/microservices/web-construct/`), then run:
 ```bash
@@ -1503,7 +1503,7 @@ uv run pytest sources/tests/e2e/test_users.py -v --headed
 ```
 Expected: PASS. If a selector fails (e.g. the filter icon's class name or the date filter's input structure differs from what's assumed here), inspect the actual rendered DOM in the headed browser (or via Playwright's trace/inspector) and adjust that one locator — this is the one area of the plan whose exact markup depends on the installed AG Grid v36 build, and needs a live check against the running app rather than a further offline guess.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add sources/tests/e2e/test_users.py
@@ -1520,7 +1520,7 @@ git commit -m "test(e2e): rewrite Users e2e tests for AG Grid DOM and URL-synced
 **Interfaces:**
 - Same conventions as Task 16, applied to the Roles page's columns (`description`, `hasPermissions`, `dateIns`) and its own row actions (Rinomina/Elimina) and "Nuovo ruolo" button.
 
-- [ ] **Step 1: Replace the file**
+- [✅] **Step 1: Replace the file**
 
 ```python
 import re
@@ -1652,14 +1652,14 @@ def test_filter_by_has_permission_and_reset(logged_in_page, base_url):
     expect(page).not_to_have_url(re.compile("hasPermission="))
 ```
 
-- [ ] **Step 2: Run against the dev server**
+- [✅] **Step 2: Run against the dev server**
 
 ```bash
 uv run pytest sources/tests/e2e/test_roles.py -v --headed
 ```
 Expected: PASS. Same note as Task 16 Step 2 applies if any AG Grid DOM selector needs a live adjustment.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add sources/tests/e2e/test_roles.py
@@ -1672,7 +1672,7 @@ git commit -m "test(e2e): rewrite Roles e2e tests for AG Grid DOM and URL-synced
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: Type-check, lint, unit tests**
+- [✅] **Step 1: Type-check, lint, unit tests**
 
 Run from `sources/microservices/web-construct/`:
 ```bash
@@ -1680,7 +1680,7 @@ npx tsc --noEmit && npm run lint && npm run test
 ```
 Expected: all PASS, zero errors/warnings.
 
-- [ ] **Step 2: Full e2e suite**
+- [✅] **Step 2: Full e2e suite**
 
 With the dev server running, from the repo root:
 ```bash
@@ -1688,7 +1688,7 @@ uv run pytest sources/tests/e2e/test_users.py sources/tests/e2e/test_roles.py -v
 ```
 Expected: all PASS.
 
-- [ ] **Step 3: Full manual browser pass**
+- [✅] **Step 3: Full manual browser pass**
 
 In a browser, as an admin:
 - `/user-management`: sort each sortable column, apply and reset each filter type (text, enum ×2, date range), scroll to the bottom to trigger more rows loading, click "Gestisci ruoli" and save a role change, toggle a user's status, toggle column visibility, confirm the URL reflects `sort`/`direction`/filter params and has no `page=`.
@@ -1698,11 +1698,11 @@ In a browser, as an admin:
 
 Expected: every interaction matches the pre-migration behavior described in the design spec (`docs/superpowers/specs/2026-07-19-ag-grid-migration-design.md`), with filters/sort/pagination now native to AG Grid and pagination replaced by infinite scroll.
 
-- [ ] **Step 4: Update the design spec's decision checklist (if applicable)**
+- [✅] **Step 4: Update the design spec's decision checklist (if applicable)**
 
 If any decision (DEC-1..DEC-7) in `docs/superpowers/specs/2026-07-19-ag-grid-migration-design.md` had to change during implementation, update that file to match reality before finishing.
 
-- [ ] **Step 5: Final commit**
+- [✅] **Step 5: Final commit**
 
 If Step 4 produced changes:
 ```bash
