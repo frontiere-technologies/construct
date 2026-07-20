@@ -66,11 +66,15 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
         className={`relative flex items-center gap-2 py-2.5 px-3 border-b border-border-subtle ${ind === 'into' ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''} ${isDragged ? 'opacity-40' : ''}`}
         style={{ paddingLeft: 12 + depth * 24 }}
       >
-        {/* Insertion line (F-03) — a clear blue bar with a dot on the left */}
+        {/* Insertion line (F-03) — a clear blue bar with a dot on the left.
+            left matches the row's own paddingLeft (not just left-2) so the line
+            starts indented at the target depth — otherwise absolute positioning
+            ignores padding and every depth's line starts at the same x. */}
         {(ind === 'before' || ind === 'after') && (
           <span
             data-testid={`drop-line-${ind}`}
-            className={`pointer-events-none absolute left-2 right-2 h-0.5 bg-primary z-10 ${ind === 'before' ? '-top-px' : '-bottom-px'}`}
+            className={`pointer-events-none absolute right-2 h-0.5 bg-primary z-10 ${ind === 'before' ? '-top-px' : '-bottom-px'}`}
+            style={{ left: 12 + depth * 24 }}
           >
             <span className="absolute -left-1 -top-[3px] w-2 h-2 rounded-full bg-primary" />
           </span>
