@@ -4,6 +4,29 @@ def nav(page, url: str) -> None:
     page.wait_for_load_state("networkidle")
 
 
+def open_column_filter(page, col_id: str):
+    """Click the funnel icon on an AG Grid column header to open its filter popup.
+
+    Note: the installed AG Grid build uses the Theming API (not the legacy
+    CSS themes), so the clickable filter icon is `[data-ref="eFilterButton"]`
+    (class `ag-header-cell-filter-button`) — the `ag-filter-icon` class only
+    marks the (usually hidden) "filter active" indicator, not the button.
+    """
+    header = page.locator(f'.ag-header-cell[col-id="{col_id}"]')
+    header.locator('.ag-header-cell-filter-button').click()
+
+
+def grid_rows(page):
+    """All data rows in an AG Grid.
+
+    Note: with the Theming API build in use here, rows live directly under
+    `.ag-grid-scrolling-rows` — there is no `.ag-center-cols-container`
+    wrapper (that class belongs to the legacy CSS theme DOM). Since these
+    grids have no pinned columns, `.ag-row` alone is unambiguous.
+    """
+    return page.locator('.ag-row')
+
+
 def do_test_login(page, base_url: str, email: str) -> None:
     """Authenticate via the test-credentials form (requires AUTH_TEST_CREDENTIALS=true on server)."""
     nav(page, f"{base_url}/login")

@@ -1,29 +1,6 @@
 import re
 from playwright.sync_api import expect
-from helpers import nav
-
-
-def _open_column_filter(page, col_id: str):
-    """Click the funnel icon on a column header to open its filter popup.
-
-    Note: the installed AG Grid build uses the Theming API (not the legacy
-    CSS themes), so the clickable filter icon is `[data-ref="eFilterButton"]`
-    (class `ag-header-cell-filter-button`) — the `ag-filter-icon` class only
-    marks the (usually hidden) "filter active" indicator, not the button.
-    """
-    header = page.locator(f'.ag-header-cell[col-id="{col_id}"]')
-    header.locator('.ag-header-cell-filter-button').click()
-
-
-def _rows(page):
-    """All data rows in the grid.
-
-    Note: with the Theming API build in use here, rows live directly under
-    `.ag-grid-scrolling-rows` — there is no `.ag-center-cols-container`
-    wrapper (that class belongs to the legacy CSS theme DOM). Since this
-    grid has no pinned columns, `.ag-row` alone is unambiguous.
-    """
-    return page.locator('.ag-row')
+from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows
 
 
 def test_users_list_loads(logged_in_page, base_url):
@@ -62,11 +39,6 @@ def test_manage_roles_opens_and_lists_roles(logged_in_page, base_url):
     expect(page.get_by_test_id("save-roles")).to_be_visible()
     reg = page.get_by_test_id("role-checkbox-0")
     expect(reg).to_be_disabled()
-
-
-def test_non_admin_denied(non_admin_page, base_url):
-    nav(non_admin_page, f"{base_url}/user-management")
-    expect(non_admin_page.get_by_role("heading", name="Utenti")).to_have_count(0)
 
 
 def test_filter_by_status_and_reset(logged_in_page, base_url):

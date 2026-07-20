@@ -105,7 +105,7 @@ export const AdminTheme: React.FC = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Theme & Styles</h1>
         <p className="text-foreground-muted">Customize your application appearance</p>

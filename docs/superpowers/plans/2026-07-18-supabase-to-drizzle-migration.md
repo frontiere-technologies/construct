@@ -40,7 +40,7 @@
 - All timestamp columns use `{ withTimezone: true, mode: 'string' }` — Drizzle returns/accepts ISO strings, matching what PostgREST returned today and what every DTO in the codebase already expects (e.g. `UserRow.created_at: string`). This is load-bearing for every later task: do not switch any timestamp column to `mode: 'date'`.
 - All `bigint` PK/FK columns (`id_role`, `id_item`, `id_role_type`, etc.) use `{ mode: 'number' }` — matching the existing `number`-typed ids used throughout `lib/rbac/types.ts`.
 
-- [ ] **Step 1: Install dependencies**
+- [✅] **Step 1: Install dependencies**
 
 ```bash
 cd sources/microservices/web-construct
@@ -48,7 +48,7 @@ npm install drizzle-orm postgres
 npm install -D drizzle-kit
 ```
 
-- [ ] **Step 2: Write `lib/db/schema.ts`**
+- [✅] **Step 2: Write `lib/db/schema.ts`**
 
 ```ts
 import { sql } from 'drizzle-orm'
@@ -196,7 +196,7 @@ export const roleListView = pgView('role_list_view', {
 }).existing()
 ```
 
-- [ ] **Step 3: Write `lib/db.ts`**
+- [✅] **Step 3: Write `lib/db.ts`**
 
 ```ts
 import { drizzle } from 'drizzle-orm/postgres-js'
@@ -212,7 +212,7 @@ const client = postgres(process.env.DATABASE_URL!, { prepare: false })
 export const db = drizzle(client, { schema })
 ```
 
-- [ ] **Step 4: Write `drizzle.config.ts`** (used only for one-off `drizzle-kit introspect` sanity checks against the live DB — never for migrations, per DEC-4)
+- [✅] **Step 4: Write `drizzle.config.ts`** (used only for one-off `drizzle-kit introspect` sanity checks against the live DB — never for migrations, per DEC-4)
 
 ```ts
 import { defineConfig } from 'drizzle-kit'
@@ -224,7 +224,7 @@ export default defineConfig({
 })
 ```
 
-- [ ] **Step 5: Update `.env.template`**
+- [✅] **Step 5: Update `.env.template`**
 
 Replace:
 ```
@@ -238,7 +238,7 @@ with:
 DATABASE_URL=postgresql://postgres.xxxxxxxx:password@aws-0-region.pooler.supabase.com:6543/postgres
 ```
 
-- [ ] **Step 6: Update `sources/devops/k8s/dev/secret.env.example`**
+- [✅] **Step 6: Update `sources/devops/k8s/dev/secret.env.example`**
 
 From `sources/microservices/web-construct/`, replace in `../../devops/k8s/dev/secret.env.example`:
 ```
@@ -255,12 +255,12 @@ AUTH_SECRET=
 
 Note (manual, not part of this commit): the real `sources/devops/k8s/dev/secret.env` is gitignored and contains live credentials — whoever runs this plan must add their own `DATABASE_URL` (Supavisor pooler string, port 6543) to it by hand; do not read or write that file from this plan.
 
-- [ ] **Step 7: Verify the build**
+- [✅] **Step 7: Verify the build**
 
 Run: `npm run build`
 Expected: build succeeds — `lib/db.ts` and `lib/db/schema.ts` compile and type-check even though nothing imports them yet.
 
-- [ ] **Step 8: Commit**
+- [✅] **Step 8: Commit**
 
 ```bash
 git add lib/db.ts lib/db/schema.ts drizzle.config.ts package.json package-lock.json .env.template ../../devops/k8s/dev/secret.env.example
@@ -278,7 +278,7 @@ git commit -m "feat(db): add Drizzle ORM client and hand-written schema for Supa
 - Consumes: `db`, `users` from Task 1.
 - No test file exists for this module today (confirmed: no `lib/theme-actions.test.ts`) and none is added — out of scope, matching spec §5.
 
-- [ ] **Step 1: Replace `lib/theme-actions.ts` in full**
+- [✅] **Step 1: Replace `lib/theme-actions.ts` in full**
 
 ```ts
 'use server'
@@ -312,17 +312,17 @@ export async function loadThemeConfig(): Promise<ThemeConfig | null> {
 }
 ```
 
-- [ ] **Step 2: Verify the build**
+- [✅] **Step 2: Verify the build**
 
 Run: `npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Manual smoke check**
+- [✅] **Step 3: Manual smoke check**
 
 Run: `npm run dev`, log in, go to Admin → Theme, change a color token, click "Save Theme", reload the page.
 Expected: the customized value persists after reload (same behavior as before the migration).
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add lib/theme-actions.ts
@@ -341,7 +341,7 @@ git commit -m "refactor(theme): migrate theme-actions.ts to Drizzle"
 - Consumes: `db`, `users` from Task 1.
 - No unit test exists for `profile-actions.ts` today — none added, out of scope. E2E coverage exists: `sources/tests/e2e/test_profile.py`.
 
-- [ ] **Step 1: Replace `lib/profile-actions.ts` in full**
+- [✅] **Step 1: Replace `lib/profile-actions.ts` in full**
 
 ```ts
 'use server'
@@ -398,7 +398,7 @@ export async function saveProfile(profile: UserProfile): Promise<{ error: string
 }
 ```
 
-- [ ] **Step 2: Replace `app/(protected)/profile/page.tsx` in full**
+- [✅] **Step 2: Replace `app/(protected)/profile/page.tsx` in full**
 
 ```tsx
 import { redirect } from 'next/navigation'
@@ -437,17 +437,17 @@ export default async function ProfilePage() {
 }
 ```
 
-- [ ] **Step 3: Verify the build**
+- [✅] **Step 3: Verify the build**
 
 Run: `npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 4: Run the profile E2E suite**
+- [✅] **Step 4: Run the profile E2E suite**
 
 Run: `uv run pytest sources/tests/e2e/test_profile.py`
 Expected: all tests pass unchanged.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add lib/profile-actions.ts "app/(protected)/profile/page.tsx"
@@ -468,7 +468,7 @@ git commit -m "refactor(profile): migrate profile-actions.ts and profile page to
 - Produces: `toNavigationItemRow(row: typeof navigationItem.$inferSelect): NavigationItemRow` from `lib/rbac/nav-row-mapper.ts` — the single place that converts a Drizzle `navigation_item` row into the row shape the untouched pure helpers expect. Reused by Tasks 6 and 7.
 - Neither file has a unit test today; none added.
 
-- [ ] **Step 1: Write `lib/rbac/nav-row-mapper.ts`**
+- [✅] **Step 1: Write `lib/rbac/nav-row-mapper.ts`**
 
 ```ts
 import type { navigationItem } from '@/lib/db/schema'
@@ -493,7 +493,7 @@ export function toNavigationItemRow(r: typeof navigationItem.$inferSelect): Navi
 }
 ```
 
-- [ ] **Step 2: Replace `lib/rbac/navigation-service.ts` in full**
+- [✅] **Step 2: Replace `lib/rbac/navigation-service.ts` in full**
 
 ```ts
 import { cache } from 'react'
@@ -523,7 +523,7 @@ export const getSidebarMenu = cache(async (roleIds: number[]): Promise<MenuItem[
 })
 ```
 
-- [ ] **Step 3: Replace `lib/rbac/functionalities-service.ts` in full**
+- [✅] **Step 3: Replace `lib/rbac/functionalities-service.ts` in full**
 
 ```ts
 import { cache } from 'react'
@@ -573,17 +573,17 @@ export const getParentList = cache(async (): Promise<{ id: number; name: string 
 })
 ```
 
-- [ ] **Step 4: Verify the build**
+- [✅] **Step 4: Verify the build**
 
 Run: `npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 5: Run the RBAC E2E suites touching navigation**
+- [✅] **Step 5: Run the RBAC E2E suites touching navigation**
 
 Run: `uv run pytest sources/tests/e2e/test_sidebar.py sources/tests/e2e/test_functionalities.py sources/tests/e2e/test_rbac.py`
 Expected: all tests pass unchanged.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add lib/rbac/nav-row-mapper.ts lib/rbac/navigation-service.ts lib/rbac/functionalities-service.ts
@@ -602,7 +602,7 @@ git commit -m "refactor(rbac): migrate navigation-service.ts and functionalities
 - Consumes: `db`, `users`, `userRole` from Task 1; `USER_SORT_COLUMN`, `buildUserDtos`, `UserRow`, `UserRoleRow` from `lib/rbac/user-mappers.ts` (unchanged — still snake_case, `USER_SORT_COLUMN` still maps to snake_case column-name strings); `getAllRoles` from `lib/rbac/roles-service.ts` (unchanged signature).
 - Produces: `applyUserFilters(query: UsersQuery, ids: string[] | null): SQL[]` — signature change from the old `applyUserFilters(q, query, ids)` that mutated a chained query builder. It now returns an array of Drizzle conditions to be combined with `and(...)`. This is the pattern reused identically by `roles-service.ts` (Task 6).
 
-- [ ] **Step 1: Update the failing test for the new `applyUserFilters` signature**
+- [✅] **Step 1: Update the failing test for the new `applyUserFilters` signature**
 
 Replace `lib/rbac/users-service.test.ts` in full:
 
@@ -652,12 +652,12 @@ describe('applyUserFilters', () => {
 
 Note: the `.toContain` assertions check the shape of Drizzle's generated SQL (quoted `"table"."column"` identifiers). If the actual rendered text from `dialect.sqlToQuery(...)` differs (e.g. operator spacing), update the assertion to match what the failing test run actually prints — the `params` assertions are the load-bearing check and should not need adjustment.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [✅] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run lib/rbac/users-service.test.ts`
 Expected: FAIL — `applyUserFilters` still has the old 3-argument, builder-mutating signature.
 
-- [ ] **Step 3: Replace `lib/rbac/users-service.ts` in full**
+- [✅] **Step 3: Replace `lib/rbac/users-service.ts` in full**
 
 ```ts
 import { cache } from 'react'
@@ -766,17 +766,17 @@ export const countUsers = cache(async (query: UsersQuery): Promise<number> => {
 })
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [✅] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run lib/rbac/users-service.test.ts`
 Expected: PASS (5 tests).
 
-- [ ] **Step 5: Verify the build and the users E2E suite**
+- [✅] **Step 5: Verify the build and the users E2E suite**
 
 Run: `npm run build && uv run pytest sources/tests/e2e/test_users.py`
 Expected: build succeeds; all E2E tests pass unchanged.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add lib/rbac/users-service.ts lib/rbac/users-service.test.ts
@@ -795,7 +795,7 @@ git commit -m "refactor(rbac): migrate users-service.ts to Drizzle, rewrite appl
 - Consumes: `db`, `roleListView`, `navigationItem`, `roleItem` from Task 1; `toNavigationItemRow` from Task 4; `buildAuthTree` from `permission-tree.ts` (unchanged); `nextDay` from `date-utils.ts` (unchanged).
 - Produces: `applyFilters(query: RolesQuery): SQL[]` — same condition-array pattern as `applyUserFilters` (Task 5), consumed only within this file.
 
-- [ ] **Step 1: Update the failing test for the new `applyFilters` signature**
+- [✅] **Step 1: Update the failing test for the new `applyFilters` signature**
 
 Replace `lib/rbac/roles-service.test.ts` in full:
 
@@ -857,12 +857,12 @@ describe('applyFilters', () => {
 
 Note: same caveat as Task 5 — if the exact `.sql` substrings don't match Drizzle's actual output, adjust them to what the failing run prints; `params` assertions are load-bearing.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [✅] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run lib/rbac/roles-service.test.ts`
 Expected: FAIL — `applyFilters` still has the old single-generic-builder signature.
 
-- [ ] **Step 3: Replace `lib/rbac/roles-service.ts` in full**
+- [✅] **Step 3: Replace `lib/rbac/roles-service.ts` in full**
 
 ```ts
 import { cache } from 'react'
@@ -994,17 +994,17 @@ export const getRoleAuthorizationTree = cache(
 )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [✅] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run lib/rbac/roles-service.test.ts`
 Expected: PASS (7 tests).
 
-- [ ] **Step 5: Verify the build and the roles E2E suite**
+- [✅] **Step 5: Verify the build and the roles E2E suite**
 
 Run: `npm run build && uv run pytest sources/tests/e2e/test_roles.py`
 Expected: build succeeds; all E2E tests pass unchanged.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add lib/rbac/roles-service.ts lib/rbac/roles-service.test.ts
@@ -1022,7 +1022,7 @@ git commit -m "refactor(rbac): migrate roles-service.ts to Drizzle, rewrite appl
 - Consumes: `db`, `navigationItem` from Task 1; `toNavigationItemRow` from Task 4; `sanitizeSvg`, `canDeleteSubtree`, `isDescendant`, `requireAdmin` — all unchanged.
 - No unit test exists for this module; none added.
 
-- [ ] **Step 1: Replace `lib/rbac/navigation-actions.ts` in full**
+- [✅] **Step 1: Replace `lib/rbac/navigation-actions.ts` in full**
 
 ```ts
 'use server'
@@ -1169,17 +1169,17 @@ export async function deleteNavigationItem(id: number): Promise<void> {
 }
 ```
 
-- [ ] **Step 2: Verify the build**
+- [✅] **Step 2: Verify the build**
 
 Run: `npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Run the functionalities E2E suite**
+- [✅] **Step 3: Run the functionalities E2E suite**
 
 Run: `uv run pytest sources/tests/e2e/test_functionalities.py`
 Expected: all tests pass unchanged (covers create/update/move/delete of navigation items and tags).
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add lib/rbac/navigation-actions.ts
@@ -1199,7 +1199,7 @@ git commit -m "refactor(rbac): migrate navigation-actions.ts to Drizzle"
 - `computeIsAdmin` is a pure function untouched by this task; its test (`auth-roles.test.ts`) needs no changes.
 - No unit test exists for `resolveUserRoleIds`; none added.
 
-- [ ] **Step 1: Replace `lib/rbac/users-actions.ts` in full**
+- [✅] **Step 1: Replace `lib/rbac/users-actions.ts` in full**
 
 ```ts
 'use server'
@@ -1288,7 +1288,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
 }
 ```
 
-- [ ] **Step 2: Replace `lib/rbac/auth-roles.ts` in full**
+- [✅] **Step 2: Replace `lib/rbac/auth-roles.ts` in full**
 
 ```ts
 import { eq } from 'drizzle-orm'
@@ -1315,17 +1315,17 @@ export async function resolveUserRoleIds(userId: string): Promise<number[]> {
 }
 ```
 
-- [ ] **Step 3: Run the existing `auth-roles.test.ts` to confirm `computeIsAdmin` is unaffected**
+- [✅] **Step 3: Run the existing `auth-roles.test.ts` to confirm `computeIsAdmin` is unaffected**
 
 Run: `npx vitest run lib/rbac/auth-roles.test.ts`
 Expected: PASS (unchanged — 2 tests).
 
-- [ ] **Step 4: Verify the build and the users/RBAC E2E suites**
+- [✅] **Step 4: Verify the build and the users/RBAC E2E suites**
 
 Run: `npm run build && uv run pytest sources/tests/e2e/test_users.py sources/tests/e2e/test_rbac.py`
 Expected: build succeeds; all E2E tests pass unchanged (covers role assignment and status/deactivation lockout rules).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add lib/rbac/users-actions.ts lib/rbac/auth-roles.ts
@@ -1343,7 +1343,7 @@ git commit -m "refactor(rbac): migrate users-actions.ts and auth-roles.ts to Dri
 - Consumes: `db`, `role`, `roleType` from Task 1; `requireAdmin` unchanged.
 - No unit test exists for this module; none added.
 
-- [ ] **Step 1: Replace `lib/rbac/roles-actions.ts` in full**
+- [✅] **Step 1: Replace `lib/rbac/roles-actions.ts` in full**
 
 ```ts
 'use server'
@@ -1424,17 +1424,17 @@ export async function deleteRole(roleId: number): Promise<void> {
 }
 ```
 
-- [ ] **Step 2: Verify the build**
+- [✅] **Step 2: Verify the build**
 
 Run: `npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Run the roles E2E suite**
+- [✅] **Step 3: Run the roles E2E suite**
 
 Run: `uv run pytest sources/tests/e2e/test_roles.py`
 Expected: all tests pass unchanged (covers create/rename/delete role and permission grant/revoke).
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add lib/rbac/roles-actions.ts
@@ -1453,7 +1453,7 @@ The most delicate module (login, upsert-on-first-login). No unit tests exist tod
 **Interfaces:**
 - Consumes: `db`, `users`, `allowedDomains` from Task 1; `resolveUserRoleIds`, `computeIsAdmin` from Task 8 (unchanged signatures); `authConfig`, `createLogger` unchanged.
 
-- [ ] **Step 1: Replace `lib/auth.ts` in full**
+- [✅] **Step 1: Replace `lib/auth.ts` in full**
 
 ```ts
 import NextAuth, { CredentialsSignin } from 'next-auth'
@@ -1656,22 +1656,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 })
 ```
 
-- [ ] **Step 2: Verify the build**
+- [✅] **Step 2: Verify the build**
 
 Run: `npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Run the full auth-related E2E suites**
+- [✅] **Step 3: Run the full auth-related E2E suites**
 
 Run: `uv run pytest sources/tests/e2e/test_auth.py sources/tests/e2e/test_register.py`
 Expected: all tests pass unchanged (login redirect, test-credentials login, register/forgot-password confirmation screens).
 
-- [ ] **Step 4: Manual OIDC smoke check**
+- [✅] **Step 4: Manual OIDC smoke check**
 
 Run: `npm run dev`, sign in with the credentials provider (or the test-credentials provider if `AUTH_TEST_CREDENTIALS=true` locally) using an account that already exists, then with a brand-new email in an allowed domain.
 Expected: existing user logs in and lands on the home page with the correct role/admin state; a brand-new email gets a `users` row upserted and the Registered-user role attached (unchanged behavior).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add lib/auth.ts
@@ -1695,7 +1695,7 @@ git commit -m "refactor(auth): migrate lib/auth.ts to Drizzle"
 - `app/api/auth/register/route.ts`'s original `insert({ ..., role: 'user', ... })` referenced a `role` column that `schema.sql:48` already drops (`alter table users drop column if exists role`) — this field is removed here since `lib/db/schema.ts`'s `users` table has no `role` column to assign it to; this is a pre-existing dead/broken field, not a behavior change to anything actually persisted today.
 - No unit tests exist for any of these files; none added. E2E coverage: `sources/tests/e2e/test_register.py` covers register + forgot-password. `set-password`, `change-password`, and `send-invite` have no E2E coverage — verify those three manually.
 
-- [ ] **Step 1: Replace `app/api/auth/register/route.ts` in full**
+- [✅] **Step 1: Replace `app/api/auth/register/route.ts` in full**
 
 ```ts
 import { NextRequest, NextResponse } from 'next/server'
@@ -1807,7 +1807,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [ ] **Step 2: Replace `app/api/auth/forgot-password/route.ts` in full**
+- [✅] **Step 2: Replace `app/api/auth/forgot-password/route.ts` in full**
 
 ```ts
 import { NextRequest, NextResponse } from 'next/server'
@@ -1888,7 +1888,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [ ] **Step 3: Replace `app/api/auth/set-password/route.ts` in full**
+- [✅] **Step 3: Replace `app/api/auth/set-password/route.ts` in full**
 
 ```ts
 import { NextRequest, NextResponse } from 'next/server'
@@ -1957,7 +1957,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [ ] **Step 4: Replace `app/api/auth/change-password/route.ts` in full**
+- [✅] **Step 4: Replace `app/api/auth/change-password/route.ts` in full**
 
 ```ts
 import { NextRequest, NextResponse } from 'next/server'
@@ -2018,7 +2018,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [ ] **Step 5: Replace `app/api/admin/send-invite/route.ts` in full**
+- [✅] **Step 5: Replace `app/api/admin/send-invite/route.ts` in full**
 
 ```ts
 import { NextRequest, NextResponse } from 'next/server'
@@ -2098,7 +2098,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [ ] **Step 6: Replace `app/set-password/page.tsx` in full**
+- [✅] **Step 6: Replace `app/set-password/page.tsx` in full**
 
 ```tsx
 import { eq } from 'drizzle-orm'
@@ -2176,24 +2176,24 @@ export default async function SetPasswordPage({ searchParams }: Props) {
 }
 ```
 
-- [ ] **Step 7: Verify the build**
+- [✅] **Step 7: Verify the build**
 
 Run: `npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 8: Run the register/forgot-password E2E suite**
+- [✅] **Step 8: Run the register/forgot-password E2E suite**
 
 Run: `uv run pytest sources/tests/e2e/test_register.py`
 Expected: all tests pass unchanged.
 
-- [ ] **Step 9: Manual checks for the flows with no E2E coverage**
+- [✅] **Step 9: Manual checks for the flows with no E2E coverage**
 
 Run: `npm run dev` and manually exercise:
 - Set-password: register a new user (or use the admin "send invite" action), open the emailed/logged `set-password` link, submit a new password, confirm login with it works and the link is rejected as "già utilizzato" on a second submit.
 - Change-password: log in with a credentials user, go to the change-password form, submit a wrong current password (expect rejection), then the correct one (expect success + re-auth prompt).
 - Send-invite: as an admin, trigger "send invite" for an existing user from the Users admin page, confirm the invite email is logged/sent and the resulting link works.
 
-- [ ] **Step 10: Commit**
+- [✅] **Step 10: Commit**
 
 ```bash
 git add app/api/auth/register/route.ts app/api/auth/forgot-password/route.ts app/api/auth/set-password/route.ts app/api/auth/change-password/route.ts app/api/admin/send-invite/route.ts app/set-password/page.tsx
@@ -2211,29 +2211,29 @@ git commit -m "refactor(auth): migrate remaining API routes and set-password pag
 **Interfaces:**
 - Consumes: nothing new — this task only removes what is now unused, after Tasks 1–11 have moved every call site to `db`.
 
-- [ ] **Step 1: Confirm no application code still imports the old client**
+- [✅] **Step 1: Confirm no application code still imports the old client**
 
 Run: `grep -r "supabase-server\|createAdminClient\|@supabase/supabase-js" --include="*.ts" --include="*.tsx" . | grep -v node_modules`
 Expected: only `lib/supabase-server.ts` itself (its own definition) appears — no other file references it.
 
-- [ ] **Step 2: Delete `lib/supabase-server.ts`**
+- [✅] **Step 2: Delete `lib/supabase-server.ts`**
 
 ```bash
 git rm lib/supabase-server.ts
 ```
 
-- [ ] **Step 3: Remove the dependency**
+- [✅] **Step 3: Remove the dependency**
 
 ```bash
 npm uninstall @supabase/supabase-js
 ```
 
-- [ ] **Step 4: Migration closure check**
+- [✅] **Step 4: Migration closure check**
 
 Run: `grep -r "@supabase/supabase-js" --include="*.ts" --include="*.tsx" . | grep -v node_modules`
 Expected: no output (package.json no longer lists it, and no import references it).
 
-- [ ] **Step 5: Full verification**
+- [✅] **Step 5: Full verification**
 
 Run: `npm run build && npm run lint && npx vitest run`
 Expected: build succeeds, lint is clean, all Vitest suites pass.
@@ -2241,7 +2241,7 @@ Expected: build succeeds, lint is clean, all Vitest suites pass.
 Run: `uv run pytest`
 Expected: the entire E2E suite passes.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add package.json package-lock.json

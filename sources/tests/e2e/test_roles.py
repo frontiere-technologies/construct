@@ -3,30 +3,7 @@ import time
 from datetime import date, timedelta
 
 from playwright.sync_api import expect
-from helpers import nav
-
-
-def _open_column_filter(page, col_id: str):
-    """Click the funnel icon on a column header to open its filter popup.
-
-    Note: the installed AG Grid build uses the Theming API (not the legacy
-    CSS themes), so the clickable filter icon is `[data-ref="eFilterButton"]`
-    (class `ag-header-cell-filter-button`) — the `ag-filter-icon` class only
-    marks the (usually hidden) "filter active" indicator, not the button.
-    """
-    header = page.locator(f'.ag-header-cell[col-id="{col_id}"]')
-    header.locator('.ag-header-cell-filter-button').click()
-
-
-def _rows(page):
-    """All data rows in the grid.
-
-    Note: with the Theming API build in use here, rows live directly under
-    `.ag-grid-scrolling-rows` — there is no `.ag-center-cols-container`
-    wrapper (that class belongs to the legacy CSS theme DOM). Since this
-    grid has no pinned columns, `.ag-row` alone is unambiguous.
-    """
-    return page.locator('.ag-row')
+from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows
 
 
 def _search(page, base_url, name):
