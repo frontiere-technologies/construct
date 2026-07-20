@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight } from 'lucide-react'
+import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import clsx from 'clsx'
 import { useUI } from '@/context/UIContext'
 import { useAuth } from '@/context/AuthContext'
@@ -39,6 +39,7 @@ const ICON_COL_W = 'w-16'
 const TEXT_COL_W = 'w-52'
 const ICON_SUB_W = 'w-14'
 const TEXT_SUB_W = 'w-48'
+const RAIL_W = 'w-8'
 const COLLAPSE_KEY = 'sidebarCollapseState'
 
 interface TooltipState { text: string; top: number; left: number }
@@ -178,7 +179,7 @@ const SubItem: React.FC<SubItemProps> = ({
   )
 }
 
-const readCollapse = (key: 'col1' | 'col2' | 'col3', defaultValue: boolean): boolean => {
+const readCollapse = (key: 'col1' | 'col2' | 'col3' | 'master', defaultValue: boolean): boolean => {
   try {
     const saved = localStorage.getItem(COLLAPSE_KEY)
     if (!saved) return defaultValue
@@ -212,19 +213,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   const [col1Collapsed, setCol1Collapsed] = useState<boolean>(true)
   const [col2Collapsed, setCol2Collapsed] = useState<boolean>(false)
   const [col3Collapsed, setCol3Collapsed] = useState<boolean>(false)
+  const [masterCollapsed, setMasterCollapsed] = useState<boolean>(false)
 
   // Load from localStorage after mount to avoid SSR hydration mismatch
   useEffect(() => {
     setCol1Collapsed(readCollapse('col1', true))
     setCol2Collapsed(readCollapse('col2', false))
     setCol3Collapsed(readCollapse('col3', false))
+    setMasterCollapsed(readCollapse('master', false))
   }, [])
 
   useEffect(() => {
     try {
-      localStorage.setItem(COLLAPSE_KEY, JSON.stringify({ col1: col1Collapsed, col2: col2Collapsed, col3: col3Collapsed }))
+      localStorage.setItem(COLLAPSE_KEY, JSON.stringify({ col1: col1Collapsed, col2: col2Collapsed, col3: col3Collapsed, master: masterCollapsed }))
     } catch { /* ignore quota errors */ }
-  }, [col1Collapsed, col2Collapsed, col3Collapsed])
+  }, [col1Collapsed, col2Collapsed, col3Collapsed, masterCollapsed])
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const showTooltip = useCallback((e: React.MouseEvent, text: string) => {
@@ -351,11 +354,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         document.body
       )}
 
+      {!masterCollapsed && (
+      <>
       <aside className={clsx(
         'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
         col1Collapsed ? ICON_COL_W : TEXT_COL_W
       )}>
         <ColToggle collapsed={col1Collapsed} onToggle={() => setCol1Collapsed(c => !c)} />
+
+        <div className="p-2 border-b border-sidebar-text/10">
+          <button
+            data-testid="sidebar-master-toggle"
+            onClick={() => setMasterCollapsed(true)}
+            title="Collassa menu"
+            className={clsx(
+              'w-full flex items-center rounded-lg py-2 px-3 text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text transition-colors duration-200',
+              col1Collapsed ? 'justify-center' : 'gap-3'
+            )}
+          >
+            <PanelLeftClose size={20} className="flex-shrink-0" />
+            {!col1Collapsed && <span className="text-sm">Collassa menu</span>}
+          </button>
+        </div>
 
         {topItems.length > 0 && (
           <div className="p-2 border-b border-sidebar-text/10 space-y-1">
@@ -531,6 +551,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                 onContainerClick={() => handleL2Click(item)} />
             ))}
           </div>
+        </aside>
+      )}
+      </>
+      )}
+
+      {masterCollapsed && (
+        <aside className={clsx(
+          'h-screen bg-sidebar-bg border-r border-sidebar-text/10 flex flex-col items-center flex-shrink-0',
+          RAIL_W
+        )}>
+          <button
+            data-testid="sidebar-collapsed-rail"
+            onClick={() => setMasterCollapsed(false)}
+            title="Espandi menu"
+            className="mt-2 p-1.5 rounded-lg text-sidebar-text/60 hover:bg-sidebar-active-bg hover:text-sidebar-active-text"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
         </aside>
       )}
     </div>
