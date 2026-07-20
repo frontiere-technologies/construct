@@ -129,6 +129,41 @@ def test_filter_by_creation_date_range(logged_in_page, base_url):
     expect(page).to_have_url(re.compile("createdTo="))
 
 
+def test_status_toggle_updates_grid_in_place(logged_in_page, base_url):
+    """Covers the 88abae4 fix: toggling a user's status must refresh the AG Grid
+    row via gridApi.refreshInfiniteCache() alone, with no page navigation/reload.
+    Scopes assertions to the row's own `row-id` attribute (the user's id) rather
+    than "some badge somewhere", and asserts the URL never changes, so this test
+    would fail if the refreshInfiniteCache() call were removed from toggleStatus.
+    """
+    page = logged_in_page
+    nav(page, f"{base_url}/user-management")
+    url_before = page.url
+
+    row = _rows(page).first
+    row_id = row.get_attribute("row-id")
+    badge = row.locator('[data-testid="status-badge"]')
+    original_text = badge.inner_text()
+    assert original_text in ("Attivo", "Disattivato")
+    flipped_text = "Disattivato" if original_text == "Attivo" else "Attivo"
+
+    # Re-locate the row by its stable row-id after each toggle: refreshInfiniteCache()
+    # refetches the current blocks, which can reorder rows, but the same user id
+    # must still be present with the flipped status — without any navigation.
+    row_by_id = page.locator(f'.ag-row[row-id="{row_id}"]')
+
+    page.once("dialog", lambda d: d.accept())
+    badge.click()
+    expect(row_by_id.locator('[data-testid="status-badge"]')).to_have_text(flipped_text)
+    expect(page).to_have_url(url_before)
+
+    # Restore original state so the test doesn't leave data mutated.
+    page.once("dialog", lambda d: d.accept())
+    row_by_id.locator('[data-testid="status-badge"]').click()
+    expect(row_by_id.locator('[data-testid="status-badge"]')).to_have_text(original_text)
+    expect(page).to_have_url(url_before)
+
+
 def test_column_visibility_toggle(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/user-management")
