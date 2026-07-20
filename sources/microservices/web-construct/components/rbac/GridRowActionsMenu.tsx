@@ -39,7 +39,7 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
   const items = params.getItems(params.data)
 
   return (
-    <div className="flex justify-end" onClick={e => e.stopPropagation()}>
+    <div className="flex justify-end" data-grid-no-row-click onClick={e => e.stopPropagation()}>
       <button
         data-testid={`row-menu-${rowId}`}
         onClick={e => {

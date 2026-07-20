@@ -53,7 +53,11 @@ export default function DataGrid<T>({
         }}
         onFilterChanged={onFilterChanged}
         onSortChanged={onSortChanged}
-        onRowClicked={onRowClicked ? e => { if (e.data) onRowClicked(e.data) } : undefined}
+        onRowClicked={onRowClicked ? e => {
+          const target = e.event?.target as HTMLElement | null
+          if (target?.closest('[data-grid-no-row-click]')) return
+          if (e.data) onRowClicked(e.data)
+        } : undefined}
         onGridReady={onGridReady}
       />
     </div>
