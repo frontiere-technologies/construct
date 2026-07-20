@@ -103,7 +103,9 @@ def test_inputs_disabled_while_saving(logged_in_page, base_url):
     picker = page.locator('input[type="color"]').first
     page.get_by_role("button", name="Salva", exact=True).click()
     expect(picker).to_be_disabled()
+    expect(page.locator('input[type="color"]').nth(1)).to_be_disabled()
     expect(page.get_by_role("button", name="Reset", exact=True)).to_be_disabled()
     expect(page.get_by_role("button", name="Annulla", exact=True)).to_be_disabled()
     page.locator("text=Theme saved.").wait_for(state="visible", timeout=10_000)
     expect(picker).to_be_enabled()
+    expect(page.locator('input[type="color"]').nth(1)).to_be_enabled()
