@@ -20,7 +20,7 @@ def _create_role(page, base_url, name):
     nav(page, f"{base_url}/roles-permissions")
     page.get_by_role("button", name="Nuovo ruolo").click()
     page.get_by_placeholder("Nome ruolo").fill(name)
-    page.get_by_role("button", name="Crea nuovo ruolo").click()
+    page.get_by_role("button", name="Salva").click()
     # Higher timeout: first hit to the detail route triggers Next.js dev-mode compilation (~3-5s)
     page.wait_for_url("**/roles-permissions/**", timeout=15_000)
     return page.url
