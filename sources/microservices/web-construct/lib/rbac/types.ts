@@ -97,6 +97,9 @@ export interface RolesQuery {
 
 export interface RolesPage {
   pagination: { currentElements: number; currentPage: number; totalPages: number }
+  /** Exact row count across all pages (from the same COUNT() query used for totalPages), so
+   * grid datasources can compute an exact lastRow instead of a `< pageSize` length heuristic. */
+  total: number
   elements: RolePageItemDto[]
 }
 

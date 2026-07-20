@@ -1,40 +1,24 @@
-import { listUsers } from '@/lib/rbac/users-service'
 import { getAllRoles } from '@/lib/rbac/roles-service'
 import UsersTableClient from '@/components/rbac/users/UsersTableClient'
 import type { UsersQuery, UserStatusId } from '@/lib/rbac/types'
 
 export default async function UserManagementPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams
-  const query: UsersQuery = {
-    page: Number(sp.page ?? '0'),
-    size: 10,
-    search: sp.search,
-    sort: (sp.sort as UsersQuery['sort']) ?? 'dateIns',
-    direction: (sp.direction as 'ASC' | 'DESC') ?? 'DESC',
-    roleIds: sp.roleIds ? sp.roleIds.split(',').map(Number) : undefined,
-    statuses: sp.statuses ? (sp.statuses.split(',').map(Number) as UserStatusId[]) : undefined,
-    createdFrom: sp.createdFrom,
-    createdTo: sp.createdTo,
-  }
-  const [{ users, total }, allRolesRaw] = await Promise.all([listUsers(query), getAllRoles()])
-  const totalPages = Math.max(1, Math.ceil(total / query.size))
+  const allRolesRaw = await getAllRoles()
   const allRoles = allRolesRaw.map(r => ({ id: r.id, name: r.description }))
 
   return (
     <div className="max-w-7xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Utenti</h1>
       <UsersTableClient
-        rows={users}
-        page={query.page}
-        totalPages={totalPages}
-        sortField={query.sort ?? 'dateIns'}
-        sortDir={query.direction ?? 'DESC'}
-        search={query.search ?? ''}
+        sortField={(sp.sort as UsersQuery['sort']) ?? 'dateIns'}
+        sortDir={(sp.direction as 'ASC' | 'DESC') ?? 'DESC'}
+        search={sp.search ?? ''}
         allRoles={allRoles}
-        roleId={query.roleIds?.[0] ?? null}
-        statusId={query.statuses?.[0] ?? null}
-        createdFrom={query.createdFrom ?? null}
-        createdTo={query.createdTo ?? null}
+        roleId={sp.roleIds ? Number(sp.roleIds.split(',')[0]) : null}
+        statusId={sp.statuses ? (Number(sp.statuses.split(',')[0]) as UserStatusId) : null}
+        createdFrom={sp.createdFrom ?? null}
+        createdTo={sp.createdTo ?? null}
       />
     </div>
   )

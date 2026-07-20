@@ -3,7 +3,7 @@ import pytest
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-from helpers import do_test_login
+from helpers import do_test_login, nav
 
 _env_file = Path(__file__).parent / ".env.test"
 if _env_file.exists():
@@ -52,15 +52,46 @@ def page(browser):
     ctx.close()
 
 
-@pytest.fixture
-def logged_in_page(page, base_url, test_email):
-    """Authenticated admin page."""
-    do_test_login(page, base_url, test_email)
-    yield page
+def _login_once(browser, base_url, email):
+    """Run the real login flow once and capture the resulting storage state
+    (session cookie), so per-test fixtures can start already-authenticated
+    contexts instead of repeating the login UI flow for every test."""
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+    p = ctx.new_page()
+    do_test_login(p, base_url, email)
+    state = ctx.storage_state()
+    ctx.close()
+    return state
+
+
+@pytest.fixture(scope="session")
+def admin_storage_state(browser, base_url, test_email):
+    return _login_once(browser, base_url, test_email)
+
+
+@pytest.fixture(scope="session")
+def non_admin_storage_state(browser, base_url, test_email_user):
+    return _login_once(browser, base_url, test_email_user)
 
 
 @pytest.fixture
-def non_admin_page(page, base_url, test_email_user):
-    """Authenticated non-admin page."""
-    do_test_login(page, base_url, test_email_user)
-    yield page
+def logged_in_page(browser, base_url, admin_storage_state):
+    """Authenticated admin page, reusing the session-scoped login's storage
+    state so each test starts a fresh (isolated) but already-logged-in context.
+    Lands on `/`, matching do_test_login's end state (tests rely on this)."""
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900}, storage_state=admin_storage_state)
+    p = ctx.new_page()
+    nav(p, f"{base_url}/")
+    yield p
+    ctx.close()
+
+
+@pytest.fixture
+def non_admin_page(browser, base_url, non_admin_storage_state):
+    """Authenticated non-admin page, reusing the session-scoped login's storage state.
+    Lands on `/`, matching do_test_login's end state (tests rely on this)."""
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900}, storage_state=non_admin_storage_state)
+    p = ctx.new_page()
+    nav(p, f"{base_url}/")
+    yield p
+    ctx.close()

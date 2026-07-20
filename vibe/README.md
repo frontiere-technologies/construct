@@ -72,8 +72,6 @@ curl -sL https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagen
 curl -sL https://raw.githubusercontent.com/VoltAgent/awesome-claude-code-subagents/refs/heads/main/categories/04-quality-security/ui-ux-tester.md -o .claude/agents/ui-ux-tester.md
 ```
 
-These three (`architect-reviewer`, `code-reviewer`, `ui-ux-tester`) are already installed in this repo and used by the review process below.
-
 Do not install the [VoltAgent subagents marketplace](https://github.com/VoltAgent/awesome-claude-code-subagents/tree/main/categories) as a whole — copy only the agent definitions actually needed into the repository.
 
 For Copilot/OpenAI/Gemini, equivalent agent definitions go in the tool-specific config directory listed in the table in step 1.
@@ -165,3 +163,5 @@ Spawn each as a subagent rather than running the review inline.
 ## To be evaluated
 
 - https://github.com/thedotmack/claude-mem
+- https://context7.com/
+- claude-plugins-official: frontend-design. code-review, code-simplifier

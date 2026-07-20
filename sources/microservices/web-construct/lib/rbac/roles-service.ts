@@ -64,6 +64,7 @@ export const listRoles = cache(async (query: RolesQuery): Promise<RolesPage> => 
       currentPage: query.page,
       totalPages: Math.max(1, Math.ceil(total / query.size)),
     },
+    total,
     elements,
   }
 })
