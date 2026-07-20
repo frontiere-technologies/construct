@@ -125,14 +125,22 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
             </div>
           </div>
 
-          {/* Save button */}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full mt-6 py-2 px-4 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-          >
-            {saving ? 'Saving…' : 'Save Profile'}
-          </button>
+          {/* Actions */}
+          <div className="flex gap-3 mt-6">
+            <button
+              onClick={() => { setProfile(initialProfile); setStatus(null) }}
+              className="flex-1 py-2 px-4 rounded-lg border border-border text-sm font-medium hover:bg-surface-hover transition-colors"
+            >
+              Annulla
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-2 px-4 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              {saving ? 'Saving…' : 'Salva'}
+            </button>
+          </div>
 
           {/* Status message */}
           {status && (

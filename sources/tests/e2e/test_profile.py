@@ -37,7 +37,7 @@ def test_profile_save_and_persist(profile_page, base_url):
 
     first_name_input = page.locator('input[type="text"]').first
     first_name_input.fill("E2E Test User")
-    page.get_by_role("button", name="Save Profile").click()
+    page.get_by_role("button", name="Salva").click()
     page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
 
     page.reload()
@@ -47,7 +47,7 @@ def test_profile_save_and_persist(profile_page, base_url):
 
     # Cleanup
     page.locator('input[type="text"]').first.fill("")
-    page.get_by_role("button", name="Save Profile").click()
+    page.get_by_role("button", name="Salva").click()
     page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
 
 
@@ -56,7 +56,7 @@ def test_profile_phone_rejects_invalid_format(profile_page):
 
     phone_input = page.locator('input[type="tel"]')
     phone_input.fill("123")
-    page.get_by_role("button", name="Save Profile").click()
+    page.get_by_role("button", name="Salva").click()
     page.locator("text=Numero di telefono non valido").wait_for(state="visible", timeout=10_000)
 
     # Cleanup: field is unsaved, but clear the input for test isolation
@@ -68,7 +68,7 @@ def test_profile_phone_accepts_e164_format(profile_page):
 
     phone_input = page.locator('input[type="tel"]')
     phone_input.fill("+14155552671")
-    page.get_by_role("button", name="Save Profile").click()
+    page.get_by_role("button", name="Salva").click()
     page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
 
     page.reload()
@@ -78,7 +78,7 @@ def test_profile_phone_accepts_e164_format(profile_page):
 
     # Cleanup
     page.locator('input[type="tel"]').fill("")
-    page.get_by_role("button", name="Save Profile").click()
+    page.get_by_role("button", name="Salva").click()
     page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
 
 
@@ -88,7 +88,7 @@ def test_profile_phone_trims_whitespace_on_persist(profile_page):
     phone_input = page.locator('input[type="tel"]')
     # Submit a whitespace-padded valid E.164 number
     phone_input.fill("  +14155552671  ")
-    page.get_by_role("button", name="Save Profile").click()
+    page.get_by_role("button", name="Salva").click()
     page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
 
     page.reload()
@@ -99,5 +99,21 @@ def test_profile_phone_trims_whitespace_on_persist(profile_page):
 
     # Cleanup
     page.locator('input[type="tel"]').fill("")
-    page.get_by_role("button", name="Save Profile").click()
+    page.get_by_role("button", name="Salva").click()
     page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
+
+
+def test_profile_annulla_discards_changes(profile_page):
+    page = profile_page
+    first_name_input = page.locator('input[type="text"]').first
+    original_value = first_name_input.input_value()
+
+    first_name_input.fill("Should Not Persist")
+    page.get_by_role("button", name="Annulla").click()
+
+    assert first_name_input.input_value() == original_value
+
+    page.reload()
+    page.wait_for_load_state("networkidle")
+    reloaded = page.locator('input[type="text"]').first.input_value()
+    assert reloaded == original_value, "Annulla must not persist the discarded value"
