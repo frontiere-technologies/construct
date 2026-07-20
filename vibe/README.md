@@ -162,6 +162,6 @@ Spawn each as a subagent rather than running the review inline.
 
 ## To be evaluated
 
-- https://github.com/thedotmack/claude-mem
-- https://context7.com/
 - claude-plugins-official: frontend-design. code-review, code-simplifier
+- https://github.com/thedotmack/claude-mem
+- https://context7.com/ - Get the latest docs into Claude, Codex, Cursor, and other agents
