@@ -16,14 +16,26 @@ type Props = CustomFilterProps<unknown, unknown, EnumFilterModel> & { options: E
 // doesFilterPass identity again, which schedules another filterChanged, forever).
 const alwaysPass = () => true
 
-export default function EnumSelectFilter({ model, onModelChange, options }: Props) {
+export default function EnumSelectFilter({ model, onModelChange, options, api }: Props) {
   useGridFilter({ doesFilterPass: alwaysPass })
+
+  // Explicit close-on-select: this filter has no "Apply" button, and AG Grid doesn't
+  // auto-close a custom filter's popup on model change (unlike its built-in filters).
+  // Previously this table's `columnDefs` happened to get a new reference on every
+  // filter-apply navigation, which forced AG Grid to recreate the filter and incidentally
+  // closed the popup — a side effect, not a deliberate behavior, and one that stopped
+  // happening once `columnDefs` was memoized more stably. Calling this directly makes the
+  // close-on-select behavior explicit and consistent everywhere this component is used.
+  const select = (value: EnumFilterModel | null) => {
+    onModelChange(value)
+    api.hidePopupMenu()
+  }
 
   return (
     <div className="w-48 p-1">
       <button
         type="button"
-        onClick={() => onModelChange(null)}
+        onClick={() => select(null)}
         className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded hover:bg-surface-hover ${model == null ? 'font-medium' : 'text-foreground-secondary'}`}
       >
         <span className="flex-1">Tutti</span>
@@ -36,7 +48,7 @@ export default function EnumSelectFilter({ model, onModelChange, options }: Prop
             key={opt.value}
             type="button"
             data-testid={`filter-option-${opt.value}`}
-            onClick={() => onModelChange(selected ? null : { value: opt.value })}
+            onClick={() => select(selected ? null : { value: opt.value })}
             className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded hover:bg-surface-hover ${selected ? 'font-medium' : 'text-foreground-secondary'}`}
           >
             <span className="flex-1">{opt.label}</span>

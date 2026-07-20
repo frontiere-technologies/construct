@@ -68,6 +68,12 @@ export default function UsersTableClient(props: Props) {
 
   const datasource = useMemo(() => createUsersDatasource(), [])
 
+  // `page.tsx` re-fetches and re-maps `allRoles` on every filter/sort navigation, so
+  // `props.allRoles` is a new array reference each time even when its content is identical.
+  // Keying the memo on this derived string instead of the array itself avoids rebuilding
+  // columnDefs (and the Ruolo filter's option list) on every unrelated interaction.
+  const allRolesKey = props.allRoles.map(r => `${r.id}:${r.name}`).join('|')
+
   const columnDefs = useMemo<ColDef<UserDTO>[]>(() => [
     {
       colId: 'firstName', headerName: 'Utente', sortable: true,
@@ -103,7 +109,7 @@ export default function UsersTableClient(props: Props) {
         getItems: (u: UserDTO) => [{ label: 'Gestisci ruoli', onClick: () => setManaging(u) }],
       },
     },
-  ], [props.allRoles])
+  ], [allRolesKey]) // eslint-disable-line react-hooks/exhaustive-deps -- allRolesKey stands in for props.allRoles (see comment above)
 
   const onFilterChanged = (event: FilterChangedEvent<UserDTO>) => {
     const model = event.api.getFilterModel() as UsersGridFilterModel
