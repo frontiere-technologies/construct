@@ -55,6 +55,10 @@ export default function DataGrid<T>({
         onSortChanged={onSortChanged}
         onRowClicked={onRowClicked ? e => {
           const target = e.event?.target as HTMLElement | null
+          // Paired with the `data-grid-no-row-click` attribute (see GridRowActionsMenu):
+          // AG Grid's row-click listener is native DOM, so a cell's React onClick calling
+          // stopPropagation() never reaches it — this .closest() check is the only way to
+          // opt a cell (e.g. the actions column) out of row-click navigation.
           if (target?.closest('[data-grid-no-row-click]')) return
           if (e.data) onRowClicked(e.data)
         } : undefined}
