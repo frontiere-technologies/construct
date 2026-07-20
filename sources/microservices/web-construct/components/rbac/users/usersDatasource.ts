@@ -23,9 +23,13 @@ export function createUsersDatasource(): IDatasource {
           if (!res.ok) throw new Error(`Request failed with status ${res.status}`)
           return res.json() as Promise<{ users: UserDTO[]; total: number }>
         })
-        .then(({ users }) => {
+        .then(({ users, total }) => {
           const from = query.page * GRID_BLOCK_SIZE
-          const lastRow = users.length < GRID_BLOCK_SIZE ? from + users.length : undefined
+          // Use the exact `total` the API already computed (via COUNT()) instead of a
+          // length heuristic: `users.length < GRID_BLOCK_SIZE` never fires when the row
+          // total is an exact multiple of GRID_BLOCK_SIZE, so AG Grid would request one
+          // extra (empty) block before realizing it had reached the end.
+          const lastRow = from + users.length >= total ? total : undefined
           params.successCallback(users, lastRow)
         })
         .catch(() => params.failCallback())
