@@ -138,10 +138,10 @@ export default function FunctionalityForm(
         <div>{error && <p className="text-sm text-red-600">{error}</p>}</div>
         <div className="flex gap-3">
           <button onClick={() => router.push('/functionalities')} className="px-4 py-2 text-sm rounded-lg border border-border">
-            Cancella
+            Annulla
           </button>
           <button onClick={submit} disabled={!valid || busy} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed">
-            {mode === 'create' ? 'Crea funzionalità' : 'Salva'}
+            Salva
           </button>
         </div>
       </div>

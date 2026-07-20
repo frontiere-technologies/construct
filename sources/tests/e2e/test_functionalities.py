@@ -16,7 +16,7 @@ def _create_functionality(page, base_url, name, link):
     page.get_by_placeholder("Descrizione *").fill("e2e")
     _select_tipologia(page, "Link interno (/path)")
     page.get_by_placeholder("Link *").fill(link)
-    page.get_by_role("button", name="Crea funzionalità").click()
+    page.get_by_role("button", name="Salva").click()
     page.wait_for_url("**/functionalities", timeout=10_000)
     page.wait_for_load_state("networkidle")
 
@@ -102,7 +102,7 @@ def test_create_edit_delete_functionality(logged_in_page, base_url):
     page.get_by_placeholder("Descrizione *").fill("desc e2e")
     _select_tipologia(page, "Link interno (/path)")
     page.get_by_placeholder("Link *").fill("/e2e-func")
-    page.get_by_role("button", name="Crea funzionalità").click()
+    page.get_by_role("button", name="Salva").click()
     page.wait_for_url("**/functionalities", timeout=10_000)
     page.wait_for_load_state("networkidle")
     expect(page.get_by_text(name, exact=True).first).to_be_visible()
@@ -201,3 +201,10 @@ def test_drag_moves_item_after_last(logged_in_page, base_url):
     finally:
         _delete_functionality(page, base_url, a)
         _delete_functionality(page, base_url, b)
+
+
+def test_functionality_create_annulla_navigates_back(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities/create?root=root")
+    page.get_by_role("button", name="Annulla").click()
+    page.wait_for_url("**/functionalities", timeout=10_000)
