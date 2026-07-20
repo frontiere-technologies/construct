@@ -95,3 +95,15 @@ def test_save_applies_and_persists_color(logged_in_page, base_url):
         _set_color(current, original_value)
         page.get_by_role("button", name="Salva", exact=True).click()
         page.locator("text=Theme saved.").wait_for(state="visible", timeout=10_000)
+
+
+def test_inputs_disabled_while_saving(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/admin/theme")
+    picker = page.locator('input[type="color"]').first
+    page.get_by_role("button", name="Salva", exact=True).click()
+    expect(picker).to_be_disabled()
+    expect(page.get_by_role("button", name="Reset", exact=True)).to_be_disabled()
+    expect(page.get_by_role("button", name="Annulla", exact=True)).to_be_disabled()
+    page.locator("text=Theme saved.").wait_for(state="visible", timeout=10_000)
+    expect(picker).to_be_enabled()

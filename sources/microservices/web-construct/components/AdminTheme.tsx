@@ -11,9 +11,10 @@ interface ColorPickerProps {
   label: string
   value: string
   onChange: (v: string) => void
+  disabled?: boolean
 }
 
-const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange }) => (
+const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, disabled }) => (
   <div className="flex items-center justify-between">
     <label className="text-sm text-foreground-secondary">{label}</label>
     <div className="flex items-center space-x-2">
@@ -22,7 +23,8 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange }) => 
         type="color"
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent"
+        disabled={disabled}
+        className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed"
       />
     </div>
   </div>
@@ -34,18 +36,19 @@ interface TokenRowProps {
   darkValue: string
   onChangeLight: (v: string) => void
   onChangeDark: (v: string) => void
+  disabled?: boolean
 }
 
-const TokenRow: React.FC<TokenRowProps> = ({ label, lightValue, darkValue, onChangeLight, onChangeDark }) => (
+const TokenRow: React.FC<TokenRowProps> = ({ label, lightValue, darkValue, onChangeLight, onChangeDark, disabled }) => (
   <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4">
     <span className="text-sm text-foreground-secondary">{label}</span>
     <div className="flex items-center gap-1">
       <span className="text-[10px] uppercase text-foreground-faint w-8">Light</span>
-      <input type="color" value={lightValue} onChange={e => onChangeLight(e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent" />
+      <input type="color" value={lightValue} onChange={e => onChangeLight(e.target.value)} disabled={disabled} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed" />
     </div>
     <div className="flex items-center gap-1">
       <span className="text-[10px] uppercase text-foreground-faint w-8">Dark</span>
-      <input type="color" value={darkValue} onChange={e => onChangeDark(e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent" />
+      <input type="color" value={darkValue} onChange={e => onChangeDark(e.target.value)} disabled={disabled} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed" />
     </div>
   </div>
 )
@@ -143,6 +146,7 @@ export const AdminTheme: React.FC = () => {
             label="Primary Color (Active Icons, Buttons)"
             value={draftThemeConfig.primaryColor}
             onChange={v => updateTheme('primaryColor', v)}
+            disabled={saving}
           />
         </div>
 
@@ -160,6 +164,7 @@ export const AdminTheme: React.FC = () => {
                   darkValue={draftThemeConfig[row.darkKey]}
                   onChangeLight={v => updateTheme(row.lightKey, v)}
                   onChangeDark={v => updateTheme(row.darkKey, v)}
+                  disabled={saving}
                 />
               ))}
             </div>
@@ -178,13 +183,15 @@ export const AdminTheme: React.FC = () => {
           <div className="flex gap-3">
             <button
               onClick={handleReset}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg"
+              disabled={saving}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Reset
             </button>
             <button
               onClick={handleCancel}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg"
+              disabled={saving}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Annulla
             </button>
