@@ -206,3 +206,87 @@ def test_collapsed_rail_is_narrow(logged_in_page):
     rail = page.locator("aside").first
     width = rail.bounding_box()["width"]
     assert width <= 28, f"Collapsed rail is not narrow enough: {width:.0f}px"
+
+
+def test_hover_shows_preview_overlay(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+    rail = page.locator("aside").first
+    rail.hover()
+    preview = page.locator('[data-testid="sidebar-hover-preview"]')
+    preview.wait_for(state="visible", timeout=2_000)
+    assert preview.locator("aside").count() >= 1, "Preview overlay has no sidebar columns inside it"
+
+
+def test_hover_preview_closes_on_mouse_leave(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+    rail = page.locator("aside").first
+    rail.hover()
+    preview = page.locator('[data-testid="sidebar-hover-preview"]')
+    preview.wait_for(state="visible", timeout=2_000)
+
+    page.mouse.move(800, 450)  # move well into the main content area, away from rail and overlay
+    preview.wait_for(state="hidden", timeout=2_000)
+
+
+def test_hover_preview_navigation_closes_it(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+    rail = page.locator("aside").first
+    rail.hover()
+    preview = page.locator('[data-testid="sidebar-hover-preview"]')
+    preview.wait_for(state="visible", timeout=2_000)
+
+    # The top-level nav items rendered here are DB-driven and, depending on
+    # menu content, may all be containers (no directly navigable link at that
+    # level) — so reach a link via the account button, which is always
+    # present in col1 and always reveals a real "Profile" link in col2. This
+    # keeps the test independent of what the current menu happens to contain.
+    preview.locator("aside").first.locator("button").last.click()
+    link = preview.locator("a").first
+    link.wait_for(state="visible", timeout=2_000)
+
+    url_before = page.url
+    link.click()
+    page.wait_for_function(
+        "url => window.location.href !== url",
+        arg=url_before,
+        timeout=5_000,
+    )
+    preview.wait_for(state="hidden", timeout=2_000)
+    assert page.locator("aside").count() == 1, "Rail should still be the only sidebar column after navigating"
+
+
+def test_hover_preview_does_not_resize_main_content(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+    main = page.locator("main").first
+    width_before = main.bounding_box()["width"]
+
+    rail = page.locator("aside").first
+    rail.hover()
+    page.locator('[data-testid="sidebar-hover-preview"]').wait_for(state="visible", timeout=2_000)
+    width_after = main.bounding_box()["width"]
+
+    assert width_after == width_before, f"Main content resized during hover preview: {width_before:.0f}px → {width_after:.0f}px"

@@ -232,6 +232,41 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     } catch { /* ignore quota errors */ }
   }, [col1Collapsed, col2Collapsed, col3Collapsed, masterCollapsed])
 
+  // Hover-preview overlay for the collapsed rail: hovering it (with a short
+  // debounce) shows the full sidebar as a floating overlay instead of
+  // permanently expanding. Purely transient — never persisted, and it does
+  // not read or write masterCollapsed/col1Collapsed/col2Collapsed/col3Collapsed.
+  const [hoverPreviewOpen, setHoverPreviewOpen] = useState(false)
+  const hoveringRef = useRef(false)
+  const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleHoverEnter = useCallback(() => {
+    hoveringRef.current = true
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    if (openTimerRef.current) clearTimeout(openTimerRef.current)
+    openTimerRef.current = setTimeout(() => setHoverPreviewOpen(true), 180)
+  }, [])
+
+  const handleHoverLeave = useCallback(() => {
+    hoveringRef.current = false
+    if (openTimerRef.current) clearTimeout(openTimerRef.current)
+    closeTimerRef.current = setTimeout(() => {
+      if (!hoveringRef.current) setHoverPreviewOpen(false)
+    }, 180)
+  }, [])
+
+  // Closes the preview on a real route change; container-expand clicks
+  // inside the preview don't change the route, so they don't close it.
+  useEffect(() => {
+    setHoverPreviewOpen(false)
+  }, [pathname])
+
+  useEffect(() => () => {
+    if (openTimerRef.current) clearTimeout(openTimerRef.current)
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+  }, [])
+
   // Below this viewport width, force all three columns to icon-only mode so the
   // fixed-width text columns never squeeze the layout. This never touches the
   // persisted col1/col2/col3 preference — it's a pure render-time override.
@@ -362,19 +397,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
   )
 
-  return (
-    <div className="flex h-screen flex-shrink-0">
-      {tooltip && createPortal(
-        <div
-          className="fixed z-[9999] px-2 py-1 bg-gray-900 text-white text-xs rounded pointer-events-none whitespace-nowrap"
-          style={{ top: tooltip.top, left: tooltip.left, transform: 'translateY(-50%)' }}
-        >
-          {tooltip.text}
-        </div>,
-        document.body
-      )}
-
-      {!masterCollapsed && (
+  const sidebarColumns = (
       <>
       <aside className={clsx(
         'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
@@ -576,13 +599,43 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         </aside>
       )}
       </>
+  )
+
+  return (
+    <div className="flex h-screen flex-shrink-0">
+      {tooltip && createPortal(
+        <div
+          className="fixed z-[9999] px-2 py-1 bg-gray-900 text-white text-xs rounded pointer-events-none whitespace-nowrap"
+          style={{ top: tooltip.top, left: tooltip.left, transform: 'translateY(-50%)' }}
+        >
+          {tooltip.text}
+        </div>,
+        document.body
+      )}
+
+      {!masterCollapsed && sidebarColumns}
+
+      {masterCollapsed && hoverPreviewOpen && createPortal(
+        <div
+          data-testid="sidebar-hover-preview"
+          onMouseEnter={handleHoverEnter}
+          onMouseLeave={handleHoverLeave}
+          className="fixed top-0 left-6 h-screen z-40 shadow-2xl flex"
+        >
+          {sidebarColumns}
+        </div>,
+        document.body
       )}
 
       {masterCollapsed && (
-        <aside className={clsx(
-          'h-screen bg-sidebar-bg border-r border-sidebar-text/10 flex flex-col items-center flex-shrink-0',
-          RAIL_W
-        )}>
+        <aside
+          onMouseEnter={handleHoverEnter}
+          onMouseLeave={handleHoverLeave}
+          className={clsx(
+            'h-screen bg-sidebar-bg border-r border-sidebar-text/10 flex flex-col items-center flex-shrink-0',
+            RAIL_W
+          )}
+        >
           <button
             data-testid="sidebar-collapsed-rail"
             onClick={() => setMasterCollapsed(false)}
