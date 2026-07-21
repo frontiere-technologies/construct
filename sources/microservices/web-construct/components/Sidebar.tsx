@@ -54,7 +54,7 @@ const ColToggleStack: React.FC<{
   hideClose?: boolean
   anchorClassName: string
 }> = ({ collapsed, onToggleCollapse, toggleDisabled, onClose, closeTestId, closeTitle, hideClose, anchorClassName }) => (
-  <div className={clsx('absolute -right-3 flex flex-col gap-1 z-10', anchorClassName)}>
+  <div className={clsx('absolute flex flex-col gap-1 z-10', anchorClassName)}>
     {!hideClose && (
       <button
         data-testid={closeTestId}
@@ -504,7 +504,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               closeTestId="sidebar-master-toggle"
               closeTitle="Collassa menu"
               hideClose={isPreview}
-              anchorClassName="top-1/2 -translate-y-1/2"
+              anchorClassName="-right-5 top-1/2 -translate-y-1/2"
             />
           </div>
         </div>
@@ -522,7 +522,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             onClose={() => { setSelectedL1Id(null); setSelectedL2Id(null); setUserPanelOpen(false) }}
             closeTestId="sidebar-col-close"
             closeTitle="Chiudi pannello"
-            anchorClassName="bottom-4"
+            anchorClassName="-right-3 bottom-4"
           />
           {!effCol2Collapsed && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
@@ -621,7 +621,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             onClose={() => setSelectedL2Id(null)}
             closeTestId="sidebar-col-close"
             closeTitle="Chiudi pannello"
-            anchorClassName="bottom-4"
+            anchorClassName="-right-3 bottom-4"
           />
           {!effCol3Collapsed && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
