@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useUI } from '@/context/UIContext'
 import { useAuth } from '@/context/AuthContext'
@@ -58,6 +58,41 @@ const ColToggle: React.FC<{ collapsed: boolean; onToggle: () => void; disabled?:
     </button>
   )
 }
+
+const ColToggleStack: React.FC<{
+  collapsed: boolean
+  onToggleCollapse: () => void
+  toggleDisabled?: boolean
+  onClose: () => void
+  closeTestId: string
+  closeTitle?: string
+  hideClose?: boolean
+  anchorClassName: string
+}> = ({ collapsed, onToggleCollapse, toggleDisabled, onClose, closeTestId, closeTitle, hideClose, anchorClassName }) => (
+  <div className={clsx('absolute -right-3 flex flex-col gap-1 z-10', anchorClassName)}>
+    {!hideClose && (
+      <button
+        data-testid={closeTestId}
+        onClick={onClose}
+        title={closeTitle}
+        className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-1 shadow-sm hover:bg-sidebar-active-bg"
+      >
+        <X size={14} className="text-sidebar-text/60" />
+      </button>
+    )}
+    {!toggleDisabled && (
+      <button
+        data-testid="sidebar-toggle"
+        onClick={onToggleCollapse}
+        className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-1 shadow-sm hover:bg-sidebar-active-bg"
+      >
+        {collapsed
+          ? <ChevronRight size={14} className="text-sidebar-text/60" />
+          : <ChevronLeft size={14} className="text-sidebar-text/60" />}
+      </button>
+    )}
+  </div>
+)
 
 interface L1ItemProps {
   item: MenuItem
@@ -502,7 +537,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
           effCol2Collapsed ? ICON_SUB_W : TEXT_SUB_W
         )}>
-          <ColToggle collapsed={effCol2Collapsed} onToggle={() => setCol2Collapsed(c => !c)} disabled={isNarrowViewport} />
+          <ColToggleStack
+            collapsed={effCol2Collapsed}
+            onToggleCollapse={() => setCol2Collapsed(c => !c)}
+            toggleDisabled={isNarrowViewport}
+            onClose={() => { setSelectedL1Id(null); setSelectedL2Id(null); setUserPanelOpen(false) }}
+            closeTestId="sidebar-col-close"
+            closeTitle="Chiudi pannello"
+            anchorClassName="bottom-4"
+          />
           {!effCol2Collapsed && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
               <TruncatedSpan
@@ -593,7 +636,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
           effCol3Collapsed ? ICON_SUB_W : TEXT_SUB_W
         )}>
-          <ColToggle collapsed={effCol3Collapsed} onToggle={() => setCol3Collapsed(c => !c)} disabled={isNarrowViewport} />
+          <ColToggleStack
+            collapsed={effCol3Collapsed}
+            onToggleCollapse={() => setCol3Collapsed(c => !c)}
+            toggleDisabled={isNarrowViewport}
+            onClose={() => setSelectedL2Id(null)}
+            closeTestId="sidebar-col-close"
+            closeTitle="Chiudi pannello"
+            anchorClassName="bottom-4"
+          />
           {!effCol3Collapsed && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
               <TruncatedSpan

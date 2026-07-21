@@ -93,6 +93,23 @@ def test_admin_closes_l2_on_second_click(logged_in_page):
     assert page.locator("aside").count() < 2, "L2 did not close after second click"
 
 
+def test_col2_close_button_closes_admin_panel(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    l1_btn(l1, "Admin").click()
+    col2 = page.locator("aside").nth(1)
+    col2.wait_for(state="visible", timeout=5_000)
+    assert page.locator("aside").count() >= 2, "Admin panel did not open"
+
+    col2.locator('[data-testid="sidebar-col-close"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length < 2",
+        timeout=5_000,
+    )
+    assert page.locator("aside").count() < 2, "col2 did not close after clicking its close button"
+
+
 def test_l1_collapses(logged_in_page):
     page = logged_in_page
     l1 = page.locator("aside").first
