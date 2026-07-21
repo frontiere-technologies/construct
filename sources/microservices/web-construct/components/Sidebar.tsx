@@ -51,20 +51,17 @@ const ColToggleStack: React.FC<{
   onClose: () => void
   closeTestId: string
   closeTitle?: string
-  hideClose?: boolean
   anchorClassName: string
-}> = ({ collapsed, onToggleCollapse, toggleDisabled, onClose, closeTestId, closeTitle, hideClose, anchorClassName }) => (
+}> = ({ collapsed, onToggleCollapse, toggleDisabled, onClose, closeTestId, closeTitle, anchorClassName }) => (
   <div className={clsx('absolute flex flex-col gap-0.5 z-10', anchorClassName)}>
-    {!hideClose && (
-      <button
-        data-testid={closeTestId}
-        onClick={onClose}
-        title={closeTitle}
-        className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
-      >
-        <X size={12} className="text-sidebar-text/60" />
-      </button>
-    )}
+    <button
+      data-testid={closeTestId}
+      onClick={onClose}
+      title={closeTitle}
+      className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
+    >
+      <X size={12} className="text-sidebar-text/60" />
+    </button>
     {!toggleDisabled && (
       <button
         data-testid="sidebar-toggle"
@@ -432,7 +429,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
   )
 
-  const renderSidebarColumns = (isPreview: boolean) => (
+  const renderSidebarColumns = () => (
       <>
       <aside className={clsx(
         'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
@@ -445,7 +442,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           onClose={() => setMasterCollapsed(true)}
           closeTestId="sidebar-master-toggle"
           closeTitle="Collassa menu"
-          hideClose={isPreview}
           anchorClassName="-right-[9px] bottom-[9px]"
         />
 
@@ -659,7 +655,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         document.body
       )}
 
-      {!masterCollapsed && renderSidebarColumns(false)}
+      {!masterCollapsed && renderSidebarColumns()}
 
       {masterCollapsed && hoverPreviewOpen && createPortal(
         <div
@@ -668,7 +664,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           onMouseLeave={handleHoverLeave}
           className="fixed top-0 left-6 h-screen z-40 shadow-2xl flex"
         >
-          {renderSidebarColumns(true)}
+          {renderSidebarColumns()}
         </div>,
         document.body
       )}
