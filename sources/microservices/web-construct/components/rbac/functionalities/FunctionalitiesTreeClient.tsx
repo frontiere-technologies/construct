@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, SlidersHorizontal, Search, X } from 'lucide-react'
 import NavigationTree from '@/components/rbac/NavigationTree'
 import FilterDrawer from '@/components/rbac/FilterDrawer'
+import { PageContainer } from '@/components/PageContainer'
 import { moveNavigationItem, deleteNavigationItem } from '@/lib/rbac/navigation-actions'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 
@@ -52,9 +53,8 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Funzionalità</h1>
-      <div className="flex items-center justify-end gap-2 mb-4">
+    <PageContainer title="Funzionalità">
+      <div className="flex items-center justify-end gap-2">
         <div className="relative">
           <button
             data-testid="open-filters"
@@ -99,7 +99,7 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
           </div>
         </div>
       </FilterDrawer>
-      <div className="flex gap-6 border-b border-border-subtle mb-4">
+      <div className="flex gap-6 border-b border-border-subtle">
         {(['root', 'operations'] as const).map(t => (
           <button key={t} onClick={() => { setTab(t); setSearch(''); setSearchDraft('') }}
             className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-gray-900 text-foreground dark:border-white' : 'border-transparent text-gray-500'}`}>
@@ -112,6 +112,6 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
         renderTrailing={trailing}
         dnd={search.trim() ? undefined : { canDrag: n => !n.isImmutable, onMove }}
       />
-    </div>
+    </PageContainer>
   )
 }

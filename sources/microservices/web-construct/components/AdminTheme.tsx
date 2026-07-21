@@ -5,15 +5,16 @@ import { useUI } from '@/context/UIContext'
 import { defaultThemeConfig } from '@/types/menu'
 import { saveThemeConfig } from '@/lib/theme-actions'
 import type { ThemeConfig } from '@/types/menu'
-import { Card } from '@/components/Card'
+import { PageContainer } from '@/components/PageContainer'
 
 interface ColorPickerProps {
   label: string
   value: string
   onChange: (v: string) => void
+  disabled?: boolean
 }
 
-const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange }) => (
+const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, disabled }) => (
   <div className="flex items-center justify-between">
     <label className="text-sm text-foreground-secondary">{label}</label>
     <div className="flex items-center space-x-2">
@@ -22,7 +23,8 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange }) => 
         type="color"
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent"
+        disabled={disabled}
+        className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed"
       />
     </div>
   </div>
@@ -34,18 +36,19 @@ interface TokenRowProps {
   darkValue: string
   onChangeLight: (v: string) => void
   onChangeDark: (v: string) => void
+  disabled?: boolean
 }
 
-const TokenRow: React.FC<TokenRowProps> = ({ label, lightValue, darkValue, onChangeLight, onChangeDark }) => (
+const TokenRow: React.FC<TokenRowProps> = ({ label, lightValue, darkValue, onChangeLight, onChangeDark, disabled }) => (
   <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4">
     <span className="text-sm text-foreground-secondary">{label}</span>
     <div className="flex items-center gap-1">
       <span className="text-[10px] uppercase text-foreground-faint w-8">Light</span>
-      <input type="color" value={lightValue} onChange={e => onChangeLight(e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent" />
+      <input type="color" value={lightValue} onChange={e => onChangeLight(e.target.value)} disabled={disabled} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed" />
     </div>
     <div className="flex items-center gap-1">
       <span className="text-[10px] uppercase text-foreground-faint w-8">Dark</span>
-      <input type="color" value={darkValue} onChange={e => onChangeDark(e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent" />
+      <input type="color" value={darkValue} onChange={e => onChangeDark(e.target.value)} disabled={disabled} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed" />
     </div>
   </div>
 )
@@ -98,26 +101,31 @@ export const AdminTheme: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
   const updateTheme = (key: keyof ThemeConfig, value: string) => {
-    setSettings({
-      ...settings,
-      themeConfig: { ...settings.themeConfig, [key]: value }
-    })
+    setSettings(prev => ({ ...prev, themeConfig: { ...prev.themeConfig, [key]: value } }))
+  }
+
+  const handleReset = () => {
+    setSettings(prev => ({ ...prev, themeConfig: defaultThemeConfig }))
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaveStatus('idle')
+    const { error } = await saveThemeConfig(settings.themeConfig)
+    setSaving(false)
+    setSaveStatus(error ? 'error' : 'success')
+    setTimeout(() => setSaveStatus('idle'), 3000)
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold">Theme & Styles</h1>
-        <p className="text-foreground-muted">Customize your application appearance</p>
-      </div>
-
-      <Card className="space-y-8">
+    <PageContainer title="Theme & Styles" subtitle="Customize your application appearance">
         <div className="space-y-4">
           <h3 className="font-medium text-foreground border-b pb-2 border-border">Global</h3>
           <ColorPicker
             label="Primary Color (Active Icons, Buttons)"
             value={settings.themeConfig.primaryColor}
             onChange={v => updateTheme('primaryColor', v)}
+            disabled={saving}
           />
         </div>
 
@@ -135,6 +143,7 @@ export const AdminTheme: React.FC = () => {
                   darkValue={settings.themeConfig[row.darkKey]}
                   onChangeLight={v => updateTheme(row.lightKey, v)}
                   onChangeDark={v => updateTheme(row.darkKey, v)}
+                  disabled={saving}
                 />
               ))}
             </div>
@@ -143,6 +152,11 @@ export const AdminTheme: React.FC = () => {
 
         <div className="pt-4 border-t border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {saveStatus === 'idle' && (
+              <span className="text-sm text-foreground-faint">
+                ℹ️ Ricordati di salvare i valori, altrimenti verranno persi alla chiusura dell&apos;applicazione.
+              </span>
+            )}
             {saveStatus === 'success' && (
               <span className="text-sm text-green-600 dark:text-green-400">Theme saved.</span>
             )}
@@ -152,28 +166,21 @@ export const AdminTheme: React.FC = () => {
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => setSettings({ ...settings, themeConfig: defaultThemeConfig })}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg"
+              onClick={handleReset}
+              disabled={saving}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Reset to Defaults
+              Valori di Default
             </button>
             <button
-              onClick={async () => {
-                setSaving(true)
-                setSaveStatus('idle')
-                const { error } = await saveThemeConfig(settings.themeConfig)
-                setSaving(false)
-                setSaveStatus(error ? 'error' : 'success')
-                setTimeout(() => setSaveStatus('idle'), 3000)
-              }}
+              onClick={handleSave}
               disabled={saving}
-              className="px-4 py-2 text-sm text-white bg-[var(--theme-primary)] hover:opacity-90 disabled:opacity-50 rounded-lg transition-opacity"
+              className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {saving ? 'Saving…' : 'Save Theme'}
+              {saving ? 'Saving…' : 'Salva'}
             </button>
           </div>
         </div>
-      </Card>
-    </div>
+    </PageContainer>
   )
 }

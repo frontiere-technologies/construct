@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react'
 import { signOut } from 'next-auth/react'
-import { Card } from '@/components/Card'
 
 export function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -58,7 +57,7 @@ export function ChangePasswordForm() {
   const labelCls = 'block text-sm font-medium text-foreground-secondary mb-1'
 
   return (
-    <Card className="w-full">
+    <div className="w-full rounded-xl border border-border-subtle p-6">
       <h2 className="text-sm font-semibold text-foreground-secondary mb-4">
         Cambia password
       </h2>
@@ -114,6 +113,6 @@ export function ChangePasswordForm() {
           </p>
         )}
       </form>
-    </Card>
+    </div>
   )
 }

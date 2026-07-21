@@ -5,6 +5,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import DataGrid from '@/components/ui/DataGrid'
 import ColumnVisibilityToggle from '@/components/ui/ColumnVisibilityToggle'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import GridRowActionsMenu from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
 import CreateRoleModal from './CreateRoleModal'
@@ -46,6 +47,7 @@ export default function RolesTableClient(props: Props) {
   const sp = useSearchParams()
   const [showCreate, setShowCreate] = useState(false)
   const [renaming, setRenaming] = useState<RolePageItemDto | null>(null)
+  const [deleting, setDeleting] = useState<RolePageItemDto | null>(null)
   const [gridApi, setGridApi] = useState<GridApi<RolePageItemDto> | null>(null)
   // Kept alongside the `gridApi` state: `columnDefs` below is memoized and its "Elimina"
   // row-action closure captures `gridApi`, so a ref (always current, regardless of when
@@ -92,10 +94,9 @@ export default function RolesTableClient(props: Props) {
       cellRenderer: GridRowActionsMenu,
       cellRendererParams: {
         getItems: (r: RolePageItemDto) => [
+          { label: 'Apri', onClick: () => router.push(`/roles-permissions/${r.id}`) },
           { label: 'Rinomina', disabled: r.roleType !== 'SERVICE', onClick: () => setRenaming(r) },
-          { label: 'Elimina', disabled: r.roleType === 'SYSTEM', onClick: async () => {
-              if (confirm(`Eliminare il ruolo "${r.description}"?`)) { await deleteRole(r.id); router.refresh(); gridApiRef.current?.refreshInfiniteCache() }
-            } },
+          { label: 'Elimina', disabled: r.roleType === 'SYSTEM', onClick: () => setDeleting(r) },
         ],
       },
     },
@@ -130,11 +131,24 @@ export default function RolesTableClient(props: Props) {
         initialSortModel={rolesUrlParamsToSortModel(props)}
         onFilterChanged={onFilterChanged}
         onSortChanged={onSortChanged}
-        onRowClicked={r => router.push(`/roles-permissions/${r.id}`)}
         onGridReady={onGridReady}
       />
       {showCreate && <CreateRoleModal onClose={() => setShowCreate(false)} />}
       {renaming && <RenameRoleModal roleId={renaming.id} currentName={renaming.description} onClose={() => { setRenaming(null); gridApi?.refreshInfiniteCache() }} />}
+      {deleting && (
+        <ConfirmModal
+          title="Elimina ruolo"
+          message={`Eliminare il ruolo "${deleting.description}"?`}
+          confirmLabel="Elimina"
+          onCancel={() => setDeleting(null)}
+          onConfirm={async () => {
+            await deleteRole(deleting.id)
+            setDeleting(null)
+            router.refresh()
+            gridApiRef.current?.refreshInfiniteCache()
+          }}
+        />
+      )}
     </>
   )
 }

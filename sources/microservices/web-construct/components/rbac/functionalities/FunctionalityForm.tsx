@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { PageContainer } from '@/components/PageContainer'
 import IconPicker from './IconPicker'
 import CustomSelect from '../CustomSelect'
 import TagInput from './TagInput'
@@ -78,17 +79,7 @@ export default function FunctionalityForm(
   const itTags = f.tagTranslations.IT ?? []
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Funzionalità / {mode === 'create' ? 'Crea' : 'Modifica'}</h1>
-        <div className="flex flex-col items-end gap-2">
-          <button onClick={submit} disabled={!valid || busy} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed">
-            {mode === 'create' ? 'Crea funzionalità' : 'Salva'}
-          </button>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-        </div>
-      </div>
-
+    <PageContainer title={`Funzionalità / ${mode === 'create' ? 'Crea' : 'Modifica'}`}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4 rounded-xl border border-border-subtle p-4">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Informazioni generali</h2>
@@ -142,6 +133,18 @@ export default function FunctionalityForm(
             onTranslations={t => set('translations', t)} onTags={t => set('tagTranslations', t)} />
         </div>
       </div>
-    </div>
+
+      <div className="pt-4 border-t border-border flex items-center justify-between">
+        <div>{error && <p className="text-sm text-red-600">{error}</p>}</div>
+        <div className="flex gap-3">
+          <button onClick={() => router.push('/functionalities')} className="px-4 py-2 text-sm rounded-lg border border-border">
+            Annulla
+          </button>
+          <button onClick={submit} disabled={!valid || busy} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed">
+            Salva
+          </button>
+        </div>
+      </div>
+    </PageContainer>
   )
 }

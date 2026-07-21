@@ -1,6 +1,7 @@
 import { getAllRoles } from '@/lib/rbac/roles-service'
 import UsersTableClient from '@/components/rbac/users/UsersTableClient'
 import type { UsersQuery, UserStatusId } from '@/lib/rbac/types'
+import { PageContainer } from '@/components/PageContainer'
 
 export default async function UserManagementPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams
@@ -8,8 +9,7 @@ export default async function UserManagementPage({ searchParams }: { searchParam
   const allRoles = allRolesRaw.map(r => ({ id: r.id, name: r.description }))
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Utenti</h1>
+    <PageContainer title="Utenti">
       <UsersTableClient
         sortField={(sp.sort as UsersQuery['sort']) ?? 'dateIns'}
         sortDir={(sp.direction as 'ASC' | 'DESC') ?? 'DESC'}
@@ -20,6 +20,6 @@ export default async function UserManagementPage({ searchParams }: { searchParam
         createdFrom={sp.createdFrom ?? null}
         createdTo={sp.createdTo ?? null}
       />
-    </div>
+    </PageContainer>
   )
 }

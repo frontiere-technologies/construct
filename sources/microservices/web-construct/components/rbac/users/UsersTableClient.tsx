@@ -90,7 +90,7 @@ export default function UsersTableClient(props: Props) {
     {
       colId: 'status', headerName: 'Stato', sortable: true, filter: EnumSelectFilter,
       filterParams: { options: [{ value: USER_STATUS_ACTIVE, label: 'Attivo' }, { value: USER_STATUS_DEACTIVATED, label: 'Disattivato' }] },
-      cellRenderer: (p: { data?: UserDTO }) => p.data ? <StatusBadge status={p.data.status} onToggle={() => toggleStatus(p.data!)} /> : null,
+      cellRenderer: (p: { data?: UserDTO }) => p.data ? <StatusBadge status={p.data.status} /> : null,
     },
     {
       colId: 'dateIns', headerName: 'Creato', sortable: true,
@@ -106,7 +106,10 @@ export default function UsersTableClient(props: Props) {
       colId: 'actions', headerName: '', sortable: false, filter: false, resizable: false, width: 56,
       cellRenderer: GridRowActionsMenu,
       cellRendererParams: {
-        getItems: (u: UserDTO) => [{ label: 'Gestisci ruoli', onClick: () => setManaging(u) }],
+        getItems: (u: UserDTO) => [
+          { label: 'Gestisci ruoli', onClick: () => setManaging(u) },
+          { label: u.status.idUserStatus === USER_STATUS_ACTIVE ? 'Disattiva' : 'Attiva', onClick: () => toggleStatus(u) },
+        ],
       },
     },
   ], [allRolesKey]) // eslint-disable-line react-hooks/exhaustive-deps -- allRolesKey stands in for props.allRoles (see comment above)

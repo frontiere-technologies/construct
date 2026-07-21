@@ -43,7 +43,7 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
     // to exclude this actions column from row-click navigation. React's stopPropagation()
     // below only stops the React synthetic event chain — it doesn't stop AG Grid's own
     // native row-click listener, which is attached directly to the DOM outside React.
-    <div className="flex justify-end" data-grid-no-row-click onClick={e => e.stopPropagation()}>
+    <div className="flex h-full items-center justify-end" data-grid-no-row-click onClick={e => e.stopPropagation()}>
       <button
         data-testid={`row-menu-${rowId}`}
         onClick={e => {

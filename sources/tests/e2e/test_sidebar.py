@@ -101,3 +101,95 @@ def test_l1_collapses(logged_in_page):
     ensure_l1_collapsed(page, l1)
     w_after = l1.bounding_box()["width"]
     assert w_after < w_before, f"L1 did not collapse: {w_before:.0f}px → {w_after:.0f}px"
+
+
+def test_master_collapse_hides_sidebar(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+    rail = page.locator('[data-testid="sidebar-collapsed-rail"]')
+    assert rail.is_visible()
+    assert page.locator("aside").count() == 1
+
+
+def test_master_collapse_expand_restores_l2(logged_in_page):
+    page = logged_in_page
+    ensure_l2_open(page)
+    assert page.locator("aside").count() >= 2, "L2 did not open before collapsing"
+
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+
+    page.locator('[data-testid="sidebar-collapsed-rail"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length >= 2",
+        timeout=5_000,
+    )
+    assert page.locator("aside").count() >= 2, "L2 was not restored after expanding"
+
+
+def test_master_collapse_persists_after_reload(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+
+    page.reload()
+    page.wait_for_load_state("networkidle")
+    page.locator('[data-testid="sidebar-collapsed-rail"]').wait_for(state="visible", timeout=5_000)
+    assert page.locator("aside").count() == 1, "Master-collapsed state did not persist after reload"
+
+
+def test_narrow_viewport_forces_col1_icons(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    assert l1.bounding_box()["width"] >= 100, "L1 was not in text mode before narrowing"
+
+    page.set_viewport_size({"width": 600, "height": 900})
+    page.wait_for_function(
+        "() => document.querySelector('aside').getBoundingClientRect().width < 100",
+        timeout=5_000,
+    )
+    assert l1.bounding_box()["width"] < 100, "L1 did not force icon mode below 768px"
+    assert l1.locator('[data-testid="sidebar-toggle"]').count() == 0, "Toggle should not render below 768px"
+
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.wait_for_function(
+        "() => document.querySelector('aside').getBoundingClientRect().width >= 100",
+        timeout=5_000,
+    )
+    assert l1.bounding_box()["width"] >= 100, "L1 did not restore saved (text) preference above 768px"
+    assert l1.locator('[data-testid="sidebar-toggle"]').is_visible()
+
+
+def test_narrow_viewport_forces_col2_icons(logged_in_page):
+    page = logged_in_page
+    ensure_l2_open(page)
+    l2 = page.locator("aside").nth(1)
+    assert l2.bounding_box()["width"] >= 100, "L2 was not in text mode before narrowing"
+
+    page.set_viewport_size({"width": 600, "height": 900})
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside')[1].getBoundingClientRect().width < 100",
+        timeout=5_000,
+    )
+    assert l2.bounding_box()["width"] < 100, "L2 did not force icon mode below 768px"
+
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside')[1].getBoundingClientRect().width >= 100",
+        timeout=5_000,
+    )
+    assert l2.bounding_box()["width"] >= 100, "L2 did not restore saved (text) preference above 768px"
