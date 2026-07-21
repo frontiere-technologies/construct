@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
+import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight, PanelLeftOpen, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useUI } from '@/context/UIContext'
 import { useAuth } from '@/context/AuthContext'
@@ -43,21 +43,6 @@ const RAIL_W = 'w-6'
 const COLLAPSE_KEY = 'sidebarCollapseState'
 
 interface TooltipState { text: string; top: number; left: number }
-
-const ColToggle: React.FC<{ collapsed: boolean; onToggle: () => void; disabled?: boolean }> = ({ collapsed, onToggle, disabled }) => {
-  if (disabled) return null
-  return (
-    <button
-      data-testid="sidebar-toggle"
-      onClick={onToggle}
-      className="absolute -right-3 bottom-4 bg-sidebar-bg border border-sidebar-text/10 rounded-full p-1 shadow-sm hover:bg-sidebar-active-bg z-10"
-    >
-      {collapsed
-        ? <ChevronRight size={14} className="text-sidebar-text/60" />
-        : <ChevronLeft size={14} className="text-sidebar-text/60" />}
-    </button>
-  )
-}
 
 const ColToggleStack: React.FC<{
   collapsed: boolean
@@ -453,8 +438,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
         effCol1Collapsed ? ICON_COL_W : TEXT_COL_W
       )}>
-        <ColToggle collapsed={effCol1Collapsed} onToggle={() => setCol1Collapsed(c => !c)} disabled={isNarrowViewport} />
-
         {topItems.length > 0 && (
           <div className="p-2 border-b border-sidebar-text/10 space-y-1">
             {topItems.map(item => (
@@ -486,32 +469,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               onClick={() => handleL1Click(item)} />
           ))}
 
-          <div className={clsx(
-            'mt-1 border-t border-sidebar-text/10 pt-3 transition-colors duration-200',
-            effCol1Collapsed ? 'flex flex-col items-center gap-1' : 'flex items-center gap-2'
-          )}>
-            {!isPreview && (
-              <button
-                data-testid="sidebar-master-toggle"
-                onClick={() => setMasterCollapsed(true)}
-                title="Collassa menu"
-                className={clsx(
-                  'flex items-center justify-center rounded-lg text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text transition-colors duration-200',
-                  effCol1Collapsed ? 'w-full py-2 order-2' : 'flex-shrink-0 p-1.5 order-1'
-                )}
-              >
-                <PanelLeftClose size={20} className="flex-shrink-0" />
-              </button>
-            )}
-
+          <div className="mt-1 border-t border-sidebar-text/10 pt-3 transition-colors duration-200 relative">
             {/* User section — clickable, opens user panel in col2 */}
             <button
+              data-testid="sidebar-account-button"
               onClick={handleUserClick}
               onMouseEnter={effCol1Collapsed ? e => showTooltip(e, authUser?.email?.split('@')[0] ?? 'Account') : undefined}
               onMouseLeave={effCol1Collapsed ? hideTooltip : undefined}
               className={clsx(
-                'flex items-center gap-2 rounded-lg transition-colors duration-200',
-                effCol1Collapsed ? 'w-full justify-center py-1 order-1' : 'flex-1 min-w-0 py-1 px-1 order-2',
+                'flex items-center gap-2 rounded-lg transition-colors duration-200 w-full',
+                effCol1Collapsed ? 'justify-center py-1' : 'py-1 px-1',
                 userPanelOpen
                   ? 'text-sidebar-active-text'
                   : 'text-sidebar-text hover:text-sidebar-active-text'
@@ -528,6 +495,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                 </div>
               )}
             </button>
+
+            <ColToggleStack
+              collapsed={effCol1Collapsed}
+              onToggleCollapse={() => setCol1Collapsed(c => !c)}
+              toggleDisabled={isNarrowViewport}
+              onClose={() => setMasterCollapsed(true)}
+              closeTestId="sidebar-master-toggle"
+              closeTitle="Collassa menu"
+              hideClose={isPreview}
+              anchorClassName="top-1/2 -translate-y-1/2"
+            />
           </div>
         </div>
       </aside>

@@ -259,6 +259,35 @@ def test_hover_preview_hides_master_toggle(logged_in_page):
         "Master-collapse toggle should not appear inside the hover preview overlay"
 
 
+def test_master_toggle_not_left_of_avatar_when_l1_expanded(logged_in_page):
+    # Regression test for: the master-collapse toggle used to sit inline,
+    # to the left of the account button, inside the same flex row. It now
+    # lives in its own absolutely-positioned stack anchored to the right
+    # edge of the column, so it must never be to the account button's left.
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    toggle_box = l1.locator('[data-testid="sidebar-master-toggle"]').bounding_box()
+    avatar_box = l1.locator('[data-testid="sidebar-account-button"]').bounding_box()
+    assert toggle_box is not None, "Master-collapse toggle not found"
+    assert avatar_box is not None, "Account button not found"
+    assert toggle_box["x"] > avatar_box["x"], (
+        "Master-collapse toggle should sit to the right of the account button, not to its left"
+    )
+
+
+def test_master_toggle_works_when_l1_expanded(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+    assert page.locator('[data-testid="sidebar-collapsed-rail"]').is_visible()
+
+
 def test_hover_preview_closes_on_mouse_leave(logged_in_page):
     page = logged_in_page
     l1 = page.locator("aside").first
@@ -294,7 +323,11 @@ def test_hover_preview_navigation_closes_it(logged_in_page):
     # level) — so reach a link via the account button, which is always
     # present in col1 and always reveals a real "Profile" link in col2. This
     # keeps the test independent of what the current menu happens to contain.
-    preview.locator("aside").first.locator("button").last.click()
+    # Uses the stable testid rather than "last button in the aside": since
+    # Task 2 moved col1's ColToggleStack (with its own toggle button) to
+    # render after the account button in the DOM, "last button" no longer
+    # reliably identifies the account button.
+    preview.locator("aside").first.locator('[data-testid="sidebar-account-button"]').click()
     link = preview.locator("a").first
     link.wait_for(state="visible", timeout=2_000)
 
