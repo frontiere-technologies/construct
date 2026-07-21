@@ -522,7 +522,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             onClose={() => { setSelectedL1Id(null); setSelectedL2Id(null); setUserPanelOpen(false) }}
             closeTestId="sidebar-col-close"
             closeTitle="Chiudi pannello"
-            anchorClassName="-right-3 bottom-4"
+            anchorClassName="-right-3 bottom-[9px]"
           />
           {!effCol2Collapsed && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
@@ -621,7 +621,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             onClose={() => setSelectedL2Id(null)}
             closeTestId="sidebar-col-close"
             closeTitle="Chiudi pannello"
-            anchorClassName="-right-3 bottom-4"
+            anchorClassName="-right-3 bottom-[9px]"
           />
           {!effCol3Collapsed && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
