@@ -54,26 +54,26 @@ const ColToggleStack: React.FC<{
   hideClose?: boolean
   anchorClassName: string
 }> = ({ collapsed, onToggleCollapse, toggleDisabled, onClose, closeTestId, closeTitle, hideClose, anchorClassName }) => (
-  <div className={clsx('absolute flex flex-col gap-1 z-10', anchorClassName)}>
+  <div className={clsx('absolute flex flex-col gap-0.5 z-10', anchorClassName)}>
     {!hideClose && (
       <button
         data-testid={closeTestId}
         onClick={onClose}
         title={closeTitle}
-        className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-1 shadow-sm hover:bg-sidebar-active-bg"
+        className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
       >
-        <X size={14} className="text-sidebar-text/60" />
+        <X size={12} className="text-sidebar-text/60" />
       </button>
     )}
     {!toggleDisabled && (
       <button
         data-testid="sidebar-toggle"
         onClick={onToggleCollapse}
-        className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-1 shadow-sm hover:bg-sidebar-active-bg"
+        className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
       >
         {collapsed
-          ? <ChevronRight size={14} className="text-sidebar-text/60" />
-          : <ChevronLeft size={14} className="text-sidebar-text/60" />}
+          ? <ChevronRight size={12} className="text-sidebar-text/60" />
+          : <ChevronLeft size={12} className="text-sidebar-text/60" />}
       </button>
     )}
   </div>
@@ -446,7 +446,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           closeTestId="sidebar-master-toggle"
           closeTitle="Collassa menu"
           hideClose={isPreview}
-          anchorClassName="-right-3 bottom-4"
+          anchorClassName="-right-3 bottom-[9px]"
         />
 
         {topItems.length > 0 && (
