@@ -39,7 +39,7 @@ const ICON_COL_W = 'w-16'
 const TEXT_COL_W = 'w-52'
 const ICON_SUB_W = 'w-14'
 const TEXT_SUB_W = 'w-48'
-const RAIL_W = 'w-8'
+const RAIL_W = 'w-6'
 const COLLAPSE_KEY = 'sidebarCollapseState'
 
 interface TooltipState { text: string; top: number; left: number }
@@ -587,9 +587,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             data-testid="sidebar-collapsed-rail"
             onClick={() => setMasterCollapsed(false)}
             title="Espandi menu"
-            className="mt-auto mb-2 p-1.5 rounded-lg text-sidebar-text/60 hover:bg-sidebar-active-bg hover:text-sidebar-active-text"
+            className="mt-auto mb-2 p-1 rounded-lg text-sidebar-text/70 hover:bg-sidebar-active-bg hover:text-sidebar-active-text"
           >
-            <PanelLeftOpen size={18} />
+            <PanelLeftOpen size={14} />
           </button>
         </aside>
       )}

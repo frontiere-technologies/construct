@@ -193,3 +193,16 @@ def test_narrow_viewport_forces_col2_icons(logged_in_page):
         timeout=5_000,
     )
     assert l2.bounding_box()["width"] >= 100, "L2 did not restore saved (text) preference above 768px"
+
+
+def test_collapsed_rail_is_narrow(logged_in_page):
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+    rail = page.locator("aside").first
+    width = rail.bounding_box()["width"]
+    assert width <= 28, f"Collapsed rail is not narrow enough: {width:.0f}px"
