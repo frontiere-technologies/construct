@@ -412,7 +412,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
   )
 
-  const sidebarColumns = (
+  const renderSidebarColumns = (isPreview: boolean) => (
       <>
       <aside className={clsx(
         'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
@@ -455,17 +455,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             'mt-1 border-t border-sidebar-text/10 pt-3 transition-colors duration-200',
             effCol1Collapsed ? 'flex flex-col items-center gap-1' : 'flex items-center gap-2'
           )}>
-            <button
-              data-testid="sidebar-master-toggle"
-              onClick={() => setMasterCollapsed(true)}
-              title="Collassa menu"
-              className={clsx(
-                'flex items-center justify-center rounded-lg text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text transition-colors duration-200',
-                effCol1Collapsed ? 'w-full py-2 order-2' : 'flex-shrink-0 p-1.5 order-1'
-              )}
-            >
-              <PanelLeftClose size={20} className="flex-shrink-0" />
-            </button>
+            {!isPreview && (
+              <button
+                data-testid="sidebar-master-toggle"
+                onClick={() => setMasterCollapsed(true)}
+                title="Collassa menu"
+                className={clsx(
+                  'flex items-center justify-center rounded-lg text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text transition-colors duration-200',
+                  effCol1Collapsed ? 'w-full py-2 order-2' : 'flex-shrink-0 p-1.5 order-1'
+                )}
+              >
+                <PanelLeftClose size={20} className="flex-shrink-0" />
+              </button>
+            )}
 
             {/* User section — clickable, opens user panel in col2 */}
             <button
@@ -628,7 +630,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         document.body
       )}
 
-      {!masterCollapsed && sidebarColumns}
+      {!masterCollapsed && renderSidebarColumns(false)}
 
       {masterCollapsed && hoverPreviewOpen && createPortal(
         <div
@@ -637,7 +639,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           onMouseLeave={handleHoverLeave}
           className="fixed top-0 left-6 h-screen z-40 shadow-2xl flex"
         >
-          {sidebarColumns}
+          {renderSidebarColumns(true)}
         </div>,
         document.body
       )}

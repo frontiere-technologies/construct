@@ -223,6 +223,25 @@ def test_hover_shows_preview_overlay(logged_in_page):
     assert preview.locator("aside").count() >= 1, "Preview overlay has no sidebar columns inside it"
 
 
+def test_hover_preview_hides_master_toggle(logged_in_page):
+    # The master-collapse button ("Collassa menu") only makes sense when the
+    # sidebar is pinned expanded -- inside the hover preview the rail is
+    # already collapsed, so the button must not be rendered there.
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+    rail = page.locator("aside").first
+    rail.hover()
+    preview = page.locator('[data-testid="sidebar-hover-preview"]')
+    preview.wait_for(state="visible", timeout=2_000)
+    assert preview.locator('[data-testid="sidebar-master-toggle"]').count() == 0, \
+        "Master-collapse toggle should not appear inside the hover preview overlay"
+
+
 def test_hover_preview_closes_on_mouse_leave(logged_in_page):
     page = logged_in_page
     l1 = page.locator("aside").first
