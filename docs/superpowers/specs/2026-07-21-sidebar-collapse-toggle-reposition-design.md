@@ -39,7 +39,7 @@ Both mockup iterations were validated interactively via the brainstorming visual
 - **`components/Sidebar.tsx`**:
   - Remove the inline master-toggle `<button>` (currently rendered in the bottom account section for both icon-only and text sub-states of col1).
   - Extend the `ColToggle` rendering into a two-circle stack. Whether this is a new `ColToggleGroup` component wrapping `ColToggle` plus a new `ColClose`-style button, or two components composed by the caller, is left to the implementation plan — but the chevron's existing styling/behavior/testid must be preserved unchanged.
-  - col1: wrap the account-button row in a `relative` div; position the stack `absolute -right-3 top-1/2 -translate-y-1/2` inside it, gated by `!isPreview`.
+  - col1: wrap the account-button row in a `relative` div; position the stack `absolute -right-3 top-1/2 -translate-y-1/2` inside it. Only the `✕` is gated by `!isPreview` — the chevron keeps rendering inside the preview overlay, matching its existing (pre-this-change) behavior of staying usable there.
   - col2/col3: position the stack `absolute -right-3 bottom-4` (X above, chevron below) on the respective `<aside>`, same as today's single `ColToggle` anchor point.
   - Wire the two new close handlers (col2, col3) to the existing state setters (`setSelectedL1Id`, `setSelectedL2Id`, `setUserPanelOpen`) — no new state needed.
 
@@ -52,7 +52,7 @@ No other files change — no new context, no new library.
   - col1's `✕` (via `sidebar-master-toggle`) still triggers master-collapse from both col1 sub-states (icon-only and text).
   - col1's `✕` does not appear inside the hover-preview overlay (mirrors `test_hover_preview_hides_master_toggle`, now targeting the new location).
   - col2's `✕` closes col2 (asserts `aside` count decreases / admin panel disappears) without affecting col1.
-  - col3's `✕` closes col3 without affecting col1/col2.
+- **col3 exception:** repository investigation (seed data in `sources/devops/db/schema.sql`) found no menu item under "Admin" that is itself a container with its own children, so col3 is currently unreachable through the running app in the e2e environment — it already has zero existing test coverage today, independent of this change. col3's `✕` is implemented identically to col2's (for correctness and symmetry) but is not covered by a new automated e2e test; it's verified manually instead. Adding seed/fixture data to make col3 reachable is out of scope for this change.
 - Manual verification in the browser (Playwright via the webapp-testing skill) before considering the work done, per this project's standing convention for frontend changes.
 
 ## Out of Scope
