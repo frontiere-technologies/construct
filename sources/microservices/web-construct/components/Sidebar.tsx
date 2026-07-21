@@ -273,6 +273,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     }, 180)
   }, [])
 
+  // col1's close button: collapses the sidebar when pinned expanded (as
+  // before), and also dismisses the hover-preview overlay when clicked from
+  // inside it -- setMasterCollapsed(true) alone is a no-op there since it's
+  // already true, so without this the button did nothing visible. Clearing
+  // the timers and hoveringRef mirrors the masterCollapsed effect below:
+  // the preview's DOM (and its onMouseLeave) unmounts right under the
+  // cursor, so no real mouseleave will ever fire to do this on its own.
+  const handleMasterClose = useCallback(() => {
+    setMasterCollapsed(true)
+    hoveringRef.current = false
+    if (openTimerRef.current) clearTimeout(openTimerRef.current)
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    setHoverPreviewOpen(false)
+  }, [])
+
   // Closes the preview on a real route change; container-expand clicks
   // inside the preview don't change the route, so they don't close it.
   useEffect(() => {
@@ -439,7 +454,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           collapsed={effCol1Collapsed}
           onToggleCollapse={() => setCol1Collapsed(c => !c)}
           toggleDisabled={isNarrowViewport}
-          onClose={() => setMasterCollapsed(true)}
+          onClose={handleMasterClose}
           closeTestId="sidebar-master-toggle"
           closeTitle="Collassa menu"
           anchorClassName="-right-[9px] bottom-[9px]"

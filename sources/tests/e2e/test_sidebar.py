@@ -241,9 +241,9 @@ def test_hover_shows_preview_overlay(logged_in_page):
 
 
 def test_hover_preview_shows_master_toggle(logged_in_page):
-    # The master-collapse button ("Collassa menu") is harmless to show inside
-    # the hover preview: clicking it just re-asserts masterCollapsed(true),
-    # which is already true there, so there's no need to hide it.
+    # The master-collapse button ("Collassa menu") is shown inside the hover
+    # preview too -- clicking it there dismisses the preview (see
+    # test_hover_preview_master_toggle_closes_it below), so it must be visible.
     page = logged_in_page
     l1 = page.locator("aside").first
     l1.locator('[data-testid="sidebar-master-toggle"]').click()
@@ -257,6 +257,29 @@ def test_hover_preview_shows_master_toggle(logged_in_page):
     preview.wait_for(state="visible", timeout=2_000)
     assert preview.locator('[data-testid="sidebar-master-toggle"]').count() == 1, \
         "Master-collapse toggle should still appear inside the hover preview overlay"
+
+
+def test_hover_preview_master_toggle_closes_it(logged_in_page):
+    # Clicking col1's close (X) button from inside the hover preview must
+    # dismiss the preview -- setMasterCollapsed(true) alone is a no-op there
+    # (masterCollapsed is already true), so the button needs to also close
+    # hoverPreviewOpen or it would do nothing visible.
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+    rail = page.locator("aside").first
+    rail.hover()
+    preview = page.locator('[data-testid="sidebar-hover-preview"]')
+    preview.wait_for(state="visible", timeout=2_000)
+
+    preview.locator('[data-testid="sidebar-master-toggle"]').click()
+    preview.wait_for(state="hidden", timeout=2_000)
+    assert page.locator('[data-testid="sidebar-collapsed-rail"]').is_visible(), \
+        "Rail should still be collapsed (not pinned expanded) after closing the preview"
 
 
 def test_master_toggle_not_left_of_avatar_when_l1_expanded(logged_in_page):
