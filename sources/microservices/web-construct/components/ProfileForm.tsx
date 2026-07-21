@@ -126,17 +126,17 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 mt-6">
+          <div className="flex justify-end gap-2 mt-6">
             <button
               onClick={() => { setProfile(initialProfile); setStatus(null) }}
-              className="flex-1 py-2 px-4 rounded-lg border border-border text-sm font-medium hover:bg-surface-hover transition-colors"
+              className="px-4 py-2 text-sm rounded-lg border border-border"
             >
               Annulla
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex-1 py-2 px-4 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+              className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {saving ? 'Saving…' : 'Salva'}
             </button>

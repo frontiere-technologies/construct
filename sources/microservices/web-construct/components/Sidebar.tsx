@@ -382,21 +382,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
       )}>
         <ColToggle collapsed={effCol1Collapsed} onToggle={() => setCol1Collapsed(c => !c)} disabled={isNarrowViewport} />
 
-        <div className="p-2 border-b border-sidebar-text/10">
-          <button
-            data-testid="sidebar-master-toggle"
-            onClick={() => setMasterCollapsed(true)}
-            title="Collassa menu"
-            className={clsx(
-              'w-full flex items-center rounded-lg py-2 px-3 text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text transition-colors duration-200',
-              effCol1Collapsed ? 'justify-center' : 'gap-3'
-            )}
-          >
-            <PanelLeftClose size={20} className="flex-shrink-0" />
-            {!effCol1Collapsed && <span className="text-sm">Collassa menu</span>}
-          </button>
-        </div>
-
         {topItems.length > 0 && (
           <div className="p-2 border-b border-sidebar-text/10 space-y-1">
             {topItems.map(item => (
@@ -428,30 +413,47 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               onClick={() => handleL1Click(item)} />
           ))}
 
-          {/* User section — clickable, opens user panel in col2 */}
-          <button
-            onClick={handleUserClick}
-            onMouseEnter={effCol1Collapsed ? e => showTooltip(e, authUser?.email?.split('@')[0] ?? 'Account') : undefined}
-            onMouseLeave={effCol1Collapsed ? hideTooltip : undefined}
-            className={clsx(
-              'w-full flex items-center gap-2 rounded-lg py-2 px-2 mt-1 border-t border-sidebar-text/10 pt-3 transition-colors duration-200',
-              effCol1Collapsed ? 'justify-center' : '',
-              userPanelOpen
-                ? 'text-sidebar-active-text'
-                : 'text-sidebar-text hover:text-sidebar-active-text'
-            )}
-          >
-            {authUser?.image
-              ? <Image src={authUser.image} alt="" width={26} height={26} className="rounded-full flex-shrink-0" />
-              : <CircleUser size={26} className={clsx('flex-shrink-0 transition-colors', userPanelOpen ? 'text-primary' : 'opacity-60')} />
-            }
-            {!effCol1Collapsed && (
-              <div className="flex flex-col min-w-0 flex-1 text-left">
-                <TruncatedSpan text={authUser?.email?.split('@')[0] ?? ''} className="text-xs font-medium truncate" onShowTooltip={showTooltip} onHideTooltip={hideTooltip} />
-                <TruncatedSpan text={authUser?.email ?? ''} className="text-xs opacity-50 truncate" onShowTooltip={showTooltip} onHideTooltip={hideTooltip} />
-              </div>
-            )}
-          </button>
+          <div className={clsx(
+            'mt-1 border-t border-sidebar-text/10 pt-3 transition-colors duration-200',
+            effCol1Collapsed ? 'flex flex-col items-center gap-1' : 'flex items-center gap-2'
+          )}>
+            <button
+              data-testid="sidebar-master-toggle"
+              onClick={() => setMasterCollapsed(true)}
+              title="Collassa menu"
+              className={clsx(
+                'flex items-center justify-center rounded-lg text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text transition-colors duration-200',
+                effCol1Collapsed ? 'w-full py-2 order-2' : 'flex-shrink-0 p-1.5 order-1'
+              )}
+            >
+              <PanelLeftClose size={20} className="flex-shrink-0" />
+            </button>
+
+            {/* User section — clickable, opens user panel in col2 */}
+            <button
+              onClick={handleUserClick}
+              onMouseEnter={effCol1Collapsed ? e => showTooltip(e, authUser?.email?.split('@')[0] ?? 'Account') : undefined}
+              onMouseLeave={effCol1Collapsed ? hideTooltip : undefined}
+              className={clsx(
+                'flex items-center gap-2 rounded-lg transition-colors duration-200',
+                effCol1Collapsed ? 'w-full justify-center py-1 order-1' : 'flex-1 min-w-0 py-1 px-1 order-2',
+                userPanelOpen
+                  ? 'text-sidebar-active-text'
+                  : 'text-sidebar-text hover:text-sidebar-active-text'
+              )}
+            >
+              {authUser?.image
+                ? <Image src={authUser.image} alt="" width={26} height={26} className="rounded-full flex-shrink-0" />
+                : <CircleUser size={26} className={clsx('flex-shrink-0 transition-colors', userPanelOpen ? 'text-primary' : 'opacity-60')} />
+              }
+              {!effCol1Collapsed && (
+                <div className="flex flex-col min-w-0 flex-1 text-left">
+                  <TruncatedSpan text={authUser?.email?.split('@')[0] ?? ''} className="text-xs font-medium truncate" onShowTooltip={showTooltip} onHideTooltip={hideTooltip} />
+                  <TruncatedSpan text={authUser?.email ?? ''} className="text-xs opacity-50 truncate" onShowTooltip={showTooltip} onHideTooltip={hideTooltip} />
+                </div>
+              )}
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -585,7 +587,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             data-testid="sidebar-collapsed-rail"
             onClick={() => setMasterCollapsed(false)}
             title="Espandi menu"
-            className="mt-2 p-1.5 rounded-lg text-sidebar-text/60 hover:bg-sidebar-active-bg hover:text-sidebar-active-text"
+            className="mt-auto mb-2 p-1.5 rounded-lg text-sidebar-text/60 hover:bg-sidebar-active-bg hover:text-sidebar-active-text"
           >
             <PanelLeftOpen size={18} />
           </button>

@@ -27,8 +27,8 @@ export default function CreateRoleModal({ onClose }: { onClose: () => void }) {
           autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Nome ruolo"
           className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface-overlay mb-6"
         />
-        <div className="flex items-center justify-between">
-          <button onClick={onClose} className="text-sm font-medium">Annulla</button>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-2 text-sm rounded-lg border border-border">Annulla</button>
           <button
             onClick={submit} disabled={!name.trim() || busy}
             className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"

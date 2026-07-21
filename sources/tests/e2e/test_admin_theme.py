@@ -21,58 +21,45 @@ def _theme_primary_var(page):
     )
 
 
-def test_theme_buttons_labeled_reset_annulla_salva(logged_in_page, base_url):
+def test_theme_buttons_labeled_default_values_salva(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/admin/theme")
-    expect(page.get_by_role("button", name="Reset", exact=True)).to_be_visible()
-    expect(page.get_by_role("button", name="Annulla", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Valori di Default", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Salva", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Annulla", exact=True)).to_have_count(0)
 
 
-def test_color_change_does_not_apply_until_save(logged_in_page, base_url):
-    page = logged_in_page
-    nav(page, f"{base_url}/admin/theme")
-    original_var = _theme_primary_var(page)
-    picker = page.locator('input[type="color"]').first
-    original_value = picker.input_value()
-
-    _set_color(picker, "#123456")
-    expect(picker).to_have_value("#123456")
-    assert _theme_primary_var(page) == original_var, "color must not apply live before Save"
-
-    # Cleanup: discard the unsaved edit
-    page.get_by_role("button", name="Annulla", exact=True).click()
-    expect(picker).to_have_value(original_value)
-
-
-def test_reset_updates_draft_without_applying(logged_in_page, base_url):
-    page = logged_in_page
-    nav(page, f"{base_url}/admin/theme")
-    original_var = _theme_primary_var(page)
-    picker = page.locator('input[type="color"]').first
-
-    page.get_by_role("button", name="Reset", exact=True).click()
-    expect(picker).to_have_value(PRIMARY_DEFAULT)
-    assert _theme_primary_var(page) == original_var, "Reset must not apply live before Save"
-
-    # Cleanup: discard the reset draft
-    page.get_by_role("button", name="Annulla", exact=True).click()
-
-
-def test_annulla_discards_pending_edits(logged_in_page, base_url):
+def test_color_change_applies_live_before_save(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/admin/theme")
     picker = page.locator('input[type="color"]').first
     original_value = picker.input_value()
 
-    _set_color(picker, "#abcdef")
-    expect(picker).to_have_value("#abcdef")
+    try:
+        _set_color(picker, "#123456")
+        expect(picker).to_have_value("#123456")
+        assert _theme_primary_var(page) == "#123456", "color must apply live before Save"
+    finally:
+        # Cleanup: restore the original color without persisting the edit
+        _set_color(picker, original_value)
 
-    page.get_by_role("button", name="Annulla", exact=True).click()
-    expect(picker).to_have_value(original_value)
+
+def test_reset_updates_and_applies_default_values(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/admin/theme")
+    picker = page.locator('input[type="color"]').first
+    original_value = picker.input_value()
+
+    try:
+        page.get_by_role("button", name="Valori di Default", exact=True).click()
+        expect(picker).to_have_value(PRIMARY_DEFAULT)
+        assert _theme_primary_var(page) == PRIMARY_DEFAULT, "Reset must apply live"
+    finally:
+        # Cleanup: restore the original color without persisting the edit
+        _set_color(picker, original_value)
 
 
-def test_save_applies_and_persists_color(logged_in_page, base_url):
+def test_save_persists_color(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/admin/theme")
     picker = page.locator('input[type="color"]').first
@@ -83,7 +70,7 @@ def test_save_applies_and_persists_color(logged_in_page, base_url):
         page.get_by_role("button", name="Salva", exact=True).click()
         page.locator("text=Theme saved.").wait_for(state="visible", timeout=10_000)
 
-        assert _theme_primary_var(page) == "#00ff00", "Save must apply the color live"
+        assert _theme_primary_var(page) == "#00ff00"
 
         page.reload()
         page.wait_for_load_state("networkidle")
@@ -104,8 +91,7 @@ def test_inputs_disabled_while_saving(logged_in_page, base_url):
     page.get_by_role("button", name="Salva", exact=True).click()
     expect(picker).to_be_disabled()
     expect(page.locator('input[type="color"]').nth(1)).to_be_disabled()
-    expect(page.get_by_role("button", name="Reset", exact=True)).to_be_disabled()
-    expect(page.get_by_role("button", name="Annulla", exact=True)).to_be_disabled()
+    expect(page.get_by_role("button", name="Valori di Default", exact=True)).to_be_disabled()
     page.locator("text=Theme saved.").wait_for(state="visible", timeout=10_000)
     expect(picker).to_be_enabled()
     expect(page.locator('input[type="color"]').nth(1)).to_be_enabled()

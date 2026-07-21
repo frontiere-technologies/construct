@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState } from 'react'
 import { useUI } from '@/context/UIContext'
 import { defaultThemeConfig } from '@/types/menu'
 import { saveThemeConfig } from '@/lib/theme-actions'
@@ -97,44 +97,23 @@ const TOKEN_GROUPS: TokenGroup[] = [
 
 export const AdminTheme: React.FC = () => {
   const { settings, setSettings } = useUI()
-  const [draftThemeConfig, setDraftThemeConfig] = useState<ThemeConfig>(settings.themeConfig)
-  const hasPendingEdits = useRef(false)
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
-  // Keep the draft in sync with the applied theme (e.g. once UIContext finishes
-  // loading the DB-saved config) as long as the user hasn't started editing.
-  useEffect(() => {
-    if (!hasPendingEdits.current) {
-      setDraftThemeConfig(settings.themeConfig)
-    }
-  }, [settings.themeConfig])
-
   const updateTheme = (key: keyof ThemeConfig, value: string) => {
-    hasPendingEdits.current = true
-    setDraftThemeConfig(prev => ({ ...prev, [key]: value }))
+    setSettings(prev => ({ ...prev, themeConfig: { ...prev.themeConfig, [key]: value } }))
   }
 
   const handleReset = () => {
-    hasPendingEdits.current = true
-    setDraftThemeConfig(defaultThemeConfig)
-  }
-
-  const handleCancel = () => {
-    hasPendingEdits.current = false
-    setDraftThemeConfig(settings.themeConfig)
+    setSettings(prev => ({ ...prev, themeConfig: defaultThemeConfig }))
   }
 
   const handleSave = async () => {
     setSaving(true)
     setSaveStatus('idle')
-    const { error } = await saveThemeConfig(draftThemeConfig)
+    const { error } = await saveThemeConfig(settings.themeConfig)
     setSaving(false)
     setSaveStatus(error ? 'error' : 'success')
-    if (!error) {
-      hasPendingEdits.current = false
-      setSettings({ ...settings, themeConfig: draftThemeConfig })
-    }
     setTimeout(() => setSaveStatus('idle'), 3000)
   }
 
@@ -144,7 +123,7 @@ export const AdminTheme: React.FC = () => {
           <h3 className="font-medium text-foreground border-b pb-2 border-border">Global</h3>
           <ColorPicker
             label="Primary Color (Active Icons, Buttons)"
-            value={draftThemeConfig.primaryColor}
+            value={settings.themeConfig.primaryColor}
             onChange={v => updateTheme('primaryColor', v)}
             disabled={saving}
           />
@@ -160,8 +139,8 @@ export const AdminTheme: React.FC = () => {
                 <TokenRow
                   key={row.label}
                   label={row.label}
-                  lightValue={draftThemeConfig[row.lightKey]}
-                  darkValue={draftThemeConfig[row.darkKey]}
+                  lightValue={settings.themeConfig[row.lightKey]}
+                  darkValue={settings.themeConfig[row.darkKey]}
                   onChangeLight={v => updateTheme(row.lightKey, v)}
                   onChangeDark={v => updateTheme(row.darkKey, v)}
                   disabled={saving}
@@ -173,6 +152,11 @@ export const AdminTheme: React.FC = () => {
 
         <div className="pt-4 border-t border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {saveStatus === 'idle' && (
+              <span className="text-sm text-foreground-faint">
+                ℹ️ Ricordati di salvare i valori, altrimenti verranno persi alla chiusura dell&apos;applicazione.
+              </span>
+            )}
             {saveStatus === 'success' && (
               <span className="text-sm text-green-600 dark:text-green-400">Theme saved.</span>
             )}
@@ -186,19 +170,12 @@ export const AdminTheme: React.FC = () => {
               disabled={saving}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Reset
-            </button>
-            <button
-              onClick={handleCancel}
-              disabled={saving}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Annulla
+              Valori di Default
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-2 text-sm text-white bg-[var(--theme-primary)] hover:opacity-90 disabled:opacity-50 rounded-lg transition-opacity"
+              className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {saving ? 'Saving…' : 'Salva'}
             </button>

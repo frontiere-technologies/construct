@@ -27,15 +27,21 @@ def _create_role(page, base_url, name):
 
 
 def _delete_role(page, base_url, name):
-    """Delete a role via the column filter + row menu, then assert it's gone."""
+    """Delete a role via the column filter + row menu + confirm modal, then assert it's gone.
+
+    Deletion is confirmed via a custom ConfirmModal (not a native browser dialog),
+    whose confirm button is also labelled "Elimina" — the two never coexist in the
+    DOM (the row menu closes as the modal opens), so re-querying by role/name after
+    each click unambiguously targets the currently-visible one.
+    """
     _search(page, base_url, name)
     row = _rows(page).filter(has_text=name)
     expect(row).to_be_visible()
     row_menu = row.locator('[data-testid^="row-menu"]')
     row_menu.scroll_into_view_if_needed()
     row_menu.click()
-    page.once("dialog", lambda d: d.accept())
-    page.get_by_role("button", name="Elimina").click()
+    page.get_by_role("button", name="Elimina").click()  # row-menu item -> opens ConfirmModal
+    page.get_by_role("button", name="Elimina").click()  # ConfirmModal's confirm button
     _search(page, base_url, name)
     expect(_rows(page).filter(has_text=name)).to_have_count(0)
 
@@ -56,11 +62,13 @@ def test_create_rename_delete_role(logged_in_page, base_url):
     _create_role(page, base_url, name)
     assert name in page.inner_text("h1")
 
-    # Rename via the pencil (SERVICE roles are renamable)
+    # Rename via the pencil (SERVICE roles are renamable). The rename modal's own
+    # "Salva" button is disambiguated via testid from the page's own Salva/Annulla
+    # footer (always visible now that permissions are editable without a "Modifica" gate).
     renamed = name + " R"
     page.get_by_test_id("rename-role-btn").click()
     page.get_by_placeholder("Nome ruolo").fill(renamed)
-    page.get_by_role("button", name="Salva").click()
+    page.get_by_test_id("rename-role-save").click()
     # Wait for the heading to reflect the rename (retrying assertion)
     expect(page.locator("h1")).to_contain_text(renamed)
 
@@ -72,12 +80,18 @@ def test_toggle_permission_persists(logged_in_page, base_url):
     name = f"E2E Perm {int(time.time())}"
     detail_url = _create_role(page, base_url, name)
 
-    page.get_by_role("button", name="Modifica").click()
+    # Permissions are directly editable on the page (no "Modifica" gate) —
+    # toggle a switch and save via the page's own Annulla/Salva footer.
     page.locator('[data-testid="perm-toggle"]').first.click()
-    page.get_by_role("button", name="Salva").click()
+    save_btn = page.get_by_role("button", name="Salva")
+    save_btn.click()
 
-    # Wait for save to complete: edit mode exits → "Modifica" button reappears
-    page.get_by_role("button", name="Modifica").wait_for(state="visible", timeout=10_000)
+    # Wait for the save request to settle before reloading: the button disables
+    # while the server action is in flight and re-enables once it resolves, so
+    # this avoids racing the in-flight updateRolePermissions call with the reload
+    # below (a flat wait_for_load_state("networkidle") proved unreliable here).
+    expect(save_btn).to_be_disabled()
+    expect(save_btn).to_be_enabled()
 
     # Reload and assert at least one permission toggle is ON
     nav(page, detail_url)
@@ -88,11 +102,32 @@ def test_toggle_permission_persists(logged_in_page, base_url):
     _delete_role(page, base_url, name)
 
 
+def test_cancel_leaves_detail_page(logged_in_page, base_url):
+    """"Annulla" on the role detail page must navigate back to the roles list,
+    not just reset unsaved toggle state in place."""
+    page = logged_in_page
+    name = f"E2E Cancel {int(time.time())}"
+    _create_role(page, base_url, name)
+
+    page.locator('[data-testid="perm-toggle"]').first.click()
+    page.get_by_role("button", name="Annulla").click()
+    expect(page).to_have_url(f"{base_url}/roles-permissions")
+
+    _delete_role(page, base_url, name)
+
+
 def test_system_role_not_editable(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/roles-permissions/1")  # Administrator = SYSTEM
-    edit = page.get_by_role("button", name="Modifica")
-    expect(edit).to_be_disabled()
+    # System roles keep the Annulla/Salva footer, but Salva is disabled (nothing
+    # can be persisted) and permission toggles render disabled (read-only).
+    expect(page.get_by_role("button", name="Salva")).to_be_disabled()
+    expect(page.get_by_role("button", name="Annulla")).to_be_enabled()
+    expect(page.locator('[data-testid="perm-toggle"]').first).to_be_disabled()
+
+    # Annulla still exits the page even for a non-editable system role.
+    page.get_by_role("button", name="Annulla").click()
+    expect(page).to_have_url(f"{base_url}/roles-permissions")
 
 
 def test_filter_by_creation_date_range(logged_in_page, base_url):

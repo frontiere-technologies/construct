@@ -107,6 +107,9 @@ def test_status_toggle_updates_grid_in_place(logged_in_page, base_url):
     Scopes assertions to the row's own `row-id` attribute (the user's id) rather
     than "some badge somewhere", and asserts the URL never changes, so this test
     would fail if the refreshInfiniteCache() call were removed from toggleStatus.
+
+    The toggle now lives in the row's "..." actions menu (not a click on the
+    badge itself), so each flip is driven through that menu.
     """
     page = logged_in_page
     nav(page, f"{base_url}/user-management")
@@ -124,14 +127,19 @@ def test_status_toggle_updates_grid_in_place(logged_in_page, base_url):
     # must still be present with the flipped status — without any navigation.
     row_by_id = page.locator(f'.ag-row[row-id="{row_id}"]')
 
-    page.once("dialog", lambda d: d.accept())
-    badge.click()
+    def _toggle_via_menu(expected_menu_label):
+        row_menu = row_by_id.locator('[data-testid^="row-menu"]')
+        row_menu.scroll_into_view_if_needed()
+        row_menu.click()
+        page.once("dialog", lambda d: d.accept())
+        page.get_by_role("button", name=expected_menu_label).click()
+
+    _toggle_via_menu("Disattiva" if original_text == "Attivo" else "Attiva")
     expect(row_by_id.locator('[data-testid="status-badge"]')).to_have_text(flipped_text)
     expect(page).to_have_url(url_before)
 
     # Restore original state so the test doesn't leave data mutated.
-    page.once("dialog", lambda d: d.accept())
-    row_by_id.locator('[data-testid="status-badge"]').click()
+    _toggle_via_menu("Disattiva" if flipped_text == "Attivo" else "Attiva")
     expect(row_by_id.locator('[data-testid="status-badge"]')).to_have_text(original_text)
     expect(page).to_have_url(url_before)
 

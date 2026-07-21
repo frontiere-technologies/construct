@@ -23,7 +23,6 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
   const loaded = useMemo(() => buildAuthMap(allTrees), [allTrees])
 
   const [tab, setTab] = useState<'sezioni' | 'operazioni'>('sezioni')
-  const [editing, setEditing] = useState(false)
   const [map, setMap] = useState<Map<number, boolean>>(loaded)
   const [renaming, setRenaming] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -31,14 +30,12 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
   const isSystem = role.roleType === 'SYSTEM'
   const canRename = role.roleType === 'SERVICE'
 
-  const startEdit = () => { setMap(new Map(loaded)); setEditing(true) }
-  const cancel = () => { setMap(new Map(loaded)); setEditing(false) }
+  const cancel = () => router.push('/roles-permissions')
   const save = async () => {
     setBusy(true)
     try {
       const deltas = computeDeltas(loaded, map)
       if (deltas.length) await updateRolePermissions(role.id, deltas)
-      setEditing(false)
       router.refresh()
     } finally { setBusy(false) }
   }
@@ -61,22 +58,6 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
         </>
       }
       subtitle={`${role.associatedUsersCount} Utenti associati`}
-      actions={
-        <div className="flex items-center gap-2">
-          {editing ? (
-            <>
-              <button onClick={cancel} className="px-4 py-2 text-sm rounded-lg border border-border">Annulla</button>
-              <button onClick={save} disabled={busy} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40">Salva</button>
-            </>
-          ) : (
-            <button
-              onClick={startEdit} disabled={isSystem}
-              title={isSystem ? 'I ruoli di sistema non sono modificabili' : undefined}
-              className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
-            >Modifica</button>
-          )}
-        </div>
-      }
     >
       <div className="flex gap-6 border-b border-border-subtle">
         {(['sezioni', 'operazioni'] as const).map(t => (
@@ -88,7 +69,16 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
         ))}
       </div>
 
-      <PermissionsTree trees={trees} map={map} onChange={setMap} editable={editing} />
+      <PermissionsTree trees={trees} map={map} onChange={setMap} editable={!isSystem} />
+
+      <div className="pt-4 border-t border-border flex items-center justify-end gap-3">
+        <button onClick={cancel} className="px-4 py-2 text-sm rounded-lg border border-border">Annulla</button>
+        <button
+          onClick={save} disabled={busy || isSystem}
+          title={isSystem ? 'I ruoli di sistema non sono modificabili' : undefined}
+          className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        >Salva</button>
+      </div>
 
       {renaming && <RenameRoleModal roleId={role.id} currentName={role.roleName} onClose={() => setRenaming(false)} />}
     </PageContainer>
