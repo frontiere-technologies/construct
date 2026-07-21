@@ -290,3 +290,70 @@ def test_hover_preview_does_not_resize_main_content(logged_in_page):
     width_after = main.bounding_box()["width"]
 
     assert width_after == width_before, f"Main content resized during hover preview: {width_before:.0f}px → {width_after:.0f}px"
+
+
+def test_hover_preview_does_not_reopen_instantly_after_pin_and_recollapse(logged_in_page):
+    # Regression test for: hoverPreviewOpen was only ever reset on pathname
+    # change or the mouse-leave debounce path, never when masterCollapsed
+    # transitioned from true -> false. Repro:
+    #   1. Collapse the rail, hover it -> preview opens after the 180ms debounce.
+    #   2. Click the rail's own button to pin the sidebar expanded
+    #      (setMasterCollapsed(false)). React unmounts the rail out from under
+    #      the cursor, so no real mouseleave ever fires on it.
+    #   3. Re-collapse via the master-toggle button inside the expanded columns.
+    #   4. Because hoverPreviewOpen was never cleared in step 2, the overlay's
+    #      render condition (masterCollapsed && hoverPreviewOpen) is instantly
+    #      true again -- the overlay pops open with no fresh hover and no
+    #      180ms debounce, violating the hover-intent debounce requirement.
+    page = logged_in_page
+    l1 = page.locator("aside").first
+    l1.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('aside').length === 1",
+        timeout=5_000,
+    )
+
+    rail = page.locator("aside").first
+    rail.hover()
+    preview = page.locator('[data-testid="sidebar-hover-preview"]')
+    preview.wait_for(state="visible", timeout=2_000)
+
+    # Pin the sidebar expanded by clicking the rail's own button -- not a
+    # mouseleave -- exactly as described in the bug repro.
+    page.locator('[data-testid="sidebar-collapsed-rail"]').click()
+    page.wait_for_function(
+        "() => document.querySelector('[data-testid=\"sidebar-collapsed-rail\"]') === null"
+        " && document.querySelector('[data-testid=\"sidebar-master-toggle\"]') !== null",
+        timeout=5_000,
+    )
+
+    # Move the mouse away from where the (now-unmounted) rail used to be, so
+    # nothing in this test itself could trigger a fresh, legitimate hover.
+    page.mouse.move(800, 450)
+
+    # Re-collapse via the master-toggle button inside the pinned/expanded columns.
+    # Note: we wait for the rail button to reappear (a reliable masterCollapsed
+    # === true signal), rather than for the aside count to drop to 1 -- if the
+    # bug is present, the stale hoverPreviewOpen state also keeps the portaled
+    # preview (with its own <aside> columns) mounted, so the total aside count
+    # would never reach 1 even though the collapse itself succeeded.
+    # Note: deliberately do NOT move the mouse again after this click. Clicking
+    # the button leaves the cursor resting exactly where the button was, which
+    # is where the rail's own button subsequently renders (both are bottom-
+    # anchored in the same narrow column) -- mirroring the real scenario where
+    # the user's cursor doesn't move away right after the click that collapsed
+    # it. Moving the mouse away here would trigger a legitimate mouseleave on
+    # the freshly-mounted rail and mask the bug via the correct close-debounce
+    # path instead of exercising the stale-state reset this test targets.
+    l1_expanded = page.locator("aside").first
+    l1_expanded.locator('[data-testid="sidebar-master-toggle"]').click()
+    page.locator('[data-testid="sidebar-collapsed-rail"]').wait_for(state="visible", timeout=5_000)
+
+    # Give it well past the 180ms open-debounce window and assert the overlay
+    # never appears without a fresh hover.
+    page.wait_for_timeout(300)
+    assert not preview.is_visible(), (
+        "Hover preview reopened instantly after re-collapsing without a fresh "
+        "hover -- stale hoverPreviewOpen state was not cleared when pinning "
+        "(masterCollapsed: true -> false)"
+    )

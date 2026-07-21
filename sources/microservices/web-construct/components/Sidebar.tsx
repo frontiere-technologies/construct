@@ -262,6 +262,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     setHoverPreviewOpen(false)
   }, [pathname])
 
+  // Pinning the sidebar expanded (masterCollapsed: true -> false) must always
+  // clear any stale preview state. The rail is unmounted out from under the
+  // cursor when this happens, so no real mouseleave ever fires on it and
+  // hoverPreviewOpen would otherwise stay true — popping the overlay open
+  // instantly, with no fresh hover and no debounce, the next time the rail
+  // is re-collapsed. Also cancel any pending open/close timers so one
+  // scheduled right before the pin can't fire late and flip the state back.
+  useEffect(() => {
+    if (!masterCollapsed) {
+      if (openTimerRef.current) clearTimeout(openTimerRef.current)
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+      setHoverPreviewOpen(false)
+    }
+  }, [masterCollapsed])
+
   useEffect(() => () => {
     if (openTimerRef.current) clearTimeout(openTimerRef.current)
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
