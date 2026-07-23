@@ -47,12 +47,11 @@ interface TooltipState { text: string; top: number; left: number }
 const ColToggleStack: React.FC<{
   collapsed: boolean
   onToggleCollapse: () => void
-  toggleDisabled?: boolean
   onClose: () => void
   closeTestId: string
   closeTitle?: string
   anchorClassName: string
-}> = ({ collapsed, onToggleCollapse, toggleDisabled, onClose, closeTestId, closeTitle, anchorClassName }) => (
+}> = ({ collapsed, onToggleCollapse, onClose, closeTestId, closeTitle, anchorClassName }) => (
   <div className={clsx('absolute flex flex-col gap-0.5 z-10', anchorClassName)}>
     <button
       data-testid={closeTestId}
@@ -62,17 +61,15 @@ const ColToggleStack: React.FC<{
     >
       <X size={12} className="text-sidebar-text/60" />
     </button>
-    {!toggleDisabled && (
-      <button
-        data-testid="sidebar-toggle"
-        onClick={onToggleCollapse}
-        className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
-      >
-        {collapsed
-          ? <ChevronRight size={12} className="text-sidebar-text/60" />
-          : <ChevronLeft size={12} className="text-sidebar-text/60" />}
-      </button>
-    )}
+    <button
+      data-testid="sidebar-toggle"
+      onClick={onToggleCollapse}
+      className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
+    >
+      {collapsed
+        ? <ChevronRight size={12} className="text-sidebar-text/60" />
+        : <ChevronLeft size={12} className="text-sidebar-text/60" />}
+    </button>
   </div>
 )
 
@@ -273,50 +270,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     }, 180)
   }, [])
 
-  // col1's close button: collapses the sidebar when pinned expanded (as
-  // before), and also dismisses the hover-preview overlay when clicked from
-  // inside it -- setMasterCollapsed(true) alone is a no-op there since it's
-  // already true, so without this the button did nothing visible. Clearing
-  // the timers and hoveringRef mirrors the masterCollapsed effect below:
-  // the preview's DOM (and its onMouseLeave) unmounts right under the
-  // cursor, so no real mouseleave will ever fire to do this on its own.
-  const handleMasterClose = useCallback(() => {
-    setMasterCollapsed(true)
-    hoveringRef.current = false
-    if (openTimerRef.current) clearTimeout(openTimerRef.current)
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
-    setHoverPreviewOpen(false)
-  }, [])
-
-  // Closes the preview on a real route change; container-expand clicks
-  // inside the preview don't change the route, so they don't close it.
-  useEffect(() => {
-    setHoverPreviewOpen(false)
-  }, [pathname])
-
-  // Pinning the sidebar expanded (masterCollapsed: true -> false) must always
-  // clear any stale preview state. The rail is unmounted out from under the
-  // cursor when this happens, so no real mouseleave ever fires on it and
-  // hoverPreviewOpen would otherwise stay true — popping the overlay open
-  // instantly, with no fresh hover and no debounce, the next time the rail
-  // is re-collapsed. Also cancel any pending open/close timers so one
-  // scheduled right before the pin can't fire late and flip the state back.
-  useEffect(() => {
-    if (!masterCollapsed) {
-      if (openTimerRef.current) clearTimeout(openTimerRef.current)
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
-      setHoverPreviewOpen(false)
-    }
-  }, [masterCollapsed])
-
-  useEffect(() => () => {
-    if (openTimerRef.current) clearTimeout(openTimerRef.current)
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
-  }, [])
-
-  // Below this viewport width, force all three columns to icon-only mode so the
-  // fixed-width text columns never squeeze the layout. This never touches the
-  // persisted col1/col2/col3 preference — it's a pure render-time override.
+  // Below this viewport width, force the sidebar into the same collapsed-rail +
+  // hover-preview state as a manual master-collapse. This never touches the
+  // persisted master/col1/col2/col3 preference — it's a pure render-time
+  // override — and it's the reason effMasterCollapsed (not masterCollapsed) is
+  // used for hoverPreviewOpen/rail rendering.
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
 
   useEffect(() => {
@@ -327,9 +285,54 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
-  const effCol1Collapsed = isNarrowViewport || col1Collapsed
-  const effCol2Collapsed = isNarrowViewport || col2Collapsed
-  const effCol3Collapsed = isNarrowViewport || col3Collapsed
+  const effMasterCollapsed = isNarrowViewport || masterCollapsed
+
+  // col1's close button: collapses the sidebar when pinned expanded (as
+  // before), and also dismisses the hover-preview overlay when clicked from
+  // inside it -- setMasterCollapsed(true) alone is a no-op there since it's
+  // already true, so without this the button did nothing visible. Clearing
+  // the timers and hoveringRef mirrors the masterCollapsed effect below. Below
+  // the narrow-viewport breakpoint the collapse is already forced regardless
+  // of the persisted preference, so skip setMasterCollapsed there -- otherwise
+  // dismissing the preview on a narrow window would silently pin the sidebar
+  // collapsed for the next time the window is widened past 768px.
+  const handleMasterClose = useCallback(() => {
+    if (!isNarrowViewport) setMasterCollapsed(true)
+    hoveringRef.current = false
+    if (openTimerRef.current) clearTimeout(openTimerRef.current)
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    setHoverPreviewOpen(false)
+  }, [isNarrowViewport])
+
+  // Closes the preview on a real route change; container-expand clicks
+  // inside the preview don't change the route, so they don't close it.
+  useEffect(() => {
+    setHoverPreviewOpen(false)
+  }, [pathname])
+
+  // Leaving the effectively-collapsed state (pinning expanded, or widening back
+  // past the breakpoint) must always clear any stale preview state. The rail is
+  // unmounted out from under the cursor when this happens, so no real
+  // mouseleave ever fires on it and hoverPreviewOpen would otherwise stay true
+  // — popping the overlay open instantly, with no fresh hover and no debounce,
+  // the next time the rail is re-collapsed. Also cancel any pending open/close
+  // timers so one scheduled right before can't fire late and flip the state back.
+  useEffect(() => {
+    if (!effMasterCollapsed) {
+      if (openTimerRef.current) clearTimeout(openTimerRef.current)
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+      setHoverPreviewOpen(false)
+    }
+  }, [effMasterCollapsed])
+
+  useEffect(() => () => {
+    if (openTimerRef.current) clearTimeout(openTimerRef.current)
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+  }, [])
+
+  const effCol1Collapsed = col1Collapsed
+  const effCol2Collapsed = col2Collapsed
+  const effCol3Collapsed = col3Collapsed
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const showTooltip = useCallback((e: React.MouseEvent, text: string) => {
@@ -337,6 +340,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     setTooltip({ text, top: rect.top + rect.height / 2, left: rect.right + 8 })
   }, [])
   const hideTooltip = useCallback(() => setTooltip(null), [])
+
+  // A hovered nav item's mouseleave doesn't reliably fire when the click that
+  // triggered it also navigates away (the element can unmount mid-event), so
+  // without this the tooltip text from the just-clicked item stays stuck on
+  // screen, floating over the new page.
+  useEffect(() => {
+    setTooltip(null)
+  }, [pathname])
 
   useEffect(() => {
     const active = menuItems.find(i => i.route === pathname)
@@ -453,7 +464,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         <ColToggleStack
           collapsed={effCol1Collapsed}
           onToggleCollapse={() => setCol1Collapsed(c => !c)}
-          toggleDisabled={isNarrowViewport}
           onClose={handleMasterClose}
           closeTestId="sidebar-master-toggle"
           closeTitle="Collassa menu"
@@ -529,7 +539,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           <ColToggleStack
             collapsed={effCol2Collapsed}
             onToggleCollapse={() => setCol2Collapsed(c => !c)}
-            toggleDisabled={isNarrowViewport}
             onClose={() => { setSelectedL1Id(null); setSelectedL2Id(null); setUserPanelOpen(false) }}
             closeTestId="sidebar-col-close"
             closeTitle="Chiudi pannello"
@@ -628,7 +637,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           <ColToggleStack
             collapsed={effCol3Collapsed}
             onToggleCollapse={() => setCol3Collapsed(c => !c)}
-            toggleDisabled={isNarrowViewport}
             onClose={() => setSelectedL2Id(null)}
             closeTestId="sidebar-col-close"
             closeTitle="Chiudi pannello"
@@ -662,7 +670,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     <div className="flex h-screen flex-shrink-0">
       {tooltip && createPortal(
         <div
-          className="fixed z-[9999] px-2 py-1 bg-gray-900 text-white text-xs rounded pointer-events-none whitespace-nowrap"
+          className="fixed z-[9999] px-2 py-1 bg-sidebar-active-bg text-sidebar-active-text border border-sidebar-text/10 shadow-sm text-xs rounded pointer-events-none whitespace-nowrap"
           style={{ top: tooltip.top, left: tooltip.left, transform: 'translateY(-50%)' }}
         >
           {tooltip.text}
@@ -670,9 +678,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         document.body
       )}
 
-      {!masterCollapsed && renderSidebarColumns()}
+      {!effMasterCollapsed && renderSidebarColumns()}
 
-      {masterCollapsed && hoverPreviewOpen && createPortal(
+      {effMasterCollapsed && hoverPreviewOpen && createPortal(
         <div
           data-testid="sidebar-hover-preview"
           onMouseEnter={handleHoverEnter}
@@ -684,7 +692,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         document.body
       )}
 
-      {masterCollapsed && (
+      {effMasterCollapsed && (
         <aside
           onMouseEnter={handleHoverEnter}
           onMouseLeave={handleHoverLeave}
@@ -695,7 +703,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         >
           <button
             data-testid="sidebar-collapsed-rail"
-            onClick={() => setMasterCollapsed(false)}
+            onClick={() => { if (!isNarrowViewport) setMasterCollapsed(false) }}
             title="Espandi menu"
             className="mt-auto mb-2 p-1 rounded-lg text-sidebar-text/70 hover:bg-sidebar-active-bg hover:text-sidebar-active-text"
           >

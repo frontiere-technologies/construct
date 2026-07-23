@@ -144,6 +144,27 @@ def test_status_toggle_updates_grid_in_place(logged_in_page, base_url):
     expect(page).to_have_url(url_before)
 
 
+def test_actions_column_header_has_label_and_divider(logged_in_page, base_url):
+    """The actions column ("...") used to render with an empty header and no
+    divider (resizable: false suppresses AG Grid's resize-handle, which was
+    the only thing drawing a line between headers). Regression test for
+    giving it a real headerName and enabling headerColumnBorder so every
+    column (including non-resizable ones) gets a static divider."""
+    page = logged_in_page
+    nav(page, f"{base_url}/user-management")
+    actions_header = page.locator('.ag-header-cell[col-id="actions"]')
+    expect(actions_header).to_have_text("...")
+
+    # AG Grid intentionally suppresses the border after the grid's last column
+    # (nothing to its right), so the divider between "Aggiornato" and "..." is
+    # drawn by dateMod's own right-hand border.
+    divider_color = page.locator('.ag-header-cell[col-id="dateMod"]').evaluate(
+        "el => getComputedStyle(el, '::after').borderRightColor"
+    )
+    assert divider_color != "rgba(0, 0, 0, 0)", \
+        "Missing divider between the last text column and the actions column"
+
+
 def test_column_visibility_toggle(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/user-management")

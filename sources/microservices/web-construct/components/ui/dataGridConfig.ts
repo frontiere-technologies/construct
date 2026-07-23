@@ -8,7 +8,13 @@ export const appGridTheme = themeQuartz.withParams({
   rowHoverColor: 'var(--theme-surface-hover)',
   headerBackgroundColor: '#111827',
   headerTextColor: '#ffffff',
-  headerColumnResizeHandleColor: 'var(--theme-border)',
+  // A single static divider (not the resize-drag handle) between every header
+  // cell, including non-resizable ones like the actions column -- otherwise
+  // resizable columns show their resize handle as a short tick and
+  // non-resizable columns show nothing at all.
+  headerColumnResizeHandleColor: 'transparent',
+  headerColumnBorder: { style: 'solid', width: 2, color: 'var(--theme-border)' },
+  headerColumnBorderHeight: '50%',
   oddRowBackgroundColor: 'var(--theme-surface)',
 })
 

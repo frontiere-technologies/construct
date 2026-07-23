@@ -193,6 +193,22 @@ def test_filter_by_has_permission_and_reset(logged_in_page, base_url):
     expect(rows).to_have_count(baseline)
 
 
+def test_actions_column_header_has_label_and_divider(logged_in_page, base_url):
+    """Regression test mirroring test_users.py: the actions column ("...")
+    must show a real header label and a divider against its neighbor, not an
+    empty, borderless header cell."""
+    page = logged_in_page
+    nav(page, f"{base_url}/roles-permissions")
+    actions_header = page.locator('.ag-header-cell[col-id="actions"]')
+    expect(actions_header).to_have_text("...")
+
+    divider_color = page.locator('.ag-header-cell[col-id="dateMod"]').evaluate(
+        "el => getComputedStyle(el, '::after').borderRightColor"
+    )
+    assert divider_color != "rgba(0, 0, 0, 0)", \
+        "Missing divider between the last text column and the actions column"
+
+
 def test_column_visibility_toggle(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/roles-permissions")
