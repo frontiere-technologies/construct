@@ -103,7 +103,7 @@ export default function UsersTableClient(props: Props) {
       valueGetter: p => p.data?.updatedAt ? new Date(p.data.updatedAt).toLocaleDateString() : '—',
     },
     {
-      colId: 'actions', headerName: '', sortable: false, filter: false, resizable: false, width: 56,
+      colId: 'actions', headerName: '...', sortable: false, filter: false, resizable: false, width: 56,
       cellRenderer: GridRowActionsMenu,
       cellRendererParams: {
         getItems: (u: UserDTO) => [

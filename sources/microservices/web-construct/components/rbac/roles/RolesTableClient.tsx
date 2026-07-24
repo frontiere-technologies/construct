@@ -90,7 +90,7 @@ export default function RolesTableClient(props: Props) {
     },
     { field: 'dateMod', headerName: 'Ultimo aggiornamento', sortable: true, filter: false, valueGetter: p => p.data ? fmtDate(p.data.dateMod) : '' },
     {
-      colId: 'actions', headerName: '', sortable: false, filter: false, resizable: false, width: 56,
+      colId: 'actions', headerName: '...', sortable: false, filter: false, resizable: false, width: 56,
       cellRenderer: GridRowActionsMenu,
       cellRendererParams: {
         getItems: (r: RolePageItemDto) => [
