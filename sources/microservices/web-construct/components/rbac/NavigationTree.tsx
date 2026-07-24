@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useRef } from 'react'
-import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
+import { ChevronDown, ChevronRight, GripVertical, FolderTree, Code, Globe, Link as LinkIcon, Circle, type LucideIcon } from 'lucide-react'
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, pointerWithin,
   useDraggable, useDroppable, type DragStartEvent, type DragMoveEvent, type DragEndEvent,
@@ -30,6 +30,17 @@ interface RowProps {
   dnd?: DndConfig
   activeId: number | null
   indicator: Indicator | null
+}
+
+/** Icon shown before the node name, one per functionality "kind" (F-05). */
+export function typeIcon(node: Pick<UserNavigationTreeDto, 'type' | 'functionalityType'>): LucideIcon {
+  if (node.type === 'CATEGORY') return FolderTree
+  switch (node.functionalityType) {
+    case 'EMBEDDED_PAGE': return Code
+    case 'EXTERNAL_LINK': return Globe
+    case 'INTERNAL_FUNCTIONALITY': return LinkIcon
+    default: return Circle
+  }
 }
 
 const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDefault, dnd, activeId, indicator }) => {
@@ -101,6 +112,7 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
         ) : (
           <span className="w-5" />
         )}
+        {React.createElement(typeIcon(node), { size: 14, className: 'shrink-0 text-gray-400' })}
         <span className={`flex-1 text-sm ${isCategory ? 'font-medium' : ''}`}>
           {node.name}
         </span>
@@ -227,6 +239,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
         {activeNode ? (
           <div className="flex items-center gap-2 rounded-lg border border-primary bg-surface-overlay px-3 py-2 text-sm shadow-lg">
             <GripVertical size={14} className="text-gray-400" />
+            {React.createElement(typeIcon(activeNode), { size: 14, className: 'shrink-0 text-gray-400' })}
             <span className={activeNode.type === 'CATEGORY' ? 'font-medium' : ''}>{activeNode.name}</span>
           </div>
         ) : null}
