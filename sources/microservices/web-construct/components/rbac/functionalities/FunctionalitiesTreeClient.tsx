@@ -9,16 +9,13 @@ import { PageContainer } from '@/components/PageContainer'
 import { moveNavigationItem, deleteNavigationItem } from '@/lib/rbac/navigation-actions'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 
-interface Props { rootTree: UserNavigationTreeDto[]; operationsTree: UserNavigationTreeDto[] }
+interface Props { tree: UserNavigationTreeDto[] }
 
-export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: Props) {
+export default function FunctionalitiesTreeClient({ tree }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'root' | 'operations'>('root')
   const [search, setSearch] = useState('')
   const [searchDraft, setSearchDraft] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-
-  const activeTree = tab === 'root' ? rootTree : operationsTree
 
   const filterTree = (nodes: UserNavigationTreeDto[]): UserNavigationTreeDto[] => {
     if (!search.trim()) return nodes
@@ -40,7 +37,7 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
     if (node.isImmutable) return null
     return (
       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-        <button data-testid="nav-add" title="Aggiungi sotto-elemento" onClick={() => router.push(`/functionalities/create?root=${tab}&parent=${node.id}`)} className="p-1 text-gray-400 hover:text-gray-700"><Plus size={15} /></button>
+        <button data-testid="nav-add" title="Aggiungi sotto-elemento" onClick={() => router.push(`/functionalities/create?parent=${node.id}`)} className="p-1 text-gray-400 hover:text-gray-700"><Plus size={15} /></button>
         <button data-testid="nav-edit" title="Modifica" onClick={() => router.push(`/functionalities/${node.id}/edit`)} className="p-1 text-gray-400 hover:text-gray-700"><Pencil size={15} /></button>
         <button data-testid="nav-delete" title="Elimina" onClick={async () => {
             if (confirm(`Eliminare "${node.name}" e tutti i suoi figli?`)) {
@@ -77,7 +74,7 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
             </button>
           )}
         </div>
-        <button onClick={() => router.push(`/functionalities/create?root=${tab}`)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Crea nuovo</button>
+        <button onClick={() => router.push('/functionalities/create')} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Crea nuovo</button>
       </div>
       <FilterDrawer
         open={showFilters}
@@ -99,16 +96,8 @@ export default function FunctionalitiesTreeClient({ rootTree, operationsTree }: 
           </div>
         </div>
       </FilterDrawer>
-      <div className="flex gap-6 border-b border-border-subtle">
-        {(['root', 'operations'] as const).map(t => (
-          <button key={t} onClick={() => { setTab(t); setSearch(''); setSearchDraft('') }}
-            className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-gray-900 text-foreground dark:border-white' : 'border-transparent text-gray-500'}`}>
-            {t === 'root' ? 'Tutto' : 'Operazioni'}
-          </button>
-        ))}
-      </div>
       <NavigationTree
-        nodes={filterTree(activeTree)}
+        nodes={filterTree(tree)}
         renderTrailing={trailing}
         dnd={search.trim() ? undefined : { canDrag: n => !n.isImmutable, onMove }}
       />

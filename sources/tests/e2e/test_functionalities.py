@@ -11,7 +11,7 @@ def _select_tipologia(page, label: str):
 
 def _create_functionality(page, base_url, name, link):
     """Create an internal-link-functionality tree item at the root level."""
-    nav(page, f"{base_url}/functionalities/create?root=root")
+    nav(page, f"{base_url}/functionalities/create")
     page.get_by_placeholder("Nome funzionalità *").fill(name)
     page.get_by_placeholder("Descrizione *").fill("e2e")
     _select_tipologia(page, "Link interno (/path)")
@@ -30,12 +30,11 @@ def _delete_functionality(page, base_url, name):
     page.wait_for_timeout(600)
 
 
-def test_tree_loads_with_tabs(logged_in_page, base_url):
+def test_tree_loads(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/functionalities")
     expect(page.get_by_role("heading", name="Funzionalità")).to_be_visible()
-    expect(page.get_by_role("button", name="Tutto")).to_be_visible()
-    expect(page.get_by_role("button", name="Operazioni")).to_be_visible()
+    expect(page.get_by_role("button", name="Operazioni")).to_have_count(0)
     # Seeded immutable category Admin is visible in the tree
     expect(page.get_by_text("Admin", exact=True).first).to_be_visible()
 
@@ -94,8 +93,8 @@ def test_filters_badge_and_clear(logged_in_page, base_url):
 def test_create_edit_delete_functionality(logged_in_page, base_url):
     page = logged_in_page
     name = f"E2E Func {int(time.time())}"
-    # Create — navigate with ?root=root so the server knows which subtree
-    nav(page, f"{base_url}/functionalities/create?root=root")
+    # Create — navigate to create page
+    nav(page, f"{base_url}/functionalities/create")
     # Fill IT name (first input with that placeholder)
     page.get_by_placeholder("Nome funzionalità *").fill(name)
     # Fill IT description (textarea)
@@ -205,6 +204,6 @@ def test_drag_moves_item_after_last(logged_in_page, base_url):
 
 def test_functionality_create_annulla_navigates_back(logged_in_page, base_url):
     page = logged_in_page
-    nav(page, f"{base_url}/functionalities/create?root=root")
+    nav(page, f"{base_url}/functionalities/create")
     page.get_by_role("button", name="Annulla").click()
     page.wait_for_url("**/functionalities", timeout=10_000)
