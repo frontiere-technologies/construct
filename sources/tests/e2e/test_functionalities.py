@@ -207,3 +207,13 @@ def test_functionality_create_annulla_navigates_back(logged_in_page, base_url):
     nav(page, f"{base_url}/functionalities/create")
     page.get_by_role("button", name="Annulla").click()
     page.wait_for_url("**/functionalities", timeout=10_000)
+
+
+def test_genitore_dropdown_has_no_clickable_placeholder_row(logged_in_page, base_url):
+    """The open Genitore dropdown must list only actual Category options, no clickable 'Genitore' row."""
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities/create")
+    page.locator('[data-testid="select-genitore"]').click()
+    menu = page.locator('.max-h-56.overflow-y-auto')
+    expect(menu.get_by_role("button", name="Genitore", exact=True)).to_have_count(0)
+    expect(menu.get_by_role("button", name="Admin", exact=True)).to_be_visible()
