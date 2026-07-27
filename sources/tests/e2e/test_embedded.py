@@ -64,6 +64,9 @@ def _delete_functionality(page, base_url, name):
     page.once("dialog", lambda d: d.accept())
     row.locator('[data-testid="nav-delete"]').click()
     page.wait_for_timeout(600)
+    page.reload()
+    page.wait_for_load_state("networkidle")
+    expect(page.get_by_text(name, exact=True)).to_have_count(0)
 
 
 def _perm_tree_row(page, text):
@@ -159,7 +162,10 @@ def embedded_item_page(logged_in_page, base_url, browser, test_email):
     a login that happens after the grant). Returns (item_name, fresh_page).
     Cleans up the role assignment, item, and role, and closes the fresh context.
     """
-    created = []
+    created_roles = []  # (role_name, role_id)
+    created_items = []  # item_name
+    checked_role_ids = []  # role_id whose checkbox was set on the test user
+    created_contexts = []  # browser contexts
 
     def _make(link):
         page = logged_in_page
@@ -168,23 +174,32 @@ def embedded_item_page(logged_in_page, base_url, browser, test_email):
         item_name = f"E2E Embed {ts}"
 
         role_id = _create_role(page, base_url, role_name)
+        created_roles.append((role_name, role_id))
+
         _create_embedded_functionality(page, base_url, item_name, link)
+        created_items.append(item_name)
+
         _grant_item_to_role(page, base_url, role_id, item_name)
+
         _set_role_checkbox(page, base_url, test_email, role_id, checked=True)
+        checked_role_ids.append(role_id)
 
         ctx = browser.new_context(viewport={"width": 1440, "height": 900})
         fresh_page = ctx.new_page()
         do_test_login(fresh_page, base_url, test_email)
+        created_contexts.append(ctx)
 
-        created.append((role_name, role_id, item_name, ctx))
         return item_name, fresh_page
 
     yield _make
 
-    for role_name, role_id, item_name, ctx in created:
+    for ctx in created_contexts:
         ctx.close()
+    for role_id in checked_role_ids:
         _set_role_checkbox(logged_in_page, base_url, test_email, role_id, checked=False)
+    for item_name in created_items:
         _delete_functionality(logged_in_page, base_url, item_name)
+    for role_name, role_id in created_roles:
         _delete_role(logged_in_page, base_url, role_name)
 
 
