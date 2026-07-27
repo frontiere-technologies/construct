@@ -28,14 +28,3 @@ export async function getNavigationItemById(idItem: number): Promise<NavigationI
   const [row] = await db.select().from(navigationItem).where(eq(navigationItem.idItem, idItem)).limit(1)
   return row ? toNavigationItemRow(row) : null
 }
-
-export async function isItemAuthorizedForRoles(item: NavigationItemRow, roleIds: number[]): Promise<boolean> {
-  const roleRows = roleIds.length
-    ? await db
-        .select({ id_role: roleItem.idRole, id_item: roleItem.idItem, authorized: roleItem.authorized })
-        .from(roleItem)
-        .where(inArray(roleItem.idRole, roleIds))
-    : []
-  const authorized = resolveAuthorizedItemIds([item], roleRows as RoleItemRow[], roleIds)
-  return authorized.has(item.id_item)
-}

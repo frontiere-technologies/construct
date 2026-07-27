@@ -1,7 +1,7 @@
-const SAFE_URL_SCHEME = /^https?:\/\//i
+import { isHttpUrl } from '@/lib/rbac/embedded-check'
 
 export function EmbeddedBlockedNotice({ url }: { url: string }) {
-  const isSafeUrl = SAFE_URL_SCHEME.test(url)
+  const isSafeUrl = isHttpUrl(url)
 
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4">

@@ -1,5 +1,6 @@
+import socket
 import threading
-import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -32,11 +33,21 @@ class _ProbeHandler(BaseHTTPRequestHandler):
 
 @pytest.fixture(scope="module")
 def probe_server():
+    # Bind on loopback, but hand out a URL using this machine's own mDNS/Bonjour hostname
+    # (`socket.gethostname()`, e.g. "some-mac.local") rather than the literal "127.0.0.1" or
+    # "localhost". The app's SSRF guard (lib/rbac/embedded-check.ts) blocks literal
+    # loopback/private-IP hostnames in the target URL by design, so a bare 127.0.0.1 URL here
+    # would always resolve to "not embeddable" regardless of response headers — using a real
+    # hostname keeps this test server usable for the "embeddable" test cases too. This
+    # hostname resolves quickly because it is this machine's own actively-advertised Bonjour
+    # name (mDNS answers it directly); an arbitrary unregistered "*.local" /etc/hosts entry
+    # would instead pay a multicast-timeout-then-fallback penalty of several seconds per
+    # lookup, which exceeds checkEmbeddable's internal fetch timeout.
     server = ThreadingHTTPServer(("127.0.0.1", 0), _ProbeHandler)
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    yield f"http://127.0.0.1:{port}"
+    yield f"http://{socket.gethostname()}:{port}"
     server.shutdown()
     thread.join()
 
@@ -169,9 +180,9 @@ def embedded_item_page(logged_in_page, base_url, browser, test_email):
 
     def _make(link):
         page = logged_in_page
-        ts = int(time.time())
-        role_name = f"E2E Embed Role {ts}"
-        item_name = f"E2E Embed {ts}"
+        suffix = uuid.uuid4().hex[:8]
+        role_name = f"E2E Embed Role {suffix}"
+        item_name = f"E2E Embed {suffix}"
 
         role_id = _create_role(page, base_url, role_name)
         created_roles.append((role_name, role_id))
@@ -185,22 +196,34 @@ def embedded_item_page(logged_in_page, base_url, browser, test_email):
         checked_role_ids.append(role_id)
 
         ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+        created_contexts.append(ctx)
         fresh_page = ctx.new_page()
         do_test_login(fresh_page, base_url, test_email)
-        created_contexts.append(ctx)
 
         return item_name, fresh_page
 
     yield _make
 
     for ctx in created_contexts:
-        ctx.close()
+        try:
+            ctx.close()
+        except Exception as e:
+            print(f"cleanup failed for context {ctx}: {e}")
     for role_id in checked_role_ids:
-        _set_role_checkbox(logged_in_page, base_url, test_email, role_id, checked=False)
+        try:
+            _set_role_checkbox(logged_in_page, base_url, test_email, role_id, checked=False)
+        except Exception as e:
+            print(f"cleanup failed for role checkbox {role_id}: {e}")
     for item_name in created_items:
-        _delete_functionality(logged_in_page, base_url, item_name)
+        try:
+            _delete_functionality(logged_in_page, base_url, item_name)
+        except Exception as e:
+            print(f"cleanup failed for item {item_name}: {e}")
     for role_name, role_id in created_roles:
-        _delete_role(logged_in_page, base_url, role_name)
+        try:
+            _delete_role(logged_in_page, base_url, role_name)
+        except Exception as e:
+            print(f"cleanup failed for role {role_name} ({role_id}): {e}")
 
 
 def test_embedded_page_renders_iframe_when_allowed(embedded_item_page, probe_server):
@@ -210,6 +233,29 @@ def test_embedded_page_renders_iframe_when_allowed(embedded_item_page, probe_ser
     l1_btn(l1, item_name).click()
     page.wait_for_url("**/embedded/**", timeout=10_000)
     expect(page.locator('[data-testid="embedded-iframe"]')).to_be_visible()
+    expect(page.locator('[data-testid="embedded-iframe"]')).to_have_attribute("src", f"{probe_server}/ok")
+    expect(page.locator("aside").first).to_be_visible()
+
+
+def test_embedded_page_redirects_when_not_authorized(embedded_item_page, base_url, logged_in_page, probe_server):
+    """The shared `logged_in_page` session does NOT have the throwaway role granted to
+    the fresh session inside `embedded_item_page`, so it's already a ready-made
+    "unauthorized" session for this exact item. Navigating it straight to the item's
+    `/embedded/{id}` URL must redirect back to `/`, not render the iframe/fallback."""
+    item_name, fresh_page = embedded_item_page(f"{probe_server}/ok")
+    l1 = fresh_page.locator("aside").first
+    ensure_l1_expanded(fresh_page, l1)
+    item_href = l1_btn(l1, item_name).get_attribute("href")
+    assert item_href and item_href.startswith("/embedded/")
+
+    logged_in_page.goto(f"{base_url}{item_href}")
+    # The redirect is real (a server-side `redirect('/')`), but on a route hit for the
+    # first time Next.js dev/Turbopack can still be compiling it, so `networkidle` can
+    # fire before the redirect response actually lands. Poll for the final URL instead
+    # of asserting immediately.
+    logged_in_page.wait_for_url(lambda url: url.rstrip("/") == base_url.rstrip("/"), timeout=15_000)
+    logged_in_page.wait_for_load_state("networkidle")
+    assert logged_in_page.url.rstrip("/") == base_url.rstrip("/")
 
 
 def test_embedded_page_shows_fallback_when_blocked(embedded_item_page, probe_server):
