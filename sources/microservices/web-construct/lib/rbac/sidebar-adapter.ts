@@ -1,7 +1,7 @@
 import type { MenuItem, MenuPosition } from '@/types/menu'
 import {
   type NavigationItemRow, type RoleItemRow, type Locale,
-  DEFAULT_LOCALE, ROOT_ID, OPERATIONS_ID, ITEM_TYPE_CATEGORY, FUNCTYPE_PERMISSION,
+  DEFAULT_LOCALE, ROOT_ID, OPERATIONS_ID, ITEM_TYPE_CATEGORY, FUNCTYPE_PERMISSION, FUNCTYPE_EMBEDDED_PAGE,
 } from './types'
 
 export function resolveAuthorizedItemIds(
@@ -63,7 +63,11 @@ export function mapNavigationToSidebar(
       id: String(it.id_item),
       label: labelFor(it, locale),
       icon: it.icon_path ?? undefined,
-      route: isCategory ? undefined : normalizeRoute(it.functionality_link),
+      route: isCategory
+        ? undefined
+        : it.id_functionality_type === FUNCTYPE_EMBEDDED_PAGE
+          ? `/embedded/${it.id_item}`
+          : normalizeRoute(it.functionality_link),
       type: isCategory ? 'container' : 'link',
       parentId: it.id_item_parent == null || it.id_item_parent === ROOT_ID ? null : String(it.id_item_parent),
       order: it.order_position,

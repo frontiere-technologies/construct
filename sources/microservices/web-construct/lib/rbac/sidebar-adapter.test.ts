@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolveAuthorizedItemIds, mapNavigationToSidebar } from './sidebar-adapter'
+import { FUNCTYPE_EMBEDDED_PAGE } from './types'
 import type { NavigationItemRow, RoleItemRow } from './types'
 
 const cat = (id: number, parent: number | null, name: string, extra: Partial<NavigationItemRow> = {}): NavigationItemRow => ({
@@ -9,7 +10,7 @@ const cat = (id: number, parent: number | null, name: string, extra: Partial<Nav
   no_permission_need_for_navigation: 0, ...extra,
 })
 const fn = (id: number, parent: number | null, name: string, link: string, extra: Partial<NavigationItemRow> = {}): NavigationItemRow => ({
-  ...cat(id, parent, name, extra), id_item_type: 2, id_functionality_type: 3, functionality_link: link,
+  ...cat(id, parent, name, {}), id_item_type: 2, id_functionality_type: 3, functionality_link: link, ...extra,
 })
 
 describe('resolveAuthorizedItemIds', () => {
@@ -39,8 +40,9 @@ describe('mapNavigationToSidebar', () => {
     fn(99, -1, 'USER_READ', '', { id_functionality_type: 5 }),
     cat(100, 99, 'deep ops child'),
     fn(50, 2, 'Hidden', 'hidden', { config_visibility: 1 }),
+    fn(200, 2, 'Embed', 'https://example.com', { id_functionality_type: FUNCTYPE_EMBEDDED_PAGE }),
   ]
-  const authorized = new Set([2, 3, 99, 100, 50])
+  const authorized = new Set([2, 3, 99, 100, 50, 200])
   const result = mapNavigationToSidebar(items, authorized)
 
   it('omits the root and operations virtual nodes', () => {
@@ -72,5 +74,9 @@ describe('mapNavigationToSidebar', () => {
     // authorize a leaf (3, parent 2) but NOT its parent category (2)
     const result2 = mapNavigationToSidebar(items, new Set([3]))
     expect(result2.find(i => i.id === '3')).toBeUndefined()
+  })
+  it('routes an EMBEDDED_PAGE item to the internal /embedded/{id} route', () => {
+    const embed = result.find(i => i.id === '200')!
+    expect(embed.route).toBe('/embedded/200')
   })
 })

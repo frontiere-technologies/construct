@@ -13,6 +13,7 @@ export const OPERATIONS_ID = -1
 
 export const ITEM_TYPE_CATEGORY = 1
 export const ITEM_TYPE_FUNCTIONALITY = 2
+export const FUNCTYPE_EMBEDDED_PAGE = 1
 export const FUNCTYPE_PERMISSION = 5
 
 export interface ItemTranslation {
