@@ -90,6 +90,46 @@ describe('checkEmbeddable', () => {
     mockFetchOnce(new Response(null, { status: 302 }))
     expect(await checkEmbeddable('https://example.com')).toBe(false)
   })
+
+  it('returns false for an IPv4-mapped IPv6 loopback literal ([::ffff:127.0.0.1]) without calling fetch', async () => {
+    const fn = mockFetchOnce(new Response(null, { status: 200 }))
+    expect(await checkEmbeddable('http://[::ffff:127.0.0.1]/')).toBe(false)
+    expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('returns false for an IPv4-mapped IPv6 cloud-metadata literal ([::ffff:a9fe:a9fe], 169.254.169.254) without calling fetch', async () => {
+    const fn = mockFetchOnce(new Response(null, { status: 200 }))
+    expect(await checkEmbeddable('http://[::ffff:a9fe:a9fe]/')).toBe(false)
+    expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('returns false for the unspecified IPv6 address ([::]) without calling fetch', async () => {
+    const fn = mockFetchOnce(new Response(null, { status: 200 }))
+    expect(await checkEmbeddable('http://[::]/')).toBe(false)
+    expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('returns false for a trailing-dot localhost (localhost.) without calling fetch', async () => {
+    const fn = mockFetchOnce(new Response(null, { status: 200 }))
+    expect(await checkEmbeddable('http://localhost./')).toBe(false)
+    expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('returns false when CSP has a blocking frame-ancestors policy followed by an unrelated comma-joined policy', async () => {
+    mockFetchOnce(new Response(null, {
+      status: 200,
+      headers: { 'Content-Security-Policy': "frame-ancestors 'none', default-src *" },
+    }))
+    expect(await checkEmbeddable('https://example.com')).toBe(false)
+  })
+
+  it('returns false when CSP has an unrelated policy followed by a comma-joined blocking frame-ancestors policy', async () => {
+    mockFetchOnce(new Response(null, {
+      status: 200,
+      headers: { 'Content-Security-Policy': "default-src 'self', frame-ancestors 'none'" },
+    }))
+    expect(await checkEmbeddable('https://example.com')).toBe(false)
+  })
 })
 
 describe('isHttpUrl', () => {
