@@ -31,7 +31,7 @@ Source spec: [docs/superpowers/specs/2026-07-27-embedded-link-iframe-design.md](
 - Produces: `FUNCTYPE_EMBEDDED_PAGE = 1` (exported constant from `lib/rbac/types.ts`), consumed by Task 3's route page.
 - Produces: `mapNavigationToSidebar()` now emits `route: "/embedded/{id_item}"` for any non-category item with `id_functionality_type === FUNCTYPE_EMBEDDED_PAGE`.
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Open `sources/microservices/web-construct/lib/rbac/sidebar-adapter.test.ts` and apply this diff (add the import, add one item to the `items` array, add it to `authorized`, add a new `it` block at the end of the `mapNavigationToSidebar` describe block):
 
@@ -66,12 +66,12 @@ describe('mapNavigationToSidebar', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [✅] **Step 2: Run test to verify it fails**
 
 Run: `cd sources/microservices/web-construct && npm run test -- sidebar-adapter`
 Expected: FAIL — the new test expects `route` to be `/embedded/200` but today's code returns `https://example.com` (via `normalizeRoute`).
 
-- [ ] **Step 3: Add the constant**
+- [✅] **Step 3: Add the constant**
 
 In `sources/microservices/web-construct/lib/rbac/types.ts`, change:
 
@@ -90,7 +90,7 @@ export const FUNCTYPE_EMBEDDED_PAGE = 1
 export const FUNCTYPE_PERMISSION = 5
 ```
 
-- [ ] **Step 4: Update the routing logic**
+- [✅] **Step 4: Update the routing logic**
 
 In `sources/microservices/web-construct/lib/rbac/sidebar-adapter.ts`, change the import:
 
@@ -128,12 +128,12 @@ to:
           : normalizeRoute(it.functionality_link),
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [✅] **Step 5: Run test to verify it passes**
 
 Run: `cd sources/microservices/web-construct && npm run test -- sidebar-adapter`
 Expected: PASS (all tests in the file, including the new one).
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/types.ts sources/microservices/web-construct/lib/rbac/sidebar-adapter.ts sources/microservices/web-construct/lib/rbac/sidebar-adapter.test.ts
@@ -151,7 +151,7 @@ git commit -m "feat(rbac): route EMBEDDED_PAGE items to internal /embedded page"
 **Interfaces:**
 - Produces: `checkEmbeddable(url: string): Promise<boolean>` — resolves `true` if the URL can be embedded in an iframe from this app's origin, `false` otherwise (including on any error/timeout/malformed URL). Consumed by Task 3's route page.
 
-- [ ] **Step 1: Write the failing tests**
+- [✅] **Step 1: Write the failing tests**
 
 Create `sources/microservices/web-construct/lib/rbac/embedded-check.test.ts`:
 
@@ -219,12 +219,12 @@ describe('checkEmbeddable', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [✅] **Step 2: Run tests to verify they fail**
 
 Run: `cd sources/microservices/web-construct && npm run test -- embedded-check`
 Expected: FAIL with "Cannot find module './embedded-check'" (the file doesn't exist yet).
 
-- [ ] **Step 3: Implement `checkEmbeddable`**
+- [✅] **Step 3: Implement `checkEmbeddable`**
 
 Create `sources/microservices/web-construct/lib/rbac/embedded-check.ts`:
 
@@ -274,12 +274,12 @@ export async function checkEmbeddable(url: string): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [✅] **Step 4: Run tests to verify they pass**
 
 Run: `cd sources/microservices/web-construct && npm run test -- embedded-check`
 Expected: PASS (all 8 tests).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/embedded-check.ts sources/microservices/web-construct/lib/rbac/embedded-check.test.ts
@@ -301,7 +301,7 @@ git commit -m "feat(rbac): add server-side iframe-embeddability check"
 - Produces: `getNavigationItemById(idItem: number): Promise<NavigationItemRow | null>` and `isItemAuthorizedForRoles(item: NavigationItemRow, roleIds: number[]): Promise<boolean>`, both exported from `lib/rbac/navigation-service.ts`.
 - Produces: `EmbeddedFrame({ url: string })` and `EmbeddedBlockedNotice({ url: string })` React components.
 
-- [ ] **Step 1: Add data-layer helpers to `navigation-service.ts`**
+- [✅] **Step 1: Add data-layer helpers to `navigation-service.ts`**
 
 Modify `sources/microservices/web-construct/lib/rbac/navigation-service.ts`. Change the imports at the top:
 
@@ -351,7 +351,7 @@ export async function isItemAuthorizedForRoles(item: NavigationItemRow, roleIds:
 
 No new unit test here: this file has no existing unit test (`getSidebarMenu` above it is DB-wiring code exercised only through the app itself), consistent with the codebase's existing convention of unit-testing the pure logic (`resolveAuthorizedItemIds`, already covered in `sidebar-adapter.test.ts`) and covering DB-wiring through e2e (Task 4).
 
-- [ ] **Step 2: Create `EmbeddedFrame`**
+- [✅] **Step 2: Create `EmbeddedFrame`**
 
 Create `sources/microservices/web-construct/components/EmbeddedFrame.tsx`:
 
@@ -382,7 +382,7 @@ export function EmbeddedFrame({ url }: { url: string }) {
 }
 ```
 
-- [ ] **Step 3: Create `EmbeddedBlockedNotice`**
+- [✅] **Step 3: Create `EmbeddedBlockedNotice`**
 
 Create `sources/microservices/web-construct/components/EmbeddedBlockedNotice.tsx`:
 
@@ -407,7 +407,7 @@ export function EmbeddedBlockedNotice({ url }: { url: string }) {
 }
 ```
 
-- [ ] **Step 4: Create the route page**
+- [✅] **Step 4: Create the route page**
 
 Create `sources/microservices/web-construct/app/(protected)/embedded/[itemId]/page.tsx`:
 
@@ -440,7 +440,7 @@ export default async function EmbeddedItemPage({ params }: { params: Promise<{ i
 }
 ```
 
-- [ ] **Step 5: Manual verification in the browser**
+- [✅] **Step 5: Manual verification in the browser**
 
 Run: `cd sources/microservices/web-construct && npm run dev`
 
@@ -452,7 +452,7 @@ Run: `cd sources/microservices/web-construct && npm run dev`
 6. Expected: instead of an iframe, the fallback message "⚠️ Questo sito non può essere visualizzato incorporato." appears with an "Apri in una nuova scheda →" button that opens Google in a new tab.
 7. Clean up: delete the test item from `/functionalities`.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/navigation-service.ts sources/microservices/web-construct/components/EmbeddedFrame.tsx sources/microservices/web-construct/components/EmbeddedBlockedNotice.tsx "sources/microservices/web-construct/app/(protected)/embedded"
@@ -473,7 +473,7 @@ The corrected approach: create a throwaway custom role (via "Nuovo ruolo", a `SE
 **Interfaces:**
 - Consumes: `nav`, `l1_btn`, `ensure_l1_expanded`, `grid_rows`, `open_column_filter`, `do_test_login` (`sources/tests/e2e/helpers.py`), the `logged_in_page`/`base_url`/`browser`/`test_email` fixtures (`sources/tests/e2e/conftest.py`).
 
-- [ ] **Step 1: Write the e2e test file**
+- [✅] **Step 1: Write the e2e test file**
 
 Create `sources/tests/e2e/test_embedded.py`:
 
@@ -670,7 +670,7 @@ def test_embedded_page_shows_fallback_when_blocked(embedded_item_page, probe_ser
     assert notice.get_attribute("href") == url
 ```
 
-- [ ] **Step 2: Run the e2e tests**
+- [✅] **Step 2: Run the e2e tests**
 
 Make sure the dev server is running (`npm run dev` in `sources/microservices/web-construct`, in a separate terminal) and `sources/tests/e2e/.env.test` has `TEST_EMAIL` set to an admin account that can create roles/functionalities and manage other users' roles (the shared `logged_in_page`/`admin_storage_state` account already used by the rest of the e2e suite). Then run:
 
@@ -680,7 +680,7 @@ uv run pytest sources/tests/e2e/test_embedded.py -v
 
 Expected: both tests PASS. If a test fails on the `embedded-iframe`/fallback visibility check, first check whether the fresh login in `embedded_item_page` actually picked up the new role — `fresh_page` navigating to `/` should show the new item as a sidebar link (`l1_btn` will time out/fail to find it otherwise) before ever reaching `/embedded/...`. If the probe server calls themselves seem to hang, check `preview_logs`/server console for the dev server — the probe server binds to `127.0.0.1` on a random free port and must be reachable from the Next.js process making the server-side `checkEmbeddable` fetch.
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add sources/tests/e2e/test_embedded.py
