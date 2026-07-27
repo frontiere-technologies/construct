@@ -463,11 +463,15 @@ git commit -m "feat(rbac): render EMBEDDED_PAGE items in an iframe on /embedded/
 
 ### Task 4: E2E tests
 
+**Revised during execution:** Task 3's manual verification discovered that the test admin account's default roles (`Registered user` id 0, `Administrator` id 1) are seeded as `SYSTEM`-type roles (`role_type.description === 'SYSTEM'`), whose Sezioni permissions are **not editable via the UI** — `/roles-permissions/[roleId]`'s "Salva" button is disabled for them (confirmed by the existing test `test_system_role_not_editable` in `sources/tests/e2e/test_roles.py:119-127`). So granting a permission to "Administrator" (as the original version of this task assumed) is not possible through the app. Additionally, NextAuth bakes `roleIds` (which roles a session has) into the JWT at sign-in and never refreshes it — but permissions *within* a role the session already has (`role_item.authorized`) ARE read fresh from the DB on every request (`getSidebarMenu`/`isItemAuthorizedForRoles` both query live). So: granting a new permission to a role the test session already holds takes effect immediately with no re-login; granting a *new role* to the account requires a fresh login to take effect.
+
+The corrected approach: create a throwaway custom role (via "Nuovo ruolo", a `SERVICE`-type role — editable, same pattern already used by `test_roles.py`'s `_create_role`/`test_toggle_permission_persists`), grant the new item's permission on that role, assign the role to the test admin account, then verify using a **freshly logged-in browser context** (not the shared `logged_in_page` session) so its JWT picks up the newly assigned role. Clean up by removing the role assignment, deleting the item, and deleting the role afterward.
+
 **Files:**
 - Create: `sources/tests/e2e/test_embedded.py`
 
 **Interfaces:**
-- Consumes: `nav`, `l1_btn`, `ensure_l1_expanded`, `grid_rows` (`sources/tests/e2e/helpers.py`), the `logged_in_page`/`base_url` fixtures (`sources/tests/e2e/conftest.py`).
+- Consumes: `nav`, `l1_btn`, `ensure_l1_expanded`, `grid_rows`, `open_column_filter`, `do_test_login` (`sources/tests/e2e/helpers.py`), the `logged_in_page`/`base_url`/`browser`/`test_email` fixtures (`sources/tests/e2e/conftest.py`).
 
 - [ ] **Step 1: Write the e2e test file**
 
@@ -481,7 +485,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 from playwright.sync_api import expect
 
-from helpers import nav, l1_btn, ensure_l1_expanded, grid_rows
+from helpers import nav, l1_btn, ensure_l1_expanded, grid_rows, open_column_filter, do_test_login
 
 
 class _ProbeHandler(BaseHTTPRequestHandler):
@@ -548,73 +552,133 @@ def _tree_row(page, text):
     ).last
 
 
-def _grant_administrator_permission(page, base_url, name):
-    """Toggle the given item ON for the Administrator role and save.
-
-    Must target a role the logged-in test admin already holds *at login time*:
-    role membership is baked into the session JWT at sign-in and never
-    refreshed, so granting a brand-new role here wouldn't take effect within
-    the same already-logged-in Playwright session.
-    """
+def _create_role(page, base_url, name):
+    """Create a SERVICE (editable) role via the UI. Returns its numeric id."""
     nav(page, f"{base_url}/roles-permissions")
-    row = grid_rows(page).filter(has_text="Administrator")
-    row.locator('[data-testid^="row-menu"]').click()
-    page.get_by_role("button", name="Apri").click()
+    page.get_by_role("button", name="Nuovo ruolo").click()
+    page.get_by_placeholder("Nome ruolo").fill(name)
+    page.get_by_role("button", name="Salva").click()
     page.wait_for_url("**/roles-permissions/**", timeout=15_000)
+    return int(page.url.rstrip("/").rsplit("/", 1)[-1])
 
-    item_row = _tree_row(page, name)
-    item_row.scroll_into_view_if_needed()
-    item_row.locator('[data-testid="perm-toggle"]').click()
+
+def _search_role(page, base_url, name):
+    nav(page, f"{base_url}/roles-permissions")
+    open_column_filter(page, "description")
+    page.locator('.ag-filter input[type="text"]').first.fill(name)
+    page.get_by_role("button", name="Applica").click()
+    page.wait_for_load_state("networkidle")
+
+
+def _delete_role(page, base_url, name):
+    _search_role(page, base_url, name)
+    row = grid_rows(page).filter(has_text=name)
+    expect(row).to_be_visible()
+    row_menu = row.locator('[data-testid^="row-menu"]')
+    row_menu.scroll_into_view_if_needed()
+    row_menu.click()
+    page.get_by_role("button", name="Elimina").click()
+    page.get_by_role("button", name="Elimina").click()
+    _search_role(page, base_url, name)
+    expect(grid_rows(page).filter(has_text=name)).to_have_count(0)
+
+
+def _grant_item_to_role(page, base_url, role_id, item_name):
+    nav(page, f"{base_url}/roles-permissions/{role_id}")
+    row = _tree_row(page, item_name)
+    row.scroll_into_view_if_needed()
+    row.locator('[data-testid="perm-toggle"]').click()
     save_btn = page.get_by_role("button", name="Salva")
     save_btn.click()
     expect(save_btn).to_be_disabled()
     expect(save_btn).to_be_enabled()
 
 
-def test_embedded_page_renders_iframe_when_allowed(logged_in_page, base_url, probe_server):
-    page = logged_in_page
-    name = f"E2E Embed OK {int(time.time())}"
-    _create_embedded_functionality(page, base_url, name, f"{probe_server}/ok")
-    _grant_administrator_permission(page, base_url, name)
-    try:
-        nav(page, f"{base_url}/")
-        l1 = page.locator("aside").first
-        ensure_l1_expanded(page, l1)
-        l1_btn(l1, name).click()
-        page.wait_for_url("**/embedded/**", timeout=10_000)
-        expect(page.locator('[data-testid="embedded-iframe"]')).to_be_visible()
-    finally:
-        _delete_functionality(page, base_url, name)
+def _set_role_checkbox(page, base_url, test_email, role_id, checked):
+    """Open 'Gestisci ruoli' for the row matching test_email and check/uncheck role_id."""
+    nav(page, f"{base_url}/user-management")
+    row = grid_rows(page).filter(has_text=test_email)
+    row_menu = row.locator('[data-testid^="row-menu"]')
+    row_menu.scroll_into_view_if_needed()
+    row_menu.click()
+    page.get_by_text("Gestisci ruoli", exact=True).first.click()
+    checkbox = page.get_by_test_id(f"role-checkbox-{role_id}")
+    if checked:
+        checkbox.check()
+    else:
+        checkbox.uncheck()
+    page.get_by_test_id("save-roles").click()
+    expect(page.get_by_test_id("save-roles")).to_have_count(0)
 
 
-def test_embedded_page_shows_fallback_when_blocked(logged_in_page, base_url, probe_server):
-    page = logged_in_page
-    name = f"E2E Embed Blocked {int(time.time())}"
+@pytest.fixture
+def embedded_item_page(logged_in_page, base_url, browser, test_email):
+    """Factory fixture: given a target link, creates a throwaway role + EMBEDDED_PAGE
+    item, grants the item to the role, assigns the role to the test admin account,
+    then logs in a *fresh* browser context (role membership is baked into the
+    session JWT at sign-in and never refreshed, so verifying authorization requires
+    a login that happens after the grant). Returns (item_name, fresh_page).
+    Cleans up the role assignment, item, and role, and closes the fresh context.
+    """
+    created = []
+
+    def _make(link):
+        page = logged_in_page
+        ts = int(time.time())
+        role_name = f"E2E Embed Role {ts}"
+        item_name = f"E2E Embed {ts}"
+
+        role_id = _create_role(page, base_url, role_name)
+        _create_embedded_functionality(page, base_url, item_name, link)
+        _grant_item_to_role(page, base_url, role_id, item_name)
+        _set_role_checkbox(page, base_url, test_email, role_id, checked=True)
+
+        ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+        fresh_page = ctx.new_page()
+        do_test_login(fresh_page, base_url, test_email)
+
+        created.append((role_name, role_id, item_name, ctx))
+        return item_name, fresh_page
+
+    yield _make
+
+    for role_name, role_id, item_name, ctx in created:
+        ctx.close()
+        _set_role_checkbox(logged_in_page, base_url, test_email, role_id, checked=False)
+        _delete_functionality(logged_in_page, base_url, item_name)
+        _delete_role(logged_in_page, base_url, role_name)
+
+
+def test_embedded_page_renders_iframe_when_allowed(embedded_item_page, probe_server):
+    item_name, page = embedded_item_page(f"{probe_server}/ok")
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    l1_btn(l1, item_name).click()
+    page.wait_for_url("**/embedded/**", timeout=10_000)
+    expect(page.locator('[data-testid="embedded-iframe"]')).to_be_visible()
+
+
+def test_embedded_page_shows_fallback_when_blocked(embedded_item_page, probe_server):
     url = f"{probe_server}/blocked"
-    _create_embedded_functionality(page, base_url, name, url)
-    _grant_administrator_permission(page, base_url, name)
-    try:
-        nav(page, f"{base_url}/")
-        l1 = page.locator("aside").first
-        ensure_l1_expanded(page, l1)
-        l1_btn(l1, name).click()
-        page.wait_for_url("**/embedded/**", timeout=10_000)
-        notice = page.locator('[data-testid="embedded-blocked-open-new-tab"]')
-        expect(notice).to_be_visible()
-        assert notice.get_attribute("href") == url
-    finally:
-        _delete_functionality(page, base_url, name)
+    item_name, page = embedded_item_page(url)
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    l1_btn(l1, item_name).click()
+    page.wait_for_url("**/embedded/**", timeout=10_000)
+    notice = page.locator('[data-testid="embedded-blocked-open-new-tab"]')
+    expect(notice).to_be_visible()
+    assert notice.get_attribute("href") == url
 ```
 
 - [ ] **Step 2: Run the e2e tests**
 
-Make sure the dev server is running (`npm run dev` in `sources/microservices/web-construct`, in a separate terminal) and `sources/tests/e2e/.env.test` has `TEST_EMAIL` set to an Administrator account. Then run:
+Make sure the dev server is running (`npm run dev` in `sources/microservices/web-construct`, in a separate terminal) and `sources/tests/e2e/.env.test` has `TEST_EMAIL` set to an admin account that can create roles/functionalities and manage other users' roles (the shared `logged_in_page`/`admin_storage_state` account already used by the rest of the e2e suite). Then run:
 
 ```bash
 uv run pytest sources/tests/e2e/test_embedded.py -v
 ```
 
-Expected: both tests PASS. If `test_embedded_page_renders_iframe_when_allowed` fails on the `embedded-iframe` visibility check, check `preview_logs`/server console for the dev server — a common cause is the probe server not being reachable from the Next.js process (e.g. a firewall blocking `127.0.0.1` loopback traffic between processes, which shouldn't happen locally/in CI but is worth a first check).
+Expected: both tests PASS. If a test fails on the `embedded-iframe`/fallback visibility check, first check whether the fresh login in `embedded_item_page` actually picked up the new role — `fresh_page` navigating to `/` should show the new item as a sidebar link (`l1_btn` will time out/fail to find it otherwise) before ever reaching `/embedded/...`. If the probe server calls themselves seem to hang, check `preview_logs`/server console for the dev server — the probe server binds to `127.0.0.1` on a random free port and must be reachable from the Next.js process making the server-side `checkEmbeddable` fetch.
 
 - [ ] **Step 3: Commit**
 
