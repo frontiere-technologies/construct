@@ -109,6 +109,20 @@ describe('checkEmbeddable', () => {
     expect(fn).not.toHaveBeenCalled()
   })
 
+  it('returns false for the IPv4-mapped IPv6 form of 0.0.0.0 ([::ffff:0:0]) without calling fetch', async () => {
+    // new URL('http://[::ffff:0:0]/').hostname === '[::ffff:0:0]'
+    const fn = mockFetchOnce(new Response(null, { status: 200 }))
+    expect(await checkEmbeddable('http://[::ffff:0:0]/')).toBe(false)
+    expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('returns false for the IPv4-mapped IPv6 dotted-decimal form of 0.0.0.0 ([::ffff:0.0.0.0]) without calling fetch', async () => {
+    // new URL('http://[::ffff:0.0.0.0]/').hostname === '[::ffff:0:0]' (canonicalized by the WHATWG URL parser)
+    const fn = mockFetchOnce(new Response(null, { status: 200 }))
+    expect(await checkEmbeddable('http://[::ffff:0.0.0.0]/')).toBe(false)
+    expect(fn).not.toHaveBeenCalled()
+  })
+
   it('returns false for a trailing-dot localhost (localhost.) without calling fetch', async () => {
     const fn = mockFetchOnce(new Response(null, { status: 200 }))
     expect(await checkEmbeddable('http://localhost./')).toBe(false)

@@ -31,45 +31,16 @@ class _ProbeHandler(BaseHTTPRequestHandler):
         pass
 
 
-def _resolve_own_hostname() -> tuple[str, str]:
-    """This machine's own hostname, and the IP address it actually resolves to.
-
-    NOTE on a deviation from a UDP-connect-trick + raw-IP design initially proposed for this
-    fixture: that approach (open a UDP socket, `connect()` it to 8.0.0.0:80 with no packets
-    sent, read back `getsockname()` to learn the outbound-routable interface IP, then bind
-    the probe server to *that* IP and hand out a URL built from the literal IP) is more
-    "portable" in the narrow sense of not depending on mDNS/mDNSResponder or /etc/hosts, but
-    it was tried here and demonstrably breaks this test suite: this machine's own
-    outbound-routable address is 192.168.45.193, a private RFC1918 address — and
-    `isBlockedHost` in lib/rbac/embedded-check.ts *correctly and intentionally* blocks every
-    RFC1918 range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) as literal IPs in a target URL,
-    which is exactly the SSRF hardening this whole review is about. That blocking logic
-    predates this review's fixes entirely, and is not something this test fixture should try
-    to route around by handing the app a raw private-IP literal — virtually every real
-    dev/CI machine's outbound-routable address is itself RFC1918 space, so that design would
-    fail this exact way almost everywhere, not just here.
-    checkEmbeddable's guard does not resolve hostnames (an explicitly documented, accepted
-    residual risk in that file), so a *hostname* string — even one that resolves to a
-    private/loopback address — is not blocked. The portability bug actually reported (Linux
-    boxes where `socket.gethostname()` resolves to 127.0.1.1 while the server is hardcoded
-    to bind on 127.0.0.1, causing ECONNREFUSED) is a *mismatch* between the bind address and
-    the resolved address, not an inherent problem with using a hostname at all. Resolving
-    the hostname up front and binding the server to that exact resolved address removes the
-    mismatch unconditionally, on any platform, without weakening the app's SSRF guard: it no
-    longer matters whether the hostname happens to resolve to 127.0.0.1, to a Linux-style
-    127.0.1.1 alias, or to a real LAN IP — the server always binds to wherever it actually
-    resolves. If the hostname does not resolve at all, `socket.gethostbyname` raises
-    immediately here (a clear, fast failure), rather than silently letting every later test
-    case eat checkEmbeddable's internal 4s fetch timeout before reporting "not embeddable".
-    """
-    hostname = socket.gethostname()
-    return hostname, socket.gethostbyname(hostname)
-
-
 @pytest.fixture(scope="module")
 def probe_server():
-    hostname, ip = _resolve_own_hostname()
-    server = ThreadingHTTPServer((ip, 0), _ProbeHandler)
+    """HTTP probe server used as an embed target for the /embedded tests.
+
+    Binds all interfaces (`""`) rather than one resolved address, since the app
+    server's `fetch` and Chromium each resolve `socket.gethostname()` via their own
+    `getaddrinfo` and may pick a different address than a single pre-resolved IP.
+    """
+    hostname = socket.gethostname()
+    server = ThreadingHTTPServer(("", 0), _ProbeHandler)
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

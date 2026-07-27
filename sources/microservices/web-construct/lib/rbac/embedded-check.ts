@@ -37,6 +37,7 @@ function isBlockedIPv4(host: string): boolean {
   const octets = ipv4.slice(1, 5).map(Number)
   if (octets.some(o => o > 255)) return false
   const [a, b] = octets
+  if (a === 0) return true // 0.0.0.0/8 ("this network", RFC 1122)
   if (a === 10) return true
   if (a === 127) return true
   if (a === 172 && b >= 16 && b <= 31) return true
@@ -72,7 +73,7 @@ function isBlockedHost(hostname: string): boolean {
   // Strip IPv6 brackets and a single trailing FQDN root-label dot (`localhost.` is
   // resolved identically to `localhost` by DNS but fails a bare string comparison).
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
-  if (host === 'localhost' || host === '0.0.0.0') return true
+  if (host === 'localhost') return true
 
   if (isBlockedIPv4(host)) return true
 
