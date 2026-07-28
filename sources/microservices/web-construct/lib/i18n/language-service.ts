@@ -98,6 +98,16 @@ const LANGUAGE_SORT_COLUMN = {
   createdAt: appLanguage.createdAt,
 } as const
 
+function sortColumnFor(sort: LanguagesQuery['sort']) {
+  // `sort` arrives from a request body, so it is an arbitrary string as far as
+  // the runtime is concerned: bare indexing would return Object.prototype for
+  // '__proto__' and undefined for anything unrecognised, both of which blow up
+  // inside orderBy() rather than degrading.
+  return sort && Object.hasOwn(LANGUAGE_SORT_COLUMN, sort)
+    ? LANGUAGE_SORT_COLUMN[sort]
+    : LANGUAGE_SORT_COLUMN.code
+}
+
 /**
  * Page of languages for the admin grid (§2.4), with per-row translated/missing
  * counts folded in from `getLanguageStats`. Unlike `listLanguages` above, this
@@ -110,7 +120,7 @@ export async function listLanguagesPage(query: LanguagesQuery): Promise<Language
   if (query.isActive != null) conditions.push(eq(appLanguage.isActive, query.isActive))
   const where = conditions.length ? and(...conditions) : undefined
 
-  const sortCol = LANGUAGE_SORT_COLUMN[query.sort ?? 'code']
+  const sortCol = sortColumnFor(query.sort)
   const ascending = (query.direction ?? 'ASC') === 'ASC'
 
   try {

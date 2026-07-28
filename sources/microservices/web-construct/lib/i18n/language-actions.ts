@@ -6,7 +6,7 @@ import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { appLanguage } from '@/lib/db/schema'
 import { auditI18n } from './audit'
-import { invalidateDictionary } from './dictionary-service'
+import { invalidateDictionary, refreshLanguageVersions } from './dictionary-service'
 import {
   assertCanDeactivate, assertCanDelete, assertCanSetDefault,
   languageInputSchema, type LanguageInput,
@@ -51,7 +51,7 @@ export async function createLanguage(input: LanguageInput): Promise<ActionResult
   } catch (err) {
     return { error: describe(err, 'Impossibile creare la lingua.') }
   }
-  invalidateDictionary()
+  refreshLanguageVersions()
   revalidatePath('/', 'layout')
   return { error: null }
 }

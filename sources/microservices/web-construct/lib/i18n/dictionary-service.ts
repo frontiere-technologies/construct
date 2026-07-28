@@ -99,3 +99,15 @@ export function invalidateDictionary(code?: string): void {
   store.invalidate(code)
   versionCache = null
 }
+
+/**
+ * Force the next dictionary read to re-poll `app_language.dictionary_version`.
+ *
+ * Used when the set of languages changes but no translation did — creating a
+ * language adds a code the version map has never seen, while every cached
+ * dictionary remains valid. Dropping those dictionaries too would be
+ * indiscriminate invalidation.
+ */
+export function refreshLanguageVersions(): void {
+  versionCache = null
+}

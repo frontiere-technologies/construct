@@ -15,6 +15,14 @@ const log = createLogger('i18n-audit')
  * fixed key list, it cannot redact what it has not been told about (§13.2).
  */
 export async function auditI18n(event: string, details: Record<string, unknown>): Promise<void> {
-  const session = await auth()
-  log.info({ audit: 'i18n', event, actorId: session?.user?.id ?? null, ...details }, `i18n.${event}`)
+  // An audit-trail hiccup (e.g. `auth()` or the logger itself throwing) must
+  // never turn a write that already committed into a reported failure — the
+  // caller's mutation has already succeeded by the time this runs, so any
+  // error here is swallowed and best-effort logged instead of propagated.
+  try {
+    const session = await auth()
+    log.info({ audit: 'i18n', event, actorId: session?.user?.id ?? null, ...details }, `i18n.${event}`)
+  } catch (err) {
+    log.error({ err, event }, 'failed to record i18n audit entry')
+  }
 }
