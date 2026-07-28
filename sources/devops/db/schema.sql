@@ -591,3 +591,123 @@ alter table users add column if not exists id_language bigint
   references app_language(id_language) on delete set null;
 
 create index if not exists users_id_language_idx on users (id_language);
+
+-- ============================================================
+-- i18n seed: languages. Italian is the default (§12.2) because every
+-- existing hardcoded label in this codebase is Italian — the seeded `it`
+-- values below are byte-identical to the strings they replace, which is
+-- what keeps the Playwright suite green.
+-- ============================================================
+insert into app_language (id_language, code, locale, name, native_name, is_active, is_default) values
+  (1, 'it', 'it-IT', 'Italiano', 'Italiano', true, true),
+  (2, 'en', 'en-US', 'English',  'English',  true, false)
+on conflict (code) do nothing;
+
+-- ============================================================
+-- i18n seed: catalog. `translation_seed(key, namespace, module, description, it, en)`
+-- is a transient staging table; each feature area appends its own block of
+-- VALUES and then calls apply_translation_seed(). Re-runnable: existing keys
+-- and existing values are left untouched (§12.5).
+-- ============================================================
+create or replace function public.apply_translation_seed(p_rows jsonb)
+returns text language plpgsql as $$
+declare
+  v_keys_before  bigint;
+  v_keys_after   bigint;
+  v_vals_before  bigint;
+  v_vals_after   bigint;
+begin
+  select count(*) into v_keys_before from translation_key;
+  select count(*) into v_vals_before from translation_value;
+
+  insert into translation_key (key, namespace, module, description)
+    select r.key, r.namespace, nullif(r.module, ''), nullif(r.description, '')
+    from jsonb_to_recordset(p_rows) as r(key text, namespace text, module text, description text, it text, en text)
+  on conflict (key) do nothing;
+
+  insert into translation_value (id_translation_key, id_language, value)
+    select tk.id_translation_key, l.id_language,
+           case l.code when 'it' then r.it else r.en end
+    from jsonb_to_recordset(p_rows) as r(key text, namespace text, module text, description text, it text, en text)
+    join translation_key tk on tk.key = r.key
+    join app_language l on l.code in ('it', 'en')
+    where case l.code when 'it' then r.it else r.en end is not null
+  on conflict (id_translation_key, id_language) do nothing;
+
+  select count(*) into v_keys_after from translation_key;
+  select count(*) into v_vals_after from translation_value;
+  return format('translation seed: %s keys added (%s total), %s values added (%s total)',
+                v_keys_after - v_keys_before, v_keys_after,
+                v_vals_after - v_vals_before, v_vals_after);
+end;
+$$;
+
+-- ---- core catalog -------------------------------------------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"common.actions.save",            "namespace":"common","module":"core","description":"Primary save button","it":"Salva","en":"Save"},
+    {"key":"common.actions.cancel",          "namespace":"common","module":"core","description":"Cancel / dismiss button","it":"Annulla","en":"Cancel"},
+    {"key":"common.actions.confirm",         "namespace":"common","module":"core","description":"Generic confirm button","it":"Conferma","en":"Confirm"},
+    {"key":"common.actions.edit",            "namespace":"common","module":"core","description":"Edit row action","it":"Modifica","en":"Edit"},
+    {"key":"common.actions.delete",          "namespace":"common","module":"core","description":"Delete row action","it":"Elimina","en":"Delete"},
+    {"key":"common.actions.open",            "namespace":"common","module":"core","description":"Open row action","it":"Apri","en":"Open"},
+    {"key":"common.actions.rename",          "namespace":"common","module":"core","description":"Rename row action","it":"Rinomina","en":"Rename"},
+    {"key":"common.actions.close",           "namespace":"common","module":"core","description":"Close panel","it":"Chiudi","en":"Close"},
+    {"key":"common.actions.search",          "namespace":"common","module":"core","description":"Search","it":"Cerca","en":"Search"},
+    {"key":"common.actions.reset_filters",   "namespace":"common","module":"core","description":"Clear every active filter","it":"Azzera filtri","en":"Clear filters"},
+    {"key":"common.states.loading",          "namespace":"common","module":"core","description":"Loading indicator","it":"Caricamento…","en":"Loading…"},
+    {"key":"common.states.saving",           "namespace":"common","module":"core","description":"Save in progress","it":"Salvataggio…","en":"Saving…"},
+    {"key":"common.states.saved",            "namespace":"common","module":"core","description":"Save succeeded","it":"Salvato","en":"Saved"},
+    {"key":"common.states.no_results",       "namespace":"common","module":"core","description":"Empty grid/list","it":"Nessun risultato","en":"No results"},
+    {"key":"common.labels.yes",              "namespace":"common","module":"core","description":"Boolean true","it":"Sì","en":"Yes"},
+    {"key":"common.labels.no",               "namespace":"common","module":"core","description":"Boolean false","it":"No","en":"No"},
+    {"key":"common.labels.all",              "namespace":"common","module":"core","description":"No filter selected","it":"Tutti","en":"All"},
+    {"key":"common.labels.actions",          "namespace":"common","module":"core","description":"Row-actions column header","it":"Azioni","en":"Actions"},
+    {"key":"common.labels.optional",         "namespace":"common","module":"core","description":"Optional field suffix","it":"(facoltativo)","en":"(optional)"},
+    {"key":"common.labels.columns",          "namespace":"common","module":"core","description":"Column visibility toggle","it":"Colonne","en":"Columns"},
+
+    {"key":"validation.required",            "namespace":"validation","module":"core","description":"Mandatory field","it":"Campo obbligatorio.","en":"This field is required."},
+    {"key":"validation.too_long",            "namespace":"validation","module":"core","description":"Value exceeds max length. {{max}} = limit","it":"Massimo {{max}} caratteri.","en":"Maximum {{max}} characters."},
+    {"key":"validation.invalid_format",      "namespace":"validation","module":"core","description":"Value does not match the expected format","it":"Formato non valido.","en":"Invalid format."},
+
+    {"key":"errors.generic",                 "namespace":"errors","module":"core","description":"Unexpected failure","it":"Errore interno.","en":"Internal error."},
+    {"key":"errors.unauthorized",            "namespace":"errors","module":"core","description":"403 response body","it":"Non autorizzato.","en":"Not authorized."},
+    {"key":"errors.bad_request",             "namespace":"errors","module":"core","description":"400 response body","it":"Corpo della richiesta non valido.","en":"Invalid request body."},
+
+    {"key":"grid.filter.contains",           "namespace":"grid","module":"core","description":"AG Grid: contains","it":"Contiene","en":"Contains"},
+    {"key":"grid.filter.in_range",           "namespace":"grid","module":"core","description":"AG Grid: in range","it":"Nell'intervallo","en":"In range"},
+    {"key":"grid.filter.range_start",        "namespace":"grid","module":"core","description":"AG Grid: range start","it":"Da","en":"From"},
+    {"key":"grid.filter.range_end",          "namespace":"grid","module":"core","description":"AG Grid: range end","it":"A","en":"To"},
+    {"key":"grid.filter.placeholder",        "namespace":"grid","module":"core","description":"AG Grid: filter input placeholder","it":"Filtra...","en":"Filter..."},
+    {"key":"grid.filter.apply",              "namespace":"grid","module":"core","description":"AG Grid: apply button","it":"Applica","en":"Apply"},
+    {"key":"grid.filter.reset",              "namespace":"grid","module":"core","description":"AG Grid: reset button","it":"Reset","en":"Reset"},
+    {"key":"grid.filter.clear",              "namespace":"grid","module":"core","description":"AG Grid: clear button","it":"Cancella","en":"Clear"},
+    {"key":"grid.no_rows",                   "namespace":"grid","module":"core","description":"AG Grid: empty state","it":"Nessun risultato","en":"No results"},
+    {"key":"grid.loading",                   "namespace":"grid","module":"core","description":"AG Grid: loading state","it":"Caricamento...","en":"Loading..."},
+
+    {"key":"nav.profile",                    "namespace":"nav","module":"core","description":"Sidebar: profile link","it":"Profilo","en":"Profile"},
+    {"key":"nav.logout",                     "namespace":"nav","module":"core","description":"Sidebar: sign out","it":"Esci","en":"Logout"},
+    {"key":"nav.account",                    "namespace":"nav","module":"core","description":"Sidebar: account panel title","it":"Account","en":"Account"},
+    {"key":"nav.theme_mode",                 "namespace":"nav","module":"core","description":"Sidebar: light/dark toggle","it":"Tema","en":"Theme Mode"},
+    {"key":"nav.theme_to_dark",              "namespace":"nav","module":"core","description":"Sidebar: switch to dark tooltip","it":"Passa al tema scuro","en":"Switch to Dark"},
+    {"key":"nav.theme_to_light",             "namespace":"nav","module":"core","description":"Sidebar: switch to light tooltip","it":"Passa al tema chiaro","en":"Switch to Light"},
+    {"key":"nav.collapse_menu",              "namespace":"nav","module":"core","description":"Sidebar: collapse tooltip","it":"Collassa menu","en":"Collapse menu"},
+    {"key":"nav.expand_menu",                "namespace":"nav","module":"core","description":"Sidebar: expand tooltip","it":"Espandi menu","en":"Expand menu"},
+    {"key":"nav.close_panel",                "namespace":"nav","module":"core","description":"Sidebar: close sub-column tooltip","it":"Chiudi pannello","en":"Close panel"},
+
+    {"key":"profile.language",               "namespace":"profile","module":"core","description":"Language switcher label","it":"Lingua","en":"Language"},
+
+    {"key":"language.title",                 "namespace":"language","module":"i18n","description":"Languages admin page title","it":"Lingue","en":"Languages"},
+    {"key":"language.subtitle",              "namespace":"language","module":"i18n","description":"Languages admin page subtitle","it":"Configura le lingue disponibili nell'applicazione","en":"Configure the languages available in the application"},
+    {"key":"language.default",               "namespace":"language","module":"i18n","description":"Default-language column/flag","it":"Predefinita","en":"Default"},
+    {"key":"language.active",                "namespace":"language","module":"i18n","description":"Active-language column/flag","it":"Attiva","en":"Active"},
+
+    {"key":"translation.title",              "namespace":"translation","module":"i18n","description":"Translations admin page title","it":"Traduzioni","en":"Translations"},
+    {"key":"translation.key",                "namespace":"translation","module":"i18n","description":"Translation key column","it":"Chiave","en":"Key"},
+    {"key":"translation.value",              "namespace":"translation","module":"i18n","description":"Translated value column","it":"Valore","en":"Value"},
+    {"key":"translation.missing",            "namespace":"translation","module":"i18n","description":"Missing-translation badge","it":"Mancante","en":"Missing"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
