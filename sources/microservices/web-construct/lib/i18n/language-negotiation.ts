@@ -8,8 +8,13 @@ export function parseAcceptLanguage(header: string | null | undefined): string[]
     .map(part => {
       const [tag, ...rest] = part.trim().split(';')
       const q = rest.map(p => p.trim()).find(p => p.startsWith('q='))
-      const weight = q ? Number.parseFloat(q.slice(2)) : 1
-      return { tag: tag.trim(), weight: Number.isFinite(weight) ? weight : 0 }
+      const parsed = q ? Number.parseFloat(q.slice(2)) : 1
+      // RFC 9110's qvalue grammar only allows [0, 1]; parseFloat happily accepts
+      // `q=5` or `q=-1`, which would otherwise let an out-of-range value outrank
+      // (or wrongly lose to) a tag with an implicit q=1. Treat anything outside
+      // the valid range the same as an unparseable q: least preferred.
+      const weight = Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : 0
+      return { tag: tag.trim(), weight }
     })
     .filter(e => e.tag && e.tag !== '*')
     .sort((a, b) => b.weight - a.weight)

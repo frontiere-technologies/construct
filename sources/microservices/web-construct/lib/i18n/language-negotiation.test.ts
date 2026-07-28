@@ -17,6 +17,13 @@ describe('parseAcceptLanguage', () => {
   it('drops the wildcard', () => {
     expect(parseAcceptLanguage('*')).toEqual([])
   })
+  it('clamps an out-of-range q so it cannot outrank an implicit q=1', () => {
+    expect(parseAcceptLanguage('en;q=5,fr')).toEqual(['fr', 'en'])
+    expect(parseAcceptLanguage('en;q=-1,fr')).toEqual(['fr', 'en'])
+  })
+  it('treats an unparseable q as least preferred', () => {
+    expect(parseAcceptLanguage('en;q=abc,fr')).toEqual(['fr', 'en'])
+  })
   it('returns an empty list for null, undefined or empty input', () => {
     expect(parseAcceptLanguage(null)).toEqual([])
     expect(parseAcceptLanguage(undefined)).toEqual([])

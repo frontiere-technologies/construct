@@ -37,29 +37,46 @@ export function createFormatters(locale: string): Formatters {
   const pluralRules = new Intl.PluralRules(locale)
   const currencyFmts = new Map<string, Intl.NumberFormat>()
 
-  const timeFmt = (timeZone?: string) =>
-    new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', timeZone })
-  const dateTimeFmt = (timeZone?: string) =>
-    new Intl.DateTimeFormat(locale, {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', timeZone,
-    })
+  // `hour: 'numeric'`, not '2-digit': zero-padding is right for a 24-hour locale
+  // but produces "02:05 PM" in en-US, which no English speaker writes. 'numeric'
+  // still renders "14:05" for it-IT (two digits already) and "2:05 PM" for en-US.
+  const TIME_FIELDS = { hour: 'numeric', minute: '2-digit' } as const
+  const DATE_FIELDS = { day: '2-digit', month: '2-digit', year: 'numeric' } as const
+
+  // Cached per time zone, exactly like `currencyFmts` below: `timeZone` is a
+  // variable parameter, so without a cache every call in a list of timestamps
+  // would construct a fresh Intl.DateTimeFormat.
+  const timeFmts = new Map<string, Intl.DateTimeFormat>()
+  const dateTimeFmts = new Map<string, Intl.DateTimeFormat>()
+  const zonedDateFmts = new Map<string, Intl.DateTimeFormat>()
+
+  const cached = (
+    cache: Map<string, Intl.DateTimeFormat>,
+    timeZone: string | undefined,
+    options: Intl.DateTimeFormatOptions,
+  ): Intl.DateTimeFormat => {
+    const key = timeZone ?? ''
+    let fmt = cache.get(key)
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat(locale, { ...options, timeZone })
+      cache.set(key, fmt)
+    }
+    return fmt
+  }
 
   return {
     date(value, timeZone) {
       const d = toDate(value)
       if (!d) return EMPTY
-      return timeZone
-        ? new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone }).format(d)
-        : dateFmt.format(d)
+      return timeZone ? cached(zonedDateFmts, timeZone, DATE_FIELDS).format(d) : dateFmt.format(d)
     },
     time(value, timeZone) {
       const d = toDate(value)
-      return d ? timeFmt(timeZone).format(d) : EMPTY
+      return d ? cached(timeFmts, timeZone, TIME_FIELDS).format(d) : EMPTY
     },
     dateTime(value, timeZone) {
       const d = toDate(value)
-      return d ? dateTimeFmt(timeZone).format(d) : EMPTY
+      return d ? cached(dateTimeFmts, timeZone, { ...DATE_FIELDS, ...TIME_FIELDS }).format(d) : EMPTY
     },
     number(value) {
       return value === null || value === undefined || Number.isNaN(value) ? EMPTY : numberFmt.format(value)
