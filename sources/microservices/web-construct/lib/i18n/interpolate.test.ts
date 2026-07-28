@@ -20,7 +20,10 @@ describe('interpolate', () => {
     expect(interpolate('[{{a}}]', { a: undefined }, 'it-IT')).toBe('[]')
   })
   it('formats numbers with the active locale', () => {
-    expect(interpolate('{{n}}', { n: 1234.5 }, 'it-IT')).toBe('1.234,5')
+    // it-IT's CLDR grouping strategy is `min2`: a 4-digit run takes no separator,
+    // which is real Italian typographic convention, not an ICU quirk to override.
+    expect(interpolate('{{n}}', { n: 1234.5 }, 'it-IT')).toBe('1234,5')
+    expect(interpolate('{{n}}', { n: 12345.5 }, 'it-IT')).toBe('12.345,5')
     expect(interpolate('{{n}}', { n: 1234.5 }, 'en-US')).toBe('1,234.5')
   })
   it('formats dates with the active locale', () => {
@@ -37,5 +40,10 @@ describe('interpolate', () => {
   })
   it('is single-pass: a placeholder inside a substituted value is never expanded', () => {
     expect(interpolate('{{a}}', { a: '{{b}}', b: 'pwned' }, 'it-IT')).toBe('{{b}}')
+  })
+  it('does not resolve a placeholder named after an inherited Object property', () => {
+    expect(interpolate('{{toString}}', {}, 'it-IT')).toBe('{{toString}}')
+    expect(interpolate('{{constructor}}', {}, 'it-IT')).toBe('{{constructor}}')
+    expect(interpolate('{{hasOwnProperty}}', {}, 'it-IT')).toBe('{{hasOwnProperty}}')
   })
 })

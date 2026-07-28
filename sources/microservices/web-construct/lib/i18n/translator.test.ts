@@ -53,4 +53,11 @@ describe('createTranslator', () => {
     const t = createTranslator({ dict: {}, defaultDict: {}, locale: 'it-IT', isDev: false })
     expect(() => t('a.b')).not.toThrow()
   })
+  it('treats a key colliding with an inherited Object property as missing, without throwing', () => {
+    const t = createTranslator({ dict: {}, defaultDict: {}, locale: 'it-IT', isDev: false })
+    for (const key of ['toString', 'constructor', 'hasOwnProperty', '__proto__']) {
+      expect(() => t(key)).not.toThrow()
+      expect(t(key)).toBe(key)
+    }
+  })
 })

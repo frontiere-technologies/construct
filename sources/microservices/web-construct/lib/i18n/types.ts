@@ -30,6 +30,7 @@ export const LANG_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
 export const MAX_VALUE_LENGTH = 1000
 export const MAX_KEY_LENGTH = 200
+export const MAX_NAMESPACE_LENGTH = 60
 /** Cap on one bulk-save payload (§13.3 payload-size limit). */
 export const MAX_BULK_VALUES = 200
 

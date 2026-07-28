@@ -27,7 +27,13 @@ export function createTranslator({
   const reported = new Set<string>()
 
   return function t(key: string, params?: TranslationParams): string {
-    const template = dict[key] || defaultDict[key]
+    // `Object.hasOwn` guards, never bare indexing: a dictionary is a plain
+    // object, so `dict['toString']` would return an inherited function — truthy,
+    // not a string — and `interpolate` would then throw on `.includes`, breaking
+    // the "no throwing path" guarantee for any malformed or dynamically built key.
+    const own = (d: Dictionary, k: string): string | undefined =>
+      Object.hasOwn(d, k) && typeof d[k] === 'string' ? d[k] : undefined
+    const template = own(dict, key) || own(defaultDict, key)
     if (template) return interpolate(template, params, locale)
 
     if (onMissing && !reported.has(key)) {

@@ -4,9 +4,11 @@ const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g
 
 function render(value: string | number | Date | null | undefined, locale: string): string {
   if (value === null || value === undefined) return ''
-  if (typeof value === 'number') return new Intl.NumberFormat(locale, { useGrouping: true }).format(value)
+  if (typeof value === 'number') return new Intl.NumberFormat(locale).format(value)
+  // Same explicit field widths as format.ts's `dateFmt`, so a date renders
+  // identically whether it arrives as a t() parameter or through fmt.date().
   if (value instanceof Date) {
-    return new Intl.DateTimeFormat(locale, { year: 'numeric', month: '2-digit', day: '2-digit' }).format(value)
+    return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }).format(value)
   }
   return value
 }
@@ -29,6 +31,10 @@ export function interpolate(
 ): string {
   if (!params || !template.includes('{{')) return template
   return template.replace(PLACEHOLDER_RE, (match, name: string) =>
-    name in params ? render(params[name], locale) : match,
+    // `Object.hasOwn`, never `name in params`: `in` walks the prototype chain,
+    // so `{{toString}}` against an empty params object would resolve to
+    // Object.prototype.toString and render "function toString() { … }" instead
+    // of being left alone as an unknown placeholder.
+    Object.hasOwn(params, name) ? render(params[name], locale) : match,
   )
 }

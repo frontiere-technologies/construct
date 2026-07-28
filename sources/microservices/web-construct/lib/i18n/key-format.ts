@@ -1,4 +1,4 @@
-import { MAX_KEY_LENGTH } from './types'
+import { MAX_KEY_LENGTH, MAX_NAMESPACE_LENGTH } from './types'
 
 /** Mirrors the `translation_key_format` CHECK constraint in schema.sql. */
 const KEY_RE = /^[a-z0-9]+(_[a-z0-9]+)*(\.[a-z0-9]+(_[a-z0-9]+)*)+$/
@@ -10,7 +10,7 @@ export function isValidTranslationKey(key: string): boolean {
 }
 
 export function isValidNamespace(namespace: string): boolean {
-  return namespace.length <= 60 && NAMESPACE_RE.test(namespace)
+  return namespace.length <= MAX_NAMESPACE_LENGTH && NAMESPACE_RE.test(namespace)
 }
 
 /** The namespace a key belongs to by convention: its first dot-separated segment. */
