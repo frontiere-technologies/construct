@@ -20,8 +20,14 @@ export interface ResolvedLanguage {
   source: LanguageSource
 }
 
-/** A stored code is only usable if it still exists *and* is still active (§6.2). */
-function usable(code: string | null | undefined, languages: LanguageDto[]): LanguageDto | null {
+/**
+ * A stored code is only usable if it still exists *and* is still active (§6.2).
+ *
+ * Exported because `server.ts` needs the same test to decide whether an explicit
+ * session choice really outranks the profile: a *present but unusable* session
+ * cookie must not suppress the profile lookup.
+ */
+export function findUsableLanguage(code: string | null | undefined, languages: LanguageDto[]): LanguageDto | null {
   if (!code) return null
   const found = languages.find(l => l.code === code.toLowerCase().trim())
   return found?.isActive ? found : null
@@ -42,13 +48,13 @@ function defaultLanguage(languages: LanguageDto[]): LanguageDto {
 export function resolveActiveLanguage(input: ResolveLanguageInput): ResolvedLanguage {
   const { languages } = input
 
-  const session = usable(input.sessionChoice, languages)
+  const session = findUsableLanguage(input.sessionChoice, languages)
   if (session) return { language: session, source: 'session' }
 
-  const profile = usable(input.profileCode, languages)
+  const profile = findUsableLanguage(input.profileCode, languages)
   if (profile) return { language: profile, source: 'profile' }
 
-  const cookie = usable(input.persistentCookie, languages)
+  const cookie = findUsableLanguage(input.persistentCookie, languages)
   if (cookie) return { language: cookie, source: 'cookie' }
 
   const browser = matchLanguage(parseAcceptLanguage(input.acceptLanguage), languages)

@@ -7,7 +7,7 @@ import { appLanguage, users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { listLanguages } from './language-service'
 import { getDictionaryBundle } from './dictionary-service'
-import { resolveActiveLanguage } from './resolve-language'
+import { findUsableLanguage, resolveActiveLanguage } from './resolve-language'
 import { createTranslator } from './translator'
 import { createFormatters, type Formatters } from './format'
 import { LANG_COOKIE, LANG_SESSION_COOKIE, type Dictionary, type LanguageDto, type TranslateFn } from './types'
@@ -81,8 +81,15 @@ export const getI18n = cache(async (): Promise<ServerI18n> => {
 
   const sessionChoice = cookieStore.get(LANG_SESSION_COOKIE)?.value ?? null
   const persistentCookie = cookieStore.get(LANG_COOKIE)?.value ?? null
-  // An explicit in-session choice already wins (§6.1), so skip the profile query.
-  const profileCode = sessionChoice ? null : await profileLanguageCode()
+  // Skip the profile query only when the session choice is actually *usable*
+  // (§6.1). Testing mere presence would be wrong: if the language a user picked
+  // mid-session is later deactivated or deleted, resolveActiveLanguage rejects
+  // the stale cookie — and with profileCode already forced to null, resolution
+  // would skip the profile step entirely and fall through to the persistent
+  // cookie or the browser, demoting the user's saved preference.
+  const profileCode = findUsableLanguage(sessionChoice, languages)
+    ? null
+    : await profileLanguageCode()
 
   const { language } = resolveActiveLanguage({
     sessionChoice,
