@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import DataGrid from '@/components/ui/DataGrid'
 import ColumnVisibilityToggle from '@/components/ui/ColumnVisibilityToggle'
-import GridRowActionsMenu from '@/components/rbac/GridRowActionsMenu'
+import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
 import StatusBadge from './StatusBadge'
 import ManageRolesModal from './ManageRolesModal'
@@ -75,6 +75,10 @@ export default function UsersTableClient(props: Props) {
   const allRolesKey = props.allRoles.map(r => `${r.id}:${r.name}`).join('|')
 
   const columnDefs = useMemo<ColDef<UserDTO>[]>(() => [
+    actionsColumnDef<UserDTO>(u => [
+      { label: 'Gestisci ruoli', onClick: () => setManaging(u) },
+      { label: u.status.idUserStatus === USER_STATUS_ACTIVE ? 'Disattiva' : 'Attiva', onClick: () => toggleStatus(u) },
+    ]),
     {
       colId: 'firstName', headerName: 'Utente', sortable: true,
       valueGetter: p => p.data ? fullName(p.data) : '',
@@ -101,16 +105,6 @@ export default function UsersTableClient(props: Props) {
     {
       colId: 'dateMod', headerName: 'Aggiornato', sortable: true, filter: false,
       valueGetter: p => p.data?.updatedAt ? new Date(p.data.updatedAt).toLocaleDateString() : '—',
-    },
-    {
-      colId: 'actions', headerName: '...', sortable: false, filter: false, resizable: false, width: 56,
-      cellRenderer: GridRowActionsMenu,
-      cellRendererParams: {
-        getItems: (u: UserDTO) => [
-          { label: 'Gestisci ruoli', onClick: () => setManaging(u) },
-          { label: u.status.idUserStatus === USER_STATUS_ACTIVE ? 'Disattiva' : 'Attiva', onClick: () => toggleStatus(u) },
-        ],
-      },
     },
   ], [allRolesKey]) // eslint-disable-line react-hooks/exhaustive-deps -- allRolesKey stands in for props.allRoles (see comment above)
 

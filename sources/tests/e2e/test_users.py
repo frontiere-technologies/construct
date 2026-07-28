@@ -27,14 +27,9 @@ def test_search_narrows_users(logged_in_page, base_url):
 def test_manage_roles_opens_and_lists_roles(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/user-management")
-    # The actions column sits at the far right of the grid's own internal
-    # horizontal-scroll area (its content width exceeds the visible viewport
-    # once the sidebar takes its share) — Playwright's auto-scroll doesn't
-    # reliably bring AG Grid's transform-positioned virtual columns into view,
-    # so scroll explicitly before clicking.
-    row_menu = page.locator('[data-testid^="row-menu"]').first
-    row_menu.scroll_into_view_if_needed()
-    row_menu.click()
+    # The actions column is the first column and pinned left, so it is always
+    # within the viewport — no scrolling needed to reach the row menu.
+    page.locator('[data-testid^="row-menu"]').first.click()
     page.get_by_text("Gestisci ruoli", exact=True).first.click()
     expect(page.get_by_test_id("save-roles")).to_be_visible()
     reg = page.get_by_test_id("role-checkbox-0")
@@ -128,9 +123,7 @@ def test_status_toggle_updates_grid_in_place(logged_in_page, base_url):
     row_by_id = page.locator(f'.ag-row[row-id="{row_id}"]')
 
     def _toggle_via_menu(expected_menu_label):
-        row_menu = row_by_id.locator('[data-testid^="row-menu"]')
-        row_menu.scroll_into_view_if_needed()
-        row_menu.click()
+        row_by_id.locator('[data-testid^="row-menu"]').click()
         page.once("dialog", lambda d: d.accept())
         page.get_by_role("button", name=expected_menu_label).click()
 
@@ -144,25 +137,57 @@ def test_status_toggle_updates_grid_in_place(logged_in_page, base_url):
     expect(page).to_have_url(url_before)
 
 
-def test_actions_column_header_has_label_and_divider(logged_in_page, base_url):
-    """The actions column ("...") used to render with an empty header and no
-    divider (resizable: false suppresses AG Grid's resize-handle, which was
-    the only thing drawing a line between headers). Regression test for
-    giving it a real headerName and enabling headerColumnBorder so every
-    column (including non-resizable ones) gets a static divider."""
+def test_actions_column_header_has_label_and_no_divider(logged_in_page, base_url):
+    """The actions column ("...") shows a real header label, and — unlike every
+    other column — no divider against its neighbour: the pinned column has to
+    blend into the row. The theme's static header divider (which is what gives
+    non-resizable columns a separator at all) must stay on the other columns."""
     page = logged_in_page
     nav(page, f"{base_url}/user-management")
     actions_header = page.locator('.ag-header-cell[col-id="actions"]')
     expect(actions_header).to_have_text("...")
 
-    # AG Grid intentionally suppresses the border after the grid's last column
-    # (nothing to its right), so the divider between "Aggiornato" and "..." is
-    # drawn by dateMod's own right-hand border.
-    divider_color = page.locator('.ag-header-cell[col-id="dateMod"]').evaluate(
+    assert actions_header.evaluate("el => getComputedStyle(el, '::after').display") == "none", \
+        "The actions column must not draw a divider against the first text column"
+
+    other_divider = page.locator('.ag-header-cell[col-id="email"]').evaluate(
         "el => getComputedStyle(el, '::after').borderRightColor"
     )
-    assert divider_color != "rgba(0, 0, 0, 0)", \
-        "Missing divider between the last text column and the actions column"
+    assert other_divider != "rgba(0, 0, 0, 0)", \
+        "Non-actions columns lost their header divider"
+
+
+def test_actions_column_stays_pinned_on_horizontal_scroll(logged_in_page, base_url):
+    """The actions column is pinned left: scrolling the grid horizontally moves
+    the other columns only, keeping the row menu reachable at all times."""
+    page = logged_in_page
+    nav(page, f"{base_url}/user-management")
+    actions_header = page.locator('.ag-header-cell[col-id="actions"]')
+    first_menu = page.locator('[data-testid^="row-menu"]').first
+    expect(actions_header).to_be_visible()
+
+    x_before = actions_header.bounding_box()["x"]
+    email_x_before = page.locator('.ag-header-cell[col-id="email"]').bounding_box()["x"]
+
+    page.evaluate(
+        """() => {
+            const v = document.querySelector('.ag-body-horizontal-scroll-viewport');
+            v.scrollLeft = v.scrollWidth;
+        }"""
+    )
+    # The scroll is applied on the next animation frame, so wait for the
+    # scrolling columns to have actually moved before comparing positions.
+    page.wait_for_function(
+        """x => {
+            const h = document.querySelector('.ag-header-cell[col-id="email"]');
+            return !h || h.getBoundingClientRect().x < x;
+        }""",
+        arg=email_x_before,
+    )
+
+    assert actions_header.bounding_box()["x"] == x_before, \
+        "The pinned actions column moved while scrolling horizontally"
+    expect(first_menu).to_be_visible()
 
 
 def test_column_visibility_toggle(logged_in_page, base_url):

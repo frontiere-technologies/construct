@@ -6,7 +6,7 @@ import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEv
 import DataGrid from '@/components/ui/DataGrid'
 import ColumnVisibilityToggle from '@/components/ui/ColumnVisibilityToggle'
 import ConfirmModal from '@/components/ui/ConfirmModal'
-import GridRowActionsMenu from '@/components/rbac/GridRowActionsMenu'
+import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
 import CreateRoleModal from './CreateRoleModal'
 import RenameRoleModal from './RenameRoleModal'
@@ -65,6 +65,11 @@ export default function RolesTableClient(props: Props) {
   const datasource = useMemo(() => createRolesDatasource(), [])
 
   const columnDefs = useMemo<ColDef<RolePageItemDto>[]>(() => [
+    actionsColumnDef<RolePageItemDto>(r => [
+      { label: 'Apri', onClick: () => router.push(`/roles-permissions/${r.id}`) },
+      { label: 'Rinomina', disabled: r.roleType !== 'SERVICE', onClick: () => setRenaming(r) },
+      { label: 'Elimina', disabled: r.roleType === 'SYSTEM', onClick: () => setDeleting(r) },
+    ]),
     { field: 'id', headerName: 'ID', sortable: true, filter: false },
     {
       field: 'description', headerName: 'Nome ruolo', sortable: true,
@@ -89,17 +94,6 @@ export default function RolesTableClient(props: Props) {
       valueGetter: p => p.data ? fmtDate(p.data.dateIns) : '',
     },
     { field: 'dateMod', headerName: 'Ultimo aggiornamento', sortable: true, filter: false, valueGetter: p => p.data ? fmtDate(p.data.dateMod) : '' },
-    {
-      colId: 'actions', headerName: '...', sortable: false, filter: false, resizable: false, width: 56,
-      cellRenderer: GridRowActionsMenu,
-      cellRendererParams: {
-        getItems: (r: RolePageItemDto) => [
-          { label: 'Apri', onClick: () => router.push(`/roles-permissions/${r.id}`) },
-          { label: 'Rinomina', disabled: r.roleType !== 'SERVICE', onClick: () => setRenaming(r) },
-          { label: 'Elimina', disabled: r.roleType === 'SYSTEM', onClick: () => setDeleting(r) },
-        ],
-      },
-    },
   ], [router])
 
   const onFilterChanged = (event: FilterChangedEvent<RolePageItemDto>) => {
