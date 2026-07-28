@@ -6,7 +6,7 @@ const row = (id: number, parent: number | null, type: number, name: string, extr
   id_item: id, name, id_item_type: type, id_functionality_type: type === 2 ? 3 : null,
   functionality_link: type === 2 ? 'link-' + id : null, icon_path: null, id_item_parent: parent,
   order_position: id, navbar_position: null, item_translation: { EN: { name, description: 'd' + id } },
-  is_immutable: 0, config_visibility: 0, no_permission_need_for_navigation: 0, ...extra,
+  is_immutable: 0, config_visibility: 0, no_permission_need_for_navigation: 0, open_in_new_tab: 1, ...extra,
 })
 
 // root(0) > A(2,cat,immutable) > A1(3,leaf); root(0) > B(4,cat) > B1(5,leaf); hidden(6,leaf,config_visibility=1)
