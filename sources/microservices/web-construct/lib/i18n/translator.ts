@@ -21,18 +21,25 @@ export interface TranslatorOptions {
  * in dev / the key itself in production. A missing translation must never stop
  * a render, so this function has no throwing path at all.
  */
+/**
+ * Read a dictionary entry, or undefined.
+ *
+ * `Object.hasOwn` plus a `typeof` check, never bare indexing: a dictionary is a
+ * plain object, so `dict['toString']` would return an inherited function —
+ * truthy, but not a string — and `interpolate` would then throw on `.includes`,
+ * breaking the "no throwing path" guarantee for any malformed or dynamically
+ * built key. Module-level, because `t()` runs for every label on every render.
+ */
+function own(d: Dictionary, k: string): string | undefined {
+  return Object.hasOwn(d, k) && typeof d[k] === 'string' ? d[k] : undefined
+}
+
 export function createTranslator({
   dict, defaultDict, locale, isDev, onMissing,
 }: TranslatorOptions): TranslateFn {
   const reported = new Set<string>()
 
   return function t(key: string, params?: TranslationParams): string {
-    // `Object.hasOwn` guards, never bare indexing: a dictionary is a plain
-    // object, so `dict['toString']` would return an inherited function — truthy,
-    // not a string — and `interpolate` would then throw on `.includes`, breaking
-    // the "no throwing path" guarantee for any malformed or dynamically built key.
-    const own = (d: Dictionary, k: string): string | undefined =>
-      Object.hasOwn(d, k) && typeof d[k] === 'string' ? d[k] : undefined
     const template = own(dict, key) || own(defaultDict, key)
     if (template) return interpolate(template, params, locale)
 
