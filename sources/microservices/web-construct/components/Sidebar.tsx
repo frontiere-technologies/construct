@@ -12,6 +12,7 @@ import { useAuth } from '@/context/AuthContext'
 import type { MenuItem } from '@/types/menu'
 import { activeAncestorIds, activeAncestorPath, togglePathAt, navHighlight, type NavHighlight } from '@/lib/sidebar-highlight'
 import { IconRenderer } from './IconRenderer'
+import LanguageSwitcher from './LanguageSwitcher'
 
 // One visual language for every column: the current page (and the sections holding it) carry
 // the ring, while a section that is merely expanded gets a softer fill so it can't be mistaken
@@ -592,6 +593,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                 </button>
               </div>
             )}
+
+            <LanguageSwitcher collapsed={isSubCollapsed(1)} itemClassName={userPanelItemCls} />
           </div>
 
           {/* Logout — pinned to bottom, aligned with the user row in col1 */}
