@@ -1,5 +1,6 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
@@ -46,6 +47,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
         idFunctionalityType: input.idItemType === 2 ? input.idFunctionalityType : null,
         functionalityLink: input.idItemType === 2 ? input.functionalityLink : null,
         iconPath: sanitizeSvg(input.iconPath),
+        openInNewTab: input.openInNewTab === false ? 0 : 1,
         idItemParent: parent,
         orderPosition: nextOrder,
         description: input.description,
@@ -59,6 +61,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
     throw new Error(`Failed to create item: ${err instanceof Error ? err.message : String(err)}`)
   }
   await writeTags(created.idItem, input.tagTranslations)
+  revalidatePath('/', 'layout')
   return { id: created.idItem }
 }
 
@@ -82,10 +85,53 @@ async function assertMutable(id: number) {
   if (row.isImmutable === 1) throw new Error('This item is immutable')
 }
 
+/**
+ * Reparent `id` under `targetParentId` at `orderPosition`, renumbering the destination's
+ * children. Shared by moveNavigationItem (drag & drop in the tree) and updateNavigationItem
+ * (the Genitore dropdown in the form). Callers must have asserted `id` is mutable.
+ */
+async function reparent(items: NavigationItemRow[], id: number, targetParentId: number, orderPosition: number) {
+  if (isDescendant(items, targetParentId, id)) throw new Error('Cannot move an item into its own subtree')
+
+  const isVirtualRoot = targetParentId === ROOT_ID || targetParentId === OPERATIONS_ID
+  if (!isVirtualRoot) {
+    const targetItem = items.find(i => i.id_item === targetParentId)
+    if (!targetItem || targetItem.id_item_type !== ITEM_TYPE_CATEGORY) {
+      throw new Error('Target parent must be a category')
+    }
+  }
+
+  const dest = items
+    .filter(i => i.id_item_parent === targetParentId && i.id_item !== id)
+    .sort((a, b) => a.order_position - b.order_position)
+    .map(i => i.id_item)
+  const idx = Math.max(0, Math.min(orderPosition, dest.length))
+  dest.splice(idx, 0, id)
+  for (let pos = 0; pos < dest.length; pos++) {
+    try {
+      await db.update(navigationItem).set({ idItemParent: targetParentId, orderPosition: pos }).where(eq(navigationItem.idItem, dest[pos]))
+    } catch (err) {
+      throw new Error(`Failed to move item: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+}
+
 export async function updateNavigationItem(id: number, input: UpdateNavItemInput): Promise<void> {
   await requireAdmin()
   if (!input.name.trim()) throw new Error('Name is required')
   await assertMutable(id)
+
+  // Genitore change: validate and move first, so an illegal target aborts before any write.
+  if (input.idItemParent != null) {
+    const items = await loadItems()
+    const current = items.find(i => i.id_item === id)
+    if (current && current.id_item_parent !== input.idItemParent) {
+      // Append as the last child of the new parent, like a freshly created item.
+      const siblings = items.filter(i => i.id_item_parent === input.idItemParent && i.id_item !== id).length
+      await reparent(items, id, input.idItemParent, siblings)
+    }
+  }
+
   try {
     await db
       .update(navigationItem)
@@ -95,6 +141,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
         idFunctionalityType: input.idItemType === 2 ? input.idFunctionalityType : null,
         functionalityLink: input.idItemType === 2 ? input.functionalityLink : null,
         iconPath: sanitizeSvg(input.iconPath),
+        openInNewTab: input.openInNewTab === false ? 0 : 1,
         description: input.description,
         itemTranslation: input.itemTranslation,
       })
@@ -103,6 +150,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
     throw new Error(`Failed to update item: ${err instanceof Error ? err.message : String(err)}`)
   }
   await writeTags(id, input.tagTranslations)
+  revalidatePath('/', 'layout')
 }
 
 export async function moveNavigationItem(id: number, move: MoveInput): Promise<void> {
@@ -110,29 +158,8 @@ export async function moveNavigationItem(id: number, move: MoveInput): Promise<v
   if (id === 0 || id === -1) throw new Error('Cannot move a root')
   await assertMutable(id)
   const items = await loadItems()
-  if (isDescendant(items, move.targetParentId, id)) throw new Error('Cannot move an item into its own subtree')
-
-  const isVirtualRoot = move.targetParentId === ROOT_ID || move.targetParentId === OPERATIONS_ID
-  if (!isVirtualRoot) {
-    const targetItem = items.find(i => i.id_item === move.targetParentId)
-    if (!targetItem || targetItem.id_item_type !== ITEM_TYPE_CATEGORY) {
-      throw new Error('Target parent must be a category')
-    }
-  }
-
-  const dest = items
-    .filter(i => i.id_item_parent === move.targetParentId && i.id_item !== id)
-    .sort((a, b) => a.order_position - b.order_position)
-    .map(i => i.id_item)
-  const idx = Math.max(0, Math.min(move.orderPosition, dest.length))
-  dest.splice(idx, 0, id)
-  for (let pos = 0; pos < dest.length; pos++) {
-    try {
-      await db.update(navigationItem).set({ idItemParent: move.targetParentId, orderPosition: pos }).where(eq(navigationItem.idItem, dest[pos]))
-    } catch (err) {
-      throw new Error(`Failed to move item: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
+  await reparent(items, id, move.targetParentId, move.orderPosition)
+  revalidatePath('/', 'layout')
 }
 
 export async function deleteNavigationItem(id: number): Promise<void> {
@@ -144,4 +171,5 @@ export async function deleteNavigationItem(id: number): Promise<void> {
   } catch (err) {
     throw new Error(`Failed to delete item: ${err instanceof Error ? err.message : String(err)}`)
   }
+  revalidatePath('/', 'layout')
 }

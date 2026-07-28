@@ -7,6 +7,7 @@ import NavigationTree from '@/components/rbac/NavigationTree'
 import FilterDrawer from '@/components/rbac/FilterDrawer'
 import { PageContainer } from '@/components/PageContainer'
 import { moveNavigationItem, deleteNavigationItem } from '@/lib/rbac/navigation-actions'
+import { rowActions } from '@/lib/rbac/nav-row-actions'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 
 interface Props { tree: UserNavigationTreeDto[] }
@@ -34,17 +35,18 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
   const clearFilters = () => { setSearchDraft(''); setSearch('') }
 
   const trailing = (node: UserNavigationTreeDto) => {
-    if (node.isImmutable) return null
+    const actions = rowActions(node)
+    if (!actions.add && !actions.edit && !actions.remove) return null
     return (
       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-        <button data-testid="nav-add" title="Aggiungi sotto-elemento" onClick={() => router.push(`/functionalities/create?parent=${node.id}`)} className="p-1 text-gray-400 hover:text-gray-700"><Plus size={15} /></button>
-        <button data-testid="nav-edit" title="Modifica" onClick={() => router.push(`/functionalities/${node.id}/edit`)} className="p-1 text-gray-400 hover:text-gray-700"><Pencil size={15} /></button>
-        <button data-testid="nav-delete" title="Elimina" onClick={async () => {
+        {actions.add && <button data-testid="nav-add" title="Aggiungi sotto-elemento" onClick={() => router.push(`/functionalities/create?parent=${node.id}`)} className="p-1 text-gray-400 hover:text-gray-700"><Plus size={15} /></button>}
+        {actions.edit && <button data-testid="nav-edit" title="Modifica" onClick={() => router.push(`/functionalities/${node.id}/edit`)} className="p-1 text-gray-400 hover:text-gray-700"><Pencil size={15} /></button>}
+        {actions.remove && <button data-testid="nav-delete" title="Elimina" onClick={async () => {
             if (confirm(`Eliminare "${node.name}" e tutti i suoi figli?`)) {
               try { await deleteNavigationItem(node.id); router.refresh() }
               catch (e) { alert(e instanceof Error ? e.message : 'Delete failed') }
             }
-          }} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
+          }} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>}
       </div>
     )
   }

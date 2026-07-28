@@ -21,8 +21,12 @@ def grid_rows(page):
 
     Note: with the Theming API build in use here, rows live directly under
     `.ag-grid-scrolling-rows` — there is no `.ag-center-cols-container`
-    wrapper (that class belongs to the legacy CSS theme DOM). Since these
-    grids have no pinned columns, `.ag-row` alone is unambiguous.
+    wrapper (that class belongs to the legacy CSS theme DOM).
+
+    `.ag-row` stays unambiguous even though the actions column is pinned left:
+    this AG Grid version keeps pinned and scrolling cells inside the *same* row
+    element (the legacy DOM used to duplicate each row per pinned container), so
+    there is one `.ag-row` per record and the row-menu button is inside it.
     """
     return page.locator('.ag-row')
 
@@ -49,6 +53,12 @@ def drag_row_onto(page, drag_text: str, target_text: str, rel_y: float = 0.85) -
     rel_y > 0.5 drops *after* the target (rel_y=0.85 → after the last row exercises F-02)."""
     handle = _tree_row(page, drag_text).locator('[data-testid="drag-handle"]')
     tgt = _tree_row(page, target_text)
+    # Centre the target before measuring: dnd-kit auto-scrolls when the pointer nears the
+    # scroll container's edge, which slides the row out from under the pointer mid-drag, so
+    # `over` becomes null and no drop indicator is ever rendered. A row visible but close to
+    # the bottom of the window is enough to trigger it once the tree has a dozen-odd rows.
+    tgt.evaluate("e => e.scrollIntoView({ block: 'center' })")
+    page.wait_for_timeout(150)
     hb = handle.bounding_box()
     tb = tgt.bounding_box()
     page.mouse.move(hb["x"] + hb["width"] / 2, hb["y"] + hb["height"] / 2)

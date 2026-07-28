@@ -1,6 +1,6 @@
 import {
-  type NavigationItemRow, type UserNavigationTreeDto, type Locale,
-  DEFAULT_LOCALE, ITEM_TYPE_CATEGORY, FUNCTIONALITY_TYPE_BY_ID,
+  type NavigationItemRow, type UserNavigationTreeDto, type Locale, type ParentOption,
+  DEFAULT_LOCALE, ITEM_TYPE_CATEGORY, FUNCTIONALITY_TYPE_BY_ID, ROOT_ID, OPERATIONS_ID,
 } from './types'
 
 export function mapRowToDto(
@@ -20,6 +20,7 @@ export function mapRowToDto(
     icon: it.icon_path,
     navbarPosition: it.navbar_position,
     isImmutable: it.is_immutable === 1,
+    openInNewTab: it.open_in_new_tab !== 0,
     translations: it.item_translation ?? {},
     tagTranslations: opts.tagTranslations,
     children: opts.children,
@@ -81,4 +82,27 @@ export function canDeleteSubtree(items: NavigationItemRow[], id: number): boolea
 
 export function isDescendant(items: NavigationItemRow[], candidateId: number, ancestorId: number): boolean {
   return descendantIds(items, ancestorId).has(candidateId)
+}
+
+/**
+ * Categories an item can be nested under (the Genitore choices, Root aside). Every category
+ * qualifies, the immutable seeded sections (Home, Admin) included: being immutable only means
+ * the row itself can't be renamed or deleted, not that it can't hold new items. Left out are
+ * the virtual roots — Root is offered separately and Operations is not a placement target —
+ * and any category hidden from the config UI.
+ *
+ * `excludeSubtreeOf` is the item being edited: it and its descendants are dropped, otherwise
+ * a category could be nested into itself or into one of its own children (a cycle).
+ */
+export function selectableParents(items: NavigationItemRow[], excludeSubtreeOf?: number): ParentOption[] {
+  const excluded = excludeSubtreeOf != null ? descendantIds(items, excludeSubtreeOf) : new Set<number>()
+  return items
+    .filter(i =>
+      i.id_item_type === ITEM_TYPE_CATEGORY && i.id_item !== ROOT_ID && i.id_item !== OPERATIONS_ID
+      && i.config_visibility !== 1 && !excluded.has(i.id_item))
+    .map(i => ({
+      id: i.id_item,
+      name: i.item_translation?.[DEFAULT_LOCALE]?.name ?? i.name ?? '',
+      navbarPosition: i.navbar_position,
+    }))
 }

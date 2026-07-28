@@ -5,12 +5,13 @@ import FunctionalityForm from '@/components/rbac/functionalities/FunctionalityFo
 export default async function EditFunctionalityPage({ params }: { params: Promise<{ funcId: string }> }) {
   const { funcId } = await params
   const id = Number(funcId)
-  const [item, parents] = await Promise.all([getNavigationItem(id), getParentList()])
+  // getParentList(id) leaves out the item's own subtree, so a category can't become its own child.
+  const [item, parents] = await Promise.all([getNavigationItem(id), getParentList(id)])
   return (
     <FunctionalityForm
       mode="edit"
       funcId={id}
-      parents={parents.filter(p => p.id !== id)}
+      parents={parents}
       initial={{
         description: item.description ?? '',
         idItemType: item.type === 'CATEGORY' ? 1 : 2,
@@ -19,6 +20,7 @@ export default async function EditFunctionalityPage({ params }: { params: Promis
           : null,
         functionalityLink: item.link ?? '',
         iconPath: item.icon ?? '',
+        openInNewTab: item.openInNewTab ?? true,
         idItemParent: item.parentId,
         translations: item.translations ?? {},
         tagTranslations: item.tagTranslations ?? {},

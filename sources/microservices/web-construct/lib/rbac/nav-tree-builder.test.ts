@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildNavTree, canDeleteSubtree, isDescendant } from './nav-tree-builder'
+import { buildNavTree, canDeleteSubtree, isDescendant, selectableParents } from './nav-tree-builder'
 import type { NavigationItemRow } from './types'
 
 const row = (id: number, parent: number | null, type: number, name: string, extra: Partial<NavigationItemRow> = {}): NavigationItemRow => ({
@@ -53,4 +53,51 @@ describe('isDescendant', () => {
   it('true when candidate is inside the ancestor subtree', () => { expect(isDescendant(items, 3, 2)).toBe(true) })
   it('false otherwise', () => { expect(isDescendant(items, 5, 2)).toBe(false) })
   it('treats the node itself as a descendant (cycle into self)', () => { expect(isDescendant(items, 2, 2)).toBe(true) })
+})
+
+// roots(0,-1); Reports(10) > Weekly(11) > Deep(12); Home(13,immutable cat); Leaf(14,functionality)
+const catItems: NavigationItemRow[] = [
+  row(0, null, 1, 'root'), row(-1, null, 1, 'operations'),
+  row(10, 0, 1, 'Reports'), row(11, 10, 1, 'Weekly'), row(12, 11, 1, 'Deep'),
+  row(13, 0, 1, 'Home', { is_immutable: 1, navbar_position: 'TOP' }), row(14, 0, 2, 'Leaf'),
+]
+// selectableParents also reports navbar_position, which is what orders the Genitore dropdown
+const allCats = [
+  { id: 10, name: 'Reports', navbarPosition: null }, { id: 11, name: 'Weekly', navbarPosition: null },
+  { id: 12, name: 'Deep', navbarPosition: null }, { id: 13, name: 'Home', navbarPosition: 'TOP' },
+]
+
+describe('selectableParents', () => {
+  it('keeps every category, including the immutable seeded ones (Home, Admin)', () => {
+    // New items may be placed under Home/Admin even though those rows can't be edited
+    expect(selectableParents(catItems)).toEqual(allCats)
+  })
+
+  it('leaves out the virtual roots and functionalities', () => {
+    const ids = selectableParents(catItems).map(p => p.id)
+    expect(ids).not.toContain(0)
+    expect(ids).not.toContain(-1)
+    expect(ids).not.toContain(14)
+  })
+
+  it('leaves out categories hidden from the config UI', () => {
+    const hidden = [...catItems, row(15, 0, 1, 'Technical', { config_visibility: 1 })]
+    expect(selectableParents(hidden).map(p => p.id)).not.toContain(15)
+  })
+
+  it('excludes the item itself and its whole subtree, so a category cannot be nested in itself', () => {
+    expect(selectableParents(catItems, 10)).toEqual([{ id: 13, name: 'Home', navbarPosition: 'TOP' }])
+    expect(selectableParents(catItems, 11)).toEqual([
+      { id: 10, name: 'Reports', navbarPosition: null }, { id: 13, name: 'Home', navbarPosition: 'TOP' },
+    ])
+  })
+
+  it('excludes nothing but the item itself when it has no children', () => {
+    expect(selectableParents(catItems, 14)).toEqual(allCats)
+  })
+
+  it('falls back to the raw name when the default locale has no translation', () => {
+    const untranslated = [row(20, 0, 1, 'Raw', { item_translation: null })]
+    expect(selectableParents(untranslated)).toEqual([{ id: 20, name: 'Raw', navbarPosition: null }])
+  })
 })

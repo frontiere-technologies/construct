@@ -39,7 +39,8 @@ export default function TranslationsAccordion(
                 onChange={e => setField(loc, 'description', e.target.value)}
                 placeholder="Descrizione"
                 rows={2}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent"
+                // At least twice a single-line input's height (px-3 py-2 text-sm ≈ 38px)
+                className="w-full min-h-[76px] px-3 py-2 text-sm rounded-lg border border-border bg-transparent"
               />
               <TagInput value={tags[loc] ?? []} onChange={t => onTags({ ...tags, [loc]: t })} />
             </div>

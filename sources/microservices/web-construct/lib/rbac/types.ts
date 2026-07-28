@@ -14,6 +14,7 @@ export const OPERATIONS_ID = -1
 export const ITEM_TYPE_CATEGORY = 1
 export const ITEM_TYPE_FUNCTIONALITY = 2
 export const FUNCTYPE_EMBEDDED_PAGE = 1
+export const FUNCTYPE_EXTERNAL_LINK = 2
 export const FUNCTYPE_PERMISSION = 5
 
 export interface ItemTranslation {
@@ -35,6 +36,8 @@ export interface NavigationItemRow {
   is_immutable: number
   config_visibility: number
   no_permission_need_for_navigation: number
+  /** 1 = open in a new tab. Only consulted for EXTERNAL_LINK items. */
+  open_in_new_tab: number
 }
 
 export interface RoleItemRow {
@@ -76,8 +79,17 @@ export interface UserNavigationTreeDto {
   icon?: string | null
   navbarPosition?: 'TOP' | 'BOTTOM' | null
   isImmutable?: boolean
+  /** External links only: open the URL in a new tab rather than in the app's own tab. */
+  openInNewTab?: boolean
   translations?: Record<string, { name?: string; description?: string }>
   tagTranslations?: Record<string, string[]>
+}
+
+/** A category offered as a Genitore. `navbarPosition` is what pins Home above / Admin below Root. */
+export interface ParentOption {
+  id: number
+  name: string
+  navbarPosition: 'TOP' | 'BOTTOM' | null
 }
 
 export interface PermissionDelta {
@@ -121,6 +133,8 @@ export interface CreateNavItemInput {
   idFunctionalityType: number | null
   functionalityLink: string | null
   iconPath: string | null
+  /** External links only: open the URL in a new tab. Defaults to true when omitted. */
+  openInNewTab?: boolean
   idItemParent: number | null
   /** Resolved active-root id (ROOT_ID=0 or OPERATIONS_ID=-1). Used only on create to determine placement when idItemParent is null. Optional so edit-mode callers can omit it. */
   idRootParent?: number | null

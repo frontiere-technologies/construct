@@ -13,6 +13,7 @@ export default async function CreateFunctionalityPage({ searchParams }: { search
       initial={{
         description: '', idItemType: 2, idFunctionalityType: null,
         functionalityLink: '', iconPath: '', idItemParent: parentId,
+        openInNewTab: true,
         idRootParent: ROOT_ID,
         translations: {}, tagTranslations: {},
       }}

@@ -3,11 +3,8 @@ import { asc } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { navigationItem, navigationItemTag } from '@/lib/db/schema'
 import { toNavigationItemRow } from './nav-row-mapper'
-import { buildNavTree, mapRowToDto } from './nav-tree-builder'
-import {
-  type UserNavigationTreeDto, type NavigationItemRow,
-  DEFAULT_LOCALE, ROOT_ID, OPERATIONS_ID, ITEM_TYPE_CATEGORY,
-} from './types'
+import { buildNavTree, mapRowToDto, selectableParents } from './nav-tree-builder'
+import { type UserNavigationTreeDto, type ParentOption, ROOT_ID, OPERATIONS_ID } from './types'
 
 async function loadNavAndTags() {
   const [navRows, tagRows] = await Promise.all([
@@ -37,9 +34,8 @@ export const getNavigationItem = cache(async (id: number): Promise<UserNavigatio
   return mapRowToDto(it, { tagTranslations, children: [] })
 })
 
-export const getParentList = cache(async (): Promise<{ id: number; name: string }[]> => {
+/** Genitore choices. Pass the id of the item being edited so its own subtree is left out. */
+export const getParentList = cache(async (excludeSubtreeOf?: number): Promise<ParentOption[]> => {
   const { items } = await loadNavAndTags()
-  return items
-    .filter((i: NavigationItemRow) => i.id_item_type === ITEM_TYPE_CATEGORY && i.id_item !== ROOT_ID && i.id_item !== OPERATIONS_ID)
-    .map((i: NavigationItemRow) => ({ id: i.id_item, name: i.item_translation?.[DEFAULT_LOCALE]?.name ?? i.name ?? '' }))
+  return selectableParents(items, excludeSubtreeOf)
 })

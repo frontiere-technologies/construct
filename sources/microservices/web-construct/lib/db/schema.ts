@@ -104,6 +104,7 @@ export const navigationItem = pgTable('navigation_item', {
   isImmutable: smallint('is_immutable').notNull().default(0),
   configVisibility: smallint('config_visibility').notNull().default(0),
   noPermissionNeedForNavigation: smallint('no_permission_need_for_navigation').notNull().default(0),
+  openInNewTab: smallint('open_in_new_tab').notNull().default(1),
   externalId: text('external_id'),
   clickCount: bigint('click_count', { mode: 'number' }).default(0),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),

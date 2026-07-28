@@ -10,7 +10,17 @@ import clsx from 'clsx'
 import { useUI } from '@/context/UIContext'
 import { useAuth } from '@/context/AuthContext'
 import type { MenuItem } from '@/types/menu'
+import { activeAncestorIds, activeAncestorPath, togglePathAt, navHighlight, type NavHighlight } from '@/lib/sidebar-highlight'
 import { IconRenderer } from './IconRenderer'
+
+// One visual language for every column: the current page (and the sections holding it) carry
+// the ring, while a section that is merely expanded gets a softer fill so it can't be mistaken
+// for the page you're on.
+const HIGHLIGHT_CLS: Record<NavHighlight, string> = {
+  active: 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70',
+  open: 'bg-sidebar-active-bg/50 text-sidebar-active-text',
+  none: 'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text',
+}
 
 interface TruncatedSpanProps {
   text: string
@@ -41,6 +51,8 @@ const ICON_SUB_W = 'w-14'
 const TEXT_SUB_W = 'w-48'
 const RAIL_W = 'w-6'
 const COLLAPSE_KEY = 'sidebarCollapseState'
+/** How many sub-column collapse preferences to restore from localStorage on mount. */
+const MAX_RESTORED_SUB_COLS = 8
 
 interface TooltipState { text: string; top: number; left: number }
 
@@ -75,8 +87,7 @@ const ColToggleStack: React.FC<{
 
 interface L1ItemProps {
   item: MenuItem
-  isSelected: boolean
-  isActive: boolean
+  highlight: NavHighlight
   isCollapsed: boolean
   hasChildren: boolean
   onShowTooltip: (e: React.MouseEvent, text: string) => void
@@ -85,16 +96,13 @@ interface L1ItemProps {
 }
 
 const L1Item: React.FC<L1ItemProps> = ({
-  item, isSelected, isActive, isCollapsed, hasChildren, onShowTooltip, onHideTooltip, onClick,
+  item, highlight, isCollapsed, hasChildren, onShowTooltip, onHideTooltip, onClick,
 }) => {
+  const isActive = highlight === 'active'
   const cls = clsx(
     'w-full flex items-center rounded-lg py-2 px-3 transition-colors duration-200',
     isCollapsed ? 'justify-center' : 'gap-3',
-    isActive
-      ? 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70'
-      : isSelected
-        ? 'bg-sidebar-active-bg/50 text-sidebar-active-text'
-        : 'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
+    HIGHLIGHT_CLS[highlight],
   )
   const tooltipEnter = isCollapsed ? (e: React.MouseEvent) => onShowTooltip(e, item.label) : undefined
   const tooltipLeave = isCollapsed ? onHideTooltip : undefined
@@ -135,32 +143,29 @@ interface SubItemProps {
   item: MenuItem
   menuItems: MenuItem[]
   isCollapsed: boolean
-  isSelected: boolean
-  isActive: boolean
+  highlight: NavHighlight
   onShowTooltip: (e: React.MouseEvent, text: string) => void
   onHideTooltip: () => void
   onContainerClick: () => void
 }
 
 const SubItem: React.FC<SubItemProps> = ({
-  item, menuItems, isCollapsed, isSelected, isActive, onShowTooltip, onHideTooltip, onContainerClick,
+  item, menuItems, isCollapsed, highlight, onShowTooltip, onHideTooltip, onContainerClick,
 }) => {
   const hasChildren = menuItems.some(i => i.parentId === item.id && i.visible && i.active)
-  const highlight = isActive || isSelected
+  const isActive = highlight === 'active'
 
   const cls = clsx(
     'flex items-center rounded-lg py-2 px-3 transition-colors duration-200 w-full text-sm',
     isCollapsed ? 'justify-center' : 'gap-3',
-    highlight
-      ? 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70'
-      : 'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
+    HIGHLIGHT_CLS[highlight],
   )
 
   const tooltipEnter = isCollapsed ? (e: React.MouseEvent) => onShowTooltip(e, item.label) : undefined
   const tooltipLeave = isCollapsed ? onHideTooltip : undefined
 
   const icon = item.icon
-    ? <IconRenderer name={item.icon} size={16} className={clsx('flex-shrink-0', highlight && 'text-primary')} />
+    ? <IconRenderer name={item.icon} size={16} className={clsx('flex-shrink-0', isActive && 'text-primary')} />
     : isCollapsed
       ? <span className="text-xs font-semibold opacity-60">{item.label.charAt(0).toUpperCase()}</span>
       : null
@@ -196,7 +201,7 @@ const SubItem: React.FC<SubItemProps> = ({
   )
 }
 
-const readCollapse = (key: 'col1' | 'col2' | 'col3' | 'master', defaultValue: boolean): boolean => {
+const readCollapse = (key: string, defaultValue: boolean): boolean => {
   try {
     const saved = localStorage.getItem(COLLAPSE_KEY)
     if (!saved) return defaultValue
@@ -216,35 +221,45 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   const { user: authUser, signOut } = useAuth()
   const pathname = usePathname()
 
-  const [selectedL1Id, setSelectedL1Id] = useState<string | null>(() =>
-    menuItems.find(i =>
+  // The chain of open panels, top level first: one entry per sub-column, any depth.
+  const [openPath, setOpenPath] = useState<string[]>(() => {
+    const expanded = menuItems.find(i =>
       i.parentId === null &&
       i.type === 'container' &&
       i.defaultExpanded === true &&
       menuItems.some(c => c.parentId === i.id && c.visible && c.active)
-    )?.id ?? null
-  )
-  const [selectedL2Id, setSelectedL2Id] = useState<string | null>(null)
+    )
+    return expanded ? [expanded.id] : []
+  })
   const [userPanelOpen, setUserPanelOpen] = useState(false)
 
   const [col1Collapsed, setCol1Collapsed] = useState<boolean>(true)
-  const [col2Collapsed, setCol2Collapsed] = useState<boolean>(false)
-  const [col3Collapsed, setCol3Collapsed] = useState<boolean>(false)
+  // Collapse state per sub-column, keyed by its 1-based column number (col2, col3, col4, ...)
+  const [subCollapsed, setSubCollapsed] = useState<Record<number, boolean>>({})
   const [masterCollapsed, setMasterCollapsed] = useState<boolean>(false)
+
+  const isSubCollapsed = useCallback((depth: number) => subCollapsed[depth] ?? false, [subCollapsed])
+  const toggleSubCollapsed = useCallback(
+    (depth: number) => setSubCollapsed(prev => ({ ...prev, [depth]: !(prev[depth] ?? false) })), [])
 
   // Load from localStorage after mount to avoid SSR hydration mismatch
   useEffect(() => {
     setCol1Collapsed(readCollapse('col1', true))
-    setCol2Collapsed(readCollapse('col2', false))
-    setCol3Collapsed(readCollapse('col3', false))
     setMasterCollapsed(readCollapse('master', false))
+    const restored: Record<number, boolean> = {}
+    for (let depth = 1; depth <= MAX_RESTORED_SUB_COLS; depth++) {
+      if (readCollapse(`col${depth + 1}`, false)) restored[depth] = true
+    }
+    setSubCollapsed(restored)
   }, [])
 
   useEffect(() => {
     try {
-      localStorage.setItem(COLLAPSE_KEY, JSON.stringify({ col1: col1Collapsed, col2: col2Collapsed, col3: col3Collapsed, master: masterCollapsed }))
+      const cols: Record<string, boolean> = { col1: col1Collapsed, master: masterCollapsed }
+      for (const [depth, collapsed] of Object.entries(subCollapsed)) cols[`col${Number(depth) + 1}`] = collapsed
+      localStorage.setItem(COLLAPSE_KEY, JSON.stringify(cols))
     } catch { /* ignore quota errors */ }
-  }, [col1Collapsed, col2Collapsed, col3Collapsed, masterCollapsed])
+  }, [col1Collapsed, subCollapsed, masterCollapsed])
 
   // Hover-preview overlay for the collapsed rail: hovering it (with a short
   // debounce) shows the full sidebar as a floating overlay instead of
@@ -331,8 +346,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   }, [])
 
   const effCol1Collapsed = col1Collapsed
-  const effCol2Collapsed = col2Collapsed
-  const effCol3Collapsed = col3Collapsed
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const showTooltip = useCallback((e: React.MouseEvent, text: string) => {
@@ -349,26 +362,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     setTooltip(null)
   }, [pathname])
 
+  // Landing on a page opens exactly the panels that lead to it, however deep it is nested.
   useEffect(() => {
     const active = menuItems.find(i => i.route === pathname)
     if (!active) return
-    if (active.parentId === null) {
-      setSelectedL1Id(null)
-      setSelectedL2Id(null)
-    } else {
-      const parent = menuItems.find(i => i.id === active.parentId)
-      if (!parent) return
-      if (parent.parentId === null) {
-        setSelectedL1Id(parent.id)
-        setSelectedL2Id(null)
-      } else {
-        const grandparent = menuItems.find(i => i.id === parent.parentId)
-        if (grandparent) {
-          setSelectedL1Id(grandparent.id)
-          setSelectedL2Id(parent.id)
-        }
-      }
-    }
+    setOpenPath(activeAncestorPath(menuItems, active.id))
   }, [pathname, menuItems])
 
   const activeRouteId = useMemo(
@@ -376,18 +374,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     [menuItems, pathname]
   )
 
-  // The L1 container that is an ancestor of the current active route.
-  // Used for highlighting containers — distinct from selectedL1Id which tracks the open panel.
-  const activeL1Id = useMemo(() => {
-    if (!activeRouteId) return null
-    const active = menuItems.find(i => i.id === activeRouteId)
-    if (!active?.parentId) return null
-    const parent = menuItems.find(i => i.id === active.parentId)
-    if (!parent) return null
-    if (!parent.parentId) return parent.id
-    const grandparent = menuItems.find(i => i.id === parent.parentId)
-    return grandparent?.id ?? null
-  }, [activeRouteId, menuItems])
+  // Containers that hold the current route, at any depth. Distinct from openPath, which tracks
+  // which panels are open — an open section is not the page you're on.
+  const activeAncestors = useMemo(() => activeAncestorIds(menuItems, activeRouteId), [menuItems, activeRouteId])
+
+  const highlightCtx = useMemo(
+    () => ({
+      activeRouteId,
+      activeAncestors,
+      openIds: new Set(openPath),
+    }),
+    [activeRouteId, activeAncestors, openPath]
+  )
 
   const itemsWithChildren = useMemo(
     () => new Set(menuItems.filter(i => i.visible && i.active && i.parentId !== null).map(i => i.parentId!)),
@@ -407,51 +405,50 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     [menuItems]
   )
 
-  const l1Children = useMemo(
-    () => selectedL1Id ? menuItems.filter(i => i.parentId === selectedL1Id && i.visible && i.active).sort((a, b) => a.order - b.order) : [],
-    [menuItems, selectedL1Id]
+  const childrenOf = useCallback(
+    (id: string) => menuItems.filter(i => i.parentId === id && i.visible && i.active).sort((a, b) => a.order - b.order),
+    [menuItems]
   )
+  const hasChildren = useCallback((id: string) => menuItems.some(i => i.parentId === id && i.visible && i.active), [menuItems])
 
-  const l2Children = useMemo(
-    () => selectedL2Id ? menuItems.filter(i => i.parentId === selectedL2Id && i.visible && i.active).sort((a, b) => a.order - b.order) : [],
-    [menuItems, selectedL2Id]
-  )
+  // One entry per rendered sub-column: the container it belongs to and the items inside it.
+  // Derived straight from openPath, so a fourth (or tenth) level costs nothing extra.
+  const subColumns = useMemo(() => {
+    const cols: { parent: MenuItem; items: MenuItem[] }[] = []
+    for (const id of openPath) {
+      const parent = menuItems.find(i => i.id === id)
+      if (!parent) break
+      const items = childrenOf(id)
+      if (items.length === 0) break
+      cols.push({ parent, items })
+    }
+    return cols
+  }, [openPath, menuItems, childrenOf])
+
+  // depth 0 = a top-level container from col1; depth k = a container listed in sub-column k-1.
+  const openAtDepth = useCallback((item: MenuItem, depth: number) => {
+    if (!hasChildren(item.id)) return
+    if (depth === 0 && openPath[0] === item.id && item.collapsible === false) return
+    setOpenPath(prev => togglePathAt(prev, depth, item.id))
+  }, [hasChildren, openPath])
 
   const handleL1Click = useCallback((item: MenuItem) => {
     setUserPanelOpen(false)
-    const hasChildren = menuItems.some(i => i.parentId === item.id && i.visible && i.active)
-    if (hasChildren) {
-      if (selectedL1Id === item.id) {
-        if (item.collapsible !== false) { setSelectedL1Id(null); setSelectedL2Id(null) }
-      } else {
-        setSelectedL1Id(item.id); setSelectedL2Id(null)
-      }
-    }
-    // link items: <Link> handles navigation; pathname effect resets selectedL1Id/selectedL2Id
-  }, [menuItems, selectedL1Id])
-
-  const handleL2Click = useCallback((item: MenuItem) => {
-    const hasChildren = menuItems.some(i => i.parentId === item.id && i.visible && i.active)
-    if (hasChildren) {
-      setSelectedL2Id(prev => prev === item.id ? null : item.id)
-    }
-    // link items: SubItem renders <Link> directly; this callback is only invoked for containers
-  }, [menuItems])
+    openAtDepth(item, 0)
+    // link items: <Link> handles navigation; the pathname effect re-syncs openPath
+  }, [openAtDepth])
 
   const handleUserClick = useCallback(() => {
-    setSelectedL1Id(null)
-    setSelectedL2Id(null)
+    setOpenPath([])
     setUserPanelOpen(prev => !prev)
   }, [])
 
   const toggleTheme = () =>
     setSettings(prev => ({ ...prev, theme: prev.theme === 'light' ? 'dark' : 'light' }))
 
-  const showCol2 = l1Children.length > 0 || userPanelOpen
-
   const userPanelItemCls = clsx(
     'w-full flex items-center rounded-lg py-2 px-3 transition-colors duration-200 text-sm',
-    effCol2Collapsed ? 'justify-center' : 'gap-3',
+    isSubCollapsed(1) ? 'justify-center' : 'gap-3',
     'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
   )
 
@@ -471,10 +468,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         />
 
         {topItems.length > 0 && (
-          <div className="p-2 border-b border-sidebar-text/10 space-y-1">
+          <div className="p-2 space-y-1">
             {topItems.map(item => (
-              <L1Item key={item.id} item={item} isSelected={selectedL1Id === item.id}
-                isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
+              <L1Item key={item.id} item={item} highlight={navHighlight(item, highlightCtx)}
                 isCollapsed={effCol1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
                 onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
                 onClick={() => handleL1Click(item)} />
@@ -484,24 +480,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1 scrollbar-hide">
           {mainItems.map(item => (
-            <L1Item key={item.id} item={item} isSelected={selectedL1Id === item.id}
-              isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
+            <L1Item key={item.id} item={item} highlight={navHighlight(item, highlightCtx)}
               isCollapsed={effCol1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
               onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
               onClick={() => handleL1Click(item)} />
           ))}
         </div>
 
-        <div className="p-2 border-t border-sidebar-text/10 space-y-1">
+        <div className="p-2 space-y-1">
           {bottomItems.map(item => (
-            <L1Item key={item.id} item={item} isSelected={selectedL1Id === item.id}
-              isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
+            <L1Item key={item.id} item={item} highlight={navHighlight(item, highlightCtx)}
               isCollapsed={effCol1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
               onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
               onClick={() => handleL1Click(item)} />
           ))}
 
-          <div className="mt-1 border-t border-sidebar-text/10 pt-3 transition-colors duration-200">
+          <div className="mt-1 pt-3 transition-colors duration-200">
             {/* User section — clickable, opens user panel in col2 */}
             <button
               data-testid="sidebar-account-button"
@@ -531,23 +525,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         </div>
       </aside>
 
-      {showCol2 && (
+      {userPanelOpen && (
         <aside className={clsx(
           'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
-          effCol2Collapsed ? ICON_SUB_W : TEXT_SUB_W
+          isSubCollapsed(1) ? ICON_SUB_W : TEXT_SUB_W
         )}>
           <ColToggleStack
-            collapsed={effCol2Collapsed}
-            onToggleCollapse={() => setCol2Collapsed(c => !c)}
-            onClose={() => { setSelectedL1Id(null); setSelectedL2Id(null); setUserPanelOpen(false) }}
+            collapsed={isSubCollapsed(1)}
+            onToggleCollapse={() => toggleSubCollapsed(1)}
+            onClose={() => setUserPanelOpen(false)}
             closeTestId="sidebar-col-close"
             closeTitle="Chiudi pannello"
             anchorClassName="-right-[9px] bottom-[9px]"
           />
-          {!effCol2Collapsed && (
+          {!isSubCollapsed(1) && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
               <TruncatedSpan
-                text={userPanelOpen ? (authUser?.email?.split('@')[0] ?? 'Account') : (menuItems.find(i => i.id === selectedL1Id)?.label ?? '')}
+                text={authUser?.email?.split('@')[0] ?? 'Account'}
                 className="block truncate text-xs font-semibold uppercase tracking-wider opacity-50"
                 onShowTooltip={showTooltip}
                 onHideTooltip={hideTooltip}
@@ -556,113 +550,102 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           )}
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1 scrollbar-hide">
-            {userPanelOpen ? (
-              <>
-                {/* Profile */}
-                <Link
-                  href="/profile"
-                  onMouseEnter={effCol2Collapsed ? e => showTooltip(e, 'Profile') : undefined}
-                  onMouseLeave={effCol2Collapsed ? hideTooltip : undefined}
+            {/* Profile */}
+            <Link
+              href="/profile"
+              onMouseEnter={isSubCollapsed(1) ? e => showTooltip(e, 'Profile') : undefined}
+              onMouseLeave={isSubCollapsed(1) ? hideTooltip : undefined}
+              className={clsx(
+                userPanelItemCls,
+                pathname === '/profile' ? 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70' : ''
+              )}
+            >
+              <User size={16} className={pathname === '/profile' ? 'text-primary' : ''} />
+              {!isSubCollapsed(1) && <span>Profile</span>}
+            </Link>
+
+            {/* Theme Mode */}
+            {isSubCollapsed(1) ? (
+              <button
+                onClick={toggleTheme}
+                onMouseEnter={e => showTooltip(e, settings.theme === 'light' ? 'Switch to Dark' : 'Switch to Light')}
+                onMouseLeave={hideTooltip}
+                className={userPanelItemCls}
+              >
+                {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
+              </button>
+            ) : (
+              <div className="flex items-center rounded-lg py-2 px-3 gap-3 text-sm text-sidebar-text">
+                {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
+                <span className="flex-1">Theme Mode</span>
+                <button
+                  onClick={toggleTheme}
                   className={clsx(
-                    userPanelItemCls,
-                    pathname === '/profile' ? 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70' : ''
+                    'relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 flex-shrink-0',
+                    settings.theme === 'dark' ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
                   )}
                 >
-                  <User size={16} className={pathname === '/profile' ? 'text-primary' : ''} />
-                  {!effCol2Collapsed && <span>Profile</span>}
-                </Link>
-
-                {/* Theme Mode */}
-                {effCol2Collapsed ? (
-                  <button
-                    onClick={toggleTheme}
-                    onMouseEnter={e => showTooltip(e, settings.theme === 'light' ? 'Switch to Dark' : 'Switch to Light')}
-                    onMouseLeave={hideTooltip}
-                    className={userPanelItemCls}
-                  >
-                    {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-                  </button>
-                ) : (
-                  <div className="flex items-center rounded-lg py-2 px-3 gap-3 text-sm text-sidebar-text">
-                    {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-                    <span className="flex-1">Theme Mode</span>
-                    <button
-                      onClick={toggleTheme}
-                      className={clsx(
-                        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 flex-shrink-0',
-                        settings.theme === 'dark' ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
-                      )}
-                    >
-                      <span className={clsx(
-                        'inline-block h-3 w-3 rounded-full bg-white transition-transform duration-200',
-                        settings.theme === 'dark' ? 'translate-x-5' : 'translate-x-1'
-                      )} />
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              l1Children.map(item => (
-                <SubItem key={item.id} item={item} menuItems={menuItems}
-                  isCollapsed={effCol2Collapsed} isSelected={selectedL2Id === item.id}
-                  isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
-                  onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
-                  onContainerClick={() => handleL2Click(item)} />
-              ))
+                  <span className={clsx(
+                    'inline-block h-3 w-3 rounded-full bg-white transition-transform duration-200',
+                    settings.theme === 'dark' ? 'translate-x-5' : 'translate-x-1'
+                  )} />
+                </button>
+              </div>
             )}
           </div>
 
           {/* Logout — pinned to bottom, aligned with the user row in col1 */}
-          {userPanelOpen && (
-            <div className="p-2 border-t border-sidebar-text/10">
-              <button
-                onClick={signOut}
-                onMouseEnter={effCol2Collapsed ? e => showTooltip(e, 'Logout') : undefined}
-                onMouseLeave={effCol2Collapsed ? hideTooltip : undefined}
-                className={userPanelItemCls}
-              >
-                <LogOut size={16} />
-                {!effCol2Collapsed && <span>Logout</span>}
-              </button>
-            </div>
-          )}
-        </aside>
-      )}
-
-      {l2Children.length > 0 && (
-        <aside className={clsx(
-          'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
-          effCol3Collapsed ? ICON_SUB_W : TEXT_SUB_W
-        )}>
-          <ColToggleStack
-            collapsed={effCol3Collapsed}
-            onToggleCollapse={() => setCol3Collapsed(c => !c)}
-            onClose={() => setSelectedL2Id(null)}
-            closeTestId="sidebar-col-close"
-            closeTitle="Chiudi pannello"
-            anchorClassName="-right-[9px] bottom-[9px]"
-          />
-          {!effCol3Collapsed && (
-            <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
-              <TruncatedSpan
-                text={menuItems.find(i => i.id === selectedL2Id)?.label ?? ''}
-                className="block truncate text-xs font-semibold uppercase tracking-wider opacity-50"
-                onShowTooltip={showTooltip}
-                onHideTooltip={hideTooltip}
-              />
-            </div>
-          )}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1 scrollbar-hide">
-            {l2Children.map(item => (
-              <SubItem key={item.id} item={item} menuItems={menuItems}
-                isCollapsed={effCol3Collapsed} isSelected={false}
-                isActive={item.type === 'container' ? activeL1Id === item.id : item.id === activeRouteId}
-                onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
-                onContainerClick={() => handleL2Click(item)} />
-            ))}
+          <div className="p-2 border-t border-sidebar-text/10">
+            <button
+              onClick={signOut}
+              onMouseEnter={isSubCollapsed(1) ? e => showTooltip(e, 'Logout') : undefined}
+              onMouseLeave={isSubCollapsed(1) ? hideTooltip : undefined}
+              className={userPanelItemCls}
+            >
+              <LogOut size={16} />
+              {!isSubCollapsed(1) && <span>Logout</span>}
+            </button>
           </div>
         </aside>
       )}
+
+      {/* One column per open panel: level 2, 3, 4, ... all rendered by the same code. */}
+      {!userPanelOpen && subColumns.map(({ parent, items }, k) => {
+        const collapsed = isSubCollapsed(k + 1)
+        return (
+          <aside key={parent.id} data-testid={`sidebar-col-${k + 2}`} className={clsx(
+            'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
+            collapsed ? ICON_SUB_W : TEXT_SUB_W
+          )}>
+            <ColToggleStack
+              collapsed={collapsed}
+              onToggleCollapse={() => toggleSubCollapsed(k + 1)}
+              onClose={() => setOpenPath(prev => prev.slice(0, k))}
+              closeTestId="sidebar-col-close"
+              closeTitle="Chiudi pannello"
+              anchorClassName="-right-[9px] bottom-[9px]"
+            />
+            {!collapsed && (
+              <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
+                <TruncatedSpan
+                  text={parent.label}
+                  className="block truncate text-xs font-semibold uppercase tracking-wider opacity-50"
+                  onShowTooltip={showTooltip}
+                  onHideTooltip={hideTooltip}
+                />
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1 scrollbar-hide">
+              {items.map(item => (
+                <SubItem key={item.id} item={item} menuItems={menuItems}
+                  isCollapsed={collapsed} highlight={navHighlight(item, highlightCtx)}
+                  onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
+                  onContainerClick={() => openAtDepth(item, k + 1)} />
+              ))}
+            </div>
+          </aside>
+        )
+      })}
       </>
   )
 
