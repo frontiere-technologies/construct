@@ -4,14 +4,21 @@ from helpers import nav, drag_row_onto
 
 
 def _select_tipologia(page, label: str):
-    """Open the Tipologia custom-select dropdown and click an option by label."""
+    """Open the Tipologia custom-select dropdown and click an option by label.
+
+    Scoped to the open dropdown panel, not the whole page: when `label` matches
+    the tipologia already shown on the closed trigger, an unscoped
+    `get_by_role("button", name=label).first` would resolve to the trigger button
+    itself (it renders before the dropdown panel), just toggling it closed again
+    instead of firing onChange.
+    """
     page.locator('[data-testid="select-tipologia"]').click()
-    page.get_by_role("button", name=label, exact=True).first.click()
+    page.locator('.max-h-56.overflow-y-auto').get_by_role("button", name=label, exact=True).click()
 
 
 def _create_functionality(page, base_url, name, link):
     """Create an internal-link-functionality tree item at the root level."""
-    nav(page, f"{base_url}/functionalities/create?root=root")
+    nav(page, f"{base_url}/functionalities/create")
     page.get_by_placeholder("Nome funzionalità *").fill(name)
     page.get_by_placeholder("Descrizione *").fill("e2e")
     _select_tipologia(page, "Link interno (/path)")
@@ -30,12 +37,11 @@ def _delete_functionality(page, base_url, name):
     page.wait_for_timeout(600)
 
 
-def test_tree_loads_with_tabs(logged_in_page, base_url):
+def test_tree_loads(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/functionalities")
     expect(page.get_by_role("heading", name="Funzionalità")).to_be_visible()
-    expect(page.get_by_role("button", name="Tutto")).to_be_visible()
-    expect(page.get_by_role("button", name="Operazioni")).to_be_visible()
+    expect(page.get_by_role("button", name="Operazioni")).to_have_count(0)
     # Seeded immutable category Admin is visible in the tree
     expect(page.get_by_text("Admin", exact=True).first).to_be_visible()
 
@@ -94,8 +100,8 @@ def test_filters_badge_and_clear(logged_in_page, base_url):
 def test_create_edit_delete_functionality(logged_in_page, base_url):
     page = logged_in_page
     name = f"E2E Func {int(time.time())}"
-    # Create — navigate with ?root=root so the server knows which subtree
-    nav(page, f"{base_url}/functionalities/create?root=root")
+    # Create — navigate to create page
+    nav(page, f"{base_url}/functionalities/create")
     # Fill IT name (first input with that placeholder)
     page.get_by_placeholder("Nome funzionalità *").fill(name)
     # Fill IT description (textarea)
@@ -149,33 +155,51 @@ def test_immutable_item_has_no_actions(logged_in_page, base_url):
     expect(admin_row.locator('[data-testid="nav-edit"]')).to_have_count(0)
 
 
-def test_immutable_item_has_no_add_button(logged_in_page, base_url):
-    """F-01 (revised): immutable items (Home, Admin) have no +/edit/delete buttons."""
+def test_immutable_category_can_take_children_but_not_be_edited(logged_in_page, base_url):
+    """Home and Admin are immutable *categories*: they offer + (new item inside) but no edit/delete."""
     page = logged_in_page
     nav(page, f"{base_url}/functionalities")
     for label in ("Home", "Admin"):
         row = page.locator("div").filter(has_text=label).filter(
             has=page.locator('[data-testid="drag-handle"]')
         ).last
-        expect(row.locator('[data-testid="nav-add"]')).to_have_count(0)
+        expect(row.locator('[data-testid="nav-add"]')).to_have_count(1)
         expect(row.locator('[data-testid="nav-edit"]')).to_have_count(0)
         expect(row.locator('[data-testid="nav-delete"]')).to_have_count(0)
 
 
-def test_mutable_item_has_all_action_buttons(logged_in_page, base_url):
-    """F-01: mutable items (user-created) expose +, edit, and delete buttons."""
-    import time
+def test_functionality_row_has_no_add_button(logged_in_page, base_url):
+    """Only categories can hold children, so a functionality shows edit/delete but never +."""
     page = logged_in_page
     name = f"E2E BtnTest {int(time.time())}"
     _create_functionality(page, base_url, name, f"/e2e-btn-{int(time.time())}")
-    nav(page, f"{base_url}/functionalities")
-    row = page.locator("div").filter(has_text=name).filter(
-        has=page.locator('[data-testid="drag-handle"]')
-    ).last
-    expect(row.locator('[data-testid="nav-add"]')).to_have_count(1)
-    expect(row.locator('[data-testid="nav-edit"]')).to_have_count(1)
-    expect(row.locator('[data-testid="nav-delete"]')).to_have_count(1)
-    _delete_functionality(page, base_url, name)
+    try:
+        nav(page, f"{base_url}/functionalities")
+        row = page.locator("div").filter(has_text=name).filter(
+            has=page.locator('[data-testid="drag-handle"]')
+        ).last
+        expect(row.locator('[data-testid="nav-add"]')).to_have_count(0)
+        expect(row.locator('[data-testid="nav-edit"]')).to_have_count(1)
+        expect(row.locator('[data-testid="nav-delete"]')).to_have_count(1)
+    finally:
+        _delete_functionality(page, base_url, name)
+
+
+def test_mutable_category_has_all_action_buttons(logged_in_page, base_url):
+    """A user-created category exposes +, edit and delete."""
+    page = logged_in_page
+    name = f"E2E CatBtn {int(time.time())}"
+    _create_category(page, base_url, name)
+    try:
+        nav(page, f"{base_url}/functionalities")
+        row = page.locator("div").filter(has_text=name).filter(
+            has=page.locator('[data-testid="drag-handle"]')
+        ).last
+        expect(row.locator('[data-testid="nav-add"]')).to_have_count(1)
+        expect(row.locator('[data-testid="nav-edit"]')).to_have_count(1)
+        expect(row.locator('[data-testid="nav-delete"]')).to_have_count(1)
+    finally:
+        _delete_functionality(page, base_url, name)
 
 
 def test_drag_moves_item_after_last(logged_in_page, base_url):
@@ -205,6 +229,263 @@ def test_drag_moves_item_after_last(logged_in_page, base_url):
 
 def test_functionality_create_annulla_navigates_back(logged_in_page, base_url):
     page = logged_in_page
-    nav(page, f"{base_url}/functionalities/create?root=root")
+    nav(page, f"{base_url}/functionalities/create")
     page.get_by_role("button", name="Annulla").click()
     page.wait_for_url("**/functionalities", timeout=10_000)
+
+
+def _create_category(page, base_url, name):
+    """Create a root-level Category item (no link field)."""
+    nav(page, f"{base_url}/functionalities/create")
+    page.get_by_placeholder("Nome funzionalità *").fill(name)
+    page.get_by_placeholder("Descrizione *").fill("e2e category")
+    _select_tipologia(page, "Category")
+    page.get_by_role("button", name="Salva").click()
+    page.wait_for_url("**/functionalities", timeout=10_000)
+    page.wait_for_load_state("networkidle")
+
+
+def test_tipologia_starts_unselected(logged_in_page, base_url):
+    """Tipologia must not pre-display "Category" (a real option) while nothing is selected:
+    the placeholder shows instead, the Link field stays hidden, and Salva stays disabled."""
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities/create")
+    tipologia = page.locator('[data-testid="select-tipologia"]')
+    expect(tipologia).to_have_text("Tipologia *")
+    expect(page.get_by_placeholder("Link *")).to_have_count(0)
+
+    page.get_by_placeholder("Nome funzionalità *").fill("E2E Tipologia")
+    page.get_by_placeholder("Descrizione *").fill("e2e")
+    expect(page.get_by_role("button", name="Salva")).to_be_disabled()
+
+    _select_tipologia(page, "Link interno (/path)")
+    expect(tipologia).to_have_text("Link interno (/path)")
+    expect(page.get_by_placeholder("Link *")).to_be_visible()
+
+    # Category is a functionality-free kind: choosing it hides the Link field again
+    _select_tipologia(page, "Category")
+    expect(tipologia).to_have_text("Category")
+    expect(page.get_by_placeholder("Link *")).to_have_count(0)
+
+
+def test_genitore_defaults_to_root(logged_in_page, base_url):
+    """Genitore shows Root — not an empty placeholder — when creating at the top level."""
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities/create")
+    expect(page.locator('[data-testid="select-genitore"]')).to_have_text("Root")
+
+
+def test_genitore_dropdown_lists_root_and_categories(logged_in_page, base_url):
+    """Genitore lists Root plus every mutable category, and Root can be picked back."""
+    page = logged_in_page
+    name = f"E2E Cat Root {int(time.time())}"
+    _create_category(page, base_url, name)
+    try:
+        nav(page, f"{base_url}/functionalities/create")
+        genitore = page.locator('[data-testid="select-genitore"]')
+        expect(genitore).to_be_enabled()
+        genitore.click()
+        menu = page.locator('.max-h-56.overflow-y-auto')
+        expect(menu.get_by_role("button", name="Root", exact=True)).to_be_visible()
+        expect(menu.get_by_role("button", name=name, exact=True)).to_be_visible()
+
+        menu.get_by_role("button", name=name, exact=True).click()
+        expect(genitore).to_have_text(name)
+
+        genitore.click()
+        page.locator('[data-testid="select-genitore-option-0"]').click()
+        expect(genitore).to_have_text("Root")
+    finally:
+        _delete_functionality(page, base_url, name)
+
+
+def test_textareas_are_at_least_two_input_rows_tall(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities/create")
+    single_line = page.get_by_placeholder("Nome funzionalità *").bounding_box()["height"]
+    for label, locator in (
+        ("Descrizione *", page.get_by_placeholder("Descrizione *")),
+        ("Descrizione (traduzioni)", page.get_by_placeholder("Descrizione", exact=True).first),
+    ):
+        h = locator.bounding_box()["height"]
+        assert h >= 2 * single_line - 1, \
+            f"{label} is {h}px, expected >= 2x a single-line input ({single_line}px)"
+
+
+def test_tag_input_placeholder_is_the_hint(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities/create")
+    expect(page.get_by_placeholder("Tags (IT)")).to_have_count(0)
+    # One in "Informazioni generali" plus one per locale in the translations accordion
+    assert page.get_by_placeholder("Inserisci un tag e premi invio").count() >= 2
+
+
+def test_external_link_new_tab_flag(logged_in_page, base_url):
+    """Only "Link esterno (http[s])" carries the new-tab flag; it defaults to on and persists."""
+    page = logged_in_page
+    ts = int(time.time())
+    name = f"E2E Ext {ts}"
+    nav(page, f"{base_url}/functionalities/create")
+    page.get_by_placeholder("Nome funzionalità *").fill(name)
+    page.get_by_placeholder("Descrizione *").fill("e2e")
+
+    flag = page.locator('[data-testid="check-open-in-new-tab"]')
+    _select_tipologia(page, "Link interno (/path)")
+    expect(flag).to_have_count(0)
+    _select_tipologia(page, "Category")
+    expect(flag).to_have_count(0)
+
+    _select_tipologia(page, "Link esterno (http[s])")
+    expect(flag).to_be_checked()  # default: open in a new tab
+    page.get_by_placeholder("Link *").fill("https://example.com")
+    flag.uncheck()
+    page.get_by_role("button", name="Salva").click()
+    page.wait_for_url("**/functionalities", timeout=10_000)
+    page.wait_for_load_state("networkidle")
+    try:
+        # Reopen: the cleared flag survived the round-trip
+        page.get_by_text(name, exact=True).first.scroll_into_view_if_needed()
+        row = page.locator("div").filter(has_text=name).filter(has=page.locator('[data-testid="nav-edit"]')).last
+        row.locator('[data-testid="nav-edit"]').click()
+        page.wait_for_url("**/edit", timeout=10_000)
+        edit_url = page.url
+        expect(page.locator('[data-testid="check-open-in-new-tab"]')).not_to_be_checked()
+
+        # ...and setting it back to a new tab persists too
+        page.locator('[data-testid="check-open-in-new-tab"]').check()
+        page.get_by_role("button", name="Salva").click()
+        page.wait_for_url("**/functionalities", timeout=10_000)
+        nav(page, edit_url)
+        expect(page.locator('[data-testid="check-open-in-new-tab"]')).to_be_checked()
+    finally:
+        _delete_functionality(page, base_url, name)
+
+
+def _pick_genitore(page, label: str):
+    """Open the Genitore dropdown and click an option by label (scoped to the open panel)."""
+    page.locator('[data-testid="select-genitore"]').click()
+    page.locator('.max-h-56.overflow-y-auto').get_by_role("button", name=label, exact=True).click()
+
+
+def _row_padding_left(page, name: str):
+    """padding-left of the tree row for `name` — 12px at the root, +24px per nesting level."""
+    return page.evaluate(
+        """(n) => {
+            const span = [...document.querySelectorAll('span.flex-1')].find(e => e.textContent.trim() === n);
+            return span ? span.parentElement.style.paddingLeft : null;
+        }""",
+        name,
+    )
+
+
+def test_edit_can_change_genitore(logged_in_page, base_url):
+    """Editable items can be reparented from the form, not only by dragging them in the tree."""
+    page = logged_in_page
+    ts = int(time.time())
+    cat, func = f"E2E Parent {ts}", f"E2E Child {ts}"
+    _create_category(page, base_url, cat)
+    _create_functionality(page, base_url, func, f"/e2e-child-{ts}")
+    try:
+        nav(page, f"{base_url}/functionalities")
+        assert _row_padding_left(page, func) == "12px"  # still at the root
+        page.get_by_text(func, exact=True).first.scroll_into_view_if_needed()
+        row = page.locator("div").filter(has_text=func).filter(has=page.locator('[data-testid="nav-edit"]')).last
+        row.locator('[data-testid="nav-edit"]').click()
+        page.wait_for_url("**/edit", timeout=10_000)
+        edit_url = page.url
+
+        genitore = page.locator('[data-testid="select-genitore"]')
+        expect(genitore).to_be_enabled()
+        expect(genitore).to_have_text("Root")
+        _pick_genitore(page, cat)
+        expect(genitore).to_have_text(cat)
+        page.get_by_role("button", name="Salva").click()
+        page.wait_for_url("**/functionalities", timeout=10_000)
+        page.wait_for_load_state("networkidle")
+
+        # Persisted: the item is now a child row of the category, and the form reflects it
+        assert _row_padding_left(page, func) == "36px"
+        nav(page, edit_url)
+        expect(page.locator('[data-testid="select-genitore"]')).to_have_text(cat)
+
+        # ...and it can be moved back to the root the same way
+        _pick_genitore(page, "Root")
+        page.get_by_role("button", name="Salva").click()
+        page.wait_for_url("**/functionalities", timeout=10_000)
+        page.wait_for_load_state("networkidle")
+        assert _row_padding_left(page, func) == "12px"
+    finally:
+        _delete_functionality(page, base_url, func)
+        _delete_functionality(page, base_url, cat)
+
+
+def test_edit_genitore_excludes_own_subtree(logged_in_page, base_url):
+    """A category must not be able to become a child of itself or of its own descendants."""
+    page = logged_in_page
+    ts = int(time.time())
+    parent, child = f"E2E Outer {ts}", f"E2E Inner {ts}"
+    _create_category(page, base_url, parent)
+    _create_category(page, base_url, child)
+    try:
+        # Nest child under parent via the form
+        nav(page, f"{base_url}/functionalities")
+        page.get_by_text(child, exact=True).first.scroll_into_view_if_needed()
+        row = page.locator("div").filter(has_text=child).filter(has=page.locator('[data-testid="nav-edit"]')).last
+        row.locator('[data-testid="nav-edit"]').click()
+        page.wait_for_url("**/edit", timeout=10_000)
+        _pick_genitore(page, parent)
+        page.get_by_role("button", name="Salva").click()
+        page.wait_for_url("**/functionalities", timeout=10_000)
+        page.wait_for_load_state("networkidle")
+
+        # Editing the parent: neither itself nor its descendant may be offered as Genitore
+        page.get_by_text(parent, exact=True).first.scroll_into_view_if_needed()
+        prow = page.locator("div").filter(has_text=parent).filter(has=page.locator('[data-testid="nav-edit"]')).last
+        prow.locator('[data-testid="nav-edit"]').click()
+        page.wait_for_url("**/edit", timeout=10_000)
+        page.locator('[data-testid="select-genitore"]').click()
+        menu = page.locator('.max-h-56.overflow-y-auto')
+        expect(menu.get_by_role("button", name="Root", exact=True)).to_be_visible()
+        expect(menu.get_by_role("button", name=parent, exact=True)).to_have_count(0)
+        expect(menu.get_by_role("button", name=child, exact=True)).to_have_count(0)
+    finally:
+        _delete_functionality(page, base_url, child)
+        _delete_functionality(page, base_url, parent)
+
+
+def test_genitore_dropdown_lists_every_category(logged_in_page, base_url):
+    """Genitore offers Root, the immutable seeded sections (Home, Admin) and every user
+    category — and still no clickable 'Genitore' placeholder row."""
+    page = logged_in_page
+    name = f"E2E Category {int(time.time())}"
+    _create_category(page, base_url, name)
+    try:
+        nav(page, f"{base_url}/functionalities/create")
+        genitore = page.locator('[data-testid="select-genitore"]')
+        expect(genitore).to_be_enabled()
+        genitore.click()
+        menu = page.locator('.max-h-56.overflow-y-auto')
+        expect(menu.get_by_role("button", name="Genitore", exact=True)).to_have_count(0)
+        for label in ("Root", "Home", "Admin", name):
+            expect(menu.get_by_role("button", name=label, exact=True)).to_be_visible()
+        # Home (pinned top), Root, Admin (pinned bottom), then the user categories
+        labels = [t.strip() for t in menu.get_by_role("button").all_inner_texts()]
+        assert labels[:3] == ["Home", "Root", "Admin"], f"Unexpected Genitore order: {labels}"
+        assert name in labels[3:], f"{name} should follow the pinned sections: {labels}"
+        # Operations is not a placement target
+        expect(menu.get_by_role("button", name="Operations", exact=True)).to_have_count(0)
+        expect(menu.get_by_role("button", name="Operazioni", exact=True)).to_have_count(0)
+    finally:
+        _delete_functionality(page, base_url, name)
+
+
+def test_add_button_on_immutable_section_preselects_it_as_parent(logged_in_page, base_url):
+    """The + on Admin opens the create form already parented to Admin."""
+    page = logged_in_page
+    nav(page, f"{base_url}/functionalities")
+    row = page.locator("div").filter(has_text="Admin").filter(
+        has=page.locator('[data-testid="drag-handle"]')
+    ).last
+    row.locator('[data-testid="nav-add"]').click()
+    page.wait_for_url("**/functionalities/create?parent=*", timeout=10_000)
+    expect(page.locator('[data-testid="select-genitore"]')).to_have_text("Admin")

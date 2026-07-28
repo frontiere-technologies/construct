@@ -38,7 +38,6 @@ def _delete_role(page, base_url, name):
     row = _rows(page).filter(has_text=name)
     expect(row).to_be_visible()
     row_menu = row.locator('[data-testid^="row-menu"]')
-    row_menu.scroll_into_view_if_needed()
     row_menu.click()
     page.get_by_role("button", name="Elimina").click()  # row-menu item -> opens ConfirmModal
     page.get_by_role("button", name="Elimina").click()  # ConfirmModal's confirm button
@@ -193,20 +192,23 @@ def test_filter_by_has_permission_and_reset(logged_in_page, base_url):
     expect(rows).to_have_count(baseline)
 
 
-def test_actions_column_header_has_label_and_divider(logged_in_page, base_url):
-    """Regression test mirroring test_users.py: the actions column ("...")
-    must show a real header label and a divider against its neighbor, not an
-    empty, borderless header cell."""
+def test_actions_column_header_has_label_and_no_divider(logged_in_page, base_url):
+    """Regression test mirroring test_users.py: the actions column ("...") shows
+    a real header label and no divider against its neighbour ("ID"), while the
+    other columns keep the theme's static header divider."""
     page = logged_in_page
     nav(page, f"{base_url}/roles-permissions")
     actions_header = page.locator('.ag-header-cell[col-id="actions"]')
     expect(actions_header).to_have_text("...")
 
-    divider_color = page.locator('.ag-header-cell[col-id="dateMod"]').evaluate(
+    assert actions_header.evaluate("el => getComputedStyle(el, '::after').display") == "none", \
+        "The actions column must not draw a divider against the first text column"
+
+    other_divider = page.locator('.ag-header-cell[col-id="description"]').evaluate(
         "el => getComputedStyle(el, '::after').borderRightColor"
     )
-    assert divider_color != "rgba(0, 0, 0, 0)", \
-        "Missing divider between the last text column and the actions column"
+    assert other_divider != "rgba(0, 0, 0, 0)", \
+        "Non-actions columns lost their header divider"
 
 
 def test_column_visibility_toggle(logged_in_page, base_url):

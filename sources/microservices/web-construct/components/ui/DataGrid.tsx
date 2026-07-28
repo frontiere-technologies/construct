@@ -7,7 +7,7 @@ import {
   type ColDef, type IDatasource, type GridReadyEvent,
   type FilterChangedEvent, type SortChangedEvent,
 } from 'ag-grid-community'
-import { appGridTheme, itLocaleText } from './dataGridConfig'
+import { appGridTheme, itLocaleText, columnPinningState } from './dataGridConfig'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
@@ -50,6 +50,9 @@ export default function DataGrid<T>({
         initialState={{
           filter: initialFilterModel ? { filterModel: initialFilterModel } : undefined,
           sort: initialSortModel ? { sortModel: initialSortModel } : undefined,
+          // Restores the `pinned` flags that `initialState` would otherwise wipe --
+          // see `columnPinningState`.
+          columnPinning: columnPinningState(columnDefs),
         }}
         onFilterChanged={onFilterChanged}
         onSortChanged={onSortChanged}

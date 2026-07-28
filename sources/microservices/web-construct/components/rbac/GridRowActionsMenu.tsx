@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { MoreHorizontal } from 'lucide-react'
-import type { ICellRendererParams } from 'ag-grid-community'
+import type { ColDef, ICellRendererParams } from 'ag-grid-community'
 
 export interface RowMenuItem { label: string; onClick: () => void; disabled?: boolean }
 
@@ -11,9 +11,31 @@ export interface GridRowActionsMenuParams<T> extends ICellRendererParams<T> {
   getItems: (data: T) => RowMenuItem[]
 }
 
+/**
+ * The row-actions column, shared by every grid: always the first column and always
+ * pinned left, so it stays visible while the other columns scroll horizontally.
+ * `lockPinned` + `lockPosition` keep it there even if a user drags columns around.
+ */
+export function actionsColumnDef<T>(getItems: (data: T) => RowMenuItem[]): ColDef<T> {
+  return {
+    colId: 'actions',
+    headerName: '...',
+    pinned: 'left',
+    lockPinned: true,
+    lockPosition: 'left',
+    suppressMovable: true,
+    sortable: false,
+    filter: false,
+    resizable: false,
+    width: 56,
+    cellRenderer: GridRowActionsMenu,
+    cellRendererParams: { getItems },
+  }
+}
+
 export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T>) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const close = useCallback(() => { setOpen(false); setPos(null) }, [])
@@ -43,13 +65,15 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
     // to exclude this actions column from row-click navigation. React's stopPropagation()
     // below only stops the React synthetic event chain — it doesn't stop AG Grid's own
     // native row-click listener, which is attached directly to the DOM outside React.
-    <div className="flex h-full items-center justify-end" data-grid-no-row-click onClick={e => e.stopPropagation()}>
+    <div className="flex h-full items-center justify-center" data-grid-no-row-click onClick={e => e.stopPropagation()}>
       <button
         data-testid={`row-menu-${rowId}`}
         onClick={e => {
           if (open) { close(); return }
           const rect = e.currentTarget.getBoundingClientRect()
-          setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+          // Opens rightwards from the button (the actions column is pinned to the
+          // left edge, so the space is always on that side).
+          setPos({ top: rect.bottom + 4, left: rect.left })
           setOpen(true)
         }}
         className="p-1 rounded hover:bg-surface-hover"
@@ -57,7 +81,7 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
         <MoreHorizontal size={16} />
       </button>
       {open && pos && createPortal(
-        <div ref={menuRef} style={{ top: pos.top, right: pos.right }} className="fixed z-50 w-40 p-1 rounded-lg border border-border bg-surface-overlay shadow-lg">
+        <div ref={menuRef} style={{ top: pos.top, left: pos.left }} className="fixed z-50 w-40 p-1 rounded-lg border border-border bg-surface-overlay shadow-lg">
           {items.map(item => (
             <button
               key={item.label}

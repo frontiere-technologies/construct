@@ -209,6 +209,7 @@ create table if not exists navigation_item (
   is_immutable                       smallint not null default 0,
   config_visibility                  smallint not null default 0,
   no_permission_need_for_navigation  smallint not null default 0,
+  open_in_new_tab                    smallint not null default 1,
   external_id                        text,
   click_count                        bigint default 0,
   created_at                         timestamptz default now(),
@@ -216,6 +217,8 @@ create table if not exists navigation_item (
 );
 alter table navigation_item enable row level security;
 alter sequence if exists s_id_navigation_item owned by navigation_item.id_item;
+-- External links open in a new tab by default (1); only EXTERNAL_LINK items consult it.
+alter table navigation_item add column if not exists open_in_new_tab smallint not null default 1;
 
 create table if not exists navigation_item_tag (
   id_item  bigint not null references navigation_item(id_item) on delete cascade,

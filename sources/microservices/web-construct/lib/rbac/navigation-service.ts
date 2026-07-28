@@ -1,10 +1,10 @@
 import { cache } from 'react'
-import { asc, inArray } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { navigationItem, roleItem } from '@/lib/db/schema'
 import { toNavigationItemRow } from './nav-row-mapper'
 import { resolveAuthorizedItemIds, mapNavigationToSidebar } from './sidebar-adapter'
-import type { RoleItemRow } from './types'
+import type { NavigationItemRow, RoleItemRow } from './types'
 import type { MenuItem } from '@/types/menu'
 
 export const getSidebarMenu = cache(async (roleIds: number[]): Promise<MenuItem[]> => {
@@ -23,3 +23,8 @@ export const getSidebarMenu = cache(async (roleIds: number[]): Promise<MenuItem[
   const authorized = resolveAuthorizedItemIds(items, roleItems, roleIds)
   return mapNavigationToSidebar(items, authorized)
 })
+
+export async function getNavigationItemById(idItem: number): Promise<NavigationItemRow | null> {
+  const [row] = await db.select().from(navigationItem).where(eq(navigationItem.idItem, idItem)).limit(1)
+  return row ? toNavigationItemRow(row) : null
+}

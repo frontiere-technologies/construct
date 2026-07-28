@@ -16,5 +16,6 @@ export function toNavigationItemRow(r: typeof navigationItem.$inferSelect): Navi
     is_immutable: r.isImmutable,
     config_visibility: r.configVisibility,
     no_permission_need_for_navigation: r.noPermissionNeedForNavigation,
+    open_in_new_tab: r.openInNewTab,
   }
 }

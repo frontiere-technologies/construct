@@ -64,17 +64,6 @@ export default function CustomSelect({
       {open && (
         <div className="absolute left-0 right-0 top-full mt-1 z-40 rounded-lg border border-border bg-surface-overlay shadow-lg overflow-hidden">
           <div className="max-h-56 overflow-y-auto py-1">
-            {placeholder && (
-              <button
-                type="button"
-                onClick={() => { onChange(''); close() }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-surface-hover
-                  ${showPlaceholder ? 'font-medium text-foreground' : 'text-gray-400'}`}
-              >
-                <span className="flex-1">{placeholder}</span>
-                {showPlaceholder && <Check size={13} className="text-primary shrink-0" />}
-              </button>
-            )}
             {options.map(opt => {
               const selected = String(opt.value) === String(value)
               return (
