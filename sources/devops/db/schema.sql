@@ -305,7 +305,7 @@ on conflict (id_role, id_item) do update set authorized = true;
 
 -- Explicit Administrator grant for Admin/Theme nav items
 insert into role_item (id_role, id_item, authorized)
-select 1, n.id_item from navigation_item n where n.id_item in (6,7)
+select 1, n.id_item, true from navigation_item n where n.id_item in (6,7)
 on conflict (id_role, id_item) do update set authorized = true;
 
 -- Migration: consolidate the former "RBAC" section (id 2) under Admin (id 6) and remove it.
@@ -329,10 +329,23 @@ insert into user_role (user_id, id_role)
 select id, 0 from users
 on conflict (user_id, id_role) do nothing;
 
--- Legacy admins get Administrator (id 1)
-insert into user_role (user_id, id_role)
-select id, 1 from users where role = 'admin'
-on conflict (user_id, id_role) do nothing;
+-- Legacy admins get Administrator (id 1).
+-- Guarded: `alter table users drop column if exists role` above has already
+-- removed the legacy column on every migrated database, and it never existed on
+-- a fresh one — so an unguarded reference to it makes this whole script
+-- unrunnable rather than idempotent. Kept for deployments still mid-migration.
+do $$ begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'users' and column_name = 'role'
+  ) then
+    execute $backfill$
+      insert into user_role (user_id, id_role)
+      select id, 1 from users where role = 'admin'
+      on conflict (user_id, id_role) do nothing
+    $backfill$;
+  end if;
+end $$;
 
 -- ============================================================
 -- RBAC: role list view (counts for the roles table)
