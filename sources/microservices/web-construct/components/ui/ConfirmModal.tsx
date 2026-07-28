@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useI18n } from '@/context/I18nContext'
 
 interface ConfirmModalProps {
   title: string
@@ -10,7 +11,8 @@ interface ConfirmModalProps {
   onCancel: () => void
 }
 
-export default function ConfirmModal({ title, message, confirmLabel = 'Conferma', onConfirm, onCancel }: ConfirmModalProps) {
+export default function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }: ConfirmModalProps) {
+  const { t } = useI18n()
   const [busy, setBusy] = useState(false)
 
   const confirm = async () => {
@@ -25,11 +27,11 @@ export default function ConfirmModal({ title, message, confirmLabel = 'Conferma'
         <h2 className="text-lg font-bold mb-2">{title}</h2>
         <p className="text-sm text-gray-500 mb-6">{message}</p>
         <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="px-3 py-2 text-sm rounded-lg border border-border">Annulla</button>
+          <button onClick={onCancel} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
           <button
             onClick={confirm} disabled={busy}
             className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
-          >{confirmLabel}</button>
+          >{confirmLabel ?? t('common.actions.confirm')}</button>
         </div>
       </div>
     </div>
