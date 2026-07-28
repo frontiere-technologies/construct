@@ -55,10 +55,14 @@ export function createFormatters(locale: string): Formatters {
     timeZone: string | undefined,
     options: Intl.DateTimeFormatOptions,
   ): Intl.DateTimeFormat => {
-    const key = timeZone ?? ''
+    // `|| undefined`, not `?? ''`: an empty string is not a valid IANA zone, so
+    // normalizing it to "no zone" keeps a caller that passes '' for "unset" from
+    // either throwing or silently sharing the default zone's cache entry.
+    const zone = timeZone || undefined
+    const key = zone ?? ''
     let fmt = cache.get(key)
     if (!fmt) {
-      fmt = new Intl.DateTimeFormat(locale, { ...options, timeZone })
+      fmt = new Intl.DateTimeFormat(locale, { ...options, timeZone: zone })
       cache.set(key, fmt)
     }
     return fmt
