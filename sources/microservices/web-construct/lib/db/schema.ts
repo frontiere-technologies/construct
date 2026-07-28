@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   pgTable, pgView, uuid, text, jsonb, timestamp, bigint, integer, smallint,
-  boolean, varchar, primaryKey, type AnyPgColumn,
+  boolean, varchar, primaryKey, unique, index, type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
 export const userStatus = pgTable('user_status', {
@@ -22,6 +22,19 @@ export const navigationItemType = pgTable('navigation_item_type', {
 export const functionalityType = pgTable('functionality_type', {
   idFunctionalityType: bigint('id_functionality_type', { mode: 'number' }).primaryKey(),
   description: text('description').notNull(),
+})
+
+export const appLanguage = pgTable('app_language', {
+  idLanguage: bigint('id_language', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_language')`),
+  code: varchar('code', { length: 5 }).notNull().unique(),
+  locale: varchar('locale', { length: 10 }).notNull().unique(),
+  name: text('name').notNull(),
+  nativeName: text('native_name').notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  isDefault: boolean('is_default').notNull().default(false),
+  dictionaryVersion: bigint('dictionary_version', { mode: 'number' }).notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
 })
 
 export const users = pgTable('users', {
@@ -49,6 +62,7 @@ export const users = pgTable('users', {
   pictureUrl: text('picture_url'),
   idUserStatus: bigint('id_user_status', { mode: 'number' }).references(() => userStatus.idUserStatus).default(2),
   lastStatusTs: timestamp('last_status_ts', { withTimezone: true, mode: 'string' }),
+  idLanguage: bigint('id_language', { mode: 'number' }).references(() => appLanguage.idLanguage, { onDelete: 'set null' }),
 })
 
 export const passwordSetTokens = pgTable('password_set_tokens', {
@@ -142,3 +156,27 @@ export const roleListView = pgView('role_list_view', {
   associatedUsers: bigint('associated_users', { mode: 'number' }),
   hasPermissions: boolean('has_permissions'),
 }).existing()
+
+export const translationKey = pgTable('translation_key', {
+  idTranslationKey: bigint('id_translation_key', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_translation_key')`),
+  key: varchar('key', { length: 200 }).notNull().unique(),
+  description: text('description'),
+  namespace: varchar('namespace', { length: 60 }).notNull(),
+  module: varchar('module', { length: 60 }),
+  version: integer('version').notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
+}, (t) => [index('translation_key_namespace_idx').on(t.namespace), index('translation_key_module_idx').on(t.module)])
+
+export const translationValue = pgTable('translation_value', {
+  idTranslationValue: bigint('id_translation_value', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_translation_value')`),
+  idTranslationKey: bigint('id_translation_key', { mode: 'number' }).notNull().references(() => translationKey.idTranslationKey, { onDelete: 'cascade' }),
+  idLanguage: bigint('id_language', { mode: 'number' }).notNull().references(() => appLanguage.idLanguage, { onDelete: 'cascade' }),
+  value: varchar('value', { length: 1000 }).notNull(),
+  version: integer('version').notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
+}, (t) => [
+  unique('translation_value_key_language_unique').on(t.idTranslationKey, t.idLanguage),
+  index('translation_value_language_idx').on(t.idLanguage),
+])

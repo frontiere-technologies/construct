@@ -407,3 +407,187 @@ begin
   end if;
 end;
 $$;
+
+-- ============================================================
+-- i18n: languages
+-- code    = lowercase BCP-47 primary subtag ('it', 'en')
+-- locale  = full BCP-47 tag used for Intl formatting ('it-IT')
+-- dictionary_version is bumped by trigger on every translation
+-- change and is what the server-side dictionary cache polls.
+-- ============================================================
+create sequence if not exists s_id_language start 100;
+
+create table if not exists app_language (
+  id_language        bigint      primary key default nextval('s_id_language'),
+  code               varchar(5)  not null unique,
+  locale             varchar(10) not null unique,
+  name               text        not null,
+  native_name        text        not null,
+  is_active          boolean     not null default true,
+  is_default         boolean     not null default false,
+  dictionary_version bigint      not null default 1,
+  created_at         timestamptz default now(),
+  updated_at         timestamptz default now()
+);
+alter table app_language enable row level security;
+alter sequence if exists s_id_language owned by app_language.id_language;
+
+do $$ begin
+  alter table app_language add constraint app_language_code_format
+    check (code ~ '^[a-z]{2,3}$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table app_language add constraint app_language_locale_format
+    check (locale ~ '^[a-z]{2,3}-[A-Z]{2}$');
+exception when duplicate_object then null; end $$;
+
+-- The default language can never be the inactive one (§2.3).
+do $$ begin
+  alter table app_language add constraint app_language_default_is_active
+    check (not is_default or is_active);
+exception when duplicate_object then null; end $$;
+
+-- At most one default (§2.3). "At least one" is enforced by the delete/update
+-- guards in language-actions.ts plus the seed.
+create unique index if not exists app_language_single_default
+  on app_language ((is_default)) where is_default;
+
+create or replace trigger app_language_updated_at
+  before update on app_language
+  for each row execute function set_updated_at();
+
+-- ============================================================
+-- i18n: translation keys
+-- `key` is language-independent and stable: modulo.sezione.elemento
+-- ============================================================
+create sequence if not exists s_id_translation_key start 1000;
+
+create table if not exists translation_key (
+  id_translation_key bigint       primary key default nextval('s_id_translation_key'),
+  key                varchar(200) not null unique,
+  description        text,
+  namespace          varchar(60)  not null,
+  module             varchar(60),
+  version            integer      not null default 1,
+  created_at         timestamptz  default now(),
+  updated_at         timestamptz  default now()
+);
+alter table translation_key enable row level security;
+alter sequence if exists s_id_translation_key owned by translation_key.id_translation_key;
+
+do $$ begin
+  alter table translation_key add constraint translation_key_format
+    check (key ~ '^[a-z0-9]+(_[a-z0-9]+)*(\.[a-z0-9]+(_[a-z0-9]+)*)+$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table translation_key add constraint translation_key_namespace_format
+    check (namespace ~ '^[a-z][a-z0-9_]*$');
+exception when duplicate_object then null; end $$;
+
+create index if not exists translation_key_namespace_idx on translation_key (namespace);
+create index if not exists translation_key_module_idx    on translation_key (module);
+
+create or replace trigger translation_key_updated_at
+  before update on translation_key
+  for each row execute function set_updated_at();
+
+-- ============================================================
+-- i18n: translated values (one row per key × language)
+-- ============================================================
+create sequence if not exists s_id_translation_value start 1000;
+
+create table if not exists translation_value (
+  id_translation_value bigint        primary key default nextval('s_id_translation_value'),
+  id_translation_key   bigint        not null references translation_key(id_translation_key) on delete cascade,
+  id_language          bigint        not null references app_language(id_language) on delete cascade,
+  value                varchar(1000) not null,
+  version              integer       not null default 1,
+  created_at           timestamptz   default now(),
+  updated_at           timestamptz   default now(),
+  constraint translation_value_key_language_unique unique (id_translation_key, id_language)
+);
+alter table translation_value enable row level security;
+alter sequence if exists s_id_translation_value owned by translation_value.id_translation_value;
+
+create index if not exists translation_value_language_idx on translation_value (id_language);
+
+create or replace trigger translation_value_updated_at
+  before update on translation_value
+  for each row execute function set_updated_at();
+
+-- ============================================================
+-- i18n: dictionary versioning
+-- A value change bumps only its own language (§11.3: invalidate the
+-- affected language, leave the others alone). A key change (insert,
+-- rename, delete) changes the shape of every dictionary, so it bumps all.
+-- ============================================================
+create or replace function public.trg_bump_dictionary_version()
+returns trigger language plpgsql as $$
+begin
+  if (tg_op = 'DELETE') then
+    update app_language set dictionary_version = dictionary_version + 1
+      where id_language = old.id_language;
+  else
+    update app_language set dictionary_version = dictionary_version + 1
+      where id_language = new.id_language;
+    if (tg_op = 'UPDATE' and old.id_language is distinct from new.id_language) then
+      update app_language set dictionary_version = dictionary_version + 1
+        where id_language = old.id_language;
+    end if;
+  end if;
+  return null;
+end;
+$$;
+
+create or replace trigger translation_value_bump_version
+  after insert or update or delete on translation_value
+  for each row execute function public.trg_bump_dictionary_version();
+
+create or replace function public.trg_bump_all_dictionary_versions()
+returns trigger language plpgsql as $$
+begin
+  update app_language set dictionary_version = dictionary_version + 1;
+  return null;
+end;
+$$;
+
+create or replace trigger translation_key_bump_versions
+  after insert or update or delete on translation_key
+  for each statement execute function public.trg_bump_all_dictionary_versions();
+
+-- ============================================================
+-- i18n: atomic default-language switch (§2.3).
+-- Clearing the old default first is required: app_language_single_default
+-- is a non-deferrable unique index, so two rows can never be default even
+-- momentarily within the statement sequence.
+-- ============================================================
+create or replace function public.set_default_language(p_id_language bigint)
+returns void language plpgsql as $$
+declare v_active boolean;
+begin
+  select is_active into v_active from app_language
+    where id_language = p_id_language for update;
+  if not found then
+    raise exception 'Language % not found', p_id_language;
+  end if;
+  if not v_active then
+    raise exception 'Language % is not active', p_id_language;
+  end if;
+  update app_language set is_default = false
+    where is_default and id_language <> p_id_language;
+  update app_language set is_default = true
+    where id_language = p_id_language;
+end;
+$$;
+
+-- ============================================================
+-- i18n: per-user preferred language (§5.3). ON DELETE SET NULL so
+-- deleting a language never deletes users — the resolver falls back
+-- to the default language for anyone left pointing at nothing.
+-- ============================================================
+alter table users add column if not exists id_language bigint
+  references app_language(id_language) on delete set null;
+
+create index if not exists users_id_language_idx on users (id_language);
