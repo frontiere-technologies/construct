@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, ne, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
@@ -59,6 +59,16 @@ export interface LanguageStats {
  * Per-language translated / missing counts for the admin grid (§2.4).
  * `total keys − values for this language` is the missing count; a value row
  * cannot exist without its key (FK), so the subtraction is exact.
+ *
+ * An empty value does not count as translated: `createTranslator` treats `''`
+ * as absent and falls back to the default language, so a blank row is a missing
+ * translation as far as the user is concerned. Counting it as present would make
+ * this grid disagree with both the translator and the editor's missing/complete
+ * filter.
+ *
+ * Throws on failure rather than degrading, unlike `listLanguages` above: this
+ * feeds an admin grid, where "0 translated, 0 missing" and "the query failed"
+ * must not look identical.
  */
 export const getLanguageStats = cache(async (): Promise<Map<string, LanguageStats>> => {
   try {
@@ -67,12 +77,14 @@ export const getLanguageStats = cache(async (): Promise<Map<string, LanguageStat
       db
         .select({ code: appLanguage.code, translated: sql<number>`count(${translationValue.idTranslationValue})::int` })
         .from(appLanguage)
-        .leftJoin(translationValue, eq(translationValue.idLanguage, appLanguage.idLanguage))
+        .leftJoin(
+          translationValue,
+          and(eq(translationValue.idLanguage, appLanguage.idLanguage), ne(translationValue.value, '')),
+        )
         .groupBy(appLanguage.code),
     ])
     return new Map(perLanguage.map(r => [r.code, { code: r.code, translated: r.translated, missing: total - r.translated }]))
   } catch (err) {
-    log.error({ err }, 'failed to compute language stats')
-    return new Map()
+    throw new Error(`Failed to compute language stats: ${err instanceof Error ? err.message : String(err)}`)
   }
 })
