@@ -36,3 +36,26 @@ export const MAX_BULK_VALUES = 200
 
 export type TranslationParams = Record<string, string | number | Date | null | undefined>
 export type TranslateFn = (key: string, params?: TranslationParams) => string
+
+export type LanguageSortField = 'code' | 'locale' | 'name' | 'isActive' | 'isDefault' | 'createdAt'
+
+export interface LanguagesQuery {
+  page: number
+  size: number
+  search?: string
+  isActive?: boolean
+  sort?: LanguageSortField
+  direction?: 'ASC' | 'DESC'
+}
+
+export interface LanguagePageItemDto extends LanguageDto {
+  translated: number
+  missing: number
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export interface LanguagesPage {
+  total: number
+  elements: LanguagePageItemDto[]
+}

@@ -1,9 +1,9 @@
 import { cache } from 'react'
-import { and, asc, eq, ne, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ne, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
-import { FALLBACK_LANGUAGE, type LanguageDto } from './types'
+import { FALLBACK_LANGUAGE, type LanguageDto, type LanguagePageItemDto, type LanguagesPage, type LanguagesQuery } from './types'
 
 const log = createLogger('i18n-language-service')
 
@@ -88,3 +88,51 @@ export const getLanguageStats = cache(async (): Promise<Map<string, LanguageStat
     throw new Error(`Failed to compute language stats: ${err instanceof Error ? err.message : String(err)}`)
   }
 })
+
+const LANGUAGE_SORT_COLUMN = {
+  code: appLanguage.code,
+  locale: appLanguage.locale,
+  name: appLanguage.name,
+  isActive: appLanguage.isActive,
+  isDefault: appLanguage.isDefault,
+  createdAt: appLanguage.createdAt,
+} as const
+
+/**
+ * Page of languages for the admin grid (§2.4), with per-row translated/missing
+ * counts folded in from `getLanguageStats`. Unlike `listLanguages` above, this
+ * throws on failure: it feeds an admin grid, where "no rows" and "the query
+ * failed" must not look identical.
+ */
+export async function listLanguagesPage(query: LanguagesQuery): Promise<LanguagesPage> {
+  const conditions: SQL[] = []
+  if (query.search) conditions.push(sql`(${appLanguage.name} ilike ${'%' + query.search + '%'} or ${appLanguage.nativeName} ilike ${'%' + query.search + '%'} or ${appLanguage.code} ilike ${'%' + query.search + '%'} or ${appLanguage.locale} ilike ${'%' + query.search + '%'})`)
+  if (query.isActive != null) conditions.push(eq(appLanguage.isActive, query.isActive))
+  const where = conditions.length ? and(...conditions) : undefined
+
+  const sortCol = LANGUAGE_SORT_COLUMN[query.sort ?? 'code']
+  const ascending = (query.direction ?? 'ASC') === 'ASC'
+
+  try {
+    const [rows, [{ value: total }], stats] = await Promise.all([
+      db.select().from(appLanguage).where(where)
+        .orderBy(ascending ? asc(sortCol) : desc(sortCol))
+        .limit(query.size).offset(query.page * query.size),
+      db.select({ value: count() }).from(appLanguage).where(where),
+      getLanguageStats(),
+    ])
+    const elements: LanguagePageItemDto[] = rows.map(row => {
+      const stat = stats.get(row.code)
+      return {
+        ...toDto(row),
+        translated: stat?.translated ?? 0,
+        missing: stat?.missing ?? 0,
+        createdAt: row.createdAt ?? null,
+        updatedAt: row.updatedAt ?? null,
+      }
+    })
+    return { total, elements }
+  } catch (err) {
+    throw new Error(`Failed to list languages: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}

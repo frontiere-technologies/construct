@@ -711,3 +711,39 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- Admin → Lingue nav item
+insert into navigation_item
+  (id_item, name, id_item_type, id_functionality_type, functionality_link, id_item_parent, order_position, icon_path, navbar_position, item_translation, is_immutable, config_visibility)
+values
+  (8, 'Languages', 2, 3, 'admin/languages', 6, 4, 'Languages', null, '{"EN":{"name":"Languages"},"IT":{"name":"Lingue"}}', 1, 0)
+on conflict (id_item) do nothing;
+
+insert into role_item (id_role, id_item, authorized)
+select 1, n.id_item, true from navigation_item n where n.id_item = 8
+on conflict (id_role, id_item) do update set authorized = true;
+
+-- ---- languages admin catalog -------------------------------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"language.form.create_title","namespace":"language","module":"i18n","description":"New-language modal title","it":"Nuova lingua","en":"New language"},
+    {"key":"language.form.edit_title",  "namespace":"language","module":"i18n","description":"Edit-language modal title","it":"Modifica lingua","en":"Edit language"},
+    {"key":"language.form.code",        "namespace":"language","module":"i18n","description":"Language code field","it":"Codice","en":"Code"},
+    {"key":"language.form.locale",      "namespace":"language","module":"i18n","description":"Locale field","it":"Locale","en":"Locale"},
+    {"key":"language.form.name",        "namespace":"language","module":"i18n","description":"Language name field","it":"Nome","en":"Name"},
+    {"key":"language.form.native_name", "namespace":"language","module":"i18n","description":"Native-name field","it":"Nome nativo","en":"Native name"},
+    {"key":"language.actions.create",   "namespace":"language","module":"i18n","description":"Create-language button","it":"Nuova lingua","en":"New language"},
+    {"key":"language.actions.activate", "namespace":"language","module":"i18n","description":"Activate row action","it":"Attiva","en":"Activate"},
+    {"key":"language.actions.deactivate","namespace":"language","module":"i18n","description":"Deactivate row action","it":"Disattiva","en":"Deactivate"},
+    {"key":"language.actions.set_default","namespace":"language","module":"i18n","description":"Promote to default row action","it":"Imposta come predefinita","en":"Set as default"},
+    {"key":"language.translated_count", "namespace":"language","module":"i18n","description":"Translated-values column","it":"Traduzioni","en":"Translations"},
+    {"key":"language.missing_count",    "namespace":"language","module":"i18n","description":"Missing-values column","it":"Mancanti","en":"Missing"},
+    {"key":"language.created_at",       "namespace":"language","module":"i18n","description":"Creation-date column","it":"Data di creazione","en":"Created at"},
+    {"key":"language.confirm.set_default","namespace":"language","module":"i18n","description":"Confirm promoting a language. {{name}} = language name","it":"Impostare «{{name}}» come lingua predefinita?","en":"Set “{{name}}” as the default language?"},
+    {"key":"language.confirm.delete_title","namespace":"language","module":"i18n","description":"Delete-language confirm title","it":"Elimina lingua","en":"Delete language"},
+    {"key":"language.confirm.delete_message","namespace":"language","module":"i18n","description":"Delete-language confirm body. {{name}} = language name","it":"Eliminare la lingua «{{name}}»? Tutte le sue traduzioni verranno rimosse.","en":"Delete the language “{{name}}”? All of its translations will be removed."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
