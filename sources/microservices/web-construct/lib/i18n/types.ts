@@ -59,3 +59,66 @@ export interface LanguagesPage {
   total: number
   elements: LanguagePageItemDto[]
 }
+
+export type TranslationStatusFilter = 'all' | 'missing' | 'complete'
+export type TranslationSortField = 'key' | 'namespace' | 'module' | 'updatedAt'
+
+export interface TranslationsQuery {
+  page: number
+  size: number
+  /** Matched against key, description and translated value. */
+  search?: string
+  /** Restrict the missing/complete check — and the value search — to one language. */
+  languageCode?: string
+  namespace?: string
+  module?: string
+  status?: TranslationStatusFilter
+  sort?: TranslationSortField
+  direction?: 'ASC' | 'DESC'
+}
+
+export interface TranslationValueDto {
+  id: number
+  value: string
+  version: number
+}
+
+export interface TranslationRowDto {
+  id: number
+  key: string
+  description: string | null
+  namespace: string
+  module: string | null
+  version: number
+  updatedAt: string | null
+  /** Keyed by language code; a language with no row here is untranslated. */
+  values: Record<string, TranslationValueDto>
+  missingCodes: string[]
+}
+
+export interface TranslationsPage {
+  total: number
+  elements: TranslationRowDto[]
+}
+
+export interface TranslationConflict {
+  languageCode: string
+  currentValue: string
+  currentVersion: number
+  attemptedValue: string
+}
+
+export interface SaveTranslationsInput {
+  keyId: number
+  /** The `translation_key.version` the editor loaded — guards description/namespace edits. */
+  keyVersion: number
+  description: string | null
+  namespace: string
+  module: string | null
+  values: { languageCode: string; value: string; version: number | null }[]
+}
+
+export type SaveTranslationsResult =
+  | { ok: true }
+  | { ok: false; conflicts: TranslationConflict[] }
+  | { ok: false; error: string }

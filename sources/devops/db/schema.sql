@@ -747,3 +747,42 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- Admin → Traduzioni nav item
+insert into navigation_item
+  (id_item, name, id_item_type, id_functionality_type, functionality_link, id_item_parent, order_position, icon_path, navbar_position, item_translation, is_immutable, config_visibility)
+values
+  (9, 'Translations', 2, 3, 'admin/translations', 6, 5, 'Type', null, '{"EN":{"name":"Translations"},"IT":{"name":"Traduzioni"}}', 1, 0)
+on conflict (id_item) do nothing;
+
+insert into role_item (id_role, id_item, authorized)
+select 1, n.id_item, true from navigation_item n where n.id_item = 9
+on conflict (id_role, id_item) do update set authorized = true;
+
+-- ---- translations admin catalog ----------------------------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"translation.subtitle",        "namespace":"translation","module":"i18n","description":"Translations page subtitle","it":"Gestisci le etichette dell'interfaccia in tutte le lingue","en":"Manage interface labels in every language"},
+    {"key":"translation.description",     "namespace":"translation","module":"i18n","description":"Key description column/field","it":"Descrizione","en":"Description"},
+    {"key":"translation.namespace",       "namespace":"translation","module":"i18n","description":"Namespace column/field","it":"Namespace","en":"Namespace"},
+    {"key":"translation.module",          "namespace":"translation","module":"i18n","description":"Module column/field","it":"Modulo","en":"Module"},
+    {"key":"translation.status",          "namespace":"translation","module":"i18n","description":"Completeness column","it":"Stato","en":"Status"},
+    {"key":"translation.complete",        "namespace":"translation","module":"i18n","description":"Fully translated badge","it":"Completa","en":"Complete"},
+    {"key":"translation.updated_at",      "namespace":"translation","module":"i18n","description":"Last-modified column","it":"Ultima modifica","en":"Last updated"},
+    {"key":"translation.actions.create",  "namespace":"translation","module":"i18n","description":"New-key button","it":"Nuova chiave","en":"New key"},
+    {"key":"translation.actions.discard", "namespace":"translation","module":"i18n","description":"Discard unsaved edits","it":"Ripristina","en":"Discard changes"},
+    {"key":"translation.editor.title",    "namespace":"translation","module":"i18n","description":"Editor drawer subtitle","it":"Traduzioni per lingua","en":"Translations by language"},
+    {"key":"translation.filter.missing_only","namespace":"translation","module":"i18n","description":"Status filter: incomplete only","it":"Solo mancanti","en":"Missing only"},
+    {"key":"translation.filter.complete_only","namespace":"translation","module":"i18n","description":"Status filter: complete only","it":"Solo complete","en":"Complete only"},
+    {"key":"translation.conflict.title",  "namespace":"translation","module":"i18n","description":"Concurrent-edit banner title","it":"Conflitto di modifica","en":"Edit conflict"},
+    {"key":"translation.conflict.explanation","namespace":"translation","module":"i18n","description":"Concurrent-edit explanation","it":"Un altro amministratore ha modificato questa traduzione. Nessuna modifica è stata sovrascritta.","en":"Another administrator changed this translation. Nothing was overwritten."},
+    {"key":"translation.conflict.current","namespace":"translation","module":"i18n","description":"Label for the stored value","it":"Valore salvato","en":"Saved value"},
+    {"key":"translation.conflict.yours",  "namespace":"translation","module":"i18n","description":"Label for the attempted value","it":"Il tuo valore","en":"Your value"},
+    {"key":"translation.conflict.reload", "namespace":"translation","module":"i18n","description":"Reload-data button","it":"Ricarica i dati","en":"Reload data"},
+    {"key":"translation.confirm.delete_title","namespace":"translation","module":"i18n","description":"Delete-key confirm title","it":"Elimina chiave","en":"Delete key"},
+    {"key":"translation.confirm.delete_message","namespace":"translation","module":"i18n","description":"Delete-key confirm body. {{key}} = translation key","it":"Eliminare la chiave «{{key}}» e tutte le sue traduzioni?","en":"Delete the key “{{key}}” and all of its translations?"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
