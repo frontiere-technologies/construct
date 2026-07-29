@@ -4,10 +4,10 @@ import { db } from '@/lib/db'
 import { navigationItem, roleItem } from '@/lib/db/schema'
 import { toNavigationItemRow } from './nav-row-mapper'
 import { resolveAuthorizedItemIds, mapNavigationToSidebar } from './sidebar-adapter'
-import type { NavigationItemRow, RoleItemRow } from './types'
+import { DEFAULT_LOCALE, type Locale, type NavigationItemRow, type RoleItemRow } from './types'
 import type { MenuItem } from '@/types/menu'
 
-export const getSidebarMenu = cache(async (roleIds: number[]): Promise<MenuItem[]> => {
+export const getSidebarMenu = cache(async (roleIds: number[], locale: Locale = DEFAULT_LOCALE): Promise<MenuItem[]> => {
   const [navRows, roleRows] = await Promise.all([
     db.select().from(navigationItem).orderBy(asc(navigationItem.orderPosition)),
     roleIds.length
@@ -21,7 +21,7 @@ export const getSidebarMenu = cache(async (roleIds: number[]): Promise<MenuItem[
   const items = navRows.map(toNavigationItemRow)
   const roleItems = roleRows as RoleItemRow[]
   const authorized = resolveAuthorizedItemIds(items, roleItems, roleIds)
-  return mapNavigationToSidebar(items, authorized)
+  return mapNavigationToSidebar(items, authorized, locale)
 })
 
 export async function getNavigationItemById(idItem: number): Promise<NavigationItemRow | null> {
