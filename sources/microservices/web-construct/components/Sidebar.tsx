@@ -9,6 +9,7 @@ import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight, PanelLe
 import clsx from 'clsx'
 import { useUI } from '@/context/UIContext'
 import { useAuth } from '@/context/AuthContext'
+import { useI18n } from '@/context/I18nContext'
 import type { MenuItem } from '@/types/menu'
 import { activeAncestorIds, activeAncestorPath, togglePathAt, navHighlight, type NavHighlight } from '@/lib/sidebar-highlight'
 import { IconRenderer } from './IconRenderer'
@@ -220,6 +221,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   const { settings, setSettings } = useUI()
   const { user: authUser, signOut } = useAuth()
+  const { t } = useI18n()
   const pathname = usePathname()
 
   // The chain of open panels, top level first: one entry per sub-column, any depth.
@@ -464,7 +466,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           onToggleCollapse={() => setCol1Collapsed(c => !c)}
           onClose={handleMasterClose}
           closeTestId="sidebar-master-toggle"
-          closeTitle="Collassa menu"
+          closeTitle={t('nav.collapse_menu')}
           anchorClassName="-right-[9px] bottom-[9px]"
         />
 
@@ -501,7 +503,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             <button
               data-testid="sidebar-account-button"
               onClick={handleUserClick}
-              onMouseEnter={effCol1Collapsed ? e => showTooltip(e, authUser?.email?.split('@')[0] ?? 'Account') : undefined}
+              onMouseEnter={effCol1Collapsed ? e => showTooltip(e, authUser?.email?.split('@')[0] ?? t('nav.account')) : undefined}
               onMouseLeave={effCol1Collapsed ? hideTooltip : undefined}
               className={clsx(
                 'flex items-center gap-2 rounded-lg transition-colors duration-200 w-full',
@@ -536,13 +538,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             onToggleCollapse={() => toggleSubCollapsed(1)}
             onClose={() => setUserPanelOpen(false)}
             closeTestId="sidebar-col-close"
-            closeTitle="Chiudi pannello"
+            closeTitle={t('nav.close_panel')}
             anchorClassName="-right-[9px] bottom-[9px]"
           />
           {!isSubCollapsed(1) && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
               <TruncatedSpan
-                text={authUser?.email?.split('@')[0] ?? 'Account'}
+                text={authUser?.email?.split('@')[0] ?? t('nav.account')}
                 className="block truncate text-xs font-semibold uppercase tracking-wider opacity-50"
                 onShowTooltip={showTooltip}
                 onHideTooltip={hideTooltip}
@@ -554,7 +556,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             {/* Profile */}
             <Link
               href="/profile"
-              onMouseEnter={isSubCollapsed(1) ? e => showTooltip(e, 'Profile') : undefined}
+              onMouseEnter={isSubCollapsed(1) ? e => showTooltip(e, t('nav.profile')) : undefined}
               onMouseLeave={isSubCollapsed(1) ? hideTooltip : undefined}
               className={clsx(
                 userPanelItemCls,
@@ -562,14 +564,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               )}
             >
               <User size={16} className={pathname === '/profile' ? 'text-primary' : ''} />
-              {!isSubCollapsed(1) && <span>Profile</span>}
+              {!isSubCollapsed(1) && <span>{t('nav.profile')}</span>}
             </Link>
 
             {/* Theme Mode */}
             {isSubCollapsed(1) ? (
               <button
                 onClick={toggleTheme}
-                onMouseEnter={e => showTooltip(e, settings.theme === 'light' ? 'Switch to Dark' : 'Switch to Light')}
+                onMouseEnter={e => showTooltip(e, settings.theme === 'light' ? t('nav.theme_to_dark') : t('nav.theme_to_light'))}
                 onMouseLeave={hideTooltip}
                 className={userPanelItemCls}
               >
@@ -578,7 +580,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             ) : (
               <div className="flex items-center rounded-lg py-2 px-3 gap-3 text-sm text-sidebar-text">
                 {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-                <span className="flex-1">Theme Mode</span>
+                <span className="flex-1">{t('nav.theme_mode')}</span>
                 <button
                   onClick={toggleTheme}
                   className={clsx(
@@ -601,12 +603,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           <div className="p-2 border-t border-sidebar-text/10">
             <button
               onClick={signOut}
-              onMouseEnter={isSubCollapsed(1) ? e => showTooltip(e, 'Logout') : undefined}
+              onMouseEnter={isSubCollapsed(1) ? e => showTooltip(e, t('nav.logout')) : undefined}
               onMouseLeave={isSubCollapsed(1) ? hideTooltip : undefined}
               className={userPanelItemCls}
             >
               <LogOut size={16} />
-              {!isSubCollapsed(1) && <span>Logout</span>}
+              {!isSubCollapsed(1) && <span>{t('nav.logout')}</span>}
             </button>
           </div>
         </aside>
@@ -625,7 +627,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               onToggleCollapse={() => toggleSubCollapsed(k + 1)}
               onClose={() => setOpenPath(prev => prev.slice(0, k))}
               closeTestId="sidebar-col-close"
-              closeTitle="Chiudi pannello"
+              closeTitle={t('nav.close_panel')}
               anchorClassName="-right-[9px] bottom-[9px]"
             />
             {!collapsed && (
@@ -690,7 +692,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           <button
             data-testid="sidebar-collapsed-rail"
             onClick={() => { if (!isNarrowViewport) setMasterCollapsed(false) }}
-            title="Espandi menu"
+            title={t('nav.expand_menu')}
             className="mt-auto mb-2 p-1 rounded-lg text-sidebar-text/70 hover:bg-sidebar-active-bg hover:text-sidebar-active-text"
           >
             <PanelLeftOpen size={14} />

@@ -799,3 +799,30 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- ---- app shell (sidebar account panel, dashboard, error/loading, embedded, icon picker) ----
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"errors.page_title",              "namespace":"errors","module":"core","description":"Error boundary heading","it":"Qualcosa è andato storto.","en":"Something went wrong."},
+    {"key":"errors.error_id",                "namespace":"errors","module":"core","description":"Error boundary digest label","it":"ID errore","en":"Error ID"},
+    {"key":"errors.retry",                   "namespace":"errors","module":"core","description":"Error boundary retry button","it":"Riprova","en":"Try again"},
+    {"key":"home.dashboard",                 "namespace":"home","module":"core","description":"Dashboard page title","it":"Dashboard","en":"Dashboard"},
+    {"key":"home.total_users",               "namespace":"home","module":"core","description":"Dashboard stat card label","it":"Utenti totali","en":"Total Users"},
+    {"key":"home.active_sessions",           "namespace":"home","module":"core","description":"Dashboard stat card label","it":"Sessioni attive","en":"Active Sessions"},
+    {"key":"home.revenue",                   "namespace":"home","module":"core","description":"Dashboard stat card label","it":"Ricavi","en":"Revenue"},
+    {"key":"home.content_area",              "namespace":"home","module":"core","description":"Dashboard placeholder section heading","it":"Area contenuti","en":"Content Area"},
+    {"key":"home.placeholder_body",          "namespace":"home","module":"core","description":"Dashboard placeholder paragraph. {{path}} = current route","it":"Questa è una pagina segnaposto per {{path}}. Naviga usando la barra laterale per vedere il cambiamento dello stato attivo.","en":"This is a placeholder page for {{path}}. Navigate using the sidebar to see the active state change."},
+    {"key":"home.placeholder_admin_hint",    "namespace":"home","module":"core","description":"Dashboard placeholder admin hint paragraph","it":"Vai al Pannello di amministrazione (in fondo alla barra laterale) per configurare dinamicamente la struttura del menu.","en":"Go to the Admin Panel (bottom of sidebar) to configure the menu structure dynamically."},
+    {"key":"embedded.loading",               "namespace":"embedded","module":"core","description":"Embedded iframe accessible title","it":"Contenuto incorporato","en":"Embedded content"},
+    {"key":"embedded.blocked_title",         "namespace":"embedded","module":"core","description":"Embed-blocked warning message","it":"⚠️ Questo sito non può essere visualizzato incorporato.","en":"⚠️ This site cannot be displayed embedded."},
+    {"key":"embedded.blocked_body",          "namespace":"embedded","module":"core","description":"Embed-blocked open-in-new-tab link","it":"Apri in una nuova scheda →","en":"Open in a new tab →"},
+    {"key":"icon_picker.select_placeholder", "namespace":"icon_picker","module":"core","description":"Icon picker trigger placeholder when empty","it":"Seleziona icona…","en":"Select icon…"},
+    {"key":"icon_picker.search_placeholder", "namespace":"icon_picker","module":"core","description":"Icon picker search input placeholder","it":"Cerca icone…","en":"Search icons…"},
+    {"key":"icon_picker.no_icon",            "namespace":"icon_picker","module":"core","description":"Icon picker none-option tooltip","it":"Nessuna icona","en":"No icon"},
+    {"key":"icon_picker.empty",              "namespace":"icon_picker","module":"core","description":"Icon picker none-option label","it":"Vuoto","en":"Empty"},
+    {"key":"icon_picker.no_results",         "namespace":"icon_picker","module":"core","description":"Icon picker empty search results message","it":"Nessuna icona trovata","en":"No icons found"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
