@@ -35,8 +35,8 @@ def test_sidebar_persists_after_navigation(logged_in_page):
     # Users now lives under the Admin L2 panel
     ensure_l2_open(page)
     l2 = page.locator("aside").nth(1)
-    l2.get_by_role("link", name="Users", exact=True).or_(
-        l2.get_by_role("button", name="Users", exact=True)
+    l2.get_by_role("link", name="Gestione utenti", exact=True).or_(
+        l2.get_by_role("button", name="Gestione utenti", exact=True)
     ).click()
     page.wait_for_url("**/user-management", timeout=5_000)
     assert l1.is_visible(), "Sidebar not visible after navigation"
@@ -65,8 +65,8 @@ def test_l2_navigation_users(logged_in_page):
     # Users now lives under the Admin L2 panel
     ensure_l2_open(page)
     l2 = page.locator("aside").nth(1)
-    l2.get_by_role("link", name="Users", exact=True).or_(
-        l2.get_by_role("button", name="Users", exact=True)
+    l2.get_by_role("link", name="Gestione utenti", exact=True).or_(
+        l2.get_by_role("button", name="Gestione utenti", exact=True)
     ).click()
     page.wait_for_url("**/user-management", timeout=5_000)
     assert "/user-management" in page.url
