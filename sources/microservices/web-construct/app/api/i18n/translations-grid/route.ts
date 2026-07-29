@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { listTranslations } from '@/lib/i18n/translation-service'
-import type { TranslationsQuery } from '@/lib/i18n/types'
+import type { TranslationsQuery, TranslationStatusFilter } from '@/lib/i18n/types'
+
+const MAX_PAGE_SIZE = 200
+const ALLOWED_STATUS = new Set<TranslationStatusFilter>(['all', 'missing', 'complete'])
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -10,7 +13,16 @@ export async function POST(req: NextRequest) {
   }
 
   const query = (await req.json().catch(() => null)) as TranslationsQuery | null
-  if (!query || typeof query.page !== 'number' || typeof query.size !== 'number') {
+  // `typeof … === 'number'` alone lets NaN, negative page/size or an
+  // oversized `size` reach limit()/offset() (500 with a raw PG message), and
+  // an arbitrary `status` string fall through to the "no filter" branch
+  // silently instead of being rejected.
+  if (
+    !query ||
+    !Number.isInteger(query.page) || query.page < 0 ||
+    !Number.isInteger(query.size) || query.size < 0 || query.size > MAX_PAGE_SIZE ||
+    (query.status !== undefined && !ALLOWED_STATUS.has(query.status))
+  ) {
     return NextResponse.json({ error: 'Corpo della richiesta non valido.' }, { status: 400 })
   }
 

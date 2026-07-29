@@ -1,12 +1,12 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { auditI18n } from './audit'
-import { invalidateDictionary } from './dictionary-service'
+import { invalidateDictionary, refreshLanguageVersions } from './dictionary-service'
 import { isValidNamespace, isValidTranslationKey } from './key-format'
 import {
   MAX_BULK_VALUES, MAX_VALUE_LENGTH,
@@ -14,6 +14,17 @@ import {
 } from './types'
 
 export type KeyActionResult = { error: string | null; id?: number }
+
+/** Postgres SQLSTATE for `unique_violation` — see postgres.js's `errorFields` (`67: 'code'`). */
+const PG_UNIQUE_VIOLATION = '23505'
+
+function isUniqueViolation(err: unknown, constraint: string): boolean {
+  return (
+    typeof err === 'object' && err !== null &&
+    (err as { code?: string }).code === PG_UNIQUE_VIOLATION &&
+    (err as { message?: string }).message?.includes(constraint) === true
+  )
+}
 
 export interface TranslationKeyInput {
   key: string
@@ -48,7 +59,13 @@ export async function createTranslationKey(input: TranslationKeyInput): Promise<
       module: input.module?.trim() || null,
     }).returning({ id: translationKey.idTranslationKey })
     await auditI18n('translation_key.create', { keyId: Number(created.id), key: input.key.trim() })
-    invalidateDictionary()
+    // A brand-new key has no values yet, so no cached dictionary is actually
+    // stale — the statement-level trigger on translation_key already bumps
+    // every `dictionary_version`. Only this pod's version cache needs
+    // refreshing so it notices; dropping every cached dictionary would be
+    // indiscriminate (same reasoning as `language-actions.ts`'s
+    // `refreshLanguageVersions()` calls for `createLanguage`, etc.).
+    refreshLanguageVersions()
     revalidatePath('/', 'layout')
     return { error: null, id: Number(created.id) }
   } catch (err) {
@@ -91,7 +108,10 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
     return { ok: false, error: `Troppe traduzioni in un solo salvataggio (max ${MAX_BULK_VALUES}).` }
   }
   for (const v of input.values) {
-    if (v.value.length > MAX_VALUE_LENGTH) {
+    // Trimmed first: the stored form is always trimmed (see below), so a
+    // value that only exceeds the limit because of leading/trailing
+    // whitespace would otherwise be rejected even though it fits once saved.
+    if (v.value.trim().length > MAX_VALUE_LENGTH) {
       return { ok: false, error: `La traduzione per «${v.languageCode}» supera i ${MAX_VALUE_LENGTH} caratteri.` }
     }
   }
@@ -132,13 +152,33 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
           // A row appearing under us means another admin created it first —
           // that is a conflict, not something to silently merge into.
           if (incoming.version !== null) {
-            conflicts.push({ languageCode: incoming.languageCode, currentValue: '', currentVersion: 0, attemptedValue: value })
+            conflicts.push({ languageCode: incoming.languageCode, currentValue: '', attemptedValue: value })
             continue
           }
           if (!value) continue
-          await tx.insert(translationValue).values({
-            idTranslationKey: input.keyId, idLanguage: languageId, value,
-          })
+          try {
+            await tx.insert(translationValue).values({
+              idTranslationKey: input.keyId, idLanguage: languageId, value,
+            })
+          } catch (err) {
+            // A concurrent *first* insert for this language can race us
+            // between the SELECT above (no lock) and this INSERT and win the
+            // unique constraint — report it as a conflict, not a raw 500.
+            if (isUniqueViolation(err, 'translation_value_key_language_unique')) {
+              const [nowExisting] = await tx.select().from(translationValue)
+                .where(and(
+                  eq(translationValue.idTranslationKey, input.keyId),
+                  eq(translationValue.idLanguage, languageId),
+                )).limit(1)
+              conflicts.push({
+                languageCode: incoming.languageCode,
+                currentValue: nowExisting?.value ?? '',
+                attemptedValue: value,
+              })
+              continue
+            }
+            throw err
+          }
           touchedCodes.add(incoming.languageCode)
           continue
         }
@@ -147,7 +187,6 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
           conflicts.push({
             languageCode: incoming.languageCode,
             currentValue: existing.value,
-            currentVersion: existing.version,
             attemptedValue: value,
           })
           continue
@@ -155,13 +194,46 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
 
         if (existing.value === value) continue
 
+        // The version is part of the WHERE, not just the JS comparison above:
+        // under READ COMMITTED a plain SELECT takes no lock, so two admins
+        // can both read the same version, one UPDATE/DELETE takes the row
+        // lock and commits, and the other's write — re-evaluating the
+        // predicate once unblocked — now matches nothing. Zero rows affected
+        // is the real conflict signal; the JS check above only short-circuits
+        // the common, non-racing case.
         if (!value) {
-          await tx.delete(translationValue)
-            .where(eq(translationValue.idTranslationValue, existing.idTranslationValue))
+          const deleted = await tx.delete(translationValue)
+            .where(and(
+              eq(translationValue.idTranslationValue, existing.idTranslationValue),
+              eq(translationValue.version, incoming.version),
+            ))
+          if (deleted.count === 0) {
+            const [nowExisting] = await tx.select().from(translationValue)
+              .where(eq(translationValue.idTranslationValue, existing.idTranslationValue)).limit(1)
+            conflicts.push({
+              languageCode: incoming.languageCode,
+              currentValue: nowExisting?.value ?? existing.value,
+              attemptedValue: value,
+            })
+            continue
+          }
         } else {
-          await tx.update(translationValue)
-            .set({ value, version: existing.version + 1 })
-            .where(eq(translationValue.idTranslationValue, existing.idTranslationValue))
+          const updated = await tx.update(translationValue)
+            .set({ value, version: incoming.version + 1 })
+            .where(and(
+              eq(translationValue.idTranslationValue, existing.idTranslationValue),
+              eq(translationValue.version, incoming.version),
+            ))
+          if (updated.count === 0) {
+            const [nowExisting] = await tx.select().from(translationValue)
+              .where(eq(translationValue.idTranslationValue, existing.idTranslationValue)).limit(1)
+            conflicts.push({
+              languageCode: incoming.languageCode,
+              currentValue: nowExisting?.value ?? existing.value,
+              attemptedValue: value,
+            })
+            continue
+          }
         }
         touchedCodes.add(incoming.languageCode)
       }
@@ -185,12 +257,34 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
         nextModule !== (keyRow.module ?? null)
 
       if (metadataChanged) {
-        await tx.update(translationKey).set({
+        // Same READ-COMMITTED race as the per-language writes above: the
+        // early `keyRow.version !== input.keyVersion` check only catches the
+        // non-racing case. The version has to be in the WHERE for the write
+        // itself to be safe against a concurrent metadata update that
+        // committed in between.
+        const keyUpdated = await tx.update(translationKey).set({
           description: nextDescription,
           namespace: nextNamespace,
           module: nextModule,
           version: keyRow.version + 1,
-        }).where(eq(translationKey.idTranslationKey, input.keyId))
+        }).where(and(
+          eq(translationKey.idTranslationKey, input.keyId),
+          eq(translationKey.version, input.keyVersion),
+        ))
+        if (keyUpdated.count === 0) throw new Error('__KEY_CONFLICT__')
+      } else if (touchedCodes.size > 0) {
+        // Metadata didn't change, so the version-bump guard above correctly
+        // left `translation_key` untouched — but that also means the
+        // `before update` trigger that stamps `updated_at` never fired, so
+        // the grid's "Ultima modifica" column would still show the previous
+        // date after a successful value-only save. Move the timestamp
+        // without bumping the version: a no-op SET still fires the row
+        // trigger (it stamps `updated_at` unconditionally on any UPDATE),
+        // and no optimistic-lock predicate is needed here since nothing
+        // being guarded by `keyVersion` is being written.
+        await tx.update(translationKey)
+          .set({ updatedAt: sql`now()` })
+          .where(eq(translationKey.idTranslationKey, input.keyId))
       }
     })
   } catch (err) {

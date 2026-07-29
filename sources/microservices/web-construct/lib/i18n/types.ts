@@ -104,7 +104,6 @@ export interface TranslationsPage {
 export interface TranslationConflict {
   languageCode: string
   currentValue: string
-  currentVersion: number
   attemptedValue: string
 }
 

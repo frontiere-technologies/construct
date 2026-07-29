@@ -128,7 +128,10 @@ export async function listTranslations(query: TranslationsQuery): Promise<Transl
 
   const elements: TranslationRowDto[] = keyRows.map(row => {
     const id = Number(row.idTranslationKey)
-    const values = byKey.get(id) ?? {}
+    // Same rationale as the populated buckets above: a prototype-ful `{}`
+    // fallback would let a code like `constructor` resolve to
+    // Object.prototype instead of "missing" when `missingCodes` indexes it.
+    const values = byKey.get(id) ?? (Object.create(null) as Record<string, TranslationValueDto>)
     return {
       id,
       key: row.key,
@@ -153,5 +156,7 @@ export const listNamespaces = cache(async (): Promise<string[]> => {
 export const listModules = cache(async (): Promise<string[]> => {
   const rows = await db.selectDistinct({ module: translationKey.module })
     .from(translationKey).where(isNotNull(translationKey.module)).orderBy(asc(translationKey.module))
-  return rows.map(r => r.module!).filter(Boolean)
+  // `isNotNull` already excludes nulls at the SQL level; this narrows the type
+  // to match rather than re-filtering behaviour the query already guarantees.
+  return rows.map(r => r.module).filter((m): m is string => m !== null)
 })

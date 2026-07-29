@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
 import { saveTranslations } from '@/lib/i18n/translation-actions'
-import type { TranslationConflict, TranslationRowDto } from '@/lib/i18n/types'
+import { MAX_VALUE_LENGTH, type TranslationConflict, type TranslationRowDto } from '@/lib/i18n/types'
 
 interface Props {
   row: TranslationRowDto
@@ -135,7 +135,7 @@ export default function TranslationEditorDrawer({ row, onClose }: Props) {
                   value={values[language.code] ?? ''}
                   onChange={e => setValues(v => ({ ...v, [language.code]: e.target.value }))}
                   rows={2}
-                  maxLength={1000}
+                  maxLength={MAX_VALUE_LENGTH}
                   className={`${field} min-h-[64px]`}
                 />
               </div>
