@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import Image from 'next/image'
 import { CircleUser } from 'lucide-react'
 import { saveProfile, type UserProfile } from '@/lib/profile-actions'
+import { useI18n } from '@/context/I18nContext'
 import { PageContainer } from '@/components/PageContainer'
 import { ChangePasswordForm } from '@/components/ChangePasswordForm'
 
@@ -15,6 +16,7 @@ interface ProfileFormProps {
 }
 
 export default function ProfileForm({ email, avatarUrl, initialProfile, provider }: ProfileFormProps) {
+  const { t } = useI18n()
   const [profile, setProfile] = useState<UserProfile>(initialProfile)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -31,13 +33,13 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
     if (error) {
       setStatus({ type: 'error', message: error })
     } else {
-      setStatus({ type: 'success', message: 'Profile saved.' })
+      setStatus({ type: 'success', message: t('profile.saved') })
       setTimeout(() => setStatus(null), 3000)
     }
   }
 
   return (
-    <PageContainer title="Profile" subtitle="Manage your account settings">
+    <PageContainer title={t('profile.title')} subtitle={t('profile.subtitle')}>
       <div className={`grid gap-6 ${provider === 'credentials' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
         <div className="w-full rounded-xl border border-border-subtle p-6">
 
@@ -60,7 +62,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
             {/* Email — read-only */}
             <div>
               <label className="block text-sm font-medium text-foreground-secondary mb-1">
-                Email
+                {t('profile.email')}
               </label>
               <input
                 type="email"
@@ -73,7 +75,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
             {/* First name */}
             <div>
               <label className="block text-sm font-medium text-foreground-secondary mb-1">
-                First name
+                {t('profile.first_name')}
               </label>
               <input
                 type="text"
@@ -86,7 +88,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
             {/* Last name */}
             <div>
               <label className="block text-sm font-medium text-foreground-secondary mb-1">
-                Last name
+                {t('profile.last_name')}
               </label>
               <input
                 type="text"
@@ -99,7 +101,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
             {/* Username */}
             <div>
               <label className="block text-sm font-medium text-foreground-secondary mb-1">
-                Username
+                {t('profile.username')}
               </label>
               <input
                 type="text"
@@ -112,8 +114,8 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
             {/* Phone */}
             <div>
               <label className="block text-sm font-medium text-foreground-secondary mb-1">
-                Phone{' '}
-                <span className="font-normal text-gray-400">(optional)</span>
+                {t('profile.phone')}{' '}
+                <span className="font-normal text-gray-400">{t('common.labels.optional')}</span>
               </label>
               <input
                 type="tel"
@@ -131,14 +133,14 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
               onClick={() => { setProfile(initialProfile); setStatus(null) }}
               className="px-4 py-2 text-sm rounded-lg border border-border"
             >
-              Annulla
+              {t('common.actions.cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
               className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {saving ? 'Saving…' : 'Salva'}
+              {saving ? t('common.states.saving') : t('common.actions.save')}
             </button>
           </div>
 

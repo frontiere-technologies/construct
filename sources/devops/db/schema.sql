@@ -962,3 +962,20 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- ---- profile page (components/ProfileForm.tsx) ---------------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"profile.title",              "namespace":"profile","module":"core","description":"Profile page title","it":"Profilo","en":"Profile"},
+    {"key":"profile.subtitle",           "namespace":"profile","module":"core","description":"Profile page subtitle","it":"Gestisci le impostazioni del tuo account","en":"Manage your account settings"},
+    {"key":"profile.email",              "namespace":"profile","module":"core","description":"Email field label","it":"Email","en":"Email"},
+    {"key":"profile.first_name",         "namespace":"profile","module":"core","description":"First name field label","it":"Nome","en":"First name"},
+    {"key":"profile.last_name",          "namespace":"profile","module":"core","description":"Last name field label","it":"Cognome","en":"Last name"},
+    {"key":"profile.username",           "namespace":"profile","module":"core","description":"Username field label","it":"Username","en":"Username"},
+    {"key":"profile.phone",              "namespace":"profile","module":"core","description":"Phone field label","it":"Telefono","en":"Phone"},
+    {"key":"profile.saved",              "namespace":"profile","module":"core","description":"Profile save success message","it":"Profilo salvato.","en":"Profile saved."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
