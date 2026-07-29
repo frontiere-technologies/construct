@@ -786,3 +786,16 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- ---- shared UI components (grid + filter drawer) -----------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"common.labels.filters",       "namespace":"common","module":"core","description":"Filter drawer title","it":"Filtri","en":"Filters"},
+    {"key":"common.actions.close_filters","namespace":"common","module":"core","description":"Close the filter drawer (aria-label)","it":"Chiudi filtri","en":"Close filters"},
+    {"key":"common.actions.apply",        "namespace":"common","module":"core","description":"Generic apply/confirm action","it":"Applica","en":"Apply"},
+    {"key":"common.actions.reset",        "namespace":"common","module":"core","description":"Generic reset action","it":"Reset","en":"Reset"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;

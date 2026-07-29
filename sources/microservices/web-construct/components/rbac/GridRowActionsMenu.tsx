@@ -16,10 +16,11 @@ export interface GridRowActionsMenuParams<T> extends ICellRendererParams<T> {
  * pinned left, so it stays visible while the other columns scroll horizontally.
  * `lockPinned` + `lockPosition` keep it there even if a user drags columns around.
  */
-export function actionsColumnDef<T>(getItems: (data: T) => RowMenuItem[]): ColDef<T> {
+export function actionsColumnDef<T>(getItems: (data: T) => RowMenuItem[], headerTooltip?: string): ColDef<T> {
   return {
     colId: 'actions',
     headerName: '...',
+    headerTooltip,
     pinned: 'left',
     lockPinned: true,
     lockPosition: 'left',

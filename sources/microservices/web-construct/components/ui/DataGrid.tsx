@@ -7,7 +7,8 @@ import {
   type ColDef, type IDatasource, type GridReadyEvent,
   type FilterChangedEvent, type SortChangedEvent,
 } from 'ag-grid-community'
-import { appGridTheme, itLocaleText, columnPinningState } from './dataGridConfig'
+import { appGridTheme, gridLocaleText, columnPinningState } from './dataGridConfig'
+import { useI18n } from '@/context/I18nContext'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
@@ -29,6 +30,8 @@ export default function DataGrid<T>({
   columnDefs, datasource, getRowId, initialFilterModel, initialSortModel,
   onFilterChanged, onSortChanged, onRowClicked, onGridReady,
 }: DataGridProps<T>) {
+  const { t } = useI18n()
+  const localeText = useMemo(() => gridLocaleText(t), [t])
   const defaultColDef = useMemo<ColDef<T>>(() => ({
     resizable: true,
     sortable: true,
@@ -39,7 +42,7 @@ export default function DataGrid<T>({
     <div className="rounded-lg border border-border-subtle overflow-hidden" style={{ height: 600 }}>
       <AgGridReact<T>
         theme={appGridTheme}
-        localeText={itLocaleText}
+        localeText={localeText}
         columnDefs={columnDefs}
         defaultColDef={defaultColDef}
         rowModelType="infinite"

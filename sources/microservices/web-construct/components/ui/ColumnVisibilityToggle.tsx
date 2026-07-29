@@ -3,12 +3,14 @@
 import { useState } from 'react'
 import { Columns3 } from 'lucide-react'
 import type { GridApi } from 'ag-grid-community'
+import { useI18n } from '@/context/I18nContext'
 
 export interface ToggleableColumn { colId: string; label: string }
 
 export default function ColumnVisibilityToggle<T>(
   { gridApi, columns }: { gridApi: GridApi<T> | null; columns: ToggleableColumn[] },
 ) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [hidden, setHidden] = useState<Set<string>>(new Set())
 
@@ -24,7 +26,7 @@ export default function ColumnVisibilityToggle<T>(
   return (
     <div className="relative">
       <button onClick={() => setOpen(o => !o)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-border">
-        <Columns3 size={16} /> Colonne
+        <Columns3 size={16} /> {t('common.labels.columns')}
       </button>
       {open && (
         <div className="absolute right-0 mt-1 z-20 w-48 p-2 rounded-lg border border-border bg-surface-overlay shadow">
