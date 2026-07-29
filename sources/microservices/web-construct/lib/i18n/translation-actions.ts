@@ -18,12 +18,37 @@ export type KeyActionResult = { error: string | null; id?: number }
 /** Postgres SQLSTATE for `unique_violation` — see postgres.js's `errorFields` (`67: 'code'`). */
 const PG_UNIQUE_VIOLATION = '23505'
 
+/**
+ * drizzle-orm 0.45.2 wraps every driver error before it escapes
+ * (`drizzle-orm/pg-core/session.js`'s `catch (e) { throw new
+ * DrizzleQueryError(queryString, params, e) }`): `DrizzleQueryError` only
+ * carries `query`/`params`/`cause`, never `code`. The real postgres.js
+ * `PostgresError` — with `code` and `constraint_name` — lives at `.cause`.
+ * Walked as a loop rather than assumed to be exactly one level deep, since
+ * that wrapping depth is an implementation detail; verified against the real
+ * driver (see the "second fix round" section of task-9-report.md) to be one
+ * level down in practice.
+ */
+function findPgError(err: unknown): { code?: string; constraint_name?: string } | null {
+  let current: unknown = err
+  for (let depth = 0; depth < 5 && current !== null && current !== undefined; depth++) {
+    if (typeof current === 'object' && 'code' in current) {
+      return current as { code?: string; constraint_name?: string }
+    }
+    current = (current as { cause?: unknown }).cause
+  }
+  return null
+}
+
+/**
+ * Matches on the real Postgres error's SQLSTATE and, for `unique_violation`,
+ * its own `constraint_name` field (populated by postgres.js) — not a
+ * substring match on any wrapper's `message`, which for a `DrizzleQueryError`
+ * is just the SQL text, never the constraint name.
+ */
 function isUniqueViolation(err: unknown, constraint: string): boolean {
-  return (
-    typeof err === 'object' && err !== null &&
-    (err as { code?: string }).code === PG_UNIQUE_VIOLATION &&
-    (err as { message?: string }).message?.includes(constraint) === true
-  )
+  const pgErr = findPgError(err)
+  return pgErr?.code === PG_UNIQUE_VIOLATION && pgErr?.constraint_name === constraint
 }
 
 export interface TranslationKeyInput {
@@ -69,8 +94,8 @@ export async function createTranslationKey(input: TranslationKeyInput): Promise<
     revalidatePath('/', 'layout')
     return { error: null, id: Number(created.id) }
   } catch (err) {
+    if (isUniqueViolation(err, 'translation_key_key_key')) return { error: 'Esiste già una chiave con questo nome.' }
     const message = err instanceof Error ? err.message : String(err)
-    if (message.includes('translation_key_key_key')) return { error: 'Esiste già una chiave con questo nome.' }
     return { error: `Impossibile creare la chiave. ${message}` }
   }
 }
@@ -156,15 +181,24 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
             continue
           }
           if (!value) continue
+          // A savepoint, not just a try/catch: Postgres marks the whole
+          // transaction aborted after a constraint violation, so the
+          // recovery re-select below would itself fail with `25P02 current
+          // transaction is aborted` without rolling back to a point before
+          // the failed INSERT first (verified against the real driver — see
+          // the "second fix round" section of task-9-report.md).
+          await tx.execute(sql`savepoint translation_value_insert`)
           try {
             await tx.insert(translationValue).values({
               idTranslationKey: input.keyId, idLanguage: languageId, value,
             })
+            await tx.execute(sql`release savepoint translation_value_insert`)
           } catch (err) {
             // A concurrent *first* insert for this language can race us
             // between the SELECT above (no lock) and this INSERT and win the
             // unique constraint — report it as a conflict, not a raw 500.
             if (isUniqueViolation(err, 'translation_value_key_language_unique')) {
+              await tx.execute(sql`rollback to savepoint translation_value_insert`)
               const [nowExisting] = await tx.select().from(translationValue)
                 .where(and(
                   eq(translationValue.idTranslationKey, input.keyId),
@@ -212,7 +246,10 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
               .where(eq(translationValue.idTranslationValue, existing.idTranslationValue)).limit(1)
             conflicts.push({
               languageCode: incoming.languageCode,
-              currentValue: nowExisting?.value ?? existing.value,
+              // Not `?? existing.value`: if the competing write deleted the
+              // row, there is no current value to show — `''` matches the
+              // `!existing` branch's own convention above.
+              currentValue: nowExisting?.value ?? '',
               attemptedValue: value,
             })
             continue
@@ -229,7 +266,10 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
               .where(eq(translationValue.idTranslationValue, existing.idTranslationValue)).limit(1)
             conflicts.push({
               languageCode: incoming.languageCode,
-              currentValue: nowExisting?.value ?? existing.value,
+              // Same convention as the delete branch above: `''`, not the
+              // stale pre-write value, if the row is gone by the time we
+              // re-read it.
+              currentValue: nowExisting?.value ?? '',
               attemptedValue: value,
             })
             continue
