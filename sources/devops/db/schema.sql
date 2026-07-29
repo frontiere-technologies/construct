@@ -826,3 +826,139 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- ---- authentication: login page (components/Login.tsx) ----------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"auth.login.error_credentials",     "namespace":"auth","module":"auth","description":"Login error: CredentialsSignin","it":"Email o password non corretti.","en":"Incorrect email or password."},
+    {"key":"auth.login.error_access_denied",   "namespace":"auth","module":"auth","description":"Login error: AccessDenied","it":"Accesso negato. Non sei autorizzato ad accedere.","en":"Access denied. You are not authorized to sign in."},
+    {"key":"auth.login.error_password_not_set","namespace":"auth","module":"auth","description":"Login error: PasswordNotSet","it":"Imposta prima la tua password tramite il link ricevuto via email.","en":"Set your password first using the link you received by email."},
+    {"key":"auth.login.error_oauth_signin",    "namespace":"auth","module":"auth","description":"Login error: OAuthSignin","it":"Errore durante l'accesso. Riprova.","en":"Error signing in. Please try again."},
+    {"key":"auth.login.error_oauth_callback",  "namespace":"auth","module":"auth","description":"Login error: OAuthCallback","it":"Errore durante il callback OAuth. Riprova.","en":"Error during the OAuth callback. Please try again."},
+    {"key":"auth.login.error_default",         "namespace":"auth","module":"auth","description":"Login error: fallback/Default","it":"Si è verificato un errore durante l'accesso. Riprova.","en":"An error occurred while signing in. Please try again."},
+    {"key":"auth.login.password_set_ok",       "namespace":"auth","module":"auth","description":"Success banner after set-password flow","it":"Password impostata con successo. Puoi accedere.","en":"Password set successfully. You can now sign in."},
+    {"key":"auth.login.password_changed_ok",   "namespace":"auth","module":"auth","description":"Success banner after change-password flow","it":"Password aggiornata. Accedi con la nuova password.","en":"Password updated. Sign in with your new password."},
+    {"key":"auth.login.tagline",               "namespace":"auth","module":"auth","description":"Login card header tagline","it":"Construct: the Frontiere technology foundations","en":"Construct: the Frontiere technology foundations"},
+    {"key":"auth.login.email",                 "namespace":"auth","module":"auth","description":"Email field label","it":"Email","en":"Email"},
+    {"key":"auth.login.email_placeholder",     "namespace":"auth","module":"auth","description":"Email field placeholder","it":"nome@esempio.it","en":"name@example.com"},
+    {"key":"auth.login.password",              "namespace":"auth","module":"auth","description":"Password field label","it":"Password","en":"Password"},
+    {"key":"auth.login.hide_password",         "namespace":"auth","module":"auth","description":"Toggle password visibility (hide) aria-label","it":"Nascondi password","en":"Hide password"},
+    {"key":"auth.login.show_password",         "namespace":"auth","module":"auth","description":"Toggle password visibility (show) aria-label","it":"Mostra password","en":"Show password"},
+    {"key":"auth.login.forgot_password",       "namespace":"auth","module":"auth","description":"Link to /forgot-password","it":"Password dimenticata?","en":"Forgot password?"},
+    {"key":"auth.login.submitting",            "namespace":"auth","module":"auth","description":"Submit button while signing in","it":"Accesso in corso…","en":"Signing in…"},
+    {"key":"auth.login.submit",                "namespace":"auth","module":"auth","description":"Submit button","it":"Accedi","en":"Sign in"},
+    {"key":"auth.login.divider",               "namespace":"auth","module":"auth","description":"Divider between credentials and OAuth","it":"oppure","en":"or"},
+    {"key":"auth.login.google",                "namespace":"auth","module":"auth","description":"Google sign-in button","it":"Continua con Google","en":"Continue with Google"},
+    {"key":"auth.login.help_question",         "namespace":"auth","module":"auth","description":"Footer help line, question part","it":"Problemi di accesso?","en":"Trouble signing in?"},
+    {"key":"auth.login.help_answer",           "namespace":"auth","module":"auth","description":"Footer help line, answer part","it":"Contatta l'amministratore.","en":"Contact your administrator."},
+    {"key":"auth.login.no_account",            "namespace":"auth","module":"auth","description":"Footer line before the register link","it":"Non hai un account?","en":"Don't have an account?"},
+    {"key":"auth.login.register",              "namespace":"auth","module":"auth","description":"Link to /register","it":"Registrati","en":"Sign up"},
+    {"key":"auth.login.test_toggle",           "namespace":"auth","module":"auth","description":"Test-mode expander toggle button","it":"Accesso test","en":"Test login"},
+    {"key":"auth.login.test_email_placeholder","namespace":"auth","module":"auth","description":"Test-mode email input placeholder","it":"Email di test","en":"Test email"},
+    {"key":"auth.login.test_submitting",       "namespace":"auth","module":"auth","description":"Test-mode submit button while signing in","it":"Accesso…","en":"Signing in…"},
+    {"key":"auth.login.test_submit",           "namespace":"auth","module":"auth","description":"Test-mode submit button","it":"Entra (test)","en":"Sign in (test)"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- authentication: register page (app/register/*) --------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"auth.register.confirm",            "namespace":"auth","module":"auth","description":"Confirmation shown after submitting the register form","it":"Se l'email è autorizzata riceverai un link per completare la registrazione.","en":"If the email is authorized you will receive a link to complete registration."},
+    {"key":"auth.register.back_to_login",      "namespace":"auth","module":"auth","description":"Back-to-login link","it":"← Torna al login","en":"← Back to login"},
+    {"key":"auth.register.intro",              "namespace":"auth","module":"auth","description":"Register form intro paragraph","it":"Inserisci la tua email per ricevere un link di registrazione.","en":"Enter your email to receive a registration link."},
+    {"key":"auth.register.email",              "namespace":"auth","module":"auth","description":"Email field label","it":"Email","en":"Email"},
+    {"key":"auth.register.email_placeholder",  "namespace":"auth","module":"auth","description":"Email field placeholder","it":"nome@esempio.it","en":"name@example.com"},
+    {"key":"auth.register.error",              "namespace":"auth","module":"auth","description":"Register form submission error","it":"Errore. Riprova tra qualche istante.","en":"Error. Please try again shortly."},
+    {"key":"auth.register.submitting",         "namespace":"auth","module":"auth","description":"Submit button while sending","it":"Invio…","en":"Sending…"},
+    {"key":"auth.register.submit",             "namespace":"auth","module":"auth","description":"Submit button","it":"Registrati","en":"Sign up"},
+    {"key":"auth.register.subtitle",           "namespace":"auth","module":"auth","description":"Register page header subtitle","it":"Crea il tuo account","en":"Create your account"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- authentication: forgot-password page (app/forgot-password/*) ------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"auth.forgot.confirm",              "namespace":"auth","module":"auth","description":"Confirmation shown after submitting the forgot-password form","it":"Se l'email è registrata riceverai un link per reimpostare la password.","en":"If the email is registered you will receive a link to reset your password."},
+    {"key":"auth.forgot.back_to_login",        "namespace":"auth","module":"auth","description":"Back-to-login link","it":"← Torna al login","en":"← Back to login"},
+    {"key":"auth.forgot.intro",                "namespace":"auth","module":"auth","description":"Forgot-password form intro paragraph","it":"Inserisci la tua email per ricevere un link di reset.","en":"Enter your email to receive a reset link."},
+    {"key":"auth.forgot.email",                "namespace":"auth","module":"auth","description":"Email field label","it":"Email","en":"Email"},
+    {"key":"auth.forgot.email_placeholder",    "namespace":"auth","module":"auth","description":"Email field placeholder","it":"nome@esempio.it","en":"name@example.com"},
+    {"key":"auth.forgot.error",                "namespace":"auth","module":"auth","description":"Forgot-password form submission error","it":"Errore. Riprova tra qualche istante.","en":"Error. Please try again shortly."},
+    {"key":"auth.forgot.submitting",           "namespace":"auth","module":"auth","description":"Submit button while sending","it":"Invio…","en":"Sending…"},
+    {"key":"auth.forgot.submit",               "namespace":"auth","module":"auth","description":"Submit button","it":"Invia link","en":"Send link"},
+    {"key":"auth.forgot.subtitle",             "namespace":"auth","module":"auth","description":"Forgot-password page header subtitle","it":"Reimposta la tua password","en":"Reset your password"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- authentication: set-password page (app/set-password/*) ------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"auth.set_password.invalid_expired",       "namespace":"auth","module":"auth","description":"Invalid-or-expired token message","it":"Link non valido o scaduto.","en":"Invalid or expired link."},
+    {"key":"auth.set_password.invalid_expired_help",  "namespace":"auth","module":"auth","description":"Invalid-or-expired token help line","it":"Contatta l'amministratore per ricevere un nuovo invito.","en":"Contact your administrator for a new invitation."},
+    {"key":"auth.set_password.invalid",               "namespace":"auth","module":"auth","description":"Missing/malformed token message","it":"Link non valido.","en":"Invalid link."},
+    {"key":"auth.set_password.invalid_help",          "namespace":"auth","module":"auth","description":"Missing/malformed token help line","it":"Contatta l'amministratore.","en":"Contact your administrator."},
+    {"key":"auth.set_password.subtitle",              "namespace":"auth","module":"auth","description":"Set-password page header subtitle","it":"Imposta la tua password","en":"Set your password"},
+    {"key":"auth.set_password.err_min_length",        "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno 8 caratteri.","en":"The password must be at least 8 characters long."},
+    {"key":"auth.set_password.err_uppercase",         "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno una lettera maiuscola.","en":"The password must contain at least one uppercase letter."},
+    {"key":"auth.set_password.err_digit",              "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno un numero.","en":"The password must contain at least one digit."},
+    {"key":"auth.set_password.err_mismatch",          "namespace":"auth","module":"auth","description":"Password/confirm mismatch error","it":"Le password non corrispondono.","en":"The passwords do not match."},
+    {"key":"auth.set_password.err_unknown",           "namespace":"auth","module":"auth","description":"Fallback API error","it":"Errore sconosciuto.","en":"Unknown error."},
+    {"key":"auth.set_password.new_password",          "namespace":"auth","module":"auth","description":"New-password field label","it":"Nuova password","en":"New password"},
+    {"key":"auth.set_password.new_password_placeholder","namespace":"auth","module":"auth","description":"New-password field placeholder","it":"Min. 8 caratteri, una maiuscola, un numero","en":"Min. 8 characters, one uppercase letter, one digit"},
+    {"key":"auth.set_password.hide_password",         "namespace":"auth","module":"auth","description":"Toggle password visibility (hide) aria-label","it":"Nascondi password","en":"Hide password"},
+    {"key":"auth.set_password.show_password",         "namespace":"auth","module":"auth","description":"Toggle password visibility (show) aria-label","it":"Mostra password","en":"Show password"},
+    {"key":"auth.set_password.confirm_password",      "namespace":"auth","module":"auth","description":"Confirm-password field label","it":"Conferma password","en":"Confirm password"},
+    {"key":"auth.set_password.confirm_password_placeholder","namespace":"auth","module":"auth","description":"Confirm-password field placeholder","it":"Ripeti la password","en":"Repeat the password"},
+    {"key":"auth.set_password.submitting",            "namespace":"auth","module":"auth","description":"Submit button while saving","it":"Salvataggio…","en":"Saving…"},
+    {"key":"auth.set_password.submit",                "namespace":"auth","module":"auth","description":"Submit button","it":"Imposta password","en":"Set password"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- authentication: change-password form (components/ChangePasswordForm.tsx) --
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"auth.change_password.title",              "namespace":"auth","module":"auth","description":"Card heading","it":"Cambia password","en":"Change password"},
+    {"key":"auth.change_password.current_password",   "namespace":"auth","module":"auth","description":"Current-password field label","it":"Password attuale","en":"Current password"},
+    {"key":"auth.change_password.new_password",       "namespace":"auth","module":"auth","description":"New-password field label","it":"Nuova password","en":"New password"},
+    {"key":"auth.change_password.hint",               "namespace":"auth","module":"auth","description":"New-password requirements hint","it":"Min. 8 caratteri, una maiuscola, un numero.","en":"Min. 8 characters, one uppercase letter, one digit."},
+    {"key":"auth.change_password.confirm_password",   "namespace":"auth","module":"auth","description":"Confirm-password field label","it":"Conferma nuova password","en":"Confirm new password"},
+    {"key":"auth.change_password.err_min_length",     "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno 8 caratteri.","en":"The password must be at least 8 characters long."},
+    {"key":"auth.change_password.err_uppercase",      "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno una lettera maiuscola.","en":"The password must contain at least one uppercase letter."},
+    {"key":"auth.change_password.err_digit",          "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno un numero.","en":"The password must contain at least one digit."},
+    {"key":"auth.change_password.err_mismatch",       "namespace":"auth","module":"auth","description":"New/confirm mismatch error","it":"Le nuove password non coincidono.","en":"The new passwords do not match."},
+    {"key":"auth.change_password.err_generic",        "namespace":"auth","module":"auth","description":"Generic API error fallback","it":"Errore. Riprova.","en":"Error. Please try again."},
+    {"key":"auth.change_password.err_network",        "namespace":"auth","module":"auth","description":"Network/fetch failure","it":"Errore di rete. Riprova.","en":"Network error. Please try again."},
+    {"key":"auth.change_password.success",            "namespace":"auth","module":"auth","description":"Success message before sign-out","it":"Password aggiornata. Stai per essere disconnesso…","en":"Password updated. You are about to be signed out…"},
+    {"key":"auth.change_password.submitting",         "namespace":"auth","module":"auth","description":"Submit button while saving","it":"Salvataggio…","en":"Saving…"},
+    {"key":"auth.change_password.submit",             "namespace":"auth","module":"auth","description":"Submit button","it":"Aggiorna password","en":"Update password"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- validation: Zod message keys (lib/validations.ts VALIDATION_KEYS) --
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"validation.password.min_length", "namespace":"validation","module":"core","description":"passwordSchema.min(8) message","it":"La password deve contenere almeno 8 caratteri.","en":"The password must be at least 8 characters long."},
+    {"key":"validation.password.uppercase",  "namespace":"validation","module":"core","description":"passwordSchema uppercase regex message","it":"La password deve contenere almeno una lettera maiuscola.","en":"The password must contain at least one uppercase letter."},
+    {"key":"validation.password.digit",      "namespace":"validation","module":"core","description":"passwordSchema digit regex message","it":"La password deve contenere almeno un numero.","en":"The password must contain at least one digit."},
+    {"key":"validation.email.invalid",       "namespace":"validation","module":"core","description":"emailSchema.email() message","it":"Email non valida.","en":"Invalid email."},
+    {"key":"validation.phone.invalid",       "namespace":"validation","module":"core","description":"phoneSchema E.164 regex message","it":"Numero di telefono non valido. Usa il formato internazionale, es. +391234567890.","en":"Invalid phone number. Use the international format, e.g. +391234567890."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;

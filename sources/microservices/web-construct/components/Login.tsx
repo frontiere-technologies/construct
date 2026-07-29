@@ -5,14 +5,15 @@ import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
+import { useI18n } from '@/context/I18nContext'
 
-const ERROR_MESSAGES: Record<string, string> = {
-  CredentialsSignin: 'Email o password non corretti.',
-  AccessDenied: 'Accesso negato. Non sei autorizzato ad accedere.',
-  PasswordNotSet: 'Imposta prima la tua password tramite il link ricevuto via email.',
-  OAuthSignin: 'Errore durante l\'accesso. Riprova.',
-  OAuthCallback: 'Errore durante il callback OAuth. Riprova.',
-  Default: 'Si è verificato un errore durante l\'accesso. Riprova.',
+const ERROR_KEYS: Record<string, string> = {
+  CredentialsSignin: 'auth.login.error_credentials',
+  AccessDenied: 'auth.login.error_access_denied',
+  PasswordNotSet: 'auth.login.error_password_not_set',
+  OAuthSignin: 'auth.login.error_oauth_signin',
+  OAuthCallback: 'auth.login.error_oauth_callback',
+  Default: 'auth.login.error_default',
 }
 
 const isTestMode = process.env.NEXT_PUBLIC_AUTH_TEST_MODE === 'true'
@@ -29,13 +30,16 @@ function GoogleIcon() {
 }
 
 function LoginForm() {
+  const { t } = useI18n()
   const searchParams = useSearchParams()
   const errorCode = searchParams.get('error')
   const message = searchParams.get('message')
-  const errorMessage = errorCode ? (ERROR_MESSAGES[errorCode] ?? ERROR_MESSAGES.Default) : null
+  const errorMessage = errorCode
+    ? t(Object.hasOwn(ERROR_KEYS, errorCode) ? ERROR_KEYS[errorCode] : ERROR_KEYS.Default)
+    : null
   const successMessage =
-    message === 'password-set' ? 'Password impostata con successo. Puoi accedere.' :
-    message === 'password-changed' ? 'Password aggiornata. Accedi con la nuova password.' :
+    message === 'password-set' ? t('auth.login.password_set_ok') :
+    message === 'password-changed' ? t('auth.login.password_changed_ok') :
     null
 
   const [email, setEmail] = useState('')
@@ -67,7 +71,7 @@ function LoginForm() {
         <div className="px-8 py-5 text-center" style={{ backgroundColor: '#0f2336' }}>
           <img src="/logo.svg" alt="Construct" className="mx-auto" style={{ width: 140, height: 140 }} />
           <p className="mt-6 text-xs" style={{ color: '#7fa8c4' }}>
-            Construct: the Frontiere technology foundations
+            {t('auth.login.tagline')}
           </p>
         </div>
 
@@ -83,7 +87,7 @@ function LoginForm() {
           <form onSubmit={handleCredentialsLogin} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700" htmlFor="email">
-                Email
+                {t('auth.login.email')}
               </label>
               <input
                 id="email"
@@ -91,14 +95,14 @@ function LoginForm() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                placeholder="nome@esempio.it"
+                placeholder={t('auth.login.email_placeholder')}
                 className="rounded-lg border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
               />
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700" htmlFor="password">
-                Password
+                {t('auth.login.password')}
               </label>
               <div className="relative">
                 <input
@@ -114,7 +118,7 @@ function LoginForm() {
                   type="button"
                   onClick={() => setShowPassword(v => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  aria-label={showPassword ? 'Nascondi password' : 'Mostra password'}
+                  aria-label={showPassword ? t('auth.login.hide_password') : t('auth.login.show_password')}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -123,7 +127,7 @@ function LoginForm() {
 
             <div className="text-right -mt-2">
               <Link href="/forgot-password" className="text-xs hover:underline text-brand-blue">
-                Password dimenticata?
+                {t('auth.login.forgot_password')}
               </Link>
             </div>
 
@@ -136,14 +140,14 @@ function LoginForm() {
               disabled={loading}
               className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
             >
-              {loading ? 'Accesso in corso…' : 'Accedi'}
+              {loading ? t('auth.login.submitting') : t('auth.login.submit')}
             </button>
           </form>
 
           {/* Divider */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-xs text-gray-400">oppure</span>
+            <span className="text-xs text-gray-400">{t('auth.login.divider')}</span>
             <div className="flex-1 h-px bg-gray-200" />
           </div>
 
@@ -154,20 +158,20 @@ function LoginForm() {
             className="w-full flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition shadow-sm"
           >
             <GoogleIcon />
-            Continua con Google
+            {t('auth.login.google')}
           </button>
         </div>
 
         {/* Footer */}
         <div className="bg-gray-50 border-t border-gray-200 px-8 py-4 text-center">
           <p className="text-xs text-gray-500">
-            Problemi di accesso?{' '}
-            <span className="text-gray-700">Contatta l&apos;amministratore.</span>
+            {t('auth.login.help_question')}{' '}
+            <span className="text-gray-700">{t('auth.login.help_answer')}</span>
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            Non hai un account?{' '}
+            {t('auth.login.no_account')}{' '}
             <Link href="/register" className="font-semibold" style={{ color: '#0f5a8a' }}>
-              Registrati
+              {t('auth.login.register')}
             </Link>
           </p>
 
@@ -178,13 +182,13 @@ function LoginForm() {
                 onClick={() => setTestExpanded(v => !v)}
                 className="text-xs text-gray-400 hover:text-gray-600"
               >
-                Accesso test {testExpanded ? '▴' : '▾'}
+                {t('auth.login.test_toggle')} {testExpanded ? '▴' : '▾'}
               </button>
               {testExpanded && (
                 <form onSubmit={handleTestLogin} className="flex flex-col gap-2 mt-2">
                   <input
                     type="email"
-                    placeholder="Email di test"
+                    placeholder={t('auth.login.test_email_placeholder')}
                     value={testEmail}
                     onChange={e => setTestEmail(e.target.value)}
                     required
@@ -195,7 +199,7 @@ function LoginForm() {
                     disabled={testLoading}
                     className="bg-gray-500 text-white rounded-lg py-2 text-xs font-semibold hover:bg-gray-600 disabled:opacity-50 transition"
                   >
-                    {testLoading ? 'Accesso…' : 'Entra (test)'}
+                    {testLoading ? t('auth.login.test_submitting') : t('auth.login.test_submit')}
                   </button>
                 </form>
               )}

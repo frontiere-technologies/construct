@@ -2,8 +2,10 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { useI18n } from '@/context/I18nContext'
 
 export function ForgotPasswordForm() {
+  const { t } = useI18n()
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 
@@ -27,10 +29,10 @@ export function ForgotPasswordForm() {
     return (
       <div className="flex flex-col gap-4">
         <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-          Se l&apos;email è registrata riceverai un link per reimpostare la password.
+          {t('auth.forgot.confirm')}
         </p>
         <Link href="/login" className="text-sm text-center hover:underline" style={{ color: '#0f5a8a' }}>
-          ← Torna al login
+          {t('auth.forgot.back_to_login')}
         </Link>
       </div>
     )
@@ -39,11 +41,11 @@ export function ForgotPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <p className="text-sm text-gray-500">
-        Inserisci la tua email per ricevere un link di reset.
+        {t('auth.forgot.intro')}
       </p>
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-gray-700" htmlFor="email">
-          Email
+          {t('auth.forgot.email')}
         </label>
         <input
           id="email"
@@ -51,22 +53,22 @@ export function ForgotPasswordForm() {
           value={email}
           onChange={e => setEmail(e.target.value)}
           required
-          placeholder="nome@esempio.it"
+          placeholder={t('auth.forgot.email_placeholder')}
           className="rounded-lg border border-gray-300 px-4 py-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       {status === 'error' && (
-        <p className="text-red-600 text-sm">Errore. Riprova tra qualche istante.</p>
+        <p className="text-red-600 text-sm">{t('auth.forgot.error')}</p>
       )}
       <button
         type="submit"
         disabled={status === 'sending'}
         className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
       >
-        {status === 'sending' ? 'Invio…' : 'Invia link'}
+        {status === 'sending' ? t('auth.forgot.submitting') : t('auth.forgot.submit')}
       </button>
       <Link href="/login" className="text-sm text-center hover:underline" style={{ color: '#0f5a8a' }}>
-        ← Torna al login
+        {t('auth.forgot.back_to_login')}
       </Link>
     </form>
   )

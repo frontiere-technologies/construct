@@ -1,5 +1,19 @@
 import { z } from 'zod'
 
+/**
+ * Message *keys*, so a caller that has a translator can render these in the
+ * user's language. The schemas below keep the literal Italian text as their
+ * default so server-side callers with no React context still produce a
+ * readable message.
+ */
+export const VALIDATION_KEYS = {
+  passwordMinLength: 'validation.password.min_length',
+  passwordUppercase: 'validation.password.uppercase',
+  passwordDigit: 'validation.password.digit',
+  emailInvalid: 'validation.email.invalid',
+  phoneInvalid: 'validation.phone.invalid',
+} as const
+
 export const passwordSchema = z
   .string()
   .min(8, 'La password deve contenere almeno 8 caratteri.')

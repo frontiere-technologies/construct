@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
+import { useI18n } from '@/context/I18nContext'
 
 export function SetPasswordForm({ token }: { token: string }) {
+  const { t } = useI18n()
   const router = useRouter()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -17,19 +19,19 @@ export function SetPasswordForm({ token }: { token: string }) {
     setError(null)
 
     if (password.length < 8) {
-      setError('La password deve contenere almeno 8 caratteri.')
+      setError(t('auth.set_password.err_min_length'))
       return
     }
     if (!/[A-Z]/.test(password)) {
-      setError('La password deve contenere almeno una lettera maiuscola.')
+      setError(t('auth.set_password.err_uppercase'))
       return
     }
     if (!/[0-9]/.test(password)) {
-      setError('La password deve contenere almeno un numero.')
+      setError(t('auth.set_password.err_digit'))
       return
     }
     if (password !== confirm) {
-      setError('Le password non corrispondono.')
+      setError(t('auth.set_password.err_mismatch'))
       return
     }
 
@@ -43,7 +45,7 @@ export function SetPasswordForm({ token }: { token: string }) {
     setLoading(false)
 
     if (!res.ok) {
-      setError(data.error ?? 'Errore sconosciuto.')
+      setError(data.error ?? t('auth.set_password.err_unknown'))
       return
     }
 
@@ -54,7 +56,7 @@ export function SetPasswordForm({ token }: { token: string }) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-gray-700" htmlFor="new-password">
-          Nuova password
+          {t('auth.set_password.new_password')}
         </label>
         <div className="relative">
           <input
@@ -64,14 +66,14 @@ export function SetPasswordForm({ token }: { token: string }) {
             onChange={e => setPassword(e.target.value)}
             required
             minLength={8}
-            placeholder="Min. 8 caratteri, una maiuscola, un numero"
+            placeholder={t('auth.set_password.new_password_placeholder')}
             className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-12 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             type="button"
             onClick={() => setShowPassword(v => !v)}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            aria-label={showPassword ? 'Nascondi password' : 'Mostra password'}
+            aria-label={showPassword ? t('auth.set_password.hide_password') : t('auth.set_password.show_password')}
           >
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
@@ -80,7 +82,7 @@ export function SetPasswordForm({ token }: { token: string }) {
 
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-gray-700" htmlFor="confirm-password">
-          Conferma password
+          {t('auth.set_password.confirm_password')}
         </label>
         <input
           id="confirm-password"
@@ -88,7 +90,7 @@ export function SetPasswordForm({ token }: { token: string }) {
           value={confirm}
           onChange={e => setConfirm(e.target.value)}
           required
-          placeholder="Ripeti la password"
+          placeholder={t('auth.set_password.confirm_password_placeholder')}
           className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
@@ -102,7 +104,7 @@ export function SetPasswordForm({ token }: { token: string }) {
         disabled={loading}
         className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
       >
-        {loading ? 'Salvataggio…' : 'Imposta password'}
+        {loading ? t('auth.set_password.submitting') : t('auth.set_password.submit')}
       </button>
     </form>
   )
