@@ -20,7 +20,11 @@ import TranslationEditorDrawer from './TranslationEditorDrawer'
 import CreateTranslationKeyModal from './CreateTranslationKeyModal'
 
 interface Props {
+  /** Full URL state, including dynamic value_<languageCode> filters (Task 4 consumes it). */
+  urlParams: Record<string, string | undefined>
   search: string
+  search2: string
+  searchOperator: 'AND' | 'OR' | null
   namespace: string | null
   module: string | null
   language: string | null

@@ -11,6 +11,24 @@ describe('buildTranslationsGridQuery', () => {
   it('maps the key text filter to `search`', () => {
     expect(buildTranslationsGridQuery(0, 50, [], { key: { filter: 'common.' } }).search).toBe('common.')
   })
+  it('preserves an OR text filter with both conditions', () => {
+    expect(buildTranslationsGridQuery(0, 50, [], {
+      key: { operator: 'OR', conditions: [{ filter: 'common.' }, { filter: 'users.' }] },
+    }).search).toEqual({ operator: 'OR', conditions: ['common.', 'users.'] })
+  })
+  it('maps description and language filters to independent searches', () => {
+    const q = buildTranslationsGridQuery(0, 50, [], {
+      description: { filter: 'button label' },
+      value_en: { operator: 'OR', conditions: [{ filter: 'save' }, { filter: 'store' }] },
+      value_it: { filter: 'salva' },
+    })
+
+    expect(q.descriptionSearch).toBe('button label')
+    expect(q.valueSearches).toEqual({
+      en: { operator: 'OR', conditions: ['save', 'store'] },
+      it: 'salva',
+    })
+  })
   it('maps namespace, module, language and status filters', () => {
     const q = buildTranslationsGridQuery(0, 50, [], {
       namespace: { value: 'auth' }, module: { value: 'core' },
@@ -35,11 +53,45 @@ describe('translations URL round-trip', () => {
     expect(translationsFilterModelToSearchParams({
       key: { filter: 'auth' }, namespace: { value: 'auth' },
       module: { value: 'core' }, language: { value: 'en' }, status: { value: 'missing' },
-    })).toEqual({ search: 'auth', namespace: 'auth', module: 'core', language: 'en', status: 'missing' })
+    })).toEqual({
+      search: 'auth', search2: null, searchOperator: null,
+      description: null, description2: null, descriptionOperator: null,
+      namespace: 'auth', module: 'core', language: 'en', status: 'missing',
+    })
   })
   it('nulls out absent filters', () => {
     expect(translationsFilterModelToSearchParams({}))
-      .toEqual({ search: null, namespace: null, module: null, language: null, status: null })
+      .toEqual({
+        search: null, search2: null, searchOperator: null,
+        description: null, description2: null, descriptionOperator: null,
+        namespace: null, module: null, language: null, status: null,
+      })
+  })
+  it('serialises both AND conditions for URL navigation', () => {
+    expect(translationsFilterModelToSearchParams({
+      key: { operator: 'AND', conditions: [{ filter: 'common.' }, { filter: 'actions' }] },
+    })).toMatchObject({ search: 'common.', search2: 'actions', searchOperator: 'AND' })
+  })
+  it('round-trips description and dynamic language filters through URL params', () => {
+    const params = translationsFilterModelToSearchParams({
+      description: { filter: 'label' },
+      value_en: { operator: 'AND', conditions: [{ filter: 'save' }, { filter: 'now' }] },
+    })
+
+    expect(params).toMatchObject({
+      description: 'label', description2: null, descriptionOperator: null,
+      value_en: 'save', value_en2: 'now', value_enOperator: 'AND',
+    })
+    expect(translationsUrlParamsToFilterModel(params)).toMatchObject({
+      description: { filter: 'label' },
+      value_en: {
+        filterType: 'text', operator: 'AND',
+        conditions: [
+          { filterType: 'text', type: 'contains', filter: 'save' },
+          { filterType: 'text', type: 'contains', filter: 'now' },
+        ],
+      },
+    })
   })
   it('rebuilds the filter model from URL params', () => {
     expect(translationsUrlParamsToFilterModel({

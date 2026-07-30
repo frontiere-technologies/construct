@@ -1,3 +1,5 @@
+import type { TextSearch } from '@/lib/grid-text-search'
+
 /** A language's whole dictionary, flattened: translation key → translated value. */
 export type Dictionary = Record<string, string>
 
@@ -42,7 +44,7 @@ export type LanguageSortField = 'code' | 'locale' | 'name' | 'isActive' | 'isDef
 export interface LanguagesQuery {
   page: number
   size: number
-  search?: string
+  search?: TextSearch
   isActive?: boolean
   sort?: LanguageSortField
   direction?: 'ASC' | 'DESC'
@@ -66,9 +68,13 @@ export type TranslationSortField = 'key' | 'namespace' | 'module' | 'updatedAt'
 export interface TranslationsQuery {
   page: number
   size: number
-  /** Matched against key, description and translated value. */
-  search?: string
-  /** Restrict the missing/complete check — and the value search — to one language. */
+  /** Filter attached to the translation-key grid column; matched against key only. */
+  search?: TextSearch
+  /** Filter attached to the translation-key description column. */
+  descriptionSearch?: TextSearch
+  /** Filters attached to the dynamic per-language value columns, keyed by language code. */
+  valueSearches?: Record<string, TextSearch>
+  /** Restrict the missing/complete check to one language. */
   languageCode?: string
   namespace?: string
   module?: string

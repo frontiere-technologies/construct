@@ -16,7 +16,10 @@ export default async function TranslationsPage({ searchParams }: { searchParams:
   return (
     <PageContainer title={t('translation.title')} subtitle={t('translation.subtitle')}>
       <TranslationsTableClient
+        urlParams={sp}
         search={sp.search ?? ''}
+        search2={sp.search2 ?? ''}
+        searchOperator={sp.searchOperator === 'OR' ? 'OR' : sp.searchOperator === 'AND' ? 'AND' : null}
         namespace={sp.namespace ?? null}
         module={sp.module ?? null}
         language={sp.language ?? null}
