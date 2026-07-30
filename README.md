@@ -110,6 +110,56 @@ Theme configuration is a set of CSS custom properties (primary color, sidebar ba
 
 ---
 
+## Internationalization (i18n)
+
+Every UI label in the app is resolved at render time through a database-backed dictionary — there is no i18n framework (`next-intl`, `i18next`, …) and no `[locale]` route segments; every route stays exactly where it is.
+
+### Data model
+
+Three tables in `sources/devops/db/schema.sql`:
+
+| Table | Purpose |
+|---|---|
+| `app_language` | One row per language: `code` (lowercase BCP-47 primary subtag, e.g. `it`, `en`), `locale` (full BCP-47 tag for `Intl` formatting, e.g. `it-IT`), `name`, `native_name`, `is_active`, `is_default`, `dictionary_version` (bumped by trigger on every translation change). At most one row can have `is_default = true` (partial unique index); the default row can never be inactive. |
+| `translation_key` | One row per translation key: `key` (dot-separated, e.g. `common.actions.save`), `namespace`, `module`, `description`, `version` (optimistic-lock counter for metadata edits). |
+| `translation_value` | One row per key × language: `value` (plain text, max 1000 chars), `version` (optimistic-lock counter for the value itself). Unique on `(id_translation_key, id_language)`. |
+
+`users.id_language` (FK to `app_language`, nullable) stores each user's saved preference. This is a separate concept from the pre-existing `navigation_item.item_translation` (content translations for menu items, keyed by the **uppercase** locale from `SUPPORTED_LOCALES` in `lib/rbac/types.ts`) — the protected layout bridges the two with `language.code.toUpperCase()`, falling back to `DEFAULT_LOCALE` when a newly added UI language has no matching content translations yet.
+
+### Language resolution order
+
+`lib/i18n/resolve-language.ts#resolveActiveLanguage` picks the active language in this order, skipping any candidate that is missing, deleted, or deactivated:
+
+1. **session** — an explicit in-session switch (`construct_lang_session` cookie)
+2. **profile** — the authenticated user's `users.id_language`
+3. **cookie** — a persistent, 1-year `construct_lang` cookie (anonymous visitors)
+4. **browser** — the `Accept-Language` header, negotiated against active languages
+5. **default** — the `app_language` row with `is_default = true`
+
+### Fallback chain
+
+`lib/i18n/translator.ts#createTranslator` looks up each key in the active language's dictionary, then the **default** language's dictionary (so a missing `en` value falls back to `it` when `it` is the default), and finally renders `[missing: key]` in development or the bare key in production — `t()` never throws.
+
+### Cache and invalidation
+
+`lib/i18n/dictionary-service.ts` loads one dictionary per language per version and keeps it in an in-memory `DictionaryStore` (`lib/i18n/dictionary-cache.ts`). `app_language.dictionary_version` is bumped by DB triggers: a `translation_value` insert/update/delete bumps only the affected language; a `translation_key` insert/update/delete bumps **every** language's version (a key change reshapes every dictionary, even if only its description or namespace changed — a deliberately coarse invalidation in exchange for one trigger instead of per-column change detection). The service polls the version table on a short TTL and drops its cache for a language whenever the version it holds is stale; an admin's own edit invalidates synchronously so they see their change immediately.
+
+### Admin pages
+
+- **`/admin/languages`** — create, edit, activate/deactivate, delete, and set the default language.
+- **`/admin/translations`** — a paged, filterable grid of every translation key with one column per active language; a drawer-based editor opens per key. Both the key's metadata (namespace/module/description) and each per-language value carry their own version, so editing metadata and editing a value's text are independent optimistic locks — a stale save (someone else edited first) shows a "Conflitto di modifica" banner with the saved value, the attempted value, and a reload action, instead of silently overwriting the concurrent edit.
+
+### Adding a language
+
+Use the **`/admin/languages`** UI — no schema or code change is needed. A newly added language has no translation values yet, so every key falls back to the default language until an admin fills in its values from `/admin/translations`.
+
+### Adding a translation key
+
+- **At seed time** — add a new entry to the relevant `apply_translation_seed(...)` call in `sources/devops/db/schema.sql` and re-run `node sources/devops/db/db.mjs apply`; the seed function is idempotent (existing keys/values are left untouched, only new ones are inserted).
+- **At runtime** — use the "Nuova chiave" button on `/admin/translations`, which opens a modal to create the key (namespace, module, description) and then fill in its values from the editor drawer.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
