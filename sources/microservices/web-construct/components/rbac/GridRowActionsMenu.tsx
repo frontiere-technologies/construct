@@ -19,7 +19,7 @@ export interface GridRowActionsMenuParams<T> extends ICellRendererParams<T> {
 export function actionsColumnDef<T>(getItems: (data: T) => RowMenuItem[], headerTooltip?: string): ColDef<T> {
   return {
     colId: 'actions',
-    headerName: '...',
+    headerName: '',
     headerTooltip,
     pinned: 'left',
     lockPinned: true,

@@ -21,6 +21,13 @@ describe('actionsColumnDef', () => {
     expect(col.resizable).toBe(false)
   })
 
+  it('uses an empty header and remains the only fixed-width exception', () => {
+    const col = actionsColumnDef<Row>(() => [])
+    expect(col.headerName).toBe('')
+    expect(col.resizable).toBe(false)
+    expect(col.width).toBe(56)
+  })
+
   it('forwards the row items builder to the cell renderer', () => {
     const getItems = (row: Row) => [{ label: `row-${row.id}`, onClick: () => {} }]
     const col = actionsColumnDef<Row>(getItems)
