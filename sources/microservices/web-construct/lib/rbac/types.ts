@@ -1,3 +1,5 @@
+import type { TextSearch } from '@/lib/grid-text-search'
+
 export const SUPPORTED_LOCALES = ['EN', 'IT', 'DE', 'FR', 'ES', 'NL', 'PT', 'SK', 'RO'] as const
 export type Locale = (typeof SUPPORTED_LOCALES)[number]
 export const DEFAULT_LOCALE: Locale = 'EN'
@@ -163,11 +165,14 @@ export interface UserDTO {
 export interface UsersQuery {
   page: number
   size: number
-  search?: string
+  nameSearch?: TextSearch
+  emailSearch?: TextSearch
   roleIds?: number[]
   statuses?: UserStatusId[]
   createdFrom?: string
   createdTo?: string
+  updatedFrom?: string
+  updatedTo?: string
   sort?: 'firstName' | 'lastName' | 'email' | 'dateIns' | 'dateMod' | 'status'
   direction?: 'ASC' | 'DESC'
 }

@@ -38,4 +38,58 @@ describe('applyUserFilters', () => {
   it('applies nothing when no filters are set', () => {
     expect(applyUserFilters(baseQuery, null)).toEqual([])
   })
+
+  it('joins compound text conditions with AND', () => {
+    const [rendered] = render({
+      ...baseQuery,
+      nameSearch: { operator: 'AND', conditions: ['mario', 'frontiere'] },
+    }, null)
+
+    expect(rendered.sql).toContain(') and (')
+    expect(rendered.params).toEqual([
+      '%mario%', '%mario%',
+      '%frontiere%', '%frontiere%',
+    ])
+  })
+
+  it('joins compound text conditions with OR', () => {
+    const [rendered] = render({
+      ...baseQuery,
+      nameSearch: { operator: 'OR', conditions: ['mario', 'luigi'] },
+    }, null)
+
+    expect(rendered.sql).toContain(') or (')
+    expect(rendered.params).toEqual([
+      '%mario%', '%mario%',
+      '%luigi%', '%luigi%',
+    ])
+  })
+
+  it('applies name only to first/last name and email only to email', () => {
+    const rendered = render({
+      ...baseQuery,
+      nameSearch: 'Mario', emailSearch: 'frontiere.it', updatedFrom: '2026-07-01',
+    }, null)
+
+    expect(rendered[0].sql).toContain('"users"."first_name"')
+    expect(rendered[0].sql).toContain('"users"."last_name"')
+    expect(rendered[0].sql).not.toContain('"users"."email"')
+    expect(rendered[1].sql).toContain('"users"."email"')
+    expect(rendered[1].sql).not.toContain('"users"."first_name"')
+    expect(rendered[2].sql).toContain('"users"."updated_at" >=')
+  })
+
+  it('treats LIKE metacharacters literally in a name contains filter', () => {
+    const [rendered] = render({ ...baseQuery, nameSearch: String.raw`100%_\ready` }, null)
+
+    expect(rendered.sql).toContain("escape '\\'")
+    expect(rendered.params).toEqual([String.raw`%100\%\_\\ready%`, String.raw`%100\%\_\\ready%`])
+  })
+
+  it('includes the full updated-to day with its next-day exclusive boundary', () => {
+    const [rendered] = render({ ...baseQuery, updatedTo: '2026-07-30' }, null)
+
+    expect(rendered.sql).toContain('"users"."updated_at" <')
+    expect(rendered.params).toEqual(['2026-07-31'])
+  })
 })

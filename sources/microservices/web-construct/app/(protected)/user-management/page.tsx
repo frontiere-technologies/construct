@@ -16,11 +16,18 @@ export default async function UserManagementPage({ searchParams }: { searchParam
         sortField={(sp.sort as UsersQuery['sort']) ?? 'dateIns'}
         sortDir={(sp.direction as 'ASC' | 'DESC') ?? 'DESC'}
         search={sp.search ?? ''}
+        search2={sp.search2 ?? ''}
+        searchOperator={sp.searchOperator === 'OR' ? 'OR' : sp.searchOperator === 'AND' ? 'AND' : null}
+        emailSearch={sp.emailSearch ?? ''}
+        emailSearch2={sp.emailSearch2 ?? ''}
+        emailSearchOperator={sp.emailSearchOperator === 'OR' ? 'OR' : sp.emailSearchOperator === 'AND' ? 'AND' : null}
         allRoles={allRoles}
         roleId={sp.roleIds ? Number(sp.roleIds.split(',')[0]) : null}
         statusId={sp.statuses ? (Number(sp.statuses.split(',')[0]) as UserStatusId) : null}
         createdFrom={sp.createdFrom ?? null}
         createdTo={sp.createdTo ?? null}
+        updatedFrom={sp.updatedFrom ?? null}
+        updatedTo={sp.updatedTo ?? null}
       />
     </PageContainer>
   )
