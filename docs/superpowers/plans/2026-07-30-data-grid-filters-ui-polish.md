@@ -55,7 +55,7 @@
 - Produces: `GridToolbar({ gridApi, columns, onClearFilters, children })`.
 - Produces: `appGridThemeParams` exported for observable theme tests.
 
-- [ ] **Step 1: Scrivere i test fallenti dei modelli numero/data**
+- [✅] **Step 1: Scrivere i test fallenti dei modelli numero/data**
 
 ```ts
 it('maps an in-range number filter without swapping its bounds', () => {
@@ -69,7 +69,7 @@ it('round-trips a date range using YYYY-MM-DD values', () => {
 })
 ```
 
-- [ ] **Step 2: Scrivere i test fallenti del reset e del tema**
+- [✅] **Step 2: Scrivere i test fallenti del reset e del tema**
 
 ```ts
 it('clears the AG Grid model before clearing URL params', () => {
@@ -85,13 +85,13 @@ it('uses theme tokens for the neutral light header', () => {
 })
 ```
 
-- [ ] **Step 3: Eseguire i test e osservare RED**
+- [✅] **Step 3: Eseguire i test e osservare RED**
 
 Run: `npm test -- lib/grid-filter-models.test.ts components/ui/grid-reset.test.ts components/ui/dataGridConfig.test.ts`
 
 Expected: FAIL per moduli/esportazioni assenti e colori header ancora hard-coded.
 
-- [ ] **Step 4: Implementare conversioni, configurazioni e reset minimi**
+- [✅] **Step 4: Implementare conversioni, configurazioni e reset minimi**
 
 ```ts
 export interface GridNumberFilterModel { type?: 'equals' | 'inRange'; filter?: number; filterTo?: number }
@@ -109,7 +109,7 @@ export function gridNumberFilterToRange(model?: GridNumberFilterModel): NumberRa
 
 Implementare gli inversi e le conversioni date tagliando il timestamp ai primi 10 caratteri. `TEXT_FILTER`, `NUMBER_FILTER`, `DATE_FILTER` devono usare rispettivamente `contains`, `equals/inRange` e `inRange`, sempre con pulsanti apply/reset.
 
-- [ ] **Step 5: Implementare toolbar e stile variante A**
+- [✅] **Step 5: Implementare toolbar e stile variante A**
 
 ```tsx
 export default function GridToolbar({ gridApi, columns, onClearFilters, children }: Props) {
@@ -127,7 +127,7 @@ export default function GridToolbar({ gridApi, columns, onClearFilters, children
 
 Esportare `appGridThemeParams`, impostare header con i token della specifica e rimuovere da `globals.css` la regola che nasconde `actions::after`. Aggiungere regole globali per `button:not(:disabled)` e `button:disabled` usando transform/filter senza cambiare colori semantici.
 
-- [ ] **Step 6: Eseguire test mirati e type-check**
+- [✅] **Step 6: Eseguire test mirati e type-check**
 
 Run: `npm test -- lib/grid-filter-models.test.ts components/ui/grid-reset.test.ts components/ui/dataGridConfig.test.ts`
 
@@ -135,7 +135,7 @@ Run: `npx tsc --noEmit`
 
 Expected: PASS.
 
-- [ ] **Step 7: Committare Task 1**
+- [✅] **Step 7: Committare Task 1**
 
 ```bash
 git add sources/microservices/web-construct/lib/grid-filter-models.ts sources/microservices/web-construct/lib/grid-filter-models.test.ts sources/microservices/web-construct/components/ui/gridColumnFilters.ts sources/microservices/web-construct/components/ui/GridToolbar.tsx sources/microservices/web-construct/components/ui/grid-reset.ts sources/microservices/web-construct/components/ui/grid-reset.test.ts sources/microservices/web-construct/components/ui/dataGridConfig.ts sources/microservices/web-construct/components/ui/dataGridConfig.test.ts sources/microservices/web-construct/app/globals.css
@@ -158,7 +158,7 @@ git commit -m "feat(grid): add shared filters toolbar and light header"
 - Produces: `UsersQuery.nameSearch?: TextSearch`, `emailSearch?: TextSearch`, `createdFrom/To`, `updatedFrom/To`.
 - Produces URL keys: `search/search2/searchOperator`, `emailSearch/emailSearch2/emailSearchOperator`, `roleIds`, `statuses`, `createdFrom/To`, `updatedFrom/To`.
 
-- [ ] **Step 1: Scrivere test RED per query e URL di Email/Modificato**
+- [✅] **Step 1: Scrivere test RED per query e URL di Email/Modificato**
 
 ```ts
 it('maps name, email and both date columns independently', () => {
@@ -180,7 +180,7 @@ expect(usersFilterModelToSearchParams({ email: { filter: 'frontiere.it' } })).to
 })
 ```
 
-- [ ] **Step 2: Scrivere test RED SQL per separazione Nome/Email e data modifica**
+- [✅] **Step 2: Scrivere test RED SQL per separazione Nome/Email e data modifica**
 
 ```ts
 it('applies name only to first/last name and email only to email', () => {
@@ -192,17 +192,17 @@ it('applies name only to first/last name and email only to email', () => {
 })
 ```
 
-- [ ] **Step 3: Eseguire RED**
+- [✅] **Step 3: Eseguire RED**
 
 Run: `npm test -- lib/rbac/users-grid-query.test.ts lib/rbac/users-service.test.ts`
 
 Expected: FAIL per nuovi campi assenti.
 
-- [ ] **Step 4: Implementare tipi, conversioni e condizioni SQL**
+- [✅] **Step 4: Implementare tipi, conversioni e condizioni SQL**
 
 Usare `normalizeTextSearch` e la stessa funzione di contains letterale/escaping già adottata nei servizi i18n. Il nome deve cercare soltanto `firstName`/`lastName`; Email soltanto `users.email`. Le date finali usano `lt(nextDay(to))` per includere tutta la giornata.
 
-- [ ] **Step 5: Abilitare colonne e toolbar Utenti**
+- [✅] **Step 5: Abilitare colonne e toolbar Utenti**
 
 ```tsx
 { field: 'email', headerName: t('users.list.email'), sortable: true, ...TEXT_FILTER }
@@ -214,7 +214,7 @@ Usare `normalizeTextSearch` e la stessa funzione di contains letterale/escaping 
 
 Sostituire la toolbar locale con `GridToolbar` e chiamare `resetGridFilters(gridApiRef.current, () => setParam(usersFilterModelToSearchParams({})))`.
 
-- [ ] **Step 6: Eseguire test, type-check e commit**
+- [✅] **Step 6: Eseguire test, type-check e commit**
 
 Run: `npm test -- lib/rbac/users-grid-query.test.ts lib/rbac/users-service.test.ts`
 
@@ -241,7 +241,7 @@ git commit -m "feat(users): filter every grid column"
 - Produces: `RolesQuery.idMin/idMax`, `associatedUsersMin/Max`, `start/endDateIns`, `start/endDateMod`.
 - Produces URL keys corrispondenti e mantiene i campi testo/enum esistenti.
 
-- [ ] **Step 1: Scrivere test RED per ID, utenti associati e data modifica**
+- [✅] **Step 1: Scrivere test RED per ID, utenti associati e data modifica**
 
 ```ts
 it('maps numeric ranges and both dates', () => {
@@ -256,7 +256,7 @@ it('maps numeric ranges and both dates', () => {
 
 Verificare il round-trip URL e che il modello vuoto azzeri tutte le chiavi.
 
-- [ ] **Step 2: Scrivere test RED SQL per range inclusivi**
+- [✅] **Step 2: Scrivere test RED SQL per range inclusivi**
 
 Renderizzare `applyFilters` e verificare `gte/lte` per numeri, `gte/lt(nextDay)` per date e combinazione AND fra colonne:
 
@@ -269,11 +269,11 @@ const rendered = render({
 expect(rendered.flatMap(item => item.params)).toEqual([10, 20, 3, 3, '2026-07-01', '2026-07-31'])
 ```
 
-- [ ] **Step 3: Eseguire RED**
+- [✅] **Step 3: Eseguire RED**
 
 Run: `npm test -- lib/rbac/roles-grid-query.test.ts lib/rbac/roles-service.test.ts`
 
-- [ ] **Step 4: Implementare query/SQL e colonne Ruoli**
+- [✅] **Step 4: Implementare query/SQL e colonne Ruoli**
 
 ```tsx
 { field: 'id', headerName: t('roles.list.id'), sortable: true, ...NUMBER_FILTER }
@@ -283,7 +283,7 @@ Run: `npm test -- lib/rbac/roles-grid-query.test.ts lib/rbac/roles-service.test.
 
 Usare `GridToolbar` per reset, Colonne e Nuovo ruolo.
 
-- [ ] **Step 5: Eseguire test, type-check e commit**
+- [✅] **Step 5: Eseguire test, type-check e commit**
 
 Run: `npm test -- lib/rbac/roles-grid-query.test.ts lib/rbac/roles-service.test.ts`
 
@@ -309,7 +309,7 @@ git commit -m "feat(roles): filter every grid column"
 - Produces: quattro ricerche testuali indipendenti, `isActive`, `isDefault`, range `translated/missing`, range data creazione.
 - Consumes: helper condivisi Task 1 e SQL contains letterale esistente.
 
-- [ ] **Step 1: Scrivere test RED query/URL per tutte le colonne Lingue**
+- [✅] **Step 1: Scrivere test RED query/URL per tutte le colonne Lingue**
 
 Usare fixture letterali per `code`, `locale`, `name`, `nativeName`, entrambi gli enum, range numerici e data. Verificare round-trip composto di due colonne testo contemporanee e cleanup totale del modello vuoto:
 
@@ -329,7 +329,7 @@ expect(q).toMatchObject({
 })
 ```
 
-- [ ] **Step 2: Scrivere test RED SQL per colonne base e conteggi**
+- [✅] **Step 2: Scrivere test RED SQL per colonne base e conteggi**
 
 Esportare `applyLanguageFilters(query: LanguagesQuery): SQL[]`. Verificare che i quattro testi puntino alle rispettive colonne, che `isDefault` sia indipendente da `isActive` e che `translated/missing` usino espressioni di conteggio correlate prima della paginazione.
 
@@ -338,19 +338,19 @@ expect(render({ page: 0, size: 50, translatedMin: 10, missingMax: 3 })
   .flatMap(q => q.params)).toContain(10)
 ```
 
-- [ ] **Step 3: Eseguire RED**
+- [✅] **Step 3: Eseguire RED**
 
 Run: `npm test -- lib/i18n/languages-grid-query.test.ts lib/i18n/language-service.test.ts`
 
-- [ ] **Step 4: Implementare filtri server-side e URL**
+- [✅] **Step 4: Implementare filtri server-side e URL**
 
 Riutilizzare la stessa espressione “valori non vuoti per lingua” di `getLanguageStats` per filtrare i conteggi. Le condizioni devono entrare nel `where` condiviso da select e count; `getLanguageStats` resta responsabile dei valori mostrati.
 
-- [ ] **Step 5: Abilitare tutte le colonne e toolbar Lingue**
+- [✅] **Step 5: Abilitare tutte le colonne e toolbar Lingue**
 
 Applicare `TEXT_FILTER`, enum, `NUMBER_FILTER`, `DATE_FILTER` secondo la matrice. Usare `GridToolbar` con reset che conserva ordinamento e pulsanti Colonne/Nuova lingua.
 
-- [ ] **Step 6: Eseguire test, type-check e commit**
+- [✅] **Step 6: Eseguire test, type-check e commit**
 
 Run: `npm test -- lib/i18n/languages-grid-query.test.ts lib/i18n/language-service.test.ts`
 
@@ -376,7 +376,7 @@ git commit -m "feat(i18n): filter every language grid column"
 - Produces: `TranslationsQuery.updatedFrom/updatedTo` e URL keys omonime.
 - Consumes: `DATE_FILTER`, `GridToolbar`, reset con serializer dinamico delle lingue.
 
-- [ ] **Step 1: Scrivere test RED query/URL e SQL per Aggiornata**
+- [✅] **Step 1: Scrivere test RED query/URL e SQL per Aggiornata**
 
 ```ts
 it('maps and round-trips the updated date range', () => {
@@ -387,15 +387,15 @@ it('maps and round-trips the updated date range', () => {
 
 Nel service verificare `gte(updatedAt, from)` e `lt(updatedAt, nextDay(to))` insieme ai filtri lingua esistenti.
 
-- [ ] **Step 2: Eseguire RED**
+- [✅] **Step 2: Eseguire RED**
 
 Run: `npm test -- lib/i18n/translations-grid-query.test.ts lib/i18n/translation-service.test.ts`
 
-- [ ] **Step 3: Implementare filtro e toolbar uniforme**
+- [✅] **Step 3: Implementare filtro e toolbar uniforme**
 
 Applicare `DATE_FILTER` a `updatedAt`. Sostituire il reset attuale `router.push(pathname)` con `resetGridFilters` e `setParam(translationsFilterModelToSearchParams({}, languages.map(l => l.code)))`, conservando sort/direction.
 
-- [ ] **Step 4: Eseguire test, type-check e commit**
+- [✅] **Step 4: Eseguire test, type-check e commit**
 
 Run: `npm test -- lib/i18n/translations-grid-query.test.ts lib/i18n/translation-service.test.ts`
 
@@ -417,7 +417,7 @@ git commit -m "feat(i18n): complete translation grid filtering"
 - Consumes: implementazione Task 1-5 e server locale su porta 3000.
 - Produces: checklist `- [✅]` soltanto per requisiti realmente verificati.
 
-- [ ] **Step 1: Eseguire verifica automatica completa**
+- [✅] **Step 1: Eseguire verifica automatica completa**
 
 Run: `npm test`
 
@@ -429,19 +429,19 @@ Run: `npm run build`
 
 Expected: exit 0; warning preesistenti documentati separatamente.
 
-- [ ] **Step 2: Verificare browser sulle quattro pagine**
+- [✅] **Step 2: Verificare browser sulle quattro pagine**
 
 Con server locale attivo, controllare `/user-management`, `/roles-permissions`, `/admin/languages`, `/admin/translations` in tema giorno e notte:
 
-- [ ] ogni header dati mostra icona filtro e `actions` no;
-- [ ] “Clear filters” azzera filtri ma conserva sort/direction nell'URL;
-- [ ] header variante A leggibile in entrambi i temi;
-- [ ] separatore dopo actions uguale agli altri e assente nel body;
-- [ ] hover evidente su pulsanti primari, secondari, icon-only; disabled senza hover.
+- [✅] ogni header dati mostra icona filtro e `actions` no;
+- [✅] “Clear filters” azzera filtri ma conserva sort/direction nell'URL;
+- [✅] header variante A leggibile in entrambi i temi;
+- [✅] separatore dopo actions uguale agli altri e assente nel body;
+- [✅] hover evidente su pulsanti primari, secondari, icon-only; disabled senza hover.
 
 Aggiungere un test E2E soltanto se una regressione osservata non è già protetta dai test unitari dei confini query/reset.
 
-- [ ] **Step 3: Aggiornare checklist e verificare diff**
+- [✅] **Step 3: Aggiornare checklist e verificare diff**
 
 Marcare `- [✅]` solo per item completati, mantenendo ID e titoli invariati.
 
@@ -449,7 +449,7 @@ Run: `git diff --check`
 
 Run: `git status --short`
 
-- [ ] **Step 4: Committare tracciamento finale**
+- [✅] **Step 4: Committare tracciamento finale**
 
 ```bash
 git add docs/superpowers/specs/2026-07-30-data-grid-filters-ui-polish-design.md docs/superpowers/plans/2026-07-30-data-grid-filters-ui-polish.md sources/tests/e2e

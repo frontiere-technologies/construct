@@ -6,11 +6,11 @@ Le quattro pagine basate su AG Grid — Utenti, Ruoli e permessi, Lingue e Tradu
 
 ## Requisiti
 
-- [ ] ID=FILTER-ALL-1, Priority=P1, Title=Filtri su tutte le colonne dati, Fix description=Ogni colonna dati visibile delle quattro griglie deve avere un filtro coerente col tipo di dato; la colonna azioni è l'unica eccezione.
-- [ ] ID=CLEAR-1, Priority=P1, Title=Clear filters uniforme, Fix description=Utenti, Ruoli, Lingue e Traduzioni devono mostrare lo stesso pulsante “Clear filters”, che azzera il modello AG Grid e tutti i parametri filtro nell'URL senza rimuovere l'ordinamento.
-- [ ] ID=BUTTON-1, Priority=P1, Title=Feedback interattivo pulsanti, Fix description=Ogni pulsante abilitato dell'app deve mostrare cursore pointer, transizione breve e feedback hover coerente; i pulsanti disabilitati devono mantenere opacità ridotta, cursore non consentito e nessun effetto hover.
-- [ ] ID=GRID-SEP-1, Priority=P1, Title=Separatore dopo azioni, Fix description=L'header deve mostrare tra colonna azioni e prima colonna dati lo stesso separatore verticale usato fra le altre colonne.
-- [ ] ID=GRID-HEADER-1, Priority=P1, Title=Header neutro chiaro, Fix description=Nel tema giorno l'header deve usare una superficie neutra chiara con testo scuro; nel tema notte deve usare i token scuri equivalenti e mantenere contrasto leggibile.
+- [✅] ID=FILTER-ALL-1, Priority=P1, Title=Filtri su tutte le colonne dati, Fix description=Ogni colonna dati visibile delle quattro griglie deve avere un filtro coerente col tipo di dato; la colonna azioni è l'unica eccezione.
+- [✅] ID=CLEAR-1, Priority=P1, Title=Clear filters uniforme, Fix description=Utenti, Ruoli, Lingue e Traduzioni devono mostrare lo stesso pulsante “Clear filters”, che azzera il modello AG Grid e tutti i parametri filtro nell'URL senza rimuovere l'ordinamento.
+- [✅] ID=BUTTON-1, Priority=P1, Title=Feedback interattivo pulsanti, Fix description=Ogni pulsante abilitato dell'app deve mostrare cursore pointer, transizione breve e feedback hover coerente; i pulsanti disabilitati devono mantenere opacità ridotta, cursore non consentito e nessun effetto hover.
+- [✅] ID=GRID-SEP-1, Priority=P1, Title=Separatore dopo azioni, Fix description=L'header deve mostrare tra colonna azioni e prima colonna dati lo stesso separatore verticale usato fra le altre colonne.
+- [✅] ID=GRID-HEADER-1, Priority=P1, Title=Header neutro chiaro, Fix description=Nel tema giorno l'header deve usare una superficie neutra chiara con testo scuro; nel tema notte deve usare i token scuri equivalenti e mantenere contrasto leggibile.
 
 ## Matrice dei filtri
 
@@ -93,10 +93,10 @@ Il controllo sarà sempre visibile per coerenza fra le pagine. Potrà essere dis
 
 Lo stile globale definirà soltanto il comportamento condiviso, non un colore unico:
 
-- [ ] `cursor: pointer`, transizione breve e lieve sollevamento/variazione visiva per pulsanti abilitati;
-- [ ] nessun sollevamento, `cursor: not-allowed` e opacità ridotta per pulsanti disabilitati;
-- [ ] mantenimento dei colori semantici esistenti per azioni primarie, secondarie, icon-only e distruttive;
-- [ ] aggiunta esplicita dello sfondo hover ai pulsanti secondari delle toolbar che oggi non ne hanno uno.
+- [✅] `cursor: pointer`, transizione breve e lieve sollevamento/variazione visiva per pulsanti abilitati;
+- [✅] nessun sollevamento, `cursor: not-allowed` e opacità ridotta per pulsanti disabilitati;
+- [✅] mantenimento dei colori semantici esistenti per azioni primarie, secondarie, icon-only e distruttive;
+- [✅] aggiunta esplicita dello sfondo hover ai pulsanti secondari delle toolbar che oggi non ne hanno uno.
 
 Questo rende uniforme la percezione di interattività senza convertire tutti i pulsanti in un'unica apparenza o alterare la gerarchia delle azioni.
 
@@ -116,14 +116,14 @@ Parametri URL malformati saranno ignorati o normalizzati dagli helper di parsing
 
 ## Strategia di test
 
-- [ ] ID=TEST-FILTER-1, Verificare per ciascuna griglia la conversione di ogni colonna AG Grid nella query server-side prevista.
-- [ ] ID=TEST-FILTER-2, Verificare round-trip URL, rimozione delle chiavi obsolete e conservazione dell'ordinamento durante “Clear filters”.
-- [ ] ID=TEST-FILTER-3, Verificare con SQL renderizzata che testo, enum, numeri e date vengano applicati prima di conteggio e paginazione, inclusi estremi e valori nulli.
-- [ ] ID=TEST-UI-1, Verificare che ogni colonna dati abbia una capacità filtro e che `actions` non ne abbia una.
-- [ ] ID=TEST-UI-2, Verificare che tutte le toolbar delle griglie includano “Clear filters” e invochino lo stesso contratto di reset.
-- [ ] ID=TEST-STYLE-1, Verificare i parametri tema dell'header e la presenza del separatore `actions` senza aggiungere un divider al corpo.
-- [ ] ID=TEST-STYLE-2, Verificare manualmente tema giorno/notte, hover di pulsanti primari/secondari/icon-only/disabilitati e leggibilità dell'header.
-- [ ] ID=TEST-FINAL-1, Eseguire test mirati, suite completa, type-check, lint e build, quindi controllo visivo sulle quattro pagine con il server locale.
+- [✅] ID=TEST-FILTER-1, Verificare per ciascuna griglia la conversione di ogni colonna AG Grid nella query server-side prevista.
+- [✅] ID=TEST-FILTER-2, Verificare round-trip URL, rimozione delle chiavi obsolete e conservazione dell'ordinamento durante “Clear filters”.
+- [✅] ID=TEST-FILTER-3, Verificare con SQL renderizzata che testo, enum, numeri e date vengano applicati prima di conteggio e paginazione, inclusi estremi e valori nulli.
+- [✅] ID=TEST-UI-1, Verificare che ogni colonna dati abbia una capacità filtro e che `actions` non ne abbia una.
+- [✅] ID=TEST-UI-2, Verificare che tutte le toolbar delle griglie includano “Clear filters” e invochino lo stesso contratto di reset.
+- [✅] ID=TEST-STYLE-1, Verificare i parametri tema dell'header e la presenza del separatore `actions` senza aggiungere un divider al corpo.
+- [✅] ID=TEST-STYLE-2, Verificare manualmente tema giorno/notte, hover di pulsanti primari/secondari/icon-only/disabilitati e leggibilità dell'header.
+- [✅] ID=TEST-FINAL-1, Eseguire test mirati, suite completa, type-check, lint e build, quindi controllo visivo sulle quattro pagine con il server locale.
 
 ## Fuori ambito
 
