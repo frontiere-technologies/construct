@@ -45,7 +45,7 @@
 - Consumes: `DataGrid.defaultColDef.resizable = true`.
 - Produces: `actionsColumnDef<T>(): ColDef<T>` con `headerName: ''` e `resizable: false`.
 
-- [ ] **Step 1: Scrivere il test fallente per l'intestazione vuota**
+- [✅] **Step 1: Scrivere il test fallente per l'intestazione vuota**
 
 ```ts
 it('uses an empty header and remains the only fixed-width exception', () => {
@@ -56,13 +56,13 @@ it('uses an empty header and remains the only fixed-width exception', () => {
 })
 ```
 
-- [ ] **Step 2: Eseguire il test e verificare il fallimento corretto**
+- [✅] **Step 2: Eseguire il test e verificare il fallimento corretto**
 
 Run: `npm test -- components/rbac/GridRowActionsMenu.test.ts`
 
 Expected: FAIL perché `headerName` vale `...`.
 
-- [ ] **Step 3: Applicare la modifica minima**
+- [✅] **Step 3: Applicare la modifica minima**
 
 ```ts
 return {
@@ -76,13 +76,13 @@ return {
 
 Controllare con `rg -n "resizable:\\s*false" components` che nessuna colonna dati disabiliti esplicitamente il default; l'unica eccezione ammessa è `actionsColumnDef`.
 
-- [ ] **Step 4: Eseguire il test mirato**
+- [✅] **Step 4: Eseguire il test mirato**
 
 Run: `npm test -- components/rbac/GridRowActionsMenu.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Committare solo i file della task**
+- [✅] **Step 5: Committare solo i file della task**
 
 ```bash
 git add sources/microservices/web-construct/components/rbac/GridRowActionsMenu.tsx sources/microservices/web-construct/components/rbac/GridRowActionsMenu.test.ts
@@ -103,7 +103,7 @@ git commit -m "fix(grid): clear actions column header"
 - Produces: `TranslationsGridFilterModel.description?: GridTextFilterModel` e chiavi dinamiche `value_<languageCode>`.
 - Produces: parametri URL `description`, `description2`, `descriptionOperator`, `value_<code>`, `value_<code>2`, `value_<code>Operator`.
 
-- [ ] **Step 1: Scrivere test fallenti per conversione AG Grid → query**
+- [✅] **Step 1: Scrivere test fallenti per conversione AG Grid → query**
 
 ```ts
 it('maps description and language filters to independent searches', () => {
@@ -120,7 +120,7 @@ it('maps description and language filters to independent searches', () => {
 })
 ```
 
-- [ ] **Step 2: Scrivere test fallenti per round-trip URL**
+- [✅] **Step 2: Scrivere test fallenti per round-trip URL**
 
 ```ts
 it('round-trips description and dynamic language filters through URL params', () => {
@@ -145,13 +145,13 @@ it('round-trips description and dynamic language filters through URL params', ()
 })
 ```
 
-- [ ] **Step 3: Eseguire i test e verificare i fallimenti corretti**
+- [✅] **Step 3: Eseguire i test e verificare i fallimenti corretti**
 
 Run: `npm test -- lib/i18n/translations-grid-query.test.ts`
 
 Expected: FAIL perché i nuovi campi non esistono e i parametri non vengono serializzati.
 
-- [ ] **Step 4: Estendere tipi e conversione con helper per prefisso URL**
+- [✅] **Step 4: Estendere tipi e conversione con helper per prefisso URL**
 
 ```ts
 export interface TranslationsQuery {
@@ -180,7 +180,7 @@ function addTextSearchParams(
 
 Iterare soltanto sulle chiavi `value_` presenti nel filter model per creare `valueSearches`. La ricostruzione del modello deve leggere i parametri `value_<code>` presenti nell'oggetto URL e ignorare i suffissi `2` e `Operator` come colonne autonome.
 
-- [ ] **Step 5: Inoltrare alla pagina client tutti i parametri URL**
+- [✅] **Step 5: Inoltrare alla pagina client tutti i parametri URL**
 
 ```tsx
 <TranslationsTableClient
@@ -198,13 +198,13 @@ Iterare soltanto sulle chiavi `value_` presenti nel filter model per creare `val
 
 Mantenere compatibili i parametri chiave `search`, `search2`, `searchOperator` già introdotti nel worktree.
 
-- [ ] **Step 6: Eseguire i test mirati**
+- [✅] **Step 6: Eseguire i test mirati**
 
 Run: `npm test -- lib/i18n/translations-grid-query.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 7: Committare solo i file della task**
+- [✅] **Step 7: Committare solo i file della task**
 
 ```bash
 git add sources/microservices/web-construct/lib/i18n/translations-grid-query.ts sources/microservices/web-construct/lib/i18n/translations-grid-query.test.ts sources/microservices/web-construct/lib/i18n/types.ts 'sources/microservices/web-construct/app/(protected)/admin/translations/page.tsx'
@@ -221,7 +221,7 @@ git commit -m "feat(i18n): model translation column filters"
 - Consumes: `TranslationsQuery.descriptionSearch`, `TranslationsQuery.valueSearches` e `LanguageDto[]`.
 - Produces: `applyTranslationFilters(query: TranslationsQuery, languages: LanguageDto[]): SQL[]`.
 
-- [ ] **Step 1: Scrivere test fallenti sulla SQL della descrizione**
+- [✅] **Step 1: Scrivere test fallenti sulla SQL della descrizione**
 
 ```ts
 const dialect = new PgDialect()
@@ -240,7 +240,7 @@ it('filters description with compound AND conditions', () => {
 })
 ```
 
-- [ ] **Step 2: Scrivere test fallenti per lingua valida e sconosciuta**
+- [✅] **Step 2: Scrivere test fallenti per lingua valida e sconosciuta**
 
 ```ts
 it('filters a translation value only for a matching active language', () => {
@@ -254,13 +254,13 @@ it('filters a translation value only for a matching active language', () => {
 })
 ```
 
-- [ ] **Step 3: Eseguire i test e verificare i fallimenti corretti**
+- [✅] **Step 3: Eseguire i test e verificare i fallimenti corretti**
 
 Run: `npm test -- lib/i18n/translation-service.test.ts`
 
 Expected: FAIL perché `applyTranslationFilters` non è esportata.
 
-- [ ] **Step 4: Estrarre e implementare il builder puro delle condizioni**
+- [✅] **Step 4: Estrarre e implementare il builder puro delle condizioni**
 
 ```ts
 export function applyTranslationFilters(query: TranslationsQuery, languages: LanguageDto[]): SQL[] {
@@ -286,13 +286,13 @@ coalesce((
 
 Combinare i termini interni con AND/OR tramite `normalizeTextSearch`; combinare filtri di colonne diverse aggiungendo condizioni distinte all'array. `listTranslations` deve chiamare `applyTranslationFilters(query, languages)` prima di aggiungere il filtro Stato.
 
-- [ ] **Step 5: Eseguire i test mirati e quelli delle query Traduzioni**
+- [✅] **Step 5: Eseguire i test mirati e quelli delle query Traduzioni**
 
 Run: `npm test -- lib/i18n/translation-service.test.ts lib/i18n/translations-grid-query.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 6: Committare solo i file della task**
+- [✅] **Step 6: Committare solo i file della task**
 
 ```bash
 git add sources/microservices/web-construct/lib/i18n/translation-service.ts sources/microservices/web-construct/lib/i18n/translation-service.test.ts
@@ -311,7 +311,7 @@ git commit -m "feat(i18n): filter translations by description and value"
 - Produces: `TranslationValueCell(props): ReactNode`, vuoto senza riga, testo con valore, badge con riga senza valore.
 - Consumes: `translationsUrlParamsToFilterModel(props.urlParams)` e `translationsFilterModelToSearchParams`.
 
-- [ ] **Step 1: Scrivere il test fallente del renderer**
+- [✅] **Step 1: Scrivere il test fallente del renderer**
 
 ```tsx
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -329,13 +329,13 @@ it('renders the missing badge only for a loaded row without a value', () => {
 })
 ```
 
-- [ ] **Step 2: Eseguire il test e verificare il fallimento corretto**
+- [✅] **Step 2: Eseguire il test e verificare il fallimento corretto**
 
 Run: `npm test -- components/i18n/translations/TranslationValueCell.test.tsx`
 
 Expected: FAIL perché il componente non esiste.
 
-- [ ] **Step 3: Implementare il renderer minimo**
+- [✅] **Step 3: Implementare il renderer minimo**
 
 ```tsx
 export default function TranslationValueCell({ row, code, missingLabel }: Props) {
@@ -346,7 +346,7 @@ export default function TranslationValueCell({ row, code, missingLabel }: Props)
 }
 ```
 
-- [ ] **Step 4: Abilitare i filtri standard sulle colonne richieste**
+- [✅] **Step 4: Abilitare i filtri standard sulle colonne richieste**
 
 ```tsx
 const textFilter = {
@@ -369,13 +369,13 @@ const textFilter = {
 
 Usare `props.urlParams` per il filter model iniziale. Il callback `onFilterChanged` deve continuare a sostituire/azzerare tutti i parametri dei filtri tramite l'helper della Task 2.
 
-- [ ] **Step 5: Eseguire i test mirati**
+- [✅] **Step 5: Eseguire i test mirati**
 
 Run: `npm test -- components/i18n/translations/TranslationValueCell.test.tsx components/rbac/GridRowActionsMenu.test.ts lib/i18n/translations-grid-query.test.ts lib/i18n/translation-service.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 6: Eseguire verifica statica e suite completa**
+- [✅] **Step 6: Eseguire verifica statica e suite completa**
 
 Run: `npm run lint`
 
@@ -389,7 +389,7 @@ Run: `npm run build`
 
 Expected: build Next.js completata con exit 0.
 
-- [ ] **Step 7: Committare i file finali della task**
+- [✅] **Step 7: Committare i file finali della task**
 
 ```bash
 git add sources/microservices/web-construct/components/i18n/translations/TranslationValueCell.tsx sources/microservices/web-construct/components/i18n/translations/TranslationValueCell.test.tsx sources/microservices/web-construct/components/i18n/translations/TranslationsTableClient.tsx
@@ -406,11 +406,11 @@ git commit -m "fix(i18n): complete translations grid filters"
 - Consumes: risultati reali di test, lint e build.
 - Produces: checklist marcate `- [✅]` esclusivamente per requisiti e passi completati e verificati.
 
-- [ ] **Step 1: Marcare i requisiti e i passi realmente completati**
+- [✅] **Step 1: Marcare i requisiti e i passi realmente completati**
 
 Sostituire `- [ ]` con `- [✅]` soltanto per gli item coperti da implementazione e verifica riuscita, mantenendo invariati ID e titoli.
 
-- [ ] **Step 2: Verificare il diff complessivo e l'assenza di errori whitespace**
+- [✅] **Step 2: Verificare il diff complessivo e l'assenza di errori whitespace**
 
 Run: `git diff --check`
 
@@ -420,7 +420,7 @@ Run: `git status --short`
 
 Expected: mostra soltanto eventuali modifiche locali preesistenti non incluse nei commit della feature e gli aggiornamenti di tracciamento non ancora committati.
 
-- [ ] **Step 3: Committare il tracciamento finale**
+- [✅] **Step 3: Committare il tracciamento finale**
 
 ```bash
 git add docs/superpowers/specs/2026-07-30-translations-grid-corrections-design.md docs/superpowers/plans/2026-07-30-translations-grid-corrections.md

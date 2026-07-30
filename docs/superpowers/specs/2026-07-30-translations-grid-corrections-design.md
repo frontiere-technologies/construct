@@ -6,12 +6,12 @@ La griglia Traduzioni adotterà il comportamento standard delle altre griglie pe
 
 ## Requisiti
 
-- [ ] ID=GRID-1, Priority=P1, Title=Ridimensionamento uniforme, Fix description=Tutte le colonne dati delle griglie devono essere ridimensionabili; la colonna azioni resta fissa e non ridimensionabile.
-- [ ] ID=GRID-2, Priority=P1, Title=Intestazione azioni vuota, Fix description=La colonna azioni non deve mostrare il titolo `...`.
-- [ ] ID=FILTER-1, Priority=P1, Title=Filtro Descrizione, Fix description=La colonna Descrizione della pagina Traduzioni deve offrire il filtro testuale standard AG Grid con applicazione e reset.
-- [ ] ID=FILTER-2, Priority=P1, Title=Filtri lingue, Fix description=Ogni colonna associata a una lingua attiva, incluse English e Italiano, deve offrire lo stesso filtro testuale standard.
-- [ ] ID=FILTER-3, Priority=P1, Title=Filtri server-side, Fix description=I filtri per Descrizione e lingue devono essere applicati nel database e conservati nei parametri URL, inclusi due criteri combinati con AND oppure OR.
-- [ ] ID=LOAD-1, Priority=P1, Title=Nessun falso Mancante, Fix description=Il badge “Mancante” deve essere mostrato solo per righe caricate che non hanno un valore nella lingua, mai per placeholder o righe ancora prive di dati durante il caricamento.
+- [✅] ID=GRID-1, Priority=P1, Title=Ridimensionamento uniforme, Fix description=Tutte le colonne dati delle griglie devono essere ridimensionabili; la colonna azioni resta fissa e non ridimensionabile.
+- [✅] ID=GRID-2, Priority=P1, Title=Intestazione azioni vuota, Fix description=La colonna azioni non deve mostrare il titolo `...`.
+- [✅] ID=FILTER-1, Priority=P1, Title=Filtro Descrizione, Fix description=La colonna Descrizione della pagina Traduzioni deve offrire il filtro testuale standard AG Grid con applicazione e reset.
+- [✅] ID=FILTER-2, Priority=P1, Title=Filtri lingue, Fix description=Ogni colonna associata a una lingua attiva, incluse English e Italiano, deve offrire lo stesso filtro testuale standard.
+- [✅] ID=FILTER-3, Priority=P1, Title=Filtri server-side, Fix description=I filtri per Descrizione e lingue devono essere applicati nel database e conservati nei parametri URL, inclusi due criteri combinati con AND oppure OR.
+- [✅] ID=LOAD-1, Priority=P1, Title=Nessun falso Mancante, Fix description=Il badge “Mancante” deve essere mostrato solo per righe caricate che non hanno un valore nella lingua, mai per placeholder o righe ancora prive di dati durante il caricamento.
 
 ## Architettura e componenti
 
@@ -29,11 +29,11 @@ La serializzazione URL userà parametri separati per ciascuna colonna, evitando 
 
 Il datasource convertirà il modello AG Grid in una `TranslationsQuery` contenente:
 
-- [ ] il filtro della chiave;
-- [ ] il filtro della descrizione;
-- [ ] una mappa di filtri per codice lingua;
-- [ ] i filtri esistenti per namespace, modulo, lingua e stato;
-- [ ] ordinamento e paginazione esistenti.
+- [✅] il filtro della chiave;
+- [✅] il filtro della descrizione;
+- [✅] una mappa di filtri per codice lingua;
+- [✅] i filtri esistenti per namespace, modulo, lingua e stato;
+- [✅] ordinamento e paginazione esistenti.
 
 `listTranslations` applicherà i filtri prima del conteggio e della paginazione. Il filtro Descrizione userà una condizione case-insensitive sulla colonna `translation_key.description`. Ogni filtro lingua userà una sottoquery correlata sulla relativa `translation_value`, vincolata alla lingua richiesta; più filtri di colonna saranno combinati con AND, mentre l'AND/OR interno a ciascun filtro resterà quello scelto nel pannello AG Grid.
 
@@ -55,12 +55,12 @@ Il datasource manterrà il comportamento attuale: risposte HTTP non valide o err
 
 ## Strategia di test
 
-- [ ] ID=TEST-1, Verificare che le colonne dati ereditino il ridimensionamento e che la colonna azioni resti non ridimensionabile con intestazione vuota.
-- [ ] ID=TEST-2, Verificare la conversione AG Grid → query per Descrizione e per una o più lingue, inclusi i criteri AND/OR.
-- [ ] ID=TEST-3, Verificare il round-trip dei nuovi filtri attraverso i parametri URL.
-- [ ] ID=TEST-4, Verificare le condizioni database per Descrizione e valori lingua senza alterare conteggio o paginazione.
+- [✅] ID=TEST-1, Verificare che le colonne dati ereditino il ridimensionamento e che la colonna azioni resti non ridimensionabile con intestazione vuota.
+- [✅] ID=TEST-2, Verificare la conversione AG Grid → query per Descrizione e per una o più lingue, inclusi i criteri AND/OR.
+- [✅] ID=TEST-3, Verificare il round-trip dei nuovi filtri attraverso i parametri URL.
+- [✅] ID=TEST-4, Verificare le condizioni database per Descrizione e valori lingua senza alterare conteggio o paginazione.
 - [ ] ID=TEST-5, Verificare che il renderer non mostri “Mancante” senza `data` e continui a mostrarlo per una riga realmente priva di valore.
-- [ ] ID=TEST-6, Eseguire i test unitari mirati, la suite completa, lint e type/build check disponibili nel progetto.
+- [✅] ID=TEST-6, Eseguire i test unitari mirati, la suite completa, lint e type/build check disponibili nel progetto.
 
 L'implementazione seguirà cicli test-first: ogni comportamento sarà introdotto da un test che fallisce per il motivo atteso, seguito dalla modifica minima e dalla verifica della suite.
 
