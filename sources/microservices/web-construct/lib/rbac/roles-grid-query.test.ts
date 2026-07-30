@@ -101,6 +101,15 @@ describe('rolesUrlParamsToFilterModel / rolesFilterModelToSearchParams', () => {
     })
   })
 
+  it('restores a one-sided created date as a greater-than-or-equal grid model', () => {
+    expect(rolesUrlParamsToFilterModel({
+      search: '', hasPermission: null, startDateIns: '2026-07-01', endDateIns: null,
+      sortField: 'id', sortDir: 'ASC',
+    })).toMatchObject({
+      dateIns: { filterType: 'date', type: 'greaterThanOrEqual', dateFrom: '2026-07-01' },
+    })
+  })
+
   it('serialises both AND conditions for URL navigation', () => {
     expect(rolesFilterModelToSearchParams({
       description: { operator: 'AND', conditions: [{ filter: 'admin' }, { filter: 'service' }] },

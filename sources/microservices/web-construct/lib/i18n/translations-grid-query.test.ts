@@ -155,10 +155,12 @@ describe('translations URL round-trip', () => {
     })
   })
 
-  it('drops a one-sided updated-date URL range before constructing AG Grid state', () => {
+  it('restores a one-sided updated-date URL range as a valid AG Grid model', () => {
     const params = parseTranslationsGridUrlParams({ updatedTo: '2026-07-30' }, ['en'])
 
-    expect(translationsUrlParamsToFilterModel(params)).toEqual({})
+    expect(translationsUrlParamsToFilterModel(params)).toEqual({
+      updatedAt: { filterType: 'date', type: 'lessThanOrEqual', dateFrom: '2026-07-30' },
+    })
   })
 
   it('keeps dynamic filters only for active language codes', () => {
@@ -166,5 +168,12 @@ describe('translations URL round-trip', () => {
 
     expect(params).toMatchObject({ value_en: 'save' })
     expect(params).not.toHaveProperty('value_fr')
+  })
+
+  it('drops an inactive language enum while preserving status', () => {
+    const params = parseTranslationsGridUrlParams({ language: 'fr', status: 'missing' }, ['en'])
+
+    expect(params).toMatchObject({ language: null, status: 'missing' })
+    expect(translationsUrlParamsToFilterModel(params)).toEqual({ status: { value: 'missing' } })
   })
 })

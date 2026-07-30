@@ -4,14 +4,15 @@ import {
   searchParamsToGridTextFilter,
   type GridTextFilterModel, type TextSearchOperator,
 } from '@/lib/grid-text-search'
+import { dateRangeToGridFilter, gridDateFilterToRange, type GridDateFilterModel } from '@/lib/grid-filter-models'
 
 export interface UsersGridFilterModel {
   firstName?: GridTextFilterModel
   email?: GridTextFilterModel
   roles?: { value?: number | string }
   status?: { value?: number | string }
-  dateIns?: { dateFrom?: string; dateTo?: string }
-  dateMod?: { dateFrom?: string; dateTo?: string }
+  dateIns?: GridDateFilterModel
+  dateMod?: GridDateFilterModel
 }
 
 export interface UsersGridSortItem { colId: string; sort: 'asc' | 'desc' }
@@ -23,8 +24,8 @@ export function buildUsersGridQuery(
   filterModel: UsersGridFilterModel,
 ): UsersQuery {
   const sortItem = sortModel[0]
-  const createdDateFilter = filterModel.dateIns
-  const updatedDateFilter = filterModel.dateMod
+  const createdDateRange = gridDateFilterToRange(filterModel.dateIns)
+  const updatedDateRange = gridDateFilterToRange(filterModel.dateMod)
   return {
     page: Math.floor(startRow / pageSize),
     size: pageSize,
@@ -32,10 +33,10 @@ export function buildUsersGridQuery(
     emailSearch: gridTextFilterToSearch(filterModel.email),
     roleIds: filterModel.roles?.value != null ? [Number(filterModel.roles.value)] : undefined,
     statuses: filterModel.status?.value != null ? [Number(filterModel.status.value) as UserStatusId] : undefined,
-    createdFrom: createdDateFilter?.dateFrom?.slice(0, 10),
-    createdTo: createdDateFilter?.dateTo?.slice(0, 10),
-    updatedFrom: updatedDateFilter?.dateFrom?.slice(0, 10),
-    updatedTo: updatedDateFilter?.dateTo?.slice(0, 10),
+    createdFrom: createdDateRange?.from,
+    createdTo: createdDateRange?.to,
+    updatedFrom: updatedDateRange?.from,
+    updatedTo: updatedDateRange?.to,
     sort: (sortItem?.colId as UsersQuery['sort']) ?? 'dateIns',
     direction: sortItem ? (sortItem.sort === 'asc' ? 'ASC' : 'DESC') : 'DESC',
   }
@@ -77,8 +78,10 @@ export function usersUrlParamsToFilterModel(p: UsersUrlParams): UsersGridFilterM
   if (emailTextFilter) model.email = emailTextFilter
   if (p.roleId != null) model.roles = { value: p.roleId }
   if (p.statusId != null) model.status = { value: p.statusId }
-  if (p.createdFrom || p.createdTo) model.dateIns = { dateFrom: p.createdFrom ?? undefined, dateTo: p.createdTo ?? undefined }
-  if (p.updatedFrom || p.updatedTo) model.dateMod = { dateFrom: p.updatedFrom ?? undefined, dateTo: p.updatedTo ?? undefined }
+  const createdFilter = dateRangeToGridFilter({ from: p.createdFrom ?? undefined, to: p.createdTo ?? undefined })
+  const updatedFilter = dateRangeToGridFilter({ from: p.updatedFrom ?? undefined, to: p.updatedTo ?? undefined })
+  if (createdFilter) model.dateIns = createdFilter
+  if (updatedFilter) model.dateMod = updatedFilter
   return model
 }
 
@@ -95,9 +98,9 @@ export function usersFilterModelToSearchParams(filterModel: UsersGridFilterModel
     emailSearchOperator: emailSearchParams.searchOperator,
     roleIds: filterModel.roles?.value != null ? String(filterModel.roles.value) : null,
     statuses: filterModel.status?.value != null ? String(filterModel.status.value) : null,
-    createdFrom: filterModel.dateIns?.dateFrom ? filterModel.dateIns.dateFrom.slice(0, 10) : null,
-    createdTo: filterModel.dateIns?.dateTo ? filterModel.dateIns.dateTo.slice(0, 10) : null,
-    updatedFrom: filterModel.dateMod?.dateFrom ? filterModel.dateMod.dateFrom.slice(0, 10) : null,
-    updatedTo: filterModel.dateMod?.dateTo ? filterModel.dateMod.dateTo.slice(0, 10) : null,
+    createdFrom: gridDateFilterToRange(filterModel.dateIns)?.from ?? null,
+    createdTo: gridDateFilterToRange(filterModel.dateIns)?.to ?? null,
+    updatedFrom: gridDateFilterToRange(filterModel.dateMod)?.from ?? null,
+    updatedTo: gridDateFilterToRange(filterModel.dateMod)?.to ?? null,
   }
 }

@@ -39,9 +39,17 @@ describe('grid filter models', () => {
     expect(gridDateFilterToRange(model)).toEqual({ from: '2026-07-01', to: '2026-07-30' })
   })
 
-  it('does not build an invalid AG Grid date model from one URL bound', () => {
-    expect(dateRangeToGridFilter({ from: '2026-07-01' })).toBeUndefined()
-    expect(dateRangeToGridFilter({ to: '2026-07-30' })).toBeUndefined()
+  it('builds real AG Grid models for all supported date range shapes', () => {
+    expect(dateRangeToGridFilter({ from: '2026-07-01' })).toEqual({
+      filterType: 'date', type: 'greaterThanOrEqual', dateFrom: '2026-07-01',
+    })
+    expect(dateRangeToGridFilter({ to: '2026-07-30' })).toEqual({
+      filterType: 'date', type: 'lessThanOrEqual', dateFrom: '2026-07-30',
+    })
+    expect(gridDateFilterToRange({ filterType: 'date', type: 'greaterThanOrEqual', dateFrom: '2026-07-01' }))
+      .toEqual({ from: '2026-07-01' })
+    expect(gridDateFilterToRange({ filterType: 'date', type: 'lessThanOrEqual', dateFrom: '2026-07-30' }))
+      .toEqual({ to: '2026-07-30' })
   })
 
   it('strips timestamps from a grid date filter', () => {

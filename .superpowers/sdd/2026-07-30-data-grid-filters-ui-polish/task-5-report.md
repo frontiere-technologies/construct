@@ -24,3 +24,11 @@ Esclusi dal commit: la modifica locale a `translation-actions.integration.test.t
 - IMP-4: il service Traduzioni aggiunge il tie-breaker `id_translation_key`, legge pagina e totale in transazione read-only `REPEATABLE READ` e difende il limite massimo della data prima di calcolare il giorno successivo.
 
 Verifiche del fix round: 105 test mirati superati, `npx tsc --noEmit` superato; lint senza errori e con 4 warning preesistenti non correlati.
+
+## Fix round 2/5
+
+- IMP-2 residuo: il sanitizer URL ora whitelist anche il filtro enum `language` contro i codici attivi, preservando gli altri filtri validi.
+- NEW-IMP-1: il primitive data condiviso supporta modelli AG Grid reali per intervallo, solo limite inferiore e solo limite superiore; Users, Roles, Languages e Traduzioni serializzano gli stessi contratti.
+- `DATE_FILTER` espone esattamente le tre operazioni consentite.
+
+Verifiche del fix round: 126 test mirati superati, `npx tsc --noEmit` superato; lint senza errori e con 4 warning preesistenti non correlati.

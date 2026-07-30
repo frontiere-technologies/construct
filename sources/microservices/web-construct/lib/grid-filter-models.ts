@@ -11,7 +11,7 @@ export interface NumberRange {
 
 export interface GridDateFilterModel {
   filterType?: 'date'
-  type?: 'inRange'
+  type?: 'inRange' | 'greaterThanOrEqual' | 'lessThanOrEqual'
   dateFrom?: string
   dateTo?: string
 }
@@ -38,6 +38,8 @@ export function numberRangeToGridFilter(range?: NumberRange): GridNumberFilterMo
 
 export function gridDateFilterToRange(model?: GridDateFilterModel): DateRange | undefined {
   if (!model?.dateFrom && !model?.dateTo) return undefined
+  if (model.type === 'greaterThanOrEqual') return model.dateFrom ? { from: model.dateFrom.slice(0, 10) } : undefined
+  if (model.type === 'lessThanOrEqual') return model.dateFrom ? { to: model.dateFrom.slice(0, 10) } : undefined
 
   return {
     from: model.dateFrom?.slice(0, 10),
@@ -46,12 +48,20 @@ export function gridDateFilterToRange(model?: GridDateFilterModel): DateRange | 
 }
 
 export function dateRangeToGridFilter(range?: DateRange): GridDateFilterModel | undefined {
-  if (!range?.from || !range?.to) return undefined
-
-  return {
-    filterType: 'date',
-    type: 'inRange',
-    dateFrom: range.from?.slice(0, 10),
-    dateTo: range.to?.slice(0, 10),
+  if (range?.from && range.to) {
+    return {
+      filterType: 'date',
+      type: 'inRange',
+      dateFrom: range.from.slice(0, 10),
+      dateTo: range.to.slice(0, 10),
+    }
   }
+  if (range?.from) {
+    return { filterType: 'date', type: 'greaterThanOrEqual', dateFrom: range.from.slice(0, 10) }
+  }
+  if (range?.to) {
+    return { filterType: 'date', type: 'lessThanOrEqual', dateFrom: range.to.slice(0, 10) }
+  }
+
+  return undefined
 }

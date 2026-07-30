@@ -137,7 +137,9 @@ describe('languages URL round-trip', () => {
     })
 
     expect(parsed).toMatchObject({ createdFrom: '9999-12-30', createdTo: null })
-    expect(languagesUrlParamsToFilterModel(parsed)).toEqual({})
+    expect(languagesUrlParamsToFilterModel(parsed)).toEqual({
+      createdAt: { filterType: 'date', type: 'greaterThanOrEqual', dateFrom: '9999-12-30' },
+    })
   })
 
   it('accepts only supported sort fields and exact direction values', () => {

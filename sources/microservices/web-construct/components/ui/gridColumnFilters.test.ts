@@ -16,10 +16,10 @@ describe('shared grid filter presets', () => {
     })
   })
 
-  it('uses a range-only date filter with explicit apply and reset controls', () => {
+  it('uses the exact date operations supported by the shared date model', () => {
     expect(DATE_FILTER).toMatchObject({
       filter: 'agDateColumnFilter',
-      filterParams: { filterOptions: ['inRange'], buttons: ['apply', 'reset'] },
+      filterParams: { filterOptions: ['inRange', 'greaterThanOrEqual', 'lessThanOrEqual'], buttons: ['apply', 'reset'] },
     })
   })
 })

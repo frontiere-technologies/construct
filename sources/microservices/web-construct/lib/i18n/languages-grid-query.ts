@@ -109,6 +109,10 @@ function orderedRange<T extends number | string>(
   return [min, max]
 }
 
+function orderedDateRange(from: string | null, to: string | null): [string | null, string | null] {
+  return from != null && to != null && from > to ? [null, null] : [from, to]
+}
+
 export function parseLanguagesGridUrlParams(params: Record<string, string | undefined>): LanguagesUrlParams {
   const sort = params.sort as LanguagesQuery['sort'] | undefined
   const [translatedMin, translatedMax] = orderedRange(
@@ -117,7 +121,7 @@ export function parseLanguagesGridUrlParams(params: Record<string, string | unde
   const [missingMin, missingMax] = orderedRange(
     parseCount(params.missingMin), parseCount(params.missingMax),
   )
-  const [createdFrom, createdTo] = orderedRange(
+  const [createdFrom, createdTo] = orderedDateRange(
     parseDate(params.createdFrom),
     (() => {
       const value = parseDate(params.createdTo)

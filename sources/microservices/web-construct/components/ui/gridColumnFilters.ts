@@ -19,7 +19,7 @@ export const NUMBER_FILTER: Partial<ColDef> = {
 export const DATE_FILTER: Partial<ColDef> = {
   filter: 'agDateColumnFilter',
   filterParams: {
-    filterOptions: ['inRange'],
+    filterOptions: ['inRange', 'greaterThanOrEqual', 'lessThanOrEqual'],
     buttons: ['apply', 'reset'],
   },
 }

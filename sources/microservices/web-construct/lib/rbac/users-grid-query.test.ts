@@ -83,6 +83,15 @@ describe('usersUrlParamsToFilterModel / usersFilterModelToSearchParams', () => {
     })
   })
 
+  it('restores a one-sided updated date as a valid AG Grid model', () => {
+    expect(usersUrlParamsToFilterModel({
+      search: '', roleId: null, statusId: null, createdFrom: null, createdTo: null,
+      updatedFrom: null, updatedTo: '2026-07-30', sortField: 'dateIns', sortDir: 'DESC',
+    })).toMatchObject({
+      dateMod: { filterType: 'date', type: 'lessThanOrEqual', dateFrom: '2026-07-30' },
+    })
+  })
+
   it('serialises both OR conditions so navigation does not discard the compound filter', () => {
     expect(usersFilterModelToSearchParams({
       firstName: {

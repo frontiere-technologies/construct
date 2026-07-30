@@ -97,7 +97,7 @@ function parseDate(value: string | undefined): string | null {
 }
 
 function orderedDateRange(from: string | null, to: string | null): [string | null, string | null] {
-  return !from || !to || from > to ? [null, null] : [from, to]
+  return from != null && to != null && from > to ? [null, null] : [from, to]
 }
 
 /** Converts untrusted URL values into the subset AG Grid can safely render. */
@@ -122,7 +122,7 @@ export function parseTranslationsGridUrlParams(
       : null,
     namespace: params.namespace || null,
     module: params.module || null,
-    language: /^[a-z]{2,3}$/.test(params.language ?? '') ? params.language! : null,
+    language: activeCodes.has(params.language ?? '') ? params.language! : null,
     status: params.status === 'all' || params.status === 'missing' || params.status === 'complete' ? params.status : null,
     updatedFrom,
     updatedTo,
