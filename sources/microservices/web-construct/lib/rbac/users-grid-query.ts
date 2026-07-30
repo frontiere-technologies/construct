@@ -58,6 +58,17 @@ export interface UsersUrlParams {
   sortDir: 'ASC' | 'DESC'
 }
 
+export function parseUsersGridIntegerParam(value: string | undefined): number | null {
+  if (!value) return null
+  const parsed = Number(value.split(',')[0])
+  return Number.isFinite(parsed) && Number.isInteger(parsed) ? parsed : null
+}
+
+export function parseUsersGridStatusParam(value: string | undefined): UserStatusId | null {
+  const parsed = parseUsersGridIntegerParam(value)
+  return parsed === 1 || parsed === 2 ? parsed : null
+}
+
 export function usersUrlParamsToFilterModel(p: UsersUrlParams): UsersGridFilterModel {
   const model: UsersGridFilterModel = {}
   const nameTextFilter = searchParamsToGridTextFilter(p.search, p.search2, p.searchOperator)

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { buildUsersGridQuery, usersUrlParamsToFilterModel, usersFilterModelToSearchParams } from './users-grid-query'
+import {
+  buildUsersGridQuery, parseUsersGridIntegerParam,
+  usersUrlParamsToFilterModel, usersFilterModelToSearchParams,
+} from './users-grid-query'
 
 describe('buildUsersGridQuery', () => {
   it('defaults to page 0, dateIns/DESC sort, no filters', () => {
@@ -60,6 +63,14 @@ describe('buildUsersGridQuery', () => {
 describe('usersUrlParamsToFilterModel / usersFilterModelToSearchParams', () => {
   it('produces an empty model when nothing is set', () => {
     expect(usersUrlParamsToFilterModel({ search: '', roleId: null, statusId: null, createdFrom: null, createdTo: null, sortField: 'dateIns', sortDir: 'DESC' })).toEqual({})
+  })
+
+  it('omits an invalid role id from URL parameters instead of creating a NaN filter', () => {
+    const roleId = parseUsersGridIntegerParam('NaN')
+    const model = usersUrlParamsToFilterModel({ search: '', roleId, statusId: null, createdFrom: null, createdTo: null, sortField: 'dateIns', sortDir: 'DESC' })
+
+    expect(roleId).toBeNull()
+    expect(model.roles).toBeUndefined()
   })
 
   it('round-trips filter values through both directions', () => {
