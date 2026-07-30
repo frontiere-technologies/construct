@@ -18,6 +18,7 @@ import type { TranslationRowDto } from '@/lib/i18n/types'
 import { createTranslationsDatasource } from './translationsDatasource'
 import TranslationEditorDrawer from './TranslationEditorDrawer'
 import CreateTranslationKeyModal from './CreateTranslationKeyModal'
+import TranslationValueCell from './TranslationValueCell'
 
 interface Props {
   /** Full URL state, including dynamic value_<languageCode> filters (Task 4 consumes it). */
@@ -35,13 +36,9 @@ interface Props {
   modules: string[]
 }
 
-// The row's `values` map is keyed by DB-sourced language codes and arrives
-// over JSON, so it is a plain object by the time it reaches the grid —
-// `Object.hasOwn` keeps a lookup for an unexpected code (e.g. `constructor`)
-// from resolving to an inherited Object.prototype member instead of "missing".
-function valueFor(row: TranslationRowDto | undefined, code: string): string | undefined {
-  if (!row || !Object.hasOwn(row.values, code)) return undefined
-  return row.values[code].value
+const textFilter = {
+  filter: 'agTextColumnFilter' as const,
+  filterParams: { filterOptions: ['contains'], buttons: ['apply', 'reset'] },
 }
 
 export default function TranslationsTableClient(props: Props) {
@@ -67,12 +64,11 @@ export default function TranslationsTableClient(props: Props) {
     ]),
     {
       field: 'key', headerName: t('translation.key'), sortable: true,
-      filter: 'agTextColumnFilter',
-      filterParams: { filterOptions: ['contains'], buttons: ['apply', 'reset'] },
+      ...textFilter,
       minWidth: 260,
       cellRenderer: (p: { data?: TranslationRowDto }) => p.data ? <span className="font-mono text-xs">{p.data.key}</span> : null,
     },
-    { field: 'description', headerName: t('translation.description'), sortable: false, filter: false, minWidth: 200 },
+    { field: 'description', headerName: t('translation.description'), sortable: false, ...textFilter, minWidth: 200 },
     {
       colId: 'namespace', field: 'namespace', headerName: t('translation.namespace'), sortable: true,
       filter: EnumSelectFilter,
@@ -90,15 +86,12 @@ export default function TranslationsTableClient(props: Props) {
       colId: `value_${language.code}`,
       headerName: language.nativeName,
       sortable: false,
-      filter: false,
+      ...textFilter,
       minWidth: 200,
-      valueGetter: p => valueFor(p.data, language.code) ?? '',
-      cellRenderer: (p: { data?: TranslationRowDto }) => {
-        const value = valueFor(p.data, language.code)
-        return value
-          ? <span>{value}</span>
-          : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">{t('translation.missing')}</span>
-      },
+      valueGetter: p => p.data && Object.hasOwn(p.data.values, language.code) ? p.data.values[language.code].value : '',
+      cellRenderer: (p: { data?: TranslationRowDto }) => (
+        <TranslationValueCell row={p.data} code={language.code} missingLabel={t('translation.missing')} />
+      ),
     })),
     {
       colId: 'status', headerName: t('translation.status'), sortable: false, filter: EnumSelectFilter,
@@ -161,7 +154,7 @@ export default function TranslationsTableClient(props: Props) {
         columnDefs={columnDefs}
         datasource={datasource}
         getRowId={r => String(r.id)}
-        initialFilterModel={translationsUrlParamsToFilterModel(props) as Record<string, unknown>}
+        initialFilterModel={translationsUrlParamsToFilterModel(props.urlParams) as Record<string, unknown>}
         initialSortModel={translationsUrlParamsToSortModel(props)}
         onFilterChanged={(e: FilterChangedEvent<TranslationRowDto>) =>
           setParam(translationsFilterModelToSearchParams(
