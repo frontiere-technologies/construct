@@ -21,6 +21,12 @@ const rowWithEnglish: TranslationRowDto = {
   missingCodes: [],
 }
 
+const rowWithEmptyEnglish: TranslationRowDto = {
+  ...rowWithoutEnglish,
+  values: { en: { id: 3, value: '', version: 1 } },
+  missingCodes: ['en'],
+}
+
 describe('TranslationValueCell', () => {
   it('renders nothing while row data is unavailable', () => {
     expect(renderToStaticMarkup(
@@ -37,6 +43,12 @@ describe('TranslationValueCell', () => {
   it('renders the missing badge only for a loaded row without a value', () => {
     expect(renderToStaticMarkup(
       <TranslationValueCell row={rowWithoutEnglish} code="en" missingLabel="Missing" />,
+    )).toContain('Missing')
+  })
+
+  it('renders the missing badge for a loaded row with a present but empty value', () => {
+    expect(renderToStaticMarkup(
+      <TranslationValueCell row={rowWithEmptyEnglish} code="en" missingLabel="Missing" />,
     )).toContain('Missing')
   })
 })

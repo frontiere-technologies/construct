@@ -59,7 +59,7 @@ Il datasource manterrà il comportamento attuale: risposte HTTP non valide o err
 - [✅] ID=TEST-2, Verificare la conversione AG Grid → query per Descrizione e per una o più lingue, inclusi i criteri AND/OR.
 - [✅] ID=TEST-3, Verificare il round-trip dei nuovi filtri attraverso i parametri URL.
 - [✅] ID=TEST-4, Verificare le condizioni database per Descrizione e valori lingua senza alterare conteggio o paginazione.
-- [ ] ID=TEST-5, Verificare che il renderer non mostri “Mancante” senza `data` e continui a mostrarlo per una riga realmente priva di valore.
+- [✅] ID=TEST-5, Verificare che il renderer non mostri “Mancante” senza `data` e continui a mostrarlo per una riga realmente priva di valore.
 - [✅] ID=TEST-6, Eseguire i test unitari mirati, la suite completa, lint e type/build check disponibili nel progetto.
 
 L'implementazione seguirà cicli test-first: ogni comportamento sarà introdotto da un test che fallisce per il motivo atteso, seguito dalla modifica minima e dalla verifica della suite.

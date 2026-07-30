@@ -1,7 +1,11 @@
 import type { LanguagesQuery } from './types'
+import {
+  gridTextFilterToSearch, gridTextFilterToSearchParams, searchParamsToGridTextFilter,
+  type GridTextFilterModel, type TextSearchOperator,
+} from '@/lib/grid-text-search'
 
 export interface LanguagesGridFilterModel {
-  name?: { filter?: string }
+  name?: GridTextFilterModel
   isActive?: { value?: string | number }
 }
 
@@ -18,7 +22,7 @@ export function buildLanguagesGridQuery(
   return {
     page: Math.floor(startRow / pageSize),
     size: pageSize,
-    search: filterModel.name?.filter || undefined,
+    search: gridTextFilterToSearch(filterModel.name),
     isActive: activeValue === 'true' ? true : activeValue === 'false' ? false : undefined,
     sort: (sortItem?.colId as LanguagesQuery['sort']) ?? 'code',
     direction: sortItem ? (sortItem.sort === 'asc' ? 'ASC' : 'DESC') : 'ASC',
@@ -27,6 +31,8 @@ export function buildLanguagesGridQuery(
 
 export interface LanguagesUrlParams {
   search: string
+  search2?: string
+  searchOperator?: TextSearchOperator | null
   isActive: boolean | null
   sortField: string
   sortDir: 'ASC' | 'DESC'
@@ -34,7 +40,8 @@ export interface LanguagesUrlParams {
 
 export function languagesUrlParamsToFilterModel(p: LanguagesUrlParams): LanguagesGridFilterModel {
   const model: LanguagesGridFilterModel = {}
-  if (p.search) model.name = { filter: p.search }
+  const textFilter = searchParamsToGridTextFilter(p.search, p.search2, p.searchOperator)
+  if (textFilter) model.name = textFilter
   if (p.isActive != null) model.isActive = { value: String(p.isActive) }
   return model
 }
@@ -45,7 +52,7 @@ export function languagesUrlParamsToSortModel(p: LanguagesUrlParams): LanguagesG
 
 export function languagesFilterModelToSearchParams(model: LanguagesGridFilterModel): Record<string, string | null> {
   return {
-    search: model.name?.filter || null,
+    ...gridTextFilterToSearchParams(model.name),
     isActive: model.isActive?.value != null ? String(model.isActive.value) : null,
   }
 }

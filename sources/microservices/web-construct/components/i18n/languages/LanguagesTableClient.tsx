@@ -20,6 +20,8 @@ import LanguageFormModal from './LanguageFormModal'
 
 interface Props {
   search: string
+  search2: string
+  searchOperator: 'AND' | 'OR' | null
   isActive: boolean | null
   sortField: string
   sortDir: 'ASC' | 'DESC'

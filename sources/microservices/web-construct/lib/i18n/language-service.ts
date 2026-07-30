@@ -1,9 +1,10 @@
 import { cache } from 'react'
-import { and, asc, count, desc, eq, ne, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ne, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { FALLBACK_LANGUAGE, type LanguageDto, type LanguagePageItemDto, type LanguagesPage, type LanguagesQuery } from './types'
+import { normalizeTextSearch } from '@/lib/grid-text-search'
 
 const log = createLogger('i18n-language-service')
 
@@ -116,7 +117,19 @@ function sortColumnFor(sort: LanguagesQuery['sort']) {
  */
 export async function listLanguagesPage(query: LanguagesQuery): Promise<LanguagesPage> {
   const conditions: SQL[] = []
-  if (query.search) conditions.push(sql`(${appLanguage.name} ilike ${'%' + query.search + '%'} or ${appLanguage.nativeName} ilike ${'%' + query.search + '%'} or ${appLanguage.code} ilike ${'%' + query.search + '%'} or ${appLanguage.locale} ilike ${'%' + query.search + '%'})`)
+  const textSearch = normalizeTextSearch(query.search)
+  if (textSearch) {
+    const termConditions = textSearch.conditions.map(term => {
+      const pattern = `%${term}%`
+      return or(
+        sql`${appLanguage.name} ilike ${pattern}`,
+        sql`${appLanguage.nativeName} ilike ${pattern}`,
+        sql`${appLanguage.code} ilike ${pattern}`,
+        sql`${appLanguage.locale} ilike ${pattern}`,
+      )!
+    })
+    conditions.push((textSearch.operator === 'OR' ? or(...termConditions) : and(...termConditions))!)
+  }
   if (query.isActive != null) conditions.push(eq(appLanguage.isActive, query.isActive))
   const where = conditions.length ? and(...conditions) : undefined
 

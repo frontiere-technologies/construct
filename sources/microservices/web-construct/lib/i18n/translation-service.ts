@@ -6,7 +6,7 @@ import { listActiveLanguages } from './language-service'
 import type {
   LanguageDto, TranslationRowDto, TranslationsPage, TranslationsQuery, TranslationValueDto,
 } from './types'
-import { normalizeTextSearch } from '@/lib/grid-text-search'
+import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 
 const SORT_COLUMN = {
   key: translationKey.key,
@@ -60,7 +60,9 @@ export function applyTranslationFilters(query: TranslationsQuery, languages: Lan
   const addTextSearch = (search: TranslationsQuery['search'], column: Parameters<typeof ilike>[0]) => {
     const textSearch = normalizeTextSearch(search)
     if (!textSearch) return
-    const termConditions = textSearch.conditions.map(term => ilike(column, `%${term}%`))
+    const termConditions = textSearch.conditions.map(term =>
+      sql`${column} ilike ${`%${escapeLikePattern(term)}%`} escape '\\'`,
+    )
     conditions.push((textSearch.operator === 'OR' ? or(...termConditions) : and(...termConditions))!)
   }
 

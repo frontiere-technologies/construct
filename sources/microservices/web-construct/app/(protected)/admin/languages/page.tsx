@@ -17,6 +17,8 @@ export default async function LanguagesPage({ searchParams }: { searchParams: Pr
     <PageContainer title={t('language.title')} subtitle={t('language.subtitle')}>
       <LanguagesTableClient
         search={sp.search ?? ''}
+        search2={sp.search2 ?? ''}
+        searchOperator={sp.searchOperator === 'OR' ? 'OR' : sp.searchOperator === 'AND' ? 'AND' : null}
         isActive={sp.isActive === 'true' ? true : sp.isActive === 'false' ? false : null}
         sortField={sp.sort ?? 'code'}
         sortDir={(sp.direction as 'ASC' | 'DESC') ?? 'ASC'}

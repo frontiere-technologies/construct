@@ -11,6 +11,11 @@ describe('buildLanguagesGridQuery', () => {
   it('maps the name text filter to `search`', () => {
     expect(buildLanguagesGridQuery(0, 50, [], { name: { filter: 'ital' } }).search).toBe('ital')
   })
+  it('preserves an AND text filter with both conditions', () => {
+    expect(buildLanguagesGridQuery(0, 50, [], {
+      name: { operator: 'AND', conditions: [{ filter: 'ital' }, { filter: 'iano' }] },
+    }).search).toEqual({ operator: 'AND', conditions: ['ital', 'iano'] })
+  })
   it('maps the isActive enum filter to a boolean', () => {
     expect(buildLanguagesGridQuery(0, 50, [], { isActive: { value: 'true' } }).isActive).toBe(true)
     expect(buildLanguagesGridQuery(0, 50, [], { isActive: { value: 'false' } }).isActive).toBe(false)
@@ -27,13 +32,20 @@ describe('languages URL round-trip', () => {
   it('turns a filter model into search params and back', () => {
     const model = { name: { filter: 'en' }, isActive: { value: 'false' } }
     const params = languagesFilterModelToSearchParams(model)
-    expect(params).toEqual({ search: 'en', isActive: 'false' })
+    expect(params).toEqual({ search: 'en', search2: null, searchOperator: null, isActive: 'false' })
     expect(languagesUrlParamsToFilterModel({
       search: 'en', isActive: false, sortField: 'code', sortDir: 'ASC',
     })).toEqual(model)
   })
   it('nulls out absent filters so the URL stays clean', () => {
-    expect(languagesFilterModelToSearchParams({})).toEqual({ search: null, isActive: null })
+    expect(languagesFilterModelToSearchParams({})).toEqual({
+      search: null, search2: null, searchOperator: null, isActive: null,
+    })
+  })
+  it('serialises both OR conditions for URL navigation', () => {
+    expect(languagesFilterModelToSearchParams({
+      name: { operator: 'OR', conditions: [{ filter: 'italiano' }, { filter: 'english' }] },
+    })).toMatchObject({ search: 'italiano', search2: 'english', searchOperator: 'OR' })
   })
   it('builds the sort model from URL params', () => {
     expect(languagesUrlParamsToSortModel({ search: '', isActive: null, sortField: 'name', sortDir: 'DESC' }))

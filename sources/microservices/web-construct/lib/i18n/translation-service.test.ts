@@ -35,6 +35,45 @@ const languages: LanguageDto[] = [
 ]
 
 describe('applyTranslationFilters', () => {
+  it('treats LIKE metacharacters literally in a key contains filter', () => {
+    const rendered = applyTranslationFilters({
+      page: 0,
+      size: 50,
+      search: String.raw`100%_\ready`,
+    }, languages).map(condition => dialect.sqlToQuery(condition))
+
+    expect(rendered).toHaveLength(1)
+    expect(rendered[0].sql).toContain('"translation_key"."key" ilike $1 escape \'\\\'')
+    expect(rendered[0].sql).not.toContain('100%')
+    expect(rendered[0].params).toEqual([String.raw`%100\%\_\\ready%`])
+  })
+
+  it('treats LIKE metacharacters literally in a description contains filter', () => {
+    const rendered = applyTranslationFilters({
+      page: 0,
+      size: 50,
+      descriptionSearch: String.raw`100%_\ready`,
+    }, languages).map(condition => dialect.sqlToQuery(condition))
+
+    expect(rendered).toHaveLength(1)
+    expect(rendered[0].sql).toContain('"translation_key"."description" ilike $1 escape \'\\\'')
+    expect(rendered[0].sql).not.toContain('100%')
+    expect(rendered[0].params).toEqual([String.raw`%100\%\_\\ready%`])
+  })
+
+  it('treats LIKE metacharacters literally in a translation value contains filter', () => {
+    const rendered = applyTranslationFilters({
+      page: 0,
+      size: 50,
+      valueSearches: { en: String.raw`100%_\ready` },
+    }, languages).map(condition => dialect.sqlToQuery(condition))
+
+    expect(rendered).toHaveLength(1)
+    expect(rendered[0].sql).toContain("), '') ilike $2 escape '\\'")
+    expect(rendered[0].sql).not.toContain('100%')
+    expect(rendered[0].params).toEqual([1, String.raw`%100\%\_\\ready%`])
+  })
+
   it('filters description with compound AND conditions', () => {
     const rendered = applyTranslationFilters({
       page: 0,
@@ -56,7 +95,7 @@ describe('applyTranslationFilters', () => {
     }, languages).map(condition => dialect.sqlToQuery(condition))
 
     expect(rendered).toHaveLength(1)
-    expect(rendered[0].sql).toContain('"translation_key"."description" ilike $1 or "translation_key"."description" ilike $2')
+    expect(rendered[0].sql).toContain('"translation_key"."description" ilike $1 escape \'\\\' or "translation_key"."description" ilike $2 escape \'\\\'')
     expect(rendered[0].params).toEqual(['%button%', '%label%'])
   })
 
@@ -80,7 +119,7 @@ describe('applyTranslationFilters', () => {
     }, languages).map(condition => dialect.sqlToQuery(condition))
 
     expect(rendered).toHaveLength(1)
-    expect(rendered[0].sql).toContain("), '') ilike $2 and coalesce((")
+    expect(rendered[0].sql).toContain("), '') ilike $2 escape '\\' and coalesce((")
     expect(rendered[0].params).toEqual([1, '%save%', 1, '%now%'])
   })
 
@@ -92,7 +131,7 @@ describe('applyTranslationFilters', () => {
     }, languages).map(condition => dialect.sqlToQuery(condition))
 
     expect(rendered).toHaveLength(1)
-    expect(rendered[0].sql).toContain("), '') ilike $2 or coalesce((")
+    expect(rendered[0].sql).toContain("), '') ilike $2 escape '\\' or coalesce((")
     expect(rendered[0].params).toEqual([1, '%save%', 1, '%store%'])
   })
 
