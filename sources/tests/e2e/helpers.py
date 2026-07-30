@@ -32,11 +32,27 @@ def grid_rows(page):
 
 
 def do_test_login(page, base_url: str, email: str) -> None:
-    """Authenticate via the test-credentials form (requires AUTH_TEST_CREDENTIALS=true on server)."""
+    """Authenticate via the test-credentials form (requires AUTH_TEST_CREDENTIALS=true on server).
+
+    Locale-tolerant: the /login page normally renders in Italian (the app's
+    default), but a language-switch cookie from earlier in the same browser
+    context (e.g. a prior `switch_language(page, "en")` followed by logout)
+    can make it render in English instead. Every other test in this suite
+    only ever hits `/login` fresh, where the default locale always holds —
+    this is the one place a mid-session language switch can precede a login,
+    so each step matches either language's copy (same `.or_()` pattern used
+    for the Salva/Save buttons elsewhere in this suite).
+    """
     nav(page, f"{base_url}/login")
-    page.click('button:has-text("Accesso test")')
-    page.fill('input[placeholder="Email di test"]', email)
-    page.click('button:has-text("Entra (test)")')
+    page.get_by_role("button", name="Accesso test").or_(
+        page.get_by_role("button", name="Test login")
+    ).click()
+    page.get_by_placeholder("Email di test").or_(
+        page.get_by_placeholder("Test email")
+    ).fill(email)
+    page.get_by_role("button", name="Entra (test)").or_(
+        page.get_by_role("button", name="Sign in (test)")
+    ).click()
     page.wait_for_url(f"{base_url}/", timeout=15_000)
     page.wait_for_load_state("networkidle")
 
@@ -113,3 +129,17 @@ def l1_btn(l1, label: str):
     return l1.get_by_role("button", name=label, exact=True).or_(
         l1.get_by_role("link", name=label, exact=True)
     )
+
+
+def switch_language(page, code: str) -> None:
+    """Open the sidebar account panel and pick a language by its code.
+
+    The switcher lives in the account panel, which is only rendered once the
+    panel is open, and the sidebar's first column may be collapsed to icons.
+    """
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    page.locator('[data-testid="sidebar-account-button"]').click()
+    page.locator('[data-testid="language-switcher"]').click()
+    page.locator(f'[data-testid="language-option-{code}"]').click()
+    page.wait_for_load_state("networkidle")
