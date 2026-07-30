@@ -2,18 +2,17 @@
 
 import React, { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { SUPPORTED_LOCALES, type Locale } from '@/lib/rbac/types'
+import { SUPPORTED_LOCALES } from '@/lib/rbac/types'
 import TagInput from './TagInput'
+import { useI18n } from '@/context/I18nContext'
 
-const LABELS: Record<Locale, string> = {
-  EN: 'Inglese', IT: 'Italiano', DE: 'Tedesco', FR: 'Francese', ES: 'Spagnolo', NL: 'Olandese', PT: 'Portoghese', SK: 'Slovacco', RO: 'Rumeno',
-}
 type Tr = Record<string, { name?: string; description?: string }>
 type Tg = Record<string, string[]>
 
 export default function TranslationsAccordion(
   { translations, tags, onTranslations, onTags }: { translations: Tr; tags: Tg; onTranslations: (t: Tr) => void; onTags: (t: Tg) => void },
 ) {
+  const { t } = useI18n()
   const [open, setOpen] = useState<Record<string, boolean>>({ EN: true, IT: true })
   const setField = (loc: string, field: 'name' | 'description', v: string) =>
     onTranslations({ ...translations, [loc]: { ...translations[loc], [field]: v } })
@@ -23,7 +22,7 @@ export default function TranslationsAccordion(
       {SUPPORTED_LOCALES.map(loc => (
         <div key={loc} className="rounded-lg border border-border">
           <button type="button" onClick={() => setOpen(o => ({ ...o, [loc]: !o[loc] }))} className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium">
-            {LABELS[loc]}
+            {t(`functionalities.locale.${loc.toLowerCase()}`)}
             {open[loc] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </button>
           {open[loc] && (
@@ -31,18 +30,18 @@ export default function TranslationsAccordion(
               <input
                 value={translations[loc]?.name ?? ''}
                 onChange={e => setField(loc, 'name', e.target.value)}
-                placeholder="Nome funzionalità"
+                placeholder={t('functionalities.form.name_placeholder_optional')}
                 className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent"
               />
               <textarea
                 value={translations[loc]?.description ?? ''}
                 onChange={e => setField(loc, 'description', e.target.value)}
-                placeholder="Descrizione"
+                placeholder={t('functionalities.form.description_placeholder_optional')}
                 rows={2}
                 // At least twice a single-line input's height (px-3 py-2 text-sm ≈ 38px)
                 className="w-full min-h-[76px] px-3 py-2 text-sm rounded-lg border border-border bg-transparent"
               />
-              <TagInput value={tags[loc] ?? []} onChange={t => onTags({ ...tags, [loc]: t })} />
+              <TagInput value={tags[loc] ?? []} onChange={locTags => onTags({ ...tags, [loc]: locTags })} />
             </div>
           )}
         </div>

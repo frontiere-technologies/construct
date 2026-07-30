@@ -8,11 +8,13 @@ import FilterDrawer from '@/components/rbac/FilterDrawer'
 import { PageContainer } from '@/components/PageContainer'
 import { moveNavigationItem, deleteNavigationItem } from '@/lib/rbac/navigation-actions'
 import { rowActions } from '@/lib/rbac/nav-row-actions'
+import { useI18n } from '@/context/I18nContext'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 
 interface Props { tree: UserNavigationTreeDto[] }
 
 export default function FunctionalitiesTreeClient({ tree }: Props) {
+  const { t } = useI18n()
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [searchDraft, setSearchDraft] = useState('')
@@ -29,7 +31,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
 
   const onMove = async (id: number, targetParentId: number, orderPosition: number) => {
     try { await moveNavigationItem(id, { targetParentId, orderPosition }); router.refresh() }
-    catch (e) { alert(e instanceof Error ? e.message : 'Move failed') }
+    catch (e) { alert(e instanceof Error ? e.message : t('functionalities.tree.move_failed')) }
   }
 
   const clearFilters = () => { setSearchDraft(''); setSearch('') }
@@ -39,12 +41,12 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
     if (!actions.add && !actions.edit && !actions.remove) return null
     return (
       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-        {actions.add && <button data-testid="nav-add" title="Aggiungi sotto-elemento" onClick={() => router.push(`/functionalities/create?parent=${node.id}`)} className="p-1 text-gray-400 hover:text-gray-700"><Plus size={15} /></button>}
-        {actions.edit && <button data-testid="nav-edit" title="Modifica" onClick={() => router.push(`/functionalities/${node.id}/edit`)} className="p-1 text-gray-400 hover:text-gray-700"><Pencil size={15} /></button>}
-        {actions.remove && <button data-testid="nav-delete" title="Elimina" onClick={async () => {
-            if (confirm(`Eliminare "${node.name}" e tutti i suoi figli?`)) {
+        {actions.add && <button data-testid="nav-add" title={t('functionalities.tree.add_child')} onClick={() => router.push(`/functionalities/create?parent=${node.id}`)} className="p-1 text-gray-400 hover:text-gray-700"><Plus size={15} /></button>}
+        {actions.edit && <button data-testid="nav-edit" title={t('common.actions.edit')} onClick={() => router.push(`/functionalities/${node.id}/edit`)} className="p-1 text-gray-400 hover:text-gray-700"><Pencil size={15} /></button>}
+        {actions.remove && <button data-testid="nav-delete" title={t('common.actions.delete')} onClick={async () => {
+            if (confirm(t('functionalities.tree.confirm_delete', { name: node.name }))) {
               try { await deleteNavigationItem(node.id); router.refresh() }
-              catch (e) { alert(e instanceof Error ? e.message : 'Delete failed') }
+              catch (e) { alert(e instanceof Error ? e.message : t('functionalities.tree.delete_failed')) }
             }
           }} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>}
       </div>
@@ -52,7 +54,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
   }
 
   return (
-    <PageContainer title="Funzionalità">
+    <PageContainer title={t('functionalities.list.title')}>
       <div className="flex items-center justify-end gap-2">
         <div className="relative">
           <button
@@ -63,7 +65,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
             }}
             className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-border"
           >
-            <SlidersHorizontal size={16} /> Filtri
+            <SlidersHorizontal size={16} /> {t('common.labels.filters')}
             {search.trim() !== '' && (
               <span data-testid="filters-badge" className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[11px] leading-none">
                 1
@@ -71,12 +73,12 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
             )}
           </button>
           {search.trim() !== '' && (
-            <button data-testid="clear-filters" aria-label="Rimuovi filtri" onClick={clearFilters} className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 z-10">
+            <button data-testid="clear-filters" aria-label={t('functionalities.list.clear_filters_label')} onClick={clearFilters} className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 z-10">
               <X size={9} />
             </button>
           )}
         </div>
-        <button onClick={() => router.push('/functionalities/create')} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Crea nuovo</button>
+        <button onClick={() => router.push('/functionalities/create')} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">{t('functionalities.actions.create')}</button>
       </div>
       <FilterDrawer
         open={showFilters}
@@ -85,14 +87,14 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
         onReset={clearFilters}
       >
         <div className="space-y-1">
-          <label className="text-sm font-medium block">Cerca</label>
+          <label className="text-sm font-medium block">{t('common.actions.search')}</label>
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               data-testid="filter-search"
               value={searchDraft}
               onChange={e => setSearchDraft(e.target.value)}
-              placeholder="Cerca"
+              placeholder={t('common.actions.search')}
               className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-surface-overlay"
             />
           </div>

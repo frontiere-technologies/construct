@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Search, Upload, X, ImageOff } from 'lucide-react'
 import { IconRenderer } from '@/components/IconRenderer'
 import { sanitizeSvg } from '@/lib/rbac/svg-sanitize'
+import { useI18n } from '@/context/I18nContext'
 
 // Curated subset of Lucide icons suited for navigation/admin items.
 // Names are PascalCase — fed directly to IconRenderer which does the lazy import.
@@ -61,6 +62,7 @@ interface Props {
 }
 
 export default function IconPicker({ value, onChange, compact = false }: Props) {
+  const { t } = useI18n()
   const [open, setOpen]     = useState(false)
   const [tab, setTab]       = useState<'library' | 'upload'>('library')
   const [search, setSearch] = useState('')
@@ -90,7 +92,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
     setErr('')
     if (!file) return
     const isSvg = file.name.toLowerCase().endsWith('.svg') || file.type === 'image/svg+xml'
-    if (!isSvg) { setErr('Solo file SVG'); return }
+    if (!isSvg) { setErr(t('functionalities.icon.svg_only_error')); return }
     const reader = new FileReader()
     reader.onload = () => { onChange(sanitizeSvg(String(reader.result ?? ''))); setOpen(false) }
     reader.readAsText(file)
@@ -108,7 +110,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
         onKeyDown={e => {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o) }
         }}
-        aria-label={value ? `Icona selezionata: ${value.startsWith('<svg') ? 'SVG personalizzato' : value}` : 'Seleziona icona'}
+        aria-label={value ? t('functionalities.icon.selected_label', { value: value.startsWith('<svg') ? t('functionalities.icon.custom_svg') : value }) : t('functionalities.icon.select_label')}
         className={`group relative flex items-center justify-center rounded-lg border border-dashed cursor-pointer transition-colors hover:border-gray-400 dark:hover:border-gray-500
           ${compact
             ? 'w-[38px] h-[38px] border-gray-300 dark:border-gray-600'
@@ -118,12 +120,12 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
         {value
           ? <IconRenderer name={value} size={compact ? 18 : 28} />
           : <ImageOff size={compact ? 16 : 24} className="text-gray-300 dark:text-gray-600" />}
-        {!compact && <span className="text-xs text-gray-500">Icona</span>}
+        {!compact && <span className="text-xs text-gray-500">{t('functionalities.icon.label')}</span>}
         {value && (
           <button
             type="button"
             onClick={clear}
-            aria-label="Rimuovi icona"
+            aria-label={t('functionalities.icon.remove_label')}
             className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 z-10"
           >
             <X size={9} />
@@ -137,10 +139,10 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
             <div className="flex gap-4">
-              {(['library', 'upload'] as const).map(t => (
-                <button key={t} type="button" onClick={() => setTab(t)}
-                  className={`text-xs font-medium pb-1 border-b-2 transition-colors ${tab === t ? 'border-gray-900 dark:border-white text-foreground' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
-                  {t === 'library' ? 'Libreria' : 'Carica SVG'}
+              {(['library', 'upload'] as const).map(tabKey => (
+                <button key={tabKey} type="button" onClick={() => setTab(tabKey)}
+                  className={`text-xs font-medium pb-1 border-b-2 transition-colors ${tab === tabKey ? 'border-gray-900 dark:border-white text-foreground' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                  {tabKey === 'library' ? t('functionalities.icon.tab_library') : t('functionalities.icon.tab_upload')}
                 </button>
               ))}
             </div>
@@ -160,7 +162,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                     autoFocus
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    placeholder="Cerca icone…"
+                    placeholder={t('icon_picker.search_placeholder')}
                     className="flex-1 text-xs bg-transparent outline-none placeholder:text-gray-400"
                   />
                 </div>
@@ -170,7 +172,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                 {!search && (
                   <button
                     type="button"
-                    title="Nessuna icona"
+                    title={t('icon_picker.no_icon')}
                     onClick={() => pick('')}
                     className={`flex items-center justify-center p-2 rounded-lg hover:bg-surface-hover transition-colors ${noIconSelected ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
                   >
@@ -187,7 +189,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                   </button>
                 ))}
                 {filtered.length === 0 && (
-                  <span className="col-span-7 py-6 text-center text-xs text-gray-400">Nessun risultato</span>
+                  <span className="col-span-7 py-6 text-center text-xs text-gray-400">{t('common.states.no_results')}</span>
                 )}
               </div>
             </>
@@ -206,18 +208,18 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                   onChange={e => readFile(e.target.files?.[0])} />
                 <Upload size={18} className="text-gray-400" />
                 <span className="text-xs text-gray-500 text-center">
-                  Trascina o <span className="underline">scegli il file</span>
+                  {t('functionalities.icon.drop_prefix')} <span className="underline">{t('functionalities.icon.choose_file')}</span>
                 </span>
-                <span className="text-[10px] text-gray-400">Formato: SVG</span>
+                <span className="text-[10px] text-gray-400">{t('functionalities.icon.format_hint')}</span>
                 {err && <span className="text-[10px] text-red-500">{err}</span>}
               </div>
               {/* SVG requirements hint */}
               <div className="rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2 text-[10px] text-gray-500 leading-relaxed space-y-0.5">
-                <p className="font-medium text-foreground-muted">Requisiti SVG</p>
-                <p>• Dimensioni: <code className="font-mono">viewBox=&quot;0 0 24 24&quot;</code> (24×24 px)</p>
-                <p>• Colori: usa <code className="font-mono">currentColor</code>, evita valori hardcoded</p>
-                <p>• Stroke: <code className="font-mono">stroke-width=&quot;2&quot;</code>, stile outline</p>
-                <p>• Nessun elemento <code className="font-mono">&lt;script&gt;</code> o stile esterno</p>
+                <p className="font-medium text-foreground-muted">{t('functionalities.icon.requirements_heading')}</p>
+                <p>• {t('functionalities.icon.req_dimensions_prefix')}<code className="font-mono">viewBox=&quot;0 0 24 24&quot;</code>{t('functionalities.icon.req_dimensions_suffix')}</p>
+                <p>• {t('functionalities.icon.req_colors_prefix')}<code className="font-mono">currentColor</code>{t('functionalities.icon.req_colors_suffix')}</p>
+                <p>• {t('functionalities.icon.req_stroke_prefix')}<code className="font-mono">stroke-width=&quot;2&quot;</code>{t('functionalities.icon.req_stroke_suffix')}</p>
+                <p>• {t('functionalities.icon.req_no_script_prefix')}<code className="font-mono">&lt;script&gt;</code>{t('functionalities.icon.req_no_script_suffix')}</p>
               </div>
             </div>
           )}

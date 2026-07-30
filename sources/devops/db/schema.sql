@@ -979,3 +979,167 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- ---- rbac: roles admin (components/rbac/roles/*, app/(protected)/roles-permissions) ----
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"roles.list.title",              "namespace":"roles","module":"rbac","description":"Roles page title (also used as the role-detail breadcrumb)","it":"Ruoli & permessi","en":"Roles & permissions"},
+    {"key":"roles.list.id",                 "namespace":"roles","module":"rbac","description":"ID column header","it":"ID","en":"ID"},
+    {"key":"roles.form.name",               "namespace":"roles","module":"rbac","description":"Role-name field/column: create modal, rename modal and description column header","it":"Nome ruolo","en":"Role name"},
+    {"key":"roles.list.associated_users",   "namespace":"roles","module":"rbac","description":"Associated-users column header (also role-detail subtitle, interpolated with the count)","it":"Utenti associati","en":"Associated users"},
+    {"key":"roles.list.has_permissions",    "namespace":"roles","module":"rbac","description":"Has-permissions column header","it":"Ha permessi","en":"Has permissions"},
+    {"key":"roles.list.created_at",         "namespace":"roles","module":"rbac","description":"Created-at column header","it":"Data di creazione","en":"Created at"},
+    {"key":"roles.list.updated_at",         "namespace":"roles","module":"rbac","description":"Updated-at column header","it":"Ultimo aggiornamento","en":"Last updated"},
+    {"key":"roles.actions.create",          "namespace":"roles","module":"rbac","description":"New-role button","it":"Nuovo ruolo","en":"New role"},
+    {"key":"roles.confirm.delete_title",    "namespace":"roles","module":"rbac","description":"Delete-role confirm title","it":"Elimina ruolo","en":"Delete role"},
+    {"key":"roles.confirm.delete_message",  "namespace":"roles","module":"rbac","description":"Delete-role confirm body. {{name}} = role name","it":"Eliminare il ruolo «{{name}}»?","en":"Delete the role “{{name}}”?"},
+    {"key":"roles.form.create_title",       "namespace":"roles","module":"rbac","description":"Create-role modal heading","it":"Crea nuovo ruolo","en":"Create new role"},
+    {"key":"roles.form.create_subtitle",    "namespace":"roles","module":"rbac","description":"Create-role modal help text","it":"Per procedere con la creazione di un nuovo ruolo, inserisci il nome del ruolo desiderato","en":"To create a new role, enter the desired role name"},
+    {"key":"roles.rename.title",            "namespace":"roles","module":"rbac","description":"Rename-role modal heading","it":"Rinomina ruolo","en":"Rename role"},
+    {"key":"roles.detail.title",            "namespace":"roles","module":"rbac","description":"Role-detail breadcrumb suffix","it":"Dettagli","en":"Details"},
+    {"key":"roles.detail.tab_sections",     "namespace":"roles","module":"rbac","description":"Permissions-tree tab: sections","it":"Sezioni","en":"Sections"},
+    {"key":"roles.detail.tab_operations",   "namespace":"roles","module":"rbac","description":"Permissions-tree tab: operations","it":"Operazioni","en":"Operations"},
+    {"key":"roles.detail.system_readonly_hint","namespace":"roles","module":"rbac","description":"Save-button tooltip for SYSTEM roles","it":"I ruoli di sistema non sono modificabili","en":"System roles cannot be edited"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- rbac: users admin (components/rbac/users/*, app/(protected)/user-management) ----
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"users.list.title",              "namespace":"users","module":"rbac","description":"Users page title","it":"Utenti","en":"Users"},
+    {"key":"users.list.name",               "namespace":"users","module":"rbac","description":"User (name) column header","it":"Utente","en":"User"},
+    {"key":"users.list.email",              "namespace":"users","module":"rbac","description":"Email column header","it":"Email","en":"Email"},
+    {"key":"users.list.roles",              "namespace":"users","module":"rbac","description":"Roles column header (also the manage-roles modal field label)","it":"Ruoli","en":"Roles"},
+    {"key":"users.list.status",             "namespace":"users","module":"rbac","description":"Status column header","it":"Stato","en":"Status"},
+    {"key":"users.list.created_at",         "namespace":"users","module":"rbac","description":"Created-at column header","it":"Creato","en":"Created"},
+    {"key":"users.list.updated_at",         "namespace":"users","module":"rbac","description":"Updated-at column header","it":"Aggiornato","en":"Updated"},
+    {"key":"users.actions.manage_roles",    "namespace":"users","module":"rbac","description":"Row-menu action + manage-roles modal title prefix","it":"Gestisci ruoli","en":"Manage roles"},
+    {"key":"users.actions.activate",        "namespace":"users","module":"rbac","description":"Row-menu action: activate a user","it":"Attiva","en":"Activate"},
+    {"key":"users.actions.deactivate",      "namespace":"users","module":"rbac","description":"Row-menu action: deactivate a user","it":"Disattiva","en":"Deactivate"},
+    {"key":"users.status.active",           "namespace":"users","module":"rbac","description":"Active-status badge/filter option","it":"Attivo","en":"Active"},
+    {"key":"users.status.deactivated",      "namespace":"users","module":"rbac","description":"Deactivated-status badge/filter option","it":"Disattivato","en":"Deactivated"},
+    {"key":"users.confirm.deactivate",      "namespace":"users","module":"rbac","description":"Native-confirm message. {{email}} = user email","it":"Disattivare {{email}}?","en":"Deactivate {{email}}?"},
+    {"key":"users.confirm.activate",        "namespace":"users","module":"rbac","description":"Native-confirm message. {{email}} = user email","it":"Attivare {{email}}?","en":"Activate {{email}}?"},
+    {"key":"users.roles.always_assigned",   "namespace":"users","module":"rbac","description":"Locked-role suffix in the manage-roles list","it":"sempre assegnato","en":"always assigned"},
+    {"key":"users.roles.save_error",        "namespace":"users","module":"rbac","description":"Manage-roles save failure fallback","it":"Errore durante il salvataggio","en":"Error while saving"},
+    {"key":"users.roles.remove_label",      "namespace":"users","module":"rbac","description":"Remove-role chip aria-label. {{name}} = role name","it":"Rimuovi {{name}}","en":"Remove {{name}}"},
+    {"key":"users.roles.search_placeholder","namespace":"users","module":"rbac","description":"Role multi-select search input placeholder","it":"Cerca un ruolo…","en":"Search a role…"},
+    {"key":"users.roles.no_results",        "namespace":"users","module":"rbac","description":"Role multi-select empty-results message","it":"Nessun ruolo trovato","en":"No role found"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- rbac: functionalities admin (components/rbac/functionalities/*, app/(protected)/functionalities/**) ----
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"functionalities.list.title",               "namespace":"functionalities","module":"rbac","description":"Functionalities tree page title (also the form's title prefix)","it":"Funzionalità","en":"Functionalities"},
+    {"key":"functionalities.list.clear_filters_label",  "namespace":"functionalities","module":"rbac","description":"Clear-filters button aria-label (tree toolbar)","it":"Rimuovi filtri","en":"Clear filters"},
+    {"key":"functionalities.actions.create",            "namespace":"functionalities","module":"rbac","description":"Create-new button (tree toolbar)","it":"Crea nuovo","en":"Create new"},
+    {"key":"functionalities.tree.add_child",            "namespace":"functionalities","module":"rbac","description":"Add-sub-item row action tooltip","it":"Aggiungi sotto-elemento","en":"Add sub-item"},
+    {"key":"functionalities.tree.confirm_delete",       "namespace":"functionalities","module":"rbac","description":"Native-confirm message. {{name}} = item name","it":"Eliminare «{{name}}» e tutti i suoi figli?","en":"Delete “{{name}}” and all its children?"},
+    {"key":"functionalities.tree.move_failed",          "namespace":"functionalities","module":"rbac","description":"Drag-and-drop move failure fallback","it":"Spostamento non riuscito.","en":"Move failed."},
+    {"key":"functionalities.tree.delete_failed",        "namespace":"functionalities","module":"rbac","description":"Delete failure fallback","it":"Eliminazione non riuscita.","en":"Delete failed."},
+    {"key":"functionalities.form.create_label",         "namespace":"functionalities","module":"rbac","description":"Form title suffix in create mode","it":"Crea","en":"Create"},
+    {"key":"functionalities.form.general_info",         "namespace":"functionalities","module":"rbac","description":"Form section heading","it":"Informazioni generali","en":"General information"},
+    {"key":"functionalities.form.name_placeholder",     "namespace":"functionalities","module":"rbac","description":"Required IT name field placeholder","it":"Nome funzionalità *","en":"Functionality name *"},
+    {"key":"functionalities.form.description_placeholder","namespace":"functionalities","module":"rbac","description":"Required IT description field placeholder","it":"Descrizione *","en":"Description *"},
+    {"key":"functionalities.form.parent_placeholder",   "namespace":"functionalities","module":"rbac","description":"Genitore (parent) select placeholder","it":"Genitore","en":"Parent"},
+    {"key":"functionalities.form.parent_locked_create_hint","namespace":"functionalities","module":"rbac","description":"Genitore disabled-select tooltip, create mode","it":"Nessuna categoria disponibile: verrà creato alla radice","en":"No category available: it will be created at the root"},
+    {"key":"functionalities.form.parent_locked_edit_hint","namespace":"functionalities","module":"rbac","description":"Genitore disabled-select tooltip, edit mode","it":"Nessuna categoria disponibile come genitore","en":"No category available as parent"},
+    {"key":"functionalities.form.type_heading",         "namespace":"functionalities","module":"rbac","description":"Tipologia section heading","it":"Tipologia","en":"Type"},
+    {"key":"functionalities.form.type_placeholder",     "namespace":"functionalities","module":"rbac","description":"Tipologia select placeholder","it":"Tipologia *","en":"Type *"},
+    {"key":"functionalities.form.link_placeholder",     "namespace":"functionalities","module":"rbac","description":"Link field placeholder","it":"Link *","en":"Link *"},
+    {"key":"functionalities.form.open_new_tab",         "namespace":"functionalities","module":"rbac","description":"External-link new-tab checkbox label","it":"Apri in una nuova scheda","en":"Open in a new tab"},
+    {"key":"functionalities.form.translations_heading", "namespace":"functionalities","module":"rbac","description":"Translations panel heading","it":"Gestione traduzioni","en":"Translations management"},
+    {"key":"functionalities.form.missing_id_error",     "namespace":"functionalities","module":"rbac","description":"Edit-mode guard error (missing funcId)","it":"ID funzionalità mancante","en":"Missing functionality ID"},
+    {"key":"functionalities.form.save_error",           "namespace":"functionalities","module":"rbac","description":"Generic save failure fallback","it":"Errore durante il salvataggio. Riprova.","en":"Error while saving. Please try again."},
+    {"key":"functionalities.form.name_placeholder_optional","namespace":"functionalities","module":"rbac","description":"Per-locale name placeholder in the translations accordion","it":"Nome funzionalità","en":"Functionality name"},
+    {"key":"functionalities.form.description_placeholder_optional","namespace":"functionalities","module":"rbac","description":"Per-locale description placeholder in the translations accordion","it":"Descrizione","en":"Description"},
+    {"key":"functionalities.form.tag_placeholder",      "namespace":"functionalities","module":"rbac","description":"TagInput default placeholder","it":"Inserisci un tag e premi invio","en":"Enter a tag and press enter"},
+    {"key":"functionalities.item_type.category",        "namespace":"functionalities","module":"rbac","description":"Tipologia option: category","it":"Category","en":"Category"},
+    {"key":"functionalities.item_type.embedded",        "namespace":"functionalities","module":"rbac","description":"Tipologia option: embedded external link","it":"Link esterno embedded (iframe)","en":"Embedded external link (iframe)"},
+    {"key":"functionalities.item_type.external",        "namespace":"functionalities","module":"rbac","description":"Tipologia option: external link","it":"Link esterno (http[s])","en":"External link (http[s])"},
+    {"key":"functionalities.item_type.internal",         "namespace":"functionalities","module":"rbac","description":"Tipologia option: internal link","it":"Link interno (/path)","en":"Internal link (/path)"},
+    {"key":"functionalities.locale.en",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: English","it":"Inglese","en":"English"},
+    {"key":"functionalities.locale.it",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Italian","it":"Italiano","en":"Italian"},
+    {"key":"functionalities.locale.de",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: German","it":"Tedesco","en":"German"},
+    {"key":"functionalities.locale.fr",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: French","it":"Francese","en":"French"},
+    {"key":"functionalities.locale.es",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Spanish","it":"Spagnolo","en":"Spanish"},
+    {"key":"functionalities.locale.nl",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Dutch","it":"Olandese","en":"Dutch"},
+    {"key":"functionalities.locale.pt",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Portuguese","it":"Portoghese","en":"Portuguese"},
+    {"key":"functionalities.locale.sk",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Slovak","it":"Slovacco","en":"Slovak"},
+    {"key":"functionalities.locale.ro",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Romanian","it":"Rumeno","en":"Romanian"},
+    {"key":"functionalities.icon.select_label",         "namespace":"functionalities","module":"rbac","description":"Icon-picker trigger aria-label when empty","it":"Seleziona icona","en":"Select icon"},
+    {"key":"functionalities.icon.selected_label",       "namespace":"functionalities","module":"rbac","description":"Icon-picker trigger aria-label when set. {{value}} = icon name or 'custom SVG' label","it":"Icona selezionata: {{value}}","en":"Selected icon: {{value}}"},
+    {"key":"functionalities.icon.custom_svg",           "namespace":"functionalities","module":"rbac","description":"Icon-picker aria-label value for a custom uploaded SVG","it":"SVG personalizzato","en":"Custom SVG"},
+    {"key":"functionalities.icon.label",                "namespace":"functionalities","module":"rbac","description":"Icon-picker trigger caption (non-compact mode)","it":"Icona","en":"Icon"},
+    {"key":"functionalities.icon.remove_label",         "namespace":"functionalities","module":"rbac","description":"Icon-picker clear-icon button aria-label","it":"Rimuovi icona","en":"Remove icon"},
+    {"key":"functionalities.icon.tab_library",          "namespace":"functionalities","module":"rbac","description":"Icon-picker tab: library","it":"Libreria","en":"Library"},
+    {"key":"functionalities.icon.tab_upload",            "namespace":"functionalities","module":"rbac","description":"Icon-picker tab: upload SVG","it":"Carica SVG","en":"Upload SVG"},
+    {"key":"functionalities.icon.svg_only_error",       "namespace":"functionalities","module":"rbac","description":"Icon-picker upload error: non-SVG file","it":"Solo file SVG","en":"SVG files only"},
+    {"key":"functionalities.icon.drop_prefix",          "namespace":"functionalities","module":"rbac","description":"Icon-picker upload hint, text before the underlined link","it":"Trascina o","en":"Drag or"},
+    {"key":"functionalities.icon.choose_file",          "namespace":"functionalities","module":"rbac","description":"Icon-picker upload hint, underlined link text","it":"scegli il file","en":"choose a file"},
+    {"key":"functionalities.icon.format_hint",          "namespace":"functionalities","module":"rbac","description":"Icon-picker upload tab format hint","it":"Formato: SVG","en":"Format: SVG"},
+    {"key":"functionalities.icon.requirements_heading", "namespace":"functionalities","module":"rbac","description":"Icon-picker SVG requirements heading","it":"Requisiti SVG","en":"SVG requirements"},
+    {"key":"functionalities.icon.req_dimensions_prefix","namespace":"functionalities","module":"rbac","description":"SVG requirement line 1, text before <code>","it":"Dimensioni: ","en":"Dimensions: "},
+    {"key":"functionalities.icon.req_dimensions_suffix","namespace":"functionalities","module":"rbac","description":"SVG requirement line 1, text after <code>","it":" (24×24 px)","en":" (24×24 px)"},
+    {"key":"functionalities.icon.req_colors_prefix",    "namespace":"functionalities","module":"rbac","description":"SVG requirement line 2, text before <code>","it":"Colori: usa ","en":"Colors: use "},
+    {"key":"functionalities.icon.req_colors_suffix",    "namespace":"functionalities","module":"rbac","description":"SVG requirement line 2, text after <code>","it":", evita valori hardcoded","en":", avoid hardcoded values"},
+    {"key":"functionalities.icon.req_stroke_prefix",    "namespace":"functionalities","module":"rbac","description":"SVG requirement line 3, text before <code>","it":"Stroke: ","en":"Stroke: "},
+    {"key":"functionalities.icon.req_stroke_suffix",    "namespace":"functionalities","module":"rbac","description":"SVG requirement line 3, text after <code>","it":", stile outline","en":", outline style"},
+    {"key":"functionalities.icon.req_no_script_prefix", "namespace":"functionalities","module":"rbac","description":"SVG requirement line 4, text before <code>","it":"Nessun elemento ","en":"No "},
+    {"key":"functionalities.icon.req_no_script_suffix", "namespace":"functionalities","module":"rbac","description":"SVG requirement line 4, text after <code>","it":" o stile esterno","en":" or external style"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- theme admin (components/AdminTheme.tsx) ----------------------------
+-- Several of these `it` values are already English in the source (a pre-existing
+-- inconsistency: this app's default active language is Italian, but AdminTheme.tsx
+-- was never localized) — the `it` seed is a byte-exact copy of the current literal
+-- either way, per this task's brief (§ critical strings), so `it` and `en` are
+-- identical for those rows rather than inventing a translation that would change
+-- what's on screen today.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"theme.page.title",              "namespace":"theme","module":"rbac","description":"Theme admin page title","it":"Theme & Styles","en":"Theme & Styles"},
+    {"key":"theme.page.subtitle",           "namespace":"theme","module":"rbac","description":"Theme admin page subtitle","it":"Customize your application appearance","en":"Customize your application appearance"},
+    {"key":"theme.section.global",          "namespace":"theme","module":"rbac","description":"Global section heading","it":"Global","en":"Global"},
+    {"key":"theme.field.primary_color",     "namespace":"theme","module":"rbac","description":"Primary-color field label","it":"Primary Color (Active Icons, Buttons)","en":"Primary Color (Active Icons, Buttons)"},
+    {"key":"theme.section.backgrounds",     "namespace":"theme","module":"rbac","description":"Backgrounds token-group title","it":"Sfondi","en":"Backgrounds"},
+    {"key":"theme.field.page_background",   "namespace":"theme","module":"rbac","description":"Page-background field label","it":"Page Background","en":"Page Background"},
+    {"key":"theme.field.surface",           "namespace":"theme","module":"rbac","description":"Surface field label","it":"Surface","en":"Surface"},
+    {"key":"theme.field.surface_overlay",   "namespace":"theme","module":"rbac","description":"Surface-overlay field label","it":"Surface Overlay","en":"Surface Overlay"},
+    {"key":"theme.field.surface_hover",     "namespace":"theme","module":"rbac","description":"Surface-hover field label","it":"Surface Hover","en":"Surface Hover"},
+    {"key":"theme.section.border",          "namespace":"theme","module":"rbac","description":"Border token-group title","it":"Border","en":"Border"},
+    {"key":"theme.field.border",            "namespace":"theme","module":"rbac","description":"Border field label","it":"Border","en":"Border"},
+    {"key":"theme.field.border_subtle",     "namespace":"theme","module":"rbac","description":"Border-subtle field label","it":"Border Subtle","en":"Border Subtle"},
+    {"key":"theme.section.text",            "namespace":"theme","module":"rbac","description":"Text token-group title","it":"Testo","en":"Text"},
+    {"key":"theme.field.foreground",        "namespace":"theme","module":"rbac","description":"Foreground field label","it":"Foreground","en":"Foreground"},
+    {"key":"theme.field.foreground_secondary","namespace":"theme","module":"rbac","description":"Foreground-secondary field label","it":"Foreground Secondary","en":"Foreground Secondary"},
+    {"key":"theme.field.foreground_muted",   "namespace":"theme","module":"rbac","description":"Foreground-muted field label","it":"Foreground Muted","en":"Foreground Muted"},
+    {"key":"theme.field.foreground_faint",  "namespace":"theme","module":"rbac","description":"Foreground-faint field label","it":"Foreground Faint","en":"Foreground Faint"},
+    {"key":"theme.section.sidebar",         "namespace":"theme","module":"rbac","description":"Sidebar/active-item token-group title","it":"Sidebar & Active Item","en":"Sidebar & Active Item"},
+    {"key":"theme.field.sidebar_bg",        "namespace":"theme","module":"rbac","description":"Sidebar-background field label","it":"Sidebar Background","en":"Sidebar Background"},
+    {"key":"theme.field.sidebar_text",      "namespace":"theme","module":"rbac","description":"Sidebar-text field label","it":"Sidebar Text","en":"Sidebar Text"},
+    {"key":"theme.field.active_item_bg",    "namespace":"theme","module":"rbac","description":"Active-item-background field label","it":"Active Item Background","en":"Active Item Background"},
+    {"key":"theme.field.active_item_text",  "namespace":"theme","module":"rbac","description":"Active-item-text field label","it":"Active Item Text","en":"Active Item Text"},
+    {"key":"theme.token.light",             "namespace":"theme","module":"rbac","description":"Light-value column caption in each token row","it":"Light","en":"Light"},
+    {"key":"theme.token.dark",              "namespace":"theme","module":"rbac","description":"Dark-value column caption in each token row","it":"Dark","en":"Dark"},
+    {"key":"theme.banner.unsaved_hint",     "namespace":"theme","module":"rbac","description":"Idle-state footer hint","it":"ℹ️ Ricordati di salvare i valori, altrimenti verranno persi alla chiusura dell'applicazione.","en":"ℹ️ Remember to save your values, or they will be lost when the application closes."},
+    {"key":"theme.status.saved",            "namespace":"theme","module":"rbac","description":"Save-success footer message","it":"Theme saved.","en":"Theme saved."},
+    {"key":"theme.status.save_failed",      "namespace":"theme","module":"rbac","description":"Save-failure footer message","it":"Save failed. Please try again.","en":"Save failed. Please try again."},
+    {"key":"theme.status.saving",           "namespace":"theme","module":"rbac","description":"Save-button label while saving","it":"Saving…","en":"Saving…"},
+    {"key":"theme.actions.reset_defaults",  "namespace":"theme","module":"rbac","description":"Reset-to-defaults button","it":"Valori di Default","en":"Default Values"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
