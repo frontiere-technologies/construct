@@ -88,7 +88,7 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
               key={item.label}
               disabled={item.disabled}
               onClick={() => { close(); item.onClick() }}
-              className="block w-full text-left px-3 py-1.5 text-sm rounded hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
+              className="block w-full text-left px-3 py-1.5 text-sm rounded enabled:hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {item.label}
             </button>

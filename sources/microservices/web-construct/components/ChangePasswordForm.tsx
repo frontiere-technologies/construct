@@ -100,7 +100,7 @@ export function ChangePasswordForm() {
         <button
           type="submit"
           disabled={saving}
-          className="w-full py-2 px-4 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+          className="w-full py-2 px-4 bg-primary text-white rounded-lg text-sm font-medium enabled:hover:opacity-90 disabled:opacity-50 transition-opacity"
         >
           {saving ? t('auth.change_password.submitting') : t('auth.change_password.submit')}
         </button>
