@@ -38,6 +38,8 @@ describe('POST /api/rbac/roles-grid', () => {
     ['an inverted associated-users range', { associatedUsersMin: 4, associatedUsersMax: 3 }],
     ['an inverted created-date range', { startDateIns: '2026-07-31', endDateIns: '2026-07-01' }],
     ['an inverted updated-date range', { startDateMod: '2026-07-31', endDateMod: '2026-07-01' }],
+    ['the terminal created upper date', { endDateIns: '9999-12-31' }],
+    ['the terminal updated upper date', { endDateMod: '9999-12-31' }],
   ])('returns 400 for %s before it reaches the service', async (_label, range) => {
     const response = await POST(request({ page: 0, size: 50, sort: 'id', direction: 'ASC', ...range }))
 

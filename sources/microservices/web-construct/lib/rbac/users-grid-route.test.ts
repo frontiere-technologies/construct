@@ -35,6 +35,13 @@ describe('POST /api/rbac/users-grid', () => {
     await expect(response.json()).resolves.toEqual({ error: 'Corpo della richiesta non valido.' })
   })
 
+  it.each(['createdTo', 'updatedTo'])('returns 400 for the terminal %s date before it reaches the service', async field => {
+    const response = await POST(request({ page: 0, size: 50, sort: 'dateIns', direction: 'DESC', [field]: '9999-12-31' }))
+
+    expect(response.status).toBe(400)
+    expect(mocks.listUsers).not.toHaveBeenCalled()
+  })
+
   it('accepts a valid complete payload', async () => {
     const response = await POST(request({
       page: 0, size: 50, nameSearch: 'Mario', emailSearch: 'mario@frontiere.it', roleIds: [1], statuses: [2],

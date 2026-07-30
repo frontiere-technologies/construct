@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { UsersQuery } from './types'
+import { isSupportedRbacInclusiveDateTo } from './date-utils'
 
 export const USERS_GRID_MAX_PAGE_SIZE = 100
 
@@ -27,9 +28,9 @@ export const usersGridQuerySchema: z.ZodType<UsersQuery> = z.object({
   roleIds: z.array(z.number().finite().int()).optional(),
   statuses: z.array(z.union([z.literal(1), z.literal(2)])).optional(),
   createdFrom: dateSchema.optional(),
-  createdTo: dateSchema.optional(),
+  createdTo: dateSchema.refine(isSupportedRbacInclusiveDateTo, 'createdTo exceeds the supported inclusive upper bound').optional(),
   updatedFrom: dateSchema.optional(),
-  updatedTo: dateSchema.optional(),
+  updatedTo: dateSchema.refine(isSupportedRbacInclusiveDateTo, 'updatedTo exceeds the supported inclusive upper bound').optional(),
   sort: z.enum(['firstName', 'lastName', 'email', 'dateIns', 'dateMod', 'status']).optional(),
   direction: z.enum(['ASC', 'DESC']).optional(),
 })

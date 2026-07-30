@@ -7,6 +7,7 @@ import {
   dateRangeToGridFilter, gridDateFilterToRange, gridNumberFilterToRange, numberRangeToGridFilter,
   type GridDateFilterModel, type GridNumberFilterModel,
 } from '@/lib/grid-filter-models'
+import { isSupportedRbacInclusiveDateTo } from './date-utils'
 
 export interface RolesGridFilterModel {
   id?: GridNumberFilterModel
@@ -95,9 +96,15 @@ export function parseRolesGridUrlParams(params: Record<string, string | undefine
     associatedUsersMax: parseRolesGridNumberParam(params.associatedUsersMax),
     hasPermission: params.hasPermission === 'true' ? true : params.hasPermission === 'false' ? false : null,
     startDateIns: parseRolesGridDateParam(params.startDateIns),
-    endDateIns: parseRolesGridDateParam(params.endDateIns),
+    endDateIns: (() => {
+      const value = parseRolesGridDateParam(params.endDateIns)
+      return value && isSupportedRbacInclusiveDateTo(value) ? value : null
+    })(),
     startDateMod: parseRolesGridDateParam(params.startDateMod),
-    endDateMod: parseRolesGridDateParam(params.endDateMod),
+    endDateMod: (() => {
+      const value = parseRolesGridDateParam(params.endDateMod)
+      return value && isSupportedRbacInclusiveDateTo(value) ? value : null
+    })(),
     sortField: sort && ROLE_SORT_FIELDS.has(sort) ? sort : 'id',
     sortDir: params.direction === 'DESC' ? 'DESC' : 'ASC',
   }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildUsersGridQuery, parseUsersGridIntegerParam,
-  usersUrlParamsToFilterModel, usersFilterModelToSearchParams,
+  parseUsersGridDateParam, usersUrlParamsToFilterModel, usersFilterModelToSearchParams,
 } from './users-grid-query'
 
 describe('buildUsersGridQuery', () => {
@@ -90,6 +90,11 @@ describe('usersUrlParamsToFilterModel / usersFilterModelToSearchParams', () => {
     })).toMatchObject({
       dateMod: { filterType: 'date', type: 'lessThanOrEqual', dateFrom: '2026-07-30' },
     })
+  })
+
+  it('drops unsupported upper dates while keeping valid lower dates for both user columns', () => {
+    expect(parseUsersGridDateParam('9999-12-31', true)).toBeNull()
+    expect(parseUsersGridDateParam('9999-12-31')).toBe('9999-12-31')
   })
 
   it('serialises both OR conditions so navigation does not discard the compound filter', () => {

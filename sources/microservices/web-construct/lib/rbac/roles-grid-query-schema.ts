@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { RolesQuery } from './types'
+import { isSupportedRbacInclusiveDateTo } from './date-utils'
 
 export const ROLES_GRID_MAX_PAGE_SIZE = 100
 
@@ -29,9 +30,9 @@ export const rolesGridQuerySchema: z.ZodType<RolesQuery> = z.object({
   associatedUsersMax: z.number().finite().optional(),
   hasPermission: z.boolean().optional(),
   startDateIns: dateSchema.optional(),
-  endDateIns: dateSchema.optional(),
+  endDateIns: dateSchema.refine(isSupportedRbacInclusiveDateTo, 'endDateIns exceeds the supported inclusive upper bound').optional(),
   startDateMod: dateSchema.optional(),
-  endDateMod: dateSchema.optional(),
+  endDateMod: dateSchema.refine(isSupportedRbacInclusiveDateTo, 'endDateMod exceeds the supported inclusive upper bound').optional(),
   sort: z.enum(['id', 'description', 'associatedUsers', 'hasPermissions', 'dateIns', 'dateMod']).optional(),
   direction: z.enum(['ASC', 'DESC']).optional(),
 }).superRefine((query, context) => {

@@ -32,3 +32,10 @@ Verifiche del fix round: 105 test mirati superati, `npx tsc --noEmit` superato; 
 - `DATE_FILTER` espone esattamente le tre operazioni consentite.
 
 Verifiche del fix round: 126 test mirati superati, `npx tsc --noEmit` superato; lint senza errori e con 4 warning preesistenti non correlati.
+
+## Fix round 3/5
+
+- Users e Roles rifiutano `9999-12-31` come limite superiore inclusivo in schema, route e URL, conservando qualsiasi limite inferiore valido.
+- Entrambi i service applicano un guard difensivo prima di calcolare `nextDay`; `9999-12-31` resta valido come limite inferiore.
+
+Verifiche del fix round: 94 test mirati superati, `npx tsc --noEmit` superato; lint senza errori e con 4 warning preesistenti non correlati.

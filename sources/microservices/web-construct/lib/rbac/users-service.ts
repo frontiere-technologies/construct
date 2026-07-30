@@ -3,7 +3,7 @@ import { and, asc, desc, count, gte, ilike, inArray, lt, or, sql, type SQL } fro
 import { db } from '@/lib/db'
 import { users, userRole } from '@/lib/db/schema'
 import { getAllRoles } from './roles-service'
-import { nextDay } from './date-utils'
+import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
 import { USER_SORT_COLUMN, buildUserDtos, type UserRow, type UserRoleRow } from './user-mappers'
 import type { UserDTO, UsersQuery } from './types'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
@@ -48,9 +48,15 @@ export function applyUserFilters(query: UsersQuery, ids: string[] | null): SQL[]
   if (emailCondition) conditions.push(emailCondition)
   if (query.statuses?.length) conditions.push(inArray(users.idUserStatus, query.statuses))
   if (query.createdFrom) conditions.push(gte(users.createdAt, query.createdFrom))
-  if (query.createdTo) conditions.push(lt(users.createdAt, nextDay(query.createdTo)))
+  if (query.createdTo) {
+    if (!isSupportedRbacInclusiveDateTo(query.createdTo)) throw new Error('createdTo exceeds the supported inclusive upper bound')
+    conditions.push(lt(users.createdAt, nextDay(query.createdTo)))
+  }
   if (query.updatedFrom) conditions.push(gte(users.updatedAt, query.updatedFrom))
-  if (query.updatedTo) conditions.push(lt(users.updatedAt, nextDay(query.updatedTo)))
+  if (query.updatedTo) {
+    if (!isSupportedRbacInclusiveDateTo(query.updatedTo)) throw new Error('updatedTo exceeds the supported inclusive upper bound')
+    conditions.push(lt(users.updatedAt, nextDay(query.updatedTo)))
+  }
   if (ids) conditions.push(inArray(users.id, ids.length ? ids : ['00000000-0000-0000-0000-000000000000']))
   return conditions
 }

@@ -28,11 +28,17 @@ describe('rolesGridQuerySchema', () => {
     ['an impossible calendar date', { ...validQuery, startDateIns: '2026-02-30' }],
     ['an inverted created-date range', { ...validQuery, startDateIns: '2026-07-31', endDateIns: '2026-07-01' }],
     ['an inverted updated-date range', { ...validQuery, startDateMod: '2026-07-31', endDateMod: '2026-07-01' }],
+    ['the terminal created upper date', { ...validQuery, endDateIns: '9999-12-31' }],
+    ['the terminal updated upper date', { ...validQuery, endDateMod: '9999-12-31' }],
     ['a malformed text search', { ...validQuery, search: { operator: 'XOR', conditions: ['admin'] } }],
     ['a non-boolean permission filter', { ...validQuery, hasPermission: 'false' }],
     ['an invalid sort field', { ...validQuery, sort: 'name' }],
   ])('rejects %s', (_label, payload) => {
     expect(rolesGridQuerySchema.safeParse(payload).success).toBe(false)
+  })
+
+  it('accepts the terminal date as a lower bound', () => {
+    expect(rolesGridQuerySchema.safeParse({ page: 0, size: 50, startDateIns: '9999-12-31' }).success).toBe(true)
   })
 
   it('accepts a complete query and omitted optional filters', () => {

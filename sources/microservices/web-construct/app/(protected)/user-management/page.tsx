@@ -3,7 +3,7 @@ import UsersTableClient from '@/components/rbac/users/UsersTableClient'
 import type { UsersQuery } from '@/lib/rbac/types'
 import { PageContainer } from '@/components/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
-import { parseUsersGridIntegerParam, parseUsersGridStatusParam } from '@/lib/rbac/users-grid-query'
+import { parseUsersGridDateParam, parseUsersGridIntegerParam, parseUsersGridStatusParam } from '@/lib/rbac/users-grid-query'
 
 export default async function UserManagementPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams
@@ -25,10 +25,10 @@ export default async function UserManagementPage({ searchParams }: { searchParam
         allRoles={allRoles}
         roleId={parseUsersGridIntegerParam(sp.roleIds)}
         statusId={parseUsersGridStatusParam(sp.statuses)}
-        createdFrom={sp.createdFrom ?? null}
-        createdTo={sp.createdTo ?? null}
-        updatedFrom={sp.updatedFrom ?? null}
-        updatedTo={sp.updatedTo ?? null}
+        createdFrom={parseUsersGridDateParam(sp.createdFrom)}
+        createdTo={parseUsersGridDateParam(sp.createdTo, true)}
+        updatedFrom={parseUsersGridDateParam(sp.updatedFrom)}
+        updatedTo={parseUsersGridDateParam(sp.updatedTo, true)}
       />
     </PageContainer>
   )

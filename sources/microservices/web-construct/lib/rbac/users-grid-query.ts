@@ -5,6 +5,7 @@ import {
   type GridTextFilterModel, type TextSearchOperator,
 } from '@/lib/grid-text-search'
 import { dateRangeToGridFilter, gridDateFilterToRange, type GridDateFilterModel } from '@/lib/grid-filter-models'
+import { isSupportedRbacInclusiveDateTo } from './date-utils'
 
 export interface UsersGridFilterModel {
   firstName?: GridTextFilterModel
@@ -63,6 +64,14 @@ export function parseUsersGridIntegerParam(value: string | undefined): number | 
   if (!value) return null
   const parsed = Number(value.split(',')[0])
   return Number.isFinite(parsed) && Number.isInteger(parsed) ? parsed : null
+}
+
+export function parseUsersGridDateParam(value: string | undefined, inclusiveUpper = false): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null
+  return !inclusiveUpper || isSupportedRbacInclusiveDateTo(value) ? value : null
 }
 
 export function parseUsersGridStatusParam(value: string | undefined): UserStatusId | null {

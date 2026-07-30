@@ -20,10 +20,16 @@ describe('usersGridQuerySchema', () => {
   it.each([
     ['a malformed updated-to date', { ...validQuery, updatedTo: 'not-a-date' }],
     ['an impossible calendar date', { ...validQuery, updatedTo: '2026-02-30' }],
+    ['the terminal created upper date', { ...validQuery, createdTo: '9999-12-31' }],
+    ['the terminal updated upper date', { ...validQuery, updatedTo: '9999-12-31' }],
     ['a non-finite role id', { ...validQuery, roleIds: [Number.NaN] }],
     ['null in an optional filter field', { ...validQuery, updatedTo: null }],
   ])('rejects %s', (_label, payload) => {
     expect(usersGridQuerySchema.safeParse(payload).success).toBe(false)
+  })
+
+  it('accepts the terminal date as a lower bound', () => {
+    expect(usersGridQuerySchema.safeParse({ page: 0, size: 50, createdFrom: '9999-12-31' }).success).toBe(true)
   })
 
   it('accepts a complete valid query and omitted optional filters', () => {

@@ -9,7 +9,7 @@ import {
   type RoleType, type UserNavigationTreeDto,
   ROOT_ID, OPERATIONS_ID,
 } from './types'
-import { nextDay } from './date-utils'
+import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 
 const SORT_COLUMN = {
@@ -34,9 +34,15 @@ export function applyFilters(query: RolesQuery): SQL[] {
   if (query.associatedUsersMax != null) conditions.push(lte(roleListView.associatedUsers, query.associatedUsersMax))
   if (query.hasPermission != null) conditions.push(eq(roleListView.hasPermissions, query.hasPermission))
   if (query.startDateIns) conditions.push(gte(roleListView.dateIns, query.startDateIns))
-  if (query.endDateIns) conditions.push(lt(roleListView.dateIns, nextDay(query.endDateIns)))
+  if (query.endDateIns) {
+    if (!isSupportedRbacInclusiveDateTo(query.endDateIns)) throw new Error('endDateIns exceeds the supported inclusive upper bound')
+    conditions.push(lt(roleListView.dateIns, nextDay(query.endDateIns)))
+  }
   if (query.startDateMod) conditions.push(gte(roleListView.dateMod, query.startDateMod))
-  if (query.endDateMod) conditions.push(lt(roleListView.dateMod, nextDay(query.endDateMod)))
+  if (query.endDateMod) {
+    if (!isSupportedRbacInclusiveDateTo(query.endDateMod)) throw new Error('endDateMod exceeds the supported inclusive upper bound')
+    conditions.push(lt(roleListView.dateMod, nextDay(query.endDateMod)))
+  }
   return conditions
 }
 

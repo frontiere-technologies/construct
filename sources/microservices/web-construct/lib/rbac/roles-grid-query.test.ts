@@ -86,6 +86,22 @@ describe('rolesUrlParamsToFilterModel / rolesFilterModelToSearchParams', () => {
     })
   })
 
+  it('drops an unsupported upper bound while preserving the lower date in both role columns', () => {
+    const params = parseRolesGridUrlParams({
+      startDateIns: '9999-12-30', endDateIns: '9999-12-31',
+      startDateMod: '9999-12-30', endDateMod: '9999-12-31',
+    })
+
+    expect(params).toMatchObject({
+      startDateIns: '9999-12-30', endDateIns: null,
+      startDateMod: '9999-12-30', endDateMod: null,
+    })
+    expect(rolesUrlParamsToFilterModel(params)).toMatchObject({
+      dateIns: { type: 'greaterThanOrEqual', dateFrom: '9999-12-30' },
+      dateMod: { type: 'greaterThanOrEqual', dateFrom: '9999-12-30' },
+    })
+  })
+
   it('produces an empty model when nothing is set', () => {
     expect(rolesUrlParamsToFilterModel({ search: '', hasPermission: null, startDateIns: null, endDateIns: null, sortField: 'id', sortDir: 'ASC' })).toEqual({})
   })
