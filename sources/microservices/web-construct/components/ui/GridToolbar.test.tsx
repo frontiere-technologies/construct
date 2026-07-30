@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import * as I18nContext from '@/context/I18nContext'
 import { I18nProvider } from '@/context/I18nContext'
 import GridToolbar, { GridToolbarResetButton } from './GridToolbar'
 
@@ -18,6 +19,23 @@ const bundle = {
 }
 
 describe('GridToolbar', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('forwards its supplied clear callback to the reset action', () => {
+    vi.spyOn(I18nContext, 'useI18n').mockReturnValue({
+      t: (key: string) => `translated:${key}`,
+    } as ReturnType<typeof I18nContext.useI18n>)
+    const onClearFilters = vi.fn()
+
+    const toolbar = GridToolbar({ gridApi: null, columns: [], onClearFilters })
+    const resetAction = toolbar.props.children[0]
+    expect(resetAction.type).toBe(GridToolbarResetButton)
+
+    const button = GridToolbarResetButton(resetAction.props)
+    button.props.onClick()
+    expect(onClearFilters).toHaveBeenCalledOnce()
+  })
+
   it('wires the reset button click to the supplied clear callback', () => {
     const onClearFilters = vi.fn()
     const button = GridToolbarResetButton({ label: 'Reimposta filtri', onClearFilters })
