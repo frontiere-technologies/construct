@@ -4,8 +4,9 @@ import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { listActiveLanguages } from './language-service'
 import type {
-  TranslationRowDto, TranslationsPage, TranslationsQuery, TranslationValueDto,
+  LanguageDto, TranslationRowDto, TranslationsPage, TranslationsQuery, TranslationValueDto,
 } from './types'
+import { normalizeTextSearch } from '@/lib/grid-text-search'
 
 const SORT_COLUMN = {
   key: translationKey.key,
@@ -51,6 +52,36 @@ function statusCondition(status: 'missing' | 'complete', languageIds: number[]):
     : sql`${translated} < ${languageIds.length}`
 }
 
+export function applyTranslationFilters(query: TranslationsQuery, languages: LanguageDto[]): SQL[] {
+  const conditions: SQL[] = []
+  if (query.namespace) conditions.push(eq(translationKey.namespace, query.namespace))
+  if (query.module) conditions.push(eq(translationKey.module, query.module))
+
+  const addTextSearch = (search: TranslationsQuery['search'], column: SQL) => {
+    const textSearch = normalizeTextSearch(search)
+    if (!textSearch) return
+    const termConditions = textSearch.conditions.map(term => ilike(column, `%${term}%`))
+    conditions.push((textSearch.operator === 'OR' ? or(...termConditions) : and(...termConditions))!)
+  }
+
+  addTextSearch(query.search, translationKey.key)
+  addTextSearch(query.descriptionSearch, translationKey.description)
+
+  for (const [code, search] of Object.entries(query.valueSearches ?? {})) {
+    const language = languages.find(candidate => candidate.isActive && candidate.code === code)
+    if (!language) continue
+    const value = sql<string>`coalesce((
+      select ${translationValue.value}
+      from ${translationValue}
+      where ${translationValue.idTranslationKey} = ${translationKey.idTranslationKey}
+        and ${translationValue.idLanguage} = ${language.id}
+    ), '')`
+    addTextSearch(search, value)
+  }
+
+  return conditions
+}
+
 export async function listTranslations(query: TranslationsQuery): Promise<TranslationsPage> {
   const languages = await listActiveLanguages()
   const scoped = query.languageCode
@@ -58,18 +89,7 @@ export async function listTranslations(query: TranslationsQuery): Promise<Transl
     : languages
   const languageIds = scoped.map(l => l.id)
 
-  const conditions: SQL[] = []
-  if (query.namespace) conditions.push(eq(translationKey.namespace, query.namespace))
-  if (query.module) conditions.push(eq(translationKey.module, query.module))
-  if (query.search) {
-    const pattern = `%${query.search}%`
-    // Search spans the key, the description and the translated text (§4.2).
-    conditions.push(or(
-      ilike(translationKey.key, pattern),
-      ilike(translationKey.description, pattern),
-      sql`exists (select 1 from ${translationValue} tv where tv.id_translation_key = ${translationKey.idTranslationKey} and tv.value ilike ${pattern}${languageIds.length ? sql` and tv.id_language = any(${sql.raw(`'{${languageIds.join(',')}}'::bigint[]`)})` : sql``})`,
-    )!)
-  }
+  const conditions = applyTranslationFilters(query, languages)
   // `status` can arrive as `'all'` from an untrusted request body even though
   // the grid itself never sends it (`buildTranslationsGridQuery` omits it) —
   // treat that the same as "no status filter" rather than querying for it.
