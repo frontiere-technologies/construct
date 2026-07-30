@@ -131,6 +131,17 @@ describe('languages URL round-trip', () => {
     expect(languagesUrlParamsToFilterModel(parsed)).toEqual({})
   })
 
+  it('drops the unsupported terminal created-to date while preserving a valid lower bound', () => {
+    const parsed = parseLanguagesGridUrlParams({
+      createdFrom: '9999-12-30', createdTo: '9999-12-31',
+    })
+
+    expect(parsed).toMatchObject({ createdFrom: '9999-12-30', createdTo: null })
+    expect(languagesUrlParamsToFilterModel(parsed)).toMatchObject({
+      createdAt: { dateFrom: '9999-12-30', dateTo: undefined },
+    })
+  })
+
   it('accepts only supported sort fields and exact direction values', () => {
     const valid = parseLanguagesGridUrlParams({ sort: 'nativeName', direction: 'DESC' })
 

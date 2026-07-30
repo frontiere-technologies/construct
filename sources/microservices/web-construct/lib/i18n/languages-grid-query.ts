@@ -7,6 +7,7 @@ import {
   dateRangeToGridFilter, gridDateFilterToRange, gridNumberFilterToRange, numberRangeToGridFilter,
   type GridDateFilterModel, type GridNumberFilterModel,
 } from '@/lib/grid-filter-models'
+import { isSupportedLanguageCreatedTo } from './language-grid-boundaries'
 
 export interface LanguagesGridFilterModel {
   code?: GridTextFilterModel
@@ -117,7 +118,11 @@ export function parseLanguagesGridUrlParams(params: Record<string, string | unde
     parseCount(params.missingMin), parseCount(params.missingMax),
   )
   const [createdFrom, createdTo] = orderedRange(
-    parseDate(params.createdFrom), parseDate(params.createdTo),
+    parseDate(params.createdFrom),
+    (() => {
+      const value = parseDate(params.createdTo)
+      return value && isSupportedLanguageCreatedTo(value) ? value : null
+    })(),
   )
   return {
     codeSearch: params.codeSearch ?? '',

@@ -21,6 +21,7 @@ function request(body: unknown): NextRequest {
 
 describe('POST /api/i18n/languages-grid', () => {
   beforeEach(() => {
+    mocks.listLanguagesPage.mockClear()
     mocks.auth.mockResolvedValue({ user: { id: 'admin', isAdmin: true } })
     mocks.listLanguagesPage.mockResolvedValue({ elements: [], total: 0 })
   })
@@ -29,6 +30,7 @@ describe('POST /api/i18n/languages-grid', () => {
     ['a malformed date', { createdTo: '2026-02-30' }],
     ['an inverted count range', { translatedMin: 20, translatedMax: 10 }],
     ['an inverted date range', { createdFrom: '2026-07-30', createdTo: '2026-07-01' }],
+    ['the unsupported terminal created-to date', { createdTo: '9999-12-31' }],
     ['a non-finite count', { missingMin: Number.NaN }],
     ['an invalid boolean', { isDefault: 'false' }],
   ])('returns 400 for %s before it reaches the service', async (_label, invalid) => {

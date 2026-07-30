@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { LanguagesQuery } from './types'
+import { isSupportedLanguageCreatedTo } from './language-grid-boundaries'
 
 export const LANGUAGES_GRID_MAX_PAGE_SIZE = 200
 
@@ -35,7 +36,10 @@ export const languagesGridQuerySchema: z.ZodType<LanguagesQuery> = z.object({
   missingMin: countSchema.optional(),
   missingMax: countSchema.optional(),
   createdFrom: dateSchema.optional(),
-  createdTo: dateSchema.optional(),
+  createdTo: dateSchema.refine(
+    isSupportedLanguageCreatedTo,
+    'createdTo exceeds the supported inclusive upper bound',
+  ).optional(),
   sort: z.enum(['code', 'locale', 'name', 'nativeName', 'isActive', 'isDefault', 'createdAt']).optional(),
   direction: z.enum(['ASC', 'DESC']).optional(),
 }).superRefine((query, context) => {

@@ -38,9 +38,16 @@ describe('languagesGridQuerySchema', () => {
     ['an inverted translated range', { ...validQuery, translatedMin: 21, translatedMax: 20 }],
     ['an inverted missing range', { ...validQuery, missingMin: 4, missingMax: 3 }],
     ['an inverted created range', { ...validQuery, createdFrom: '2026-07-31', createdTo: '2026-07-01' }],
+    ['the unsupported terminal created-to date', { ...validQuery, createdTo: '9999-12-31' }],
     ['zero page size', { ...validQuery, size: 0 }],
     ['an oversized page', { ...validQuery, size: 201 }],
   ])('rejects %s', (_label, payload) => {
     expect(languagesGridQuerySchema.safeParse(payload).success).toBe(false)
+  })
+
+  it('still accepts the terminal date as a lower bound', () => {
+    expect(languagesGridQuerySchema.safeParse({
+      page: 0, size: 50, createdFrom: '9999-12-31',
+    }).success).toBe(true)
   })
 })
