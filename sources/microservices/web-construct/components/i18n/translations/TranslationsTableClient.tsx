@@ -164,7 +164,10 @@ export default function TranslationsTableClient(props: Props) {
         initialFilterModel={translationsUrlParamsToFilterModel(props) as Record<string, unknown>}
         initialSortModel={translationsUrlParamsToSortModel(props)}
         onFilterChanged={(e: FilterChangedEvent<TranslationRowDto>) =>
-          setParam(translationsFilterModelToSearchParams(e.api.getFilterModel() as TranslationsGridFilterModel))}
+          setParam(translationsFilterModelToSearchParams(
+            e.api.getFilterModel() as TranslationsGridFilterModel,
+            languages.map(language => language.code),
+          ))}
         onSortChanged={(e: SortChangedEvent<TranslationRowDto>) => {
           const active = e.api.getColumnState().find(c => c.sort)
           setParam({ sort: active?.colId ?? null, direction: active ? (active.sort === 'asc' ? 'ASC' : 'DESC') : null })
