@@ -57,7 +57,7 @@ export function applyTranslationFilters(query: TranslationsQuery, languages: Lan
   if (query.namespace) conditions.push(eq(translationKey.namespace, query.namespace))
   if (query.module) conditions.push(eq(translationKey.module, query.module))
 
-  const addTextSearch = (search: TranslationsQuery['search'], column: SQL) => {
+  const addTextSearch = (search: TranslationsQuery['search'], column: Parameters<typeof ilike>[0]) => {
     const textSearch = normalizeTextSearch(search)
     if (!textSearch) return
     const termConditions = textSearch.conditions.map(term => ilike(column, `%${term}%`))
