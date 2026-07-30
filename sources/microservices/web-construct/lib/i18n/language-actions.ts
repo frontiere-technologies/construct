@@ -14,13 +14,39 @@ import {
 
 export type ActionResult = { error: string | null }
 
-/** Unique-violation on `code` or `locale` → a message the admin can act on. */
+/**
+ * drizzle-orm 0.45.2 wraps every driver error before it escapes
+ * (`drizzle-orm/pg-core/session.js`'s `catch (e) { throw new
+ * DrizzleQueryError(queryString, params, e) }`): `DrizzleQueryError` only
+ * carries `query`/`params`/`cause`, never `constraint_name`. The real
+ * postgres.js `PostgresError` — with `code` and `constraint_name` — lives at
+ * `.cause`. Walked as a loop rather than assumed to be exactly one level
+ * deep, since that wrapping depth is an implementation detail (same
+ * reasoning, and the same helper, as `translation-actions.ts`'s
+ * `findPgError`; verified directly against the real driver here too — a
+ * bare `err.message.includes('app_language_code_key')` check on the
+ * top-level `DrizzleQueryError` never matches, since its `.message` is just
+ * the SQL text and params, never the constraint name).
+ */
+function findPgError(err: unknown): { code?: string; constraint_name?: string } | null {
+  let current: unknown = err
+  for (let depth = 0; depth < 5 && current !== null && current !== undefined; depth++) {
+    if (typeof current === 'object' && 'code' in current) {
+      return current as { code?: string; constraint_name?: string }
+    }
+    current = (current as { cause?: unknown }).cause
+  }
+  return null
+}
+
+/** Unique/check-violation on `code`, `locale` or the default-language invariants → a message the admin can act on. */
 function describe(err: unknown, fallback: string): string {
+  const constraint = findPgError(err)?.constraint_name
+  if (constraint === 'app_language_code_key') return 'Esiste già una lingua con questo codice.'
+  if (constraint === 'app_language_locale_key') return 'Esiste già una lingua con questo locale.'
+  if (constraint === 'app_language_single_default') return 'Esiste già una lingua predefinita.'
+  if (constraint === 'app_language_default_is_active') return 'La lingua predefinita deve restare attiva.'
   const message = err instanceof Error ? err.message : String(err)
-  if (message.includes('app_language_code_key')) return 'Esiste già una lingua con questo codice.'
-  if (message.includes('app_language_locale_key')) return 'Esiste già una lingua con questo locale.'
-  if (message.includes('app_language_single_default')) return 'Esiste già una lingua predefinita.'
-  if (message.includes('app_language_default_is_active')) return 'La lingua predefinita deve restare attiva.'
   return `${fallback} ${message}`
 }
 
