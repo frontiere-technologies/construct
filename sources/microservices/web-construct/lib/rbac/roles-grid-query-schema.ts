@@ -34,4 +34,15 @@ export const rolesGridQuerySchema: z.ZodType<RolesQuery> = z.object({
   endDateMod: dateSchema.optional(),
   sort: z.enum(['id', 'description', 'associatedUsers', 'hasPermissions', 'dateIns', 'dateMod']).optional(),
   direction: z.enum(['ASC', 'DESC']).optional(),
+}).superRefine((query, context) => {
+  const validateRange = (min: number | string | undefined, max: number | string | undefined, path: (string | number)[]) => {
+    if (min != null && max != null && min > max) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Range bounds must be ordered', path })
+    }
+  }
+
+  validateRange(query.idMin, query.idMax, ['idMax'])
+  validateRange(query.associatedUsersMin, query.associatedUsersMax, ['associatedUsersMax'])
+  validateRange(query.startDateIns, query.endDateIns, ['endDateIns'])
+  validateRange(query.startDateMod, query.endDateMod, ['endDateMod'])
 })

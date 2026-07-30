@@ -22,8 +22,12 @@ describe('rolesGridQuerySchema', () => {
   it.each([
     ['a non-finite numeric range bound', { ...validQuery, idMin: Number.NaN }],
     ['a zero page size', { ...validQuery, size: 0 }],
+    ['an inverted ID range', { ...validQuery, idMin: 20, idMax: 10 }],
+    ['an inverted associated-users range', { ...validQuery, associatedUsersMin: 4, associatedUsersMax: 3 }],
     ['a malformed updated date', { ...validQuery, endDateMod: 'not-a-date' }],
     ['an impossible calendar date', { ...validQuery, startDateIns: '2026-02-30' }],
+    ['an inverted created-date range', { ...validQuery, startDateIns: '2026-07-31', endDateIns: '2026-07-01' }],
+    ['an inverted updated-date range', { ...validQuery, startDateMod: '2026-07-31', endDateMod: '2026-07-01' }],
     ['a malformed text search', { ...validQuery, search: { operator: 'XOR', conditions: ['admin'] } }],
     ['a non-boolean permission filter', { ...validQuery, hasPermission: 'false' }],
     ['an invalid sort field', { ...validQuery, sort: 'name' }],

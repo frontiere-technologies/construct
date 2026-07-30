@@ -33,6 +33,19 @@ describe('POST /api/rbac/roles-grid', () => {
     expect(mocks.listRoles).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['an inverted ID range', { idMin: 20, idMax: 10 }],
+    ['an inverted associated-users range', { associatedUsersMin: 4, associatedUsersMax: 3 }],
+    ['an inverted created-date range', { startDateIns: '2026-07-31', endDateIns: '2026-07-01' }],
+    ['an inverted updated-date range', { startDateMod: '2026-07-31', endDateMod: '2026-07-01' }],
+  ])('returns 400 for %s before it reaches the service', async (_label, range) => {
+    const response = await POST(request({ page: 0, size: 50, sort: 'id', direction: 'ASC', ...range }))
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: 'Corpo della richiesta non valido.' })
+    expect(mocks.listRoles).not.toHaveBeenCalled()
+  })
+
   it('accepts a valid full filter payload', async () => {
     const payload = {
       page: 0, size: 50, search: 'admin', hasPermission: true,

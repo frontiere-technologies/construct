@@ -66,10 +66,41 @@ export interface RolesUrlParams {
   sortDir: 'ASC' | 'DESC'
 }
 
+const ROLE_SORT_FIELDS = new Set<NonNullable<RolesQuery['sort']>>([
+  'id', 'description', 'associatedUsers', 'hasPermissions', 'dateIns', 'dateMod',
+])
+
+function parseRolesGridDateParam(value: string | undefined): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? value : null
+}
+
 export function parseRolesGridNumberParam(value: string | undefined): number | null {
   if (!value) return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+export function parseRolesGridUrlParams(params: Record<string, string | undefined>): RolesUrlParams {
+  const sort = params.sort as RolesQuery['sort'] | undefined
+  return {
+    search: params.search ?? '',
+    search2: params.search2 ?? '',
+    searchOperator: params.searchOperator === 'AND' || params.searchOperator === 'OR' ? params.searchOperator : null,
+    idMin: parseRolesGridNumberParam(params.idMin),
+    idMax: parseRolesGridNumberParam(params.idMax),
+    associatedUsersMin: parseRolesGridNumberParam(params.associatedUsersMin),
+    associatedUsersMax: parseRolesGridNumberParam(params.associatedUsersMax),
+    hasPermission: params.hasPermission === 'true' ? true : params.hasPermission === 'false' ? false : null,
+    startDateIns: parseRolesGridDateParam(params.startDateIns),
+    endDateIns: parseRolesGridDateParam(params.endDateIns),
+    startDateMod: parseRolesGridDateParam(params.startDateMod),
+    endDateMod: parseRolesGridDateParam(params.endDateMod),
+    sortField: sort && ROLE_SORT_FIELDS.has(sort) ? sort : 'id',
+    sortDir: params.direction === 'DESC' ? 'DESC' : 'ASC',
+  }
 }
 
 export function rolesUrlParamsToFilterModel(p: RolesUrlParams): RolesGridFilterModel {

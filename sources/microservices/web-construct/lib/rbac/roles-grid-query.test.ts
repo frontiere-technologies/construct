@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { buildRolesGridQuery, parseRolesGridNumberParam, rolesUrlParamsToFilterModel, rolesFilterModelToSearchParams } from './roles-grid-query'
+import {
+  buildRolesGridQuery, parseRolesGridNumberParam, parseRolesGridUrlParams,
+  rolesUrlParamsToFilterModel, rolesFilterModelToSearchParams,
+} from './roles-grid-query'
 
 describe('buildRolesGridQuery', () => {
   it('defaults to page 0, id/ASC sort, no filters', () => {
@@ -63,6 +66,24 @@ describe('rolesUrlParamsToFilterModel / rolesFilterModelToSearchParams', () => {
     expect(parseRolesGridNumberParam('NaN')).toBeNull()
     expect(parseRolesGridNumberParam('Infinity')).toBeNull()
     expect(parseRolesGridNumberParam('10')).toBe(10)
+  })
+
+  it('sanitizes malformed sort, direction, and date URL parameters before the initial model is built', () => {
+    expect(parseRolesGridUrlParams({
+      sort: 'roleName',
+      direction: 'UP',
+      startDateIns: 'not-a-date',
+      endDateIns: '2026-02-30',
+      startDateMod: '2026-07-01',
+      endDateMod: '2026-13-01',
+    })).toMatchObject({
+      sortField: 'id',
+      sortDir: 'ASC',
+      startDateIns: null,
+      endDateIns: null,
+      startDateMod: '2026-07-01',
+      endDateMod: null,
+    })
   })
 
   it('produces an empty model when nothing is set', () => {
