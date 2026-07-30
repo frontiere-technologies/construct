@@ -19,14 +19,14 @@ export function columnPinningState<T>(columnDefs: ColDef<T>[]): { leftColIds: st
   return { leftColIds: idsPinnedTo('left'), rightColIds: idsPinnedTo('right') }
 }
 
-export const appGridTheme = themeQuartz.withParams({
+export const appGridThemeParams = {
   backgroundColor: 'var(--theme-surface)',
   foregroundColor: 'var(--theme-foreground)',
   borderColor: 'var(--theme-border)',
   accentColor: 'var(--theme-primary)',
   rowHoverColor: 'var(--theme-surface-hover)',
-  headerBackgroundColor: '#111827',
-  headerTextColor: '#ffffff',
+  headerBackgroundColor: 'var(--theme-surface-hover)',
+  headerTextColor: 'var(--theme-foreground)',
   // A single static divider (not the resize-drag handle) between every header
   // cell, including non-resizable ones like the actions column -- otherwise
   // resizable columns show their resize handle as a short tick and
@@ -36,11 +36,11 @@ export const appGridTheme = themeQuartz.withParams({
   headerColumnBorderHeight: '50%',
   oddRowBackgroundColor: 'var(--theme-surface)',
   // No vertical rule between the pinned actions column and the scrolling columns:
-  // the actions column reads as part of the row, not as a separate pane. The header
-  // divider that `headerColumnBorder` would still draw there is suppressed in
-  // `globals.css` (it is per-column, so it can't be turned off from the theme).
+  // the actions column reads as part of the row, not as a separate pane.
   pinnedColumnBorder: false,
-})
+}
+
+export const appGridTheme = themeQuartz.withParams(appGridThemeParams)
 
 /**
  * AG Grid's built-in strings. Built per render from the active dictionary
