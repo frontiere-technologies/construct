@@ -22,7 +22,7 @@ This document records the decisions this plan actually made and why, written aft
 - [x] ✅ ID=DEC-5, Title=Drawer-based translations editor — one key's full row of languages edited in a side drawer, not inline grid cells.
 - [x] ✅ ID=DEC-6, Title=Optimistic locking on both key and value — two independent version counters, not one.
 - [x] ✅ ID=DEC-7, Title=Pino structured audit instead of an audit table — no new persistence subsystem.
-- [x] ✅ ID=DEC-8, Title=Rate limiting deliberately out of scope — every i18n endpoint is admin-authenticated and payload size is already bounded.
+- [x] ✅ ID=DEC-8, Title=Rate limiting deliberately out of scope — access control and bounded responses/payloads reduce exposure, but the lack of request-rate controls remains an accepted trade-off.
 
 ---
 
@@ -82,7 +82,7 @@ A second mapping table (UI language code → content locale) was deliberately no
 
 **Why:** a key's metadata and a language's translated text are edited independently in the UI (the drawer lets an admin change the English value without touching the description) and are edited by potentially different admins concurrently (one admin translating into French while another fixes the key's namespace). A single version field covering both would force every edit — text-only or metadata-only — to contend on the same counter, producing false-positive conflicts: two admins editing different languages of the same key would collide on a shared version even though their writes don't actually overlap. Two counters let `saveTranslations()` accept a metadata-unchanged, value-changed save from one admin and a value-in-a-different-language save from another without either being rejected as stale.
 
-**Tied to Task 9's fix:** the first implementation compared versions in JavaScript after a plain `SELECT` (no row lock under READ COMMITTED) and then issued the `UPDATE`/`DELETE` keyed only by primary key — a genuine lost-update bug, since two concurrent requests could both pass the JS check before either write landed. The fix (documented in `.superpowers/sdd/task-9-report.md`, "Important #1") moved the version into the `UPDATE ... WHERE id = ... AND version = ...` predicate itself for **both** counters independently, so the database — not application-level JavaScript — is what actually enforces "you may only write if your version is still current," verified against a real two-transaction interleaving (one transaction's write blocks on the other's row lock, then re-evaluates its own `WHERE version = ...` against the now-committed row and correctly affects zero rows). Task 16 later added integration tests that reproduce this same real DB-level race for both the key-version and per-value-version paths, rather than only testing the non-racing "stale snapshot" case a single JS comparison would already catch.
+**Tied to Task 9's fix:** the first implementation compared versions in JavaScript after a plain `SELECT` (no row lock under READ COMMITTED) and then issued the `UPDATE`/`DELETE` keyed only by primary key — a genuine lost-update bug, since two concurrent requests could both pass the JS check before either write landed. The final implementation in `lib/i18n/translation-actions.ts` moves the version into the `UPDATE ... WHERE id = ... AND version = ...` predicate itself for **both** counters independently, so the database — not application-level JavaScript — is what actually enforces "you may only write if your version is still current." The real two-transaction interleavings are versioned in `lib/i18n/translation-actions.integration.test.ts`: one transaction's write blocks on the other's row lock, then re-evaluates its own `WHERE version = ...` against the committed row and correctly affects zero rows for both key and per-value versions.
 
 ## DEC-7 — Pino audit instead of an audit table
 
@@ -92,18 +92,24 @@ A second mapping table (UI language code → content locale) was deliberately no
 
 ## DEC-8 — Rate limiting deliberately out of scope
 
-**Decision:** No rate limiting is added to any i18n endpoint (`GET /api/i18n/dictionary`, `GET /api/i18n/languages`, `POST /api/i18n/languages-grid`, `POST /api/i18n/translations-grid`, `POST /api/i18n/preferences/language`, or the admin server actions).
+**Decision:** No rate limiting is added to any i18n endpoint: the public bounded reads (`GET /api/i18n/dictionary`, `GET /api/i18n/languages`), the authenticated-user preference endpoint (`GET`/`PUT /api/i18n/preferences/language`), the admin-only grids (`POST /api/i18n/languages-grid`, `POST /api/i18n/translations-grid`), or the admin server actions.
 
-**Why (documented in the plan's non-goals):** every i18n endpoint that mutates data is admin-authenticated (`requireAdmin()` in server actions, `session.user.isAdmin` in route handlers); the read endpoints serve a small, bounded dictionary. Adding rate limiting would mean introducing a new subsystem (a token bucket, a Redis-backed counter, or similar) into a repo that has no rate-limiting infrastructure anywhere else — a disproportionate addition for endpoints that are already gated by authentication and by concrete payload bounds: `MAX_BULK_VALUES` and `MAX_VALUE_LENGTH` (`lib/i18n/types.ts`) cap how much a single translation save can write, and the languages/translations grid endpoints clamp their `size` parameter. The abuse surface this would defend against — an authenticated admin hammering an endpoint — is bounded by those constants rather than by request-rate policing.
+**Why (documented in the plan's non-goals):** the two public endpoints expose only active-language metadata and dictionary text already intended for UI delivery; dictionary language codes are negotiated against active languages, namespaces are validated, and the response size is bounded by the finite catalogue. The preference route requires an authenticated user and accepts only an active language code through `setPreferredLanguage()`. Grid routes require an admin session and cap page size at 200; admin translation writes are additionally bounded by `MAX_BULK_VALUES` and `MAX_VALUE_LENGTH` (`lib/i18n/types.ts`). Adding rate limiting would introduce a token-bucket/Redis-style subsystem that the repository does not otherwise have. The absence of rate limiting remains an explicit accepted abuse-resilience trade-off, not a consequence of every endpoint being admin-only.
+
+## Residual limitations
+
+The final hardcoded-label scan still reports matches in 15 TSX files, but manual inspection classifies all of them as non-copy false positives: TypeScript generic syntax, JSX ternaries, technical format examples such as `it-IT` and `common.actions.save`, the `Construct` product name, a phone-number example, and the password mask. No untranslated user-facing prose was found by the prescribed scan.
+
+The remaining intentional trade-offs are architectural rather than incomplete implementation: the render path loads the complete per-language dictionary instead of splitting it by namespace; translation-key metadata edits coarsely invalidate every language cache; and navigation-item content translations remain a separate uppercase-locale system bridged with a checked fallback. These limits are documented in DEC-3, DEC-4, and the plan's progressive-loading note.
 
 ---
 
 ## Cross-references
 
 - Plan: `docs/superpowers/plans/2026-07-28-i18n-system.md`
-- Task briefs and reports: `.superpowers/sdd/task-{1..18}-*.md`
-- Task 9's optimistic-locking fix (DEC-6 detail): `.superpowers/sdd/task-9-report.md`, "Review fix round" and "Second fix round"
-- Task 16's DB-level race tests (DEC-6 detail): `.superpowers/sdd/task-16-report.md`, `.superpowers/sdd/task-16-fix-report.md`
+- Task breakdown and implementation notes: `docs/superpowers/plans/2026-07-28-i18n-system.md`
+- Task 9's optimistic-locking implementation (DEC-6 detail): `sources/microservices/web-construct/lib/i18n/translation-actions.ts`
+- Task 16's DB-level race tests (DEC-6 detail): `sources/microservices/web-construct/lib/i18n/translation-actions.integration.test.ts`
 - Task 17's locale-tolerant login helper: `sources/tests/e2e/helpers.py#do_test_login`
-- Deliberate non-goals not covered above (rich-text translations, `navigation_item` content translation scope, search debounce, CSRF): `.superpowers/sdd/task-18-brief.md`, "Deliberate non-goals" section
-- Progressive-loading note (dictionary loaded whole vs. namespace-scoped): `.superpowers/sdd/task-18-brief.md`, "Progressive-loading note" section
+- Deliberate non-goals not covered above (rich-text translations, `navigation_item` content translation scope, search debounce, CSRF): `docs/superpowers/plans/2026-07-28-i18n-system.md`, "Deliberate non-goals" section
+- Progressive-loading note (dictionary loaded whole vs. namespace-scoped): `docs/superpowers/plans/2026-07-28-i18n-system.md`, "Progressive-loading note" section

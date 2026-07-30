@@ -110,7 +110,8 @@ def test_cancel_leaves_detail_page(logged_in_page, base_url):
 
     page.locator('[data-testid="perm-toggle"]').first.click()
     page.get_by_role("button", name="Annulla").click()
-    expect(page).to_have_url(f"{base_url}/roles-permissions")
+    # The grid may immediately persist its default sort in the query string.
+    expect(page).to_have_url(re.compile(rf"^{re.escape(base_url)}/roles-permissions(?:\?.*)?$"))
 
     _delete_role(page, base_url, name)
 
@@ -126,7 +127,7 @@ def test_system_role_not_editable(logged_in_page, base_url):
 
     # Annulla still exits the page even for a non-editable system role.
     page.get_by_role("button", name="Annulla").click()
-    expect(page).to_have_url(f"{base_url}/roles-permissions")
+    expect(page).to_have_url(re.compile(rf"^{re.escape(base_url)}/roles-permissions(?:\?.*)?$"))
 
 
 def test_filter_by_creation_date_range(logged_in_page, base_url):
