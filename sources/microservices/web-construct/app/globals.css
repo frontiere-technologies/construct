@@ -2,6 +2,7 @@
 @source "../**/*.{ts,tsx,js,jsx}";
 
 button:not(:disabled) {
+  cursor: pointer;
   transition: transform 150ms ease, filter 150ms ease;
 }
 
@@ -12,6 +13,7 @@ button:not(:disabled):hover {
 
 button:disabled {
   cursor: not-allowed;
+  pointer-events: none;
   filter: opacity(0.6);
 }
 
