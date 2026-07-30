@@ -4,7 +4,9 @@ import React, { useMemo, useRef, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import DataGrid from '@/components/ui/DataGrid'
-import ColumnVisibilityToggle from '@/components/ui/ColumnVisibilityToggle'
+import GridToolbar from '@/components/ui/GridToolbar'
+import { DATE_FILTER } from '@/components/ui/gridColumnFilters'
+import { resetGridFilters } from '@/components/ui/grid-reset'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
@@ -12,7 +14,7 @@ import { useI18n } from '@/context/I18nContext'
 import { deleteTranslationKey } from '@/lib/i18n/translation-actions'
 import {
   translationsFilterModelToSearchParams, translationsUrlParamsToFilterModel,
-  translationsUrlParamsToSortModel, type TranslationsGridFilterModel,
+  translationsUrlParamsToSortModel, type TranslationsGridFilterModel, type TranslationsUrlParams,
 } from '@/lib/i18n/translations-grid-query'
 import type { TranslationRowDto } from '@/lib/i18n/types'
 import { createTranslationsDatasource } from './translationsDatasource'
@@ -22,16 +24,7 @@ import TranslationValueCell from './TranslationValueCell'
 
 interface Props {
   /** Full URL state, including dynamic value_<languageCode> filters (Task 4 consumes it). */
-  urlParams: Record<string, string | undefined>
-  search: string
-  search2: string
-  searchOperator: 'AND' | 'OR' | null
-  namespace: string | null
-  module: string | null
-  language: string | null
-  status: string | null
-  sortField: string
-  sortDir: 'ASC' | 'DESC'
+  urlParams: TranslationsUrlParams
   namespaces: string[]
   modules: string[]
 }
@@ -40,6 +33,8 @@ const textFilter = {
   filter: 'agTextColumnFilter' as const,
   filterParams: { filterOptions: ['contains'], buttons: ['apply', 'reset'] },
 }
+
+const TRANSLATION_DATE_FILTER = DATE_FILTER as Pick<ColDef<TranslationRowDto>, 'filter' | 'filterParams'>
 
 export default function TranslationsTableClient(props: Props) {
   const { t, fmt, languages } = useI18n()
@@ -110,7 +105,7 @@ export default function TranslationsTableClient(props: Props) {
       valueGetter: () => '',
     },
     {
-      colId: 'updatedAt', headerName: t('translation.updated_at'), sortable: true, filter: false, width: 160,
+      colId: 'updatedAt', headerName: t('translation.updated_at'), sortable: true, ...TRANSLATION_DATE_FILTER, width: 160,
       valueGetter: p => p.data ? fmt.dateTime(p.data.updatedAt) : '',
     },
   ], [t, fmt, languages, props.namespaces, props.modules])
@@ -131,22 +126,20 @@ export default function TranslationsTableClient(props: Props) {
     router.push(`${pathname}?${next.toString()}`)
   }
 
-  const clearFilters = () => {
-    gridApiRef.current?.setFilterModel(null)
-    router.push(pathname)
-  }
-
   return (
     <>
-      <div className="mb-3 flex items-center justify-end gap-2">
-        <button onClick={clearFilters} className="rounded-lg border border-border px-3 py-2 text-sm">
-          {t('common.actions.reset_filters')}
-        </button>
-        <ColumnVisibilityToggle gridApi={gridApi} columns={columnLabels} />
+      <GridToolbar
+        gridApi={gridApi}
+        columns={columnLabels}
+        onClearFilters={() => resetGridFilters(
+          gridApiRef.current,
+          () => setParam(translationsFilterModelToSearchParams({}, languages.map(language => language.code))),
+        )}
+      >
         <button onClick={() => setCreating(true)} className="rounded-lg bg-gray-900 px-3 py-2 text-sm text-white">
           {t('translation.actions.create')}
         </button>
-      </div>
+      </GridToolbar>
 
       {error && <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
@@ -155,7 +148,7 @@ export default function TranslationsTableClient(props: Props) {
         datasource={datasource}
         getRowId={r => String(r.id)}
         initialFilterModel={translationsUrlParamsToFilterModel(props.urlParams) as Record<string, unknown>}
-        initialSortModel={translationsUrlParamsToSortModel(props)}
+        initialSortModel={translationsUrlParamsToSortModel(props.urlParams)}
         onFilterChanged={(e: FilterChangedEvent<TranslationRowDto>) =>
           setParam(translationsFilterModelToSearchParams(
             e.api.getFilterModel() as TranslationsGridFilterModel,

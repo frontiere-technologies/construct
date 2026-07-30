@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { and, asc, count, desc, eq, ilike, inArray, isNotNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, lt, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { listActiveLanguages } from './language-service'
@@ -52,10 +52,18 @@ function statusCondition(status: 'missing' | 'complete', languageIds: number[]):
     : sql`${translated} < ${languageIds.length}`
 }
 
+function nextDay(date: string): string {
+  const next = new Date(`${date}T00:00:00.000Z`)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return next.toISOString().slice(0, 10)
+}
+
 export function applyTranslationFilters(query: TranslationsQuery, languages: LanguageDto[]): SQL[] {
   const conditions: SQL[] = []
   if (query.namespace) conditions.push(eq(translationKey.namespace, query.namespace))
   if (query.module) conditions.push(eq(translationKey.module, query.module))
+  if (query.updatedFrom) conditions.push(gte(translationKey.updatedAt, query.updatedFrom))
+  if (query.updatedTo) conditions.push(lt(translationKey.updatedAt, nextDay(query.updatedTo)))
 
   const addTextSearch = (search: TranslationsQuery['search'], column: Parameters<typeof ilike>[0]) => {
     const textSearch = normalizeTextSearch(search)

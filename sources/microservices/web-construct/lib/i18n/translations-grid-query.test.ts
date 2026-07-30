@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildTranslationsGridQuery, translationsFilterModelToSearchParams,
-  translationsUrlParamsToFilterModel, translationsUrlParamsToSortModel,
+  parseTranslationsGridUrlParams, translationsUrlParamsToFilterModel, translationsUrlParamsToSortModel,
 } from './translations-grid-query'
 
 describe('buildTranslationsGridQuery', () => {
@@ -36,6 +36,11 @@ describe('buildTranslationsGridQuery', () => {
     })
     expect(q).toMatchObject({ namespace: 'auth', module: 'core', languageCode: 'en', status: 'missing' })
   })
+  it('maps the updated date range', () => {
+    expect(buildTranslationsGridQuery(0, 50, [], {
+      updatedAt: { dateFrom: '2026-07-01', dateTo: '2026-07-30' },
+    })).toMatchObject({ updatedFrom: '2026-07-01', updatedTo: '2026-07-30' })
+  })
   it('omits the status filter when it is "all"', () => {
     expect(buildTranslationsGridQuery(0, 50, [], { status: { value: 'all' } }).status).toBeUndefined()
   })
@@ -57,6 +62,17 @@ describe('translations URL round-trip', () => {
       search: 'auth', search2: null, searchOperator: null,
       description: null, description2: null, descriptionOperator: null,
       namespace: 'auth', module: 'core', language: 'en', status: 'missing',
+      updatedFrom: null, updatedTo: null,
+    })
+  })
+  it('round-trips the updated date range through URL params', () => {
+    const params = translationsFilterModelToSearchParams({
+      updatedAt: { dateFrom: '2026-07-01', dateTo: '2026-07-30' },
+    })
+
+    expect(params).toMatchObject({ updatedFrom: '2026-07-01', updatedTo: '2026-07-30' })
+    expect(translationsUrlParamsToFilterModel(params)).toMatchObject({
+      updatedAt: { dateFrom: '2026-07-01', dateTo: '2026-07-30' },
     })
   })
   it('nulls out absent filters', () => {
@@ -65,6 +81,7 @@ describe('translations URL round-trip', () => {
         search: null, search2: null, searchOperator: null,
         description: null, description2: null, descriptionOperator: null,
         namespace: null, module: null, language: null, status: null,
+        updatedFrom: null, updatedTo: null,
       })
   })
   it('serialises both AND conditions for URL navigation', () => {
@@ -115,5 +132,34 @@ describe('translations URL round-trip', () => {
       search: '', namespace: null, module: null, language: null, status: null,
       sortField: 'updatedAt', sortDir: 'DESC',
     })).toEqual([{ colId: 'updatedAt', sort: 'desc' }])
+  })
+
+  it('sanitizes invalid URL filters before they become an AG Grid model', () => {
+    const params = parseTranslationsGridUrlParams({
+      updatedFrom: '2026-07-31', updatedTo: '2026-07-01', status: 'partial',
+      sort: '__proto__', direction: 'UP', value_en: 'save', value_en2: 'now', value_enOperator: 'XOR',
+    })
+
+    expect(params).toMatchObject({
+      updatedFrom: null, updatedTo: null, status: null, sortField: 'key', sortDir: 'ASC',
+      value_en: 'save', value_en2: 'now', value_enOperator: null,
+    })
+    expect(translationsUrlParamsToFilterModel(params)).toEqual({
+      value_en: {
+        filterType: 'text', operator: 'AND',
+        conditions: [
+          { filterType: 'text', type: 'contains', filter: 'save' },
+          { filterType: 'text', type: 'contains', filter: 'now' },
+        ],
+      },
+    })
+  })
+
+  it('keeps a valid upper updated-date bound from the URL', () => {
+    const params = parseTranslationsGridUrlParams({ updatedTo: '2026-07-30' })
+
+    expect(translationsUrlParamsToFilterModel(params)).toEqual({
+      updatedAt: { dateFrom: undefined, dateTo: '2026-07-30' },
+    })
   })
 })

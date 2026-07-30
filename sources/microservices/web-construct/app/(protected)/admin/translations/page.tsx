@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { PageContainer } from '@/components/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
 import { listModules, listNamespaces } from '@/lib/i18n/translation-service'
+import { parseTranslationsGridUrlParams } from '@/lib/i18n/translations-grid-query'
 import TranslationsTableClient from '@/components/i18n/translations/TranslationsTableClient'
 
 export default async function TranslationsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -16,16 +17,7 @@ export default async function TranslationsPage({ searchParams }: { searchParams:
   return (
     <PageContainer title={t('translation.title')} subtitle={t('translation.subtitle')}>
       <TranslationsTableClient
-        urlParams={sp}
-        search={sp.search ?? ''}
-        search2={sp.search2 ?? ''}
-        searchOperator={sp.searchOperator === 'OR' ? 'OR' : sp.searchOperator === 'AND' ? 'AND' : null}
-        namespace={sp.namespace ?? null}
-        module={sp.module ?? null}
-        language={sp.language ?? null}
-        status={sp.status ?? null}
-        sortField={sp.sort ?? 'key'}
-        sortDir={(sp.direction as 'ASC' | 'DESC') ?? 'ASC'}
+        urlParams={parseTranslationsGridUrlParams(sp)}
         namespaces={namespaces}
         modules={modules}
       />

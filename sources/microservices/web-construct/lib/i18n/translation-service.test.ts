@@ -167,4 +167,23 @@ describe('applyTranslationFilters', () => {
     expect(rendered[0].sql).toContain("), '') ilike $2")
     expect(rendered[0].params).toEqual([1, '%save%'])
   })
+
+  it('uses an inclusive updated date range without including the following day', () => {
+    const rendered = applyTranslationFilters({
+      page: 0,
+      size: 50,
+      updatedFrom: '2026-07-01',
+      updatedTo: '2026-07-30',
+    }, languages).map(condition => dialect.sqlToQuery(condition))
+
+    expect(rendered).toHaveLength(2)
+    expect(rendered.map(condition => condition.sql)).toEqual([
+      '"translation_key"."updated_at" >= $1',
+      '"translation_key"."updated_at" < $1',
+    ])
+    expect(rendered.map(condition => condition.params)).toEqual([
+      ['2026-07-01'],
+      ['2026-07-31'],
+    ])
+  })
 })

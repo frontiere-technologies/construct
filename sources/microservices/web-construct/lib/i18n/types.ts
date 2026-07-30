@@ -89,6 +89,8 @@ export interface TranslationsQuery {
   namespace?: string
   module?: string
   status?: TranslationStatusFilter
+  updatedFrom?: string
+  updatedTo?: string
   sort?: TranslationSortField
   direction?: 'ASC' | 'DESC'
 }
