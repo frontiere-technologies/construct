@@ -102,12 +102,18 @@ export interface PermissionDelta {
 export interface RolesQuery {
   page: number
   size: number
-  search?: string
+  search?: TextSearch
+  idMin?: number
+  idMax?: number
+  associatedUsersMin?: number
+  associatedUsersMax?: number
   sort?: 'id' | 'description' | 'associatedUsers' | 'hasPermissions' | 'dateIns' | 'dateMod'
   direction?: 'ASC' | 'DESC'
   hasPermission?: boolean
   startDateIns?: string
   endDateIns?: string
+  startDateMod?: string
+  endDateMod?: string
 }
 
 export interface RolesPage {

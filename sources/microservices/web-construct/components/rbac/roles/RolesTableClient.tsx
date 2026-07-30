@@ -4,8 +4,10 @@ import React, { useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import DataGrid from '@/components/ui/DataGrid'
-import ColumnVisibilityToggle from '@/components/ui/ColumnVisibilityToggle'
+import GridToolbar from '@/components/ui/GridToolbar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import { resetGridFilters } from '@/components/ui/grid-reset'
+import { DATE_FILTER, NUMBER_FILTER, TEXT_FILTER } from '@/components/ui/gridColumnFilters'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
 import CreateRoleModal from './CreateRoleModal'
@@ -19,13 +21,25 @@ import {
 } from '@/lib/rbac/roles-grid-query'
 import type { RolePageItemDto } from '@/lib/rbac/types'
 
+const ROLE_TEXT_FILTER = TEXT_FILTER as Pick<ColDef<RolePageItemDto>, 'filter' | 'filterParams'>
+const ROLE_NUMBER_FILTER = NUMBER_FILTER as Pick<ColDef<RolePageItemDto>, 'filter' | 'filterParams'>
+const ROLE_DATE_FILTER = DATE_FILTER as Pick<ColDef<RolePageItemDto>, 'filter' | 'filterParams'>
+
 interface Props {
   sortField: string
   sortDir: 'ASC' | 'DESC'
   search: string
+  search2: string
+  searchOperator: 'AND' | 'OR' | null
+  idMin: number | null
+  idMax: number | null
+  associatedUsersMin: number | null
+  associatedUsersMax: number | null
   hasPermission: boolean | null
   startDateIns: string | null
   endDateIns: string | null
+  startDateMod: string | null
+  endDateMod: string | null
 }
 
 export default function RolesTableClient(props: Props) {
@@ -58,14 +72,13 @@ export default function RolesTableClient(props: Props) {
       { label: t('common.actions.rename'), disabled: r.roleType !== 'SERVICE', onClick: () => setRenaming(r) },
       { label: t('common.actions.delete'), disabled: r.roleType === 'SYSTEM', onClick: () => setDeleting(r) },
     ]),
-    { field: 'id', headerName: t('roles.list.id'), sortable: true, filter: false },
+    { field: 'id', headerName: t('roles.list.id'), sortable: true, ...ROLE_NUMBER_FILTER },
     {
       field: 'description', headerName: t('roles.form.name'), sortable: true,
-      filter: 'agTextColumnFilter',
-      filterParams: { filterOptions: ['contains'], buttons: ['apply', 'reset'] },
+      ...ROLE_TEXT_FILTER,
       cellRenderer: (p: { data?: RolePageItemDto }) => p.data ? <span className="font-medium">{p.data.description}</span> : null,
     },
-    { field: 'associatedUsers', headerName: t('roles.list.associated_users'), sortable: true, filter: false },
+    { field: 'associatedUsers', headerName: t('roles.list.associated_users'), sortable: true, ...ROLE_NUMBER_FILTER },
     {
       colId: 'hasPermissions', headerName: t('roles.list.has_permissions'), sortable: true, filter: EnumSelectFilter,
       filterParams: { options: [{ value: 'true', label: t('common.labels.yes') }, { value: 'false', label: t('common.labels.no') }] },
@@ -76,12 +89,11 @@ export default function RolesTableClient(props: Props) {
       ) : null,
     },
     {
-      colId: 'dateIns', headerName: t('roles.list.created_at'), sortable: true,
-      filter: 'agDateColumnFilter',
-      filterParams: { filterOptions: ['inRange'], defaultOption: 'inRange', buttons: ['apply', 'reset'] },
+      field: 'dateIns', headerName: t('roles.list.created_at'), sortable: true,
+      ...ROLE_DATE_FILTER,
       valueGetter: p => p.data ? fmt.date(p.data.dateIns) : '',
     },
-    { field: 'dateMod', headerName: t('roles.list.updated_at'), sortable: true, filter: false, valueGetter: p => p.data ? fmt.date(p.data.dateMod) : '' },
+    { field: 'dateMod', headerName: t('roles.list.updated_at'), sortable: true, ...ROLE_DATE_FILTER, valueGetter: p => p.data ? fmt.date(p.data.dateMod) : '' },
   ], [router, t, fmt])
 
   const columnLabels = useMemo(() => [
@@ -108,12 +120,13 @@ export default function RolesTableClient(props: Props) {
     setGridApi(event.api)
   }
 
+  const onClearFilters = () => resetGridFilters(gridApi, () => setParam(rolesFilterModelToSearchParams({})))
+
   return (
     <>
-      <div className="flex justify-end items-center gap-2 mb-3">
-        <ColumnVisibilityToggle gridApi={gridApi} columns={columnLabels} />
+      <GridToolbar gridApi={gridApi} columns={columnLabels} onClearFilters={onClearFilters}>
         <button onClick={() => setShowCreate(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">{t('roles.actions.create')}</button>
-      </div>
+      </GridToolbar>
       <DataGrid<RolePageItemDto>
         columnDefs={columnDefs}
         datasource={datasource}
