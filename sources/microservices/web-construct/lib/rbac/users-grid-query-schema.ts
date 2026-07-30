@@ -33,4 +33,17 @@ export const usersGridQuerySchema: z.ZodType<UsersQuery> = z.object({
   updatedTo: dateSchema.refine(isSupportedRbacInclusiveDateTo, 'updatedTo exceeds the supported inclusive upper bound').optional(),
   sort: z.enum(['firstName', 'lastName', 'email', 'dateIns', 'dateMod', 'status']).optional(),
   direction: z.enum(['ASC', 'DESC']).optional(),
+}).superRefine((query, context) => {
+  const validateRange = (
+    from: string | undefined,
+    to: string | undefined,
+    path: (string | number)[],
+  ) => {
+    if (from != null && to != null && from > to) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Range bounds must be ordered', path })
+    }
+  }
+
+  validateRange(query.createdFrom, query.createdTo, ['createdTo'])
+  validateRange(query.updatedFrom, query.updatedTo, ['updatedTo'])
 })

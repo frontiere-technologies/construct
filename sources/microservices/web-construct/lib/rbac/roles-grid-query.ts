@@ -20,6 +20,18 @@ export interface RolesGridFilterModel {
 
 export interface RolesGridSortItem { colId: string; sort: 'asc' | 'desc' }
 
+function orderedRange<T extends number | string>(
+  min: T | null | undefined,
+  max: T | null | undefined,
+): { min?: T; max?: T } | undefined {
+  if (min != null && max != null && min > max) return undefined
+  if (min == null && max == null) return undefined
+  return {
+    min: min ?? undefined,
+    max: max ?? undefined,
+  }
+}
+
 export function buildRolesGridQuery(
   startRow: number,
   pageSize: number,
@@ -27,10 +39,14 @@ export function buildRolesGridQuery(
   filterModel: RolesGridFilterModel,
 ): RolesQuery {
   const sortItem = sortModel[0]
-  const idRange = gridNumberFilterToRange(filterModel.id)
-  const associatedUsersRange = gridNumberFilterToRange(filterModel.associatedUsers)
-  const dateInsRange = gridDateFilterToRange(filterModel.dateIns)
-  const dateModRange = gridDateFilterToRange(filterModel.dateMod)
+  const idRawRange = gridNumberFilterToRange(filterModel.id)
+  const associatedUsersRawRange = gridNumberFilterToRange(filterModel.associatedUsers)
+  const dateInsRawRange = gridDateFilterToRange(filterModel.dateIns)
+  const dateModRawRange = gridDateFilterToRange(filterModel.dateMod)
+  const idRange = orderedRange(idRawRange?.min, idRawRange?.max)
+  const associatedUsersRange = orderedRange(associatedUsersRawRange?.min, associatedUsersRawRange?.max)
+  const dateInsRange = orderedRange(dateInsRawRange?.from, dateInsRawRange?.to)
+  const dateModRange = orderedRange(dateModRawRange?.from, dateModRawRange?.to)
   const hasPermValue = filterModel.hasPermissions?.value
   return {
     page: Math.floor(startRow / pageSize),
@@ -41,10 +57,10 @@ export function buildRolesGridQuery(
     associatedUsersMin: associatedUsersRange?.min,
     associatedUsersMax: associatedUsersRange?.max,
     hasPermission: hasPermValue === 'true' ? true : hasPermValue === 'false' ? false : undefined,
-    startDateIns: dateInsRange?.from,
-    endDateIns: dateInsRange?.to,
-    startDateMod: dateModRange?.from,
-    endDateMod: dateModRange?.to,
+    startDateIns: dateInsRange?.min,
+    endDateIns: dateInsRange?.max,
+    startDateMod: dateModRange?.min,
+    endDateMod: dateModRange?.max,
     sort: (sortItem?.colId as RolesQuery['sort']) ?? 'id',
     direction: sortItem ? (sortItem.sort === 'asc' ? 'ASC' : 'DESC') : 'ASC',
   }
@@ -86,25 +102,41 @@ export function parseRolesGridNumberParam(value: string | undefined): number | n
 
 export function parseRolesGridUrlParams(params: Record<string, string | undefined>): RolesUrlParams {
   const sort = params.sort as RolesQuery['sort'] | undefined
+  const idRange = orderedRange(
+    parseRolesGridNumberParam(params.idMin),
+    parseRolesGridNumberParam(params.idMax),
+  )
+  const associatedUsersRange = orderedRange(
+    parseRolesGridNumberParam(params.associatedUsersMin),
+    parseRolesGridNumberParam(params.associatedUsersMax),
+  )
+  const dateInsRange = orderedRange(
+    parseRolesGridDateParam(params.startDateIns),
+    (() => {
+      const value = parseRolesGridDateParam(params.endDateIns)
+      return value && isSupportedRbacInclusiveDateTo(value) ? value : null
+    })(),
+  )
+  const dateModRange = orderedRange(
+    parseRolesGridDateParam(params.startDateMod),
+    (() => {
+      const value = parseRolesGridDateParam(params.endDateMod)
+      return value && isSupportedRbacInclusiveDateTo(value) ? value : null
+    })(),
+  )
   return {
     search: params.search ?? '',
     search2: params.search2 ?? '',
     searchOperator: params.searchOperator === 'AND' || params.searchOperator === 'OR' ? params.searchOperator : null,
-    idMin: parseRolesGridNumberParam(params.idMin),
-    idMax: parseRolesGridNumberParam(params.idMax),
-    associatedUsersMin: parseRolesGridNumberParam(params.associatedUsersMin),
-    associatedUsersMax: parseRolesGridNumberParam(params.associatedUsersMax),
+    idMin: idRange?.min ?? null,
+    idMax: idRange?.max ?? null,
+    associatedUsersMin: associatedUsersRange?.min ?? null,
+    associatedUsersMax: associatedUsersRange?.max ?? null,
     hasPermission: params.hasPermission === 'true' ? true : params.hasPermission === 'false' ? false : null,
-    startDateIns: parseRolesGridDateParam(params.startDateIns),
-    endDateIns: (() => {
-      const value = parseRolesGridDateParam(params.endDateIns)
-      return value && isSupportedRbacInclusiveDateTo(value) ? value : null
-    })(),
-    startDateMod: parseRolesGridDateParam(params.startDateMod),
-    endDateMod: (() => {
-      const value = parseRolesGridDateParam(params.endDateMod)
-      return value && isSupportedRbacInclusiveDateTo(value) ? value : null
-    })(),
+    startDateIns: dateInsRange?.min ?? null,
+    endDateIns: dateInsRange?.max ?? null,
+    startDateMod: dateModRange?.min ?? null,
+    endDateMod: dateModRange?.max ?? null,
     sortField: sort && ROLE_SORT_FIELDS.has(sort) ? sort : 'id',
     sortDir: params.direction === 'DESC' ? 'DESC' : 'ASC',
   }

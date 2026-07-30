@@ -17,11 +17,17 @@ describe('global button interaction styles', () => {
     expect(declarations('button:not(:disabled)')).toMatchObject({ cursor: 'pointer' })
   })
 
-  it('prevents disabled buttons from receiving pointer hover styles', () => {
-    expect(declarations('button:disabled')).toMatchObject({
+  it('keeps disabled buttons hit-testable so the not-allowed cursor is observable', () => {
+    const disabled = declarations('button:disabled')
+
+    expect(disabled).toMatchObject({
       cursor: 'not-allowed',
-      'pointer-events': 'none',
       filter: 'opacity(0.6)',
+    })
+    expect(disabled).not.toHaveProperty('pointer-events')
+    expect(declarations('button:not(:disabled):hover')).toMatchObject({
+      transform: 'translateY(-1px)',
+      filter: 'brightness(0.98)',
     })
   })
 })

@@ -16,20 +16,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Corpo della richiesta non valido.' }, { status: 400 })
   }
 
-  const activeCodes = new Set((await listActiveLanguages()).map(language => language.code))
-  const rawValueSearches = body && typeof body === 'object' && !Array.isArray(body)
-    ? Object.getOwnPropertyDescriptor(body, 'valueSearches')?.value
-    : undefined
-  const hasUnknownValueSearch = rawValueSearches && typeof rawValueSearches === 'object' && !Array.isArray(rawValueSearches)
-    && Object.getOwnPropertyNames(rawValueSearches).some(code => !activeCodes.has(code))
-  if (
-    (parsed.data.languageCode && !activeCodes.has(parsed.data.languageCode)) ||
-    hasUnknownValueSearch
-  ) {
-    return NextResponse.json({ error: 'Corpo della richiesta non valido.' }, { status: 400 })
-  }
-
   try {
+    const activeCodes = new Set((await listActiveLanguages()).map(language => language.code))
+    const rawValueSearches = body && typeof body === 'object' && !Array.isArray(body)
+      ? Object.getOwnPropertyDescriptor(body, 'valueSearches')?.value
+      : undefined
+    const hasUnknownValueSearch = rawValueSearches && typeof rawValueSearches === 'object' && !Array.isArray(rawValueSearches)
+      && Object.getOwnPropertyNames(rawValueSearches).some(code => !activeCodes.has(code))
+    if (
+      (parsed.data.languageCode && !activeCodes.has(parsed.data.languageCode)) ||
+      hasUnknownValueSearch
+    ) {
+      return NextResponse.json({ error: 'Corpo della richiesta non valido.' }, { status: 400 })
+    }
+
     return NextResponse.json(await listTranslations(parsed.data))
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Errore interno.' }, { status: 500 })

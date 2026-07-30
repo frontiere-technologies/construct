@@ -18,6 +18,19 @@ export interface UsersGridFilterModel {
 
 export interface UsersGridSortItem { colId: string; sort: 'asc' | 'desc' }
 
+const USER_SORT_FIELDS = new Set<NonNullable<UsersQuery['sort']>>([
+  'firstName', 'lastName', 'email', 'dateIns', 'dateMod', 'status',
+])
+
+function orderedDateRange(
+  from: string | null | undefined,
+  to: string | null | undefined,
+): { from?: string; to?: string } | undefined {
+  if (from != null && to != null && from > to) return undefined
+  if (from == null && to == null) return undefined
+  return { from: from ?? undefined, to: to ?? undefined }
+}
+
 export function buildUsersGridQuery(
   startRow: number,
   pageSize: number,
@@ -25,8 +38,10 @@ export function buildUsersGridQuery(
   filterModel: UsersGridFilterModel,
 ): UsersQuery {
   const sortItem = sortModel[0]
-  const createdDateRange = gridDateFilterToRange(filterModel.dateIns)
-  const updatedDateRange = gridDateFilterToRange(filterModel.dateMod)
+  const createdRawRange = gridDateFilterToRange(filterModel.dateIns)
+  const updatedRawRange = gridDateFilterToRange(filterModel.dateMod)
+  const createdDateRange = orderedDateRange(createdRawRange?.from, createdRawRange?.to)
+  const updatedDateRange = orderedDateRange(updatedRawRange?.from, updatedRawRange?.to)
   return {
     page: Math.floor(startRow / pageSize),
     size: pageSize,
@@ -77,6 +92,39 @@ export function parseUsersGridDateParam(value: string | undefined, inclusiveUppe
 export function parseUsersGridStatusParam(value: string | undefined): UserStatusId | null {
   const parsed = parseUsersGridIntegerParam(value)
   return parsed === 1 || parsed === 2 ? parsed : null
+}
+
+export function parseUsersGridUrlParams(params: Record<string, string | undefined>): UsersUrlParams {
+  const sort = params.sort as UsersQuery['sort'] | undefined
+  const createdRange = orderedDateRange(
+    parseUsersGridDateParam(params.createdFrom),
+    parseUsersGridDateParam(params.createdTo, true),
+  )
+  const updatedRange = orderedDateRange(
+    parseUsersGridDateParam(params.updatedFrom),
+    parseUsersGridDateParam(params.updatedTo, true),
+  )
+
+  return {
+    search: params.search ?? '',
+    search2: params.search2 ?? '',
+    searchOperator: params.searchOperator === 'AND' || params.searchOperator === 'OR'
+      ? params.searchOperator
+      : null,
+    emailSearch: params.emailSearch ?? '',
+    emailSearch2: params.emailSearch2 ?? '',
+    emailSearchOperator: params.emailSearchOperator === 'AND' || params.emailSearchOperator === 'OR'
+      ? params.emailSearchOperator
+      : null,
+    roleId: parseUsersGridIntegerParam(params.roleIds),
+    statusId: parseUsersGridStatusParam(params.statuses),
+    createdFrom: createdRange?.from ?? null,
+    createdTo: createdRange?.to ?? null,
+    updatedFrom: updatedRange?.from ?? null,
+    updatedTo: updatedRange?.to ?? null,
+    sortField: sort && USER_SORT_FIELDS.has(sort) ? sort : 'dateIns',
+    sortDir: params.direction === 'ASC' ? 'ASC' : 'DESC',
+  }
 }
 
 export function usersUrlParamsToFilterModel(p: UsersUrlParams): UsersGridFilterModel {

@@ -22,6 +22,8 @@ describe('usersGridQuerySchema', () => {
     ['an impossible calendar date', { ...validQuery, updatedTo: '2026-02-30' }],
     ['the terminal created upper date', { ...validQuery, createdTo: '9999-12-31' }],
     ['the terminal updated upper date', { ...validQuery, updatedTo: '9999-12-31' }],
+    ['an inverted created range', { ...validQuery, createdFrom: '2026-07-31', createdTo: '2026-07-01' }],
+    ['an inverted updated range', { ...validQuery, updatedFrom: '2026-07-31', updatedTo: '2026-07-01' }],
     ['a non-finite role id', { ...validQuery, roleIds: [Number.NaN] }],
     ['null in an optional filter field', { ...validQuery, updatedTo: null }],
   ])('rejects %s', (_label, payload) => {

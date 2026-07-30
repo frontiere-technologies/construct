@@ -16,7 +16,7 @@ export function GridToolbarResetButton(
   { label, onClearFilters }: { label: string; onClearFilters: () => void },
 ) {
   return (
-    <button onClick={onClearFilters} className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">
+    <button type="button" onClick={onClearFilters} className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">
       {label}
     </button>
   )

@@ -103,6 +103,46 @@ describe('rolesUrlParamsToFilterModel / rolesFilterModelToSearchParams', () => {
   })
 
   it.each([
+    ['ID', { idMin: '20', idMax: '10' }, ['idMin', 'idMax']],
+    ['associated users', { associatedUsersMin: '4', associatedUsersMax: '3' }, ['associatedUsersMin', 'associatedUsersMax']],
+    ['created date', { startDateIns: '2026-07-31', endDateIns: '2026-07-01' }, ['startDateIns', 'endDateIns']],
+    ['updated date', { startDateMod: '2026-07-31', endDateMod: '2026-07-01' }, ['startDateMod', 'endDateMod']],
+  ] as const)('drops an inverted %s URL range before it reaches the query', (_label, raw, fields) => {
+    const parsed = parseRolesGridUrlParams(raw)
+    const model = rolesUrlParamsToFilterModel(parsed)
+    const query = buildRolesGridQuery(0, 50, [], model)
+
+    expect(parsed[fields[0]]).toBeNull()
+    expect(parsed[fields[1]]).toBeNull()
+    expect(query[fields[0]]).toBeUndefined()
+    expect(query[fields[1]]).toBeUndefined()
+  })
+
+  it('drops inverted ranges received directly from AG Grid while preserving valid one-sided ranges', () => {
+    const inverted = buildRolesGridQuery(0, 50, [], {
+      id: { type: 'inRange', filter: 20, filterTo: 10 },
+      associatedUsers: { type: 'inRange', filter: 4, filterTo: 3 },
+      dateIns: { type: 'inRange', dateFrom: '2026-07-31', dateTo: '2026-07-01' },
+      dateMod: { type: 'inRange', dateFrom: '2026-07-31', dateTo: '2026-07-01' },
+    })
+    const oneSided = buildRolesGridQuery(0, 50, [], {
+      dateIns: { type: 'greaterThanOrEqual', dateFrom: '2026-07-01' },
+      dateMod: { type: 'lessThanOrEqual', dateFrom: '2026-07-30' },
+    })
+
+    expect(inverted).toMatchObject({
+      idMin: undefined, idMax: undefined,
+      associatedUsersMin: undefined, associatedUsersMax: undefined,
+      startDateIns: undefined, endDateIns: undefined,
+      startDateMod: undefined, endDateMod: undefined,
+    })
+    expect(oneSided).toMatchObject({
+      startDateIns: '2026-07-01', endDateIns: undefined,
+      startDateMod: undefined, endDateMod: '2026-07-30',
+    })
+  })
+
+  it.each([
     ['created', 'startDateIns', 'endDateIns'],
     ['updated', 'startDateMod', 'endDateMod'],
   ] as const)('carries the %s URL through the model and query while dropping a terminal upper', (_label, lowerField, upperField) => {

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   buildUsersGridQuery, parseUsersGridIntegerParam,
-  parseUsersGridDateParam, usersUrlParamsToFilterModel, usersFilterModelToSearchParams,
+  parseUsersGridDateParam, parseUsersGridUrlParams,
+  usersUrlParamsToFilterModel, usersFilterModelToSearchParams,
 } from './users-grid-query'
 import UserManagementPage from '@/app/(protected)/user-management/page'
 
@@ -72,6 +73,36 @@ describe('buildUsersGridQuery', () => {
 })
 
 describe('usersUrlParamsToFilterModel / usersFilterModelToSearchParams', () => {
+  it('normalizes malformed sort and direction URL parameters', () => {
+    expect(parseUsersGridUrlParams({ sort: 'roles', direction: 'UP' })).toMatchObject({
+      sortField: 'dateIns',
+      sortDir: 'DESC',
+    })
+  })
+
+  it.each([
+    ['created', { createdFrom: '2026-07-31', createdTo: '2026-07-01' }, ['createdFrom', 'createdTo']],
+    ['updated', { updatedFrom: '2026-07-31', updatedTo: '2026-07-01' }, ['updatedFrom', 'updatedTo']],
+  ] as const)('drops an inverted %s URL range before it reaches the query', (_label, raw, fields) => {
+    const parsed = parseUsersGridUrlParams(raw)
+    const query = buildUsersGridQuery(0, 50, [], usersUrlParamsToFilterModel(parsed))
+
+    expect(parsed[fields[0]]).toBeNull()
+    expect(parsed[fields[1]]).toBeNull()
+    expect(query[fields[0]]).toBeUndefined()
+    expect(query[fields[1]]).toBeUndefined()
+  })
+
+  it('drops inverted date ranges received directly from AG Grid', () => {
+    expect(buildUsersGridQuery(0, 50, [], {
+      dateIns: { type: 'inRange', dateFrom: '2026-07-31', dateTo: '2026-07-01' },
+      dateMod: { type: 'inRange', dateFrom: '2026-07-31', dateTo: '2026-07-01' },
+    })).toMatchObject({
+      createdFrom: undefined, createdTo: undefined,
+      updatedFrom: undefined, updatedTo: undefined,
+    })
+  })
+
   it('produces an empty model when nothing is set', () => {
     expect(usersUrlParamsToFilterModel({ search: '', roleId: null, statusId: null, createdFrom: null, createdTo: null, sortField: 'dateIns', sortDir: 'DESC' })).toEqual({})
   })

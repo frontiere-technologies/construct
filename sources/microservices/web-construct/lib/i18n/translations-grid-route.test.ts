@@ -65,4 +65,14 @@ describe('POST /api/i18n/translations-grid', () => {
     expect(response.status).toBe(400)
     expect(mocks.listTranslations).not.toHaveBeenCalled()
   })
+
+  it('returns the controlled JSON error when the active-language lookup fails', async () => {
+    mocks.listActiveLanguages.mockRejectedValue(new Error('Language lookup failed'))
+
+    const response = await POST(request({ page: 0, size: 50 }))
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({ error: 'Language lookup failed' })
+    expect(mocks.listTranslations).not.toHaveBeenCalled()
+  })
 })
