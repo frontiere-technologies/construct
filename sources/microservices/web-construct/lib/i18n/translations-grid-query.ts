@@ -97,7 +97,10 @@ export function translationsUrlParamsToSortModel<T extends TranslationsUrlParams
   return [{ colId: p.sortField ?? 'key', sort: p.sortDir === 'ASC' ? 'asc' : 'desc' }]
 }
 
-export function translationsFilterModelToSearchParams(model: TranslationsGridFilterModel): Record<string, string | null> {
+export function translationsFilterModelToSearchParams(
+  model: TranslationsGridFilterModel,
+  activeLanguageCodes: readonly string[] = [],
+): Record<string, string | null> {
   const result = {
     ...gridTextFilterToSearchParams(model.key),
     namespace: asString(model.namespace?.value) ?? null,
@@ -106,6 +109,7 @@ export function translationsFilterModelToSearchParams(model: TranslationsGridFil
     status: asString(model.status?.value) ?? null,
   }
   addTextSearchParams(result, 'description', model.description)
+  for (const code of activeLanguageCodes) addTextSearchParams(result, `value_${code}`, undefined)
   for (const colId of Object.keys(model)) {
     if (colId.startsWith('value_')) addTextSearchParams(result, colId, model[colId as `value_${string}`])
   }

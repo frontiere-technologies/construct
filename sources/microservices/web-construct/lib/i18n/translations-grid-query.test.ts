@@ -93,6 +93,14 @@ describe('translations URL round-trip', () => {
       },
     })
   })
+  it('clears removed dynamic language filters while preserving active ones', () => {
+    expect(translationsFilterModelToSearchParams({
+      value_it: { filter: 'salva' },
+    }, ['en', 'it'])).toMatchObject({
+      value_en: null, value_en2: null, value_enOperator: null,
+      value_it: 'salva', value_it2: null, value_itOperator: null,
+    })
+  })
   it('rebuilds the filter model from URL params', () => {
     expect(translationsUrlParamsToFilterModel({
       search: 'auth', namespace: 'auth', module: null, language: 'en', status: 'missing',
