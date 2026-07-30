@@ -1,10 +1,11 @@
 import { cache } from 'react'
-import { and, asc, count, desc, eq, ne, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { FALLBACK_LANGUAGE, type LanguageDto, type LanguagePageItemDto, type LanguagesPage, type LanguagesQuery } from './types'
-import { normalizeTextSearch } from '@/lib/grid-text-search'
+import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
+import { nextDay } from '@/lib/rbac/date-utils'
 
 const log = createLogger('i18n-language-service')
 
@@ -94,6 +95,7 @@ const LANGUAGE_SORT_COLUMN = {
   code: appLanguage.code,
   locale: appLanguage.locale,
   name: appLanguage.name,
+  nativeName: appLanguage.nativeName,
   isActive: appLanguage.isActive,
   isDefault: appLanguage.isDefault,
   createdAt: appLanguage.createdAt,
@@ -109,6 +111,56 @@ function sortColumnFor(sort: LanguagesQuery['sort']) {
     : LANGUAGE_SORT_COLUMN.code
 }
 
+export function languageOrderBy(query: LanguagesQuery): SQL[] {
+  const sortCol = sortColumnFor(query.sort)
+  const ascending = (query.direction ?? 'ASC') === 'ASC'
+  return [ascending ? asc(sortCol) : desc(sortCol), asc(appLanguage.idLanguage)]
+}
+
+function textSearchCondition(
+  search: LanguagesQuery['nameSearch'],
+  column: typeof appLanguage.code | typeof appLanguage.locale | typeof appLanguage.name | typeof appLanguage.nativeName,
+): SQL | undefined {
+  const textSearch = normalizeTextSearch(search)
+  if (!textSearch) return undefined
+  const termConditions = textSearch.conditions.map(term =>
+    sql`${column} ilike ${`%${escapeLikePattern(term)}%`} escape '\\'`,
+  )
+  return textSearch.operator === 'OR' ? or(...termConditions)! : and(...termConditions)!
+}
+
+function translatedCount(): SQL<number> {
+  return sql<number>`(
+    select count(*)::int from ${translationValue}
+    where ${translationValue.idLanguage} = ${appLanguage.idLanguage}
+      and ${translationValue.value} <> ''
+  )`
+}
+
+function missingCount(): SQL<number> {
+  return sql<number>`((select count(*)::int from ${translationKey}) - ${translatedCount()})`
+}
+
+export function applyLanguageFilters(query: LanguagesQuery): SQL[] {
+  const conditions: SQL[] = []
+  const textFilters = [
+    textSearchCondition(query.codeSearch, appLanguage.code),
+    textSearchCondition(query.localeSearch, appLanguage.locale),
+    textSearchCondition(query.nameSearch, appLanguage.name),
+    textSearchCondition(query.nativeNameSearch, appLanguage.nativeName),
+  ]
+  for (const condition of textFilters) if (condition) conditions.push(condition)
+  if (query.isActive != null) conditions.push(eq(appLanguage.isActive, query.isActive))
+  if (query.isDefault != null) conditions.push(eq(appLanguage.isDefault, query.isDefault))
+  if (query.translatedMin != null) conditions.push(gte(translatedCount(), query.translatedMin))
+  if (query.translatedMax != null) conditions.push(lte(translatedCount(), query.translatedMax))
+  if (query.missingMin != null) conditions.push(gte(missingCount(), query.missingMin))
+  if (query.missingMax != null) conditions.push(lte(missingCount(), query.missingMax))
+  if (query.createdFrom) conditions.push(gte(appLanguage.createdAt, query.createdFrom))
+  if (query.createdTo) conditions.push(lt(appLanguage.createdAt, nextDay(query.createdTo)))
+  return conditions
+}
+
 /**
  * Page of languages for the admin grid (§2.4), with per-row translated/missing
  * counts folded in from `getLanguageStats`. Unlike `listLanguages` above, this
@@ -116,30 +168,15 @@ function sortColumnFor(sort: LanguagesQuery['sort']) {
  * failed" must not look identical.
  */
 export async function listLanguagesPage(query: LanguagesQuery): Promise<LanguagesPage> {
-  const conditions: SQL[] = []
-  const textSearch = normalizeTextSearch(query.search)
-  if (textSearch) {
-    const termConditions = textSearch.conditions.map(term => {
-      const pattern = `%${term}%`
-      return or(
-        sql`${appLanguage.name} ilike ${pattern}`,
-        sql`${appLanguage.nativeName} ilike ${pattern}`,
-        sql`${appLanguage.code} ilike ${pattern}`,
-        sql`${appLanguage.locale} ilike ${pattern}`,
-      )!
-    })
-    conditions.push((textSearch.operator === 'OR' ? or(...termConditions) : and(...termConditions))!)
-  }
-  if (query.isActive != null) conditions.push(eq(appLanguage.isActive, query.isActive))
+  const conditions = applyLanguageFilters(query)
   const where = conditions.length ? and(...conditions) : undefined
 
-  const sortCol = sortColumnFor(query.sort)
-  const ascending = (query.direction ?? 'ASC') === 'ASC'
+  const orderBy = languageOrderBy(query)
 
   try {
     const [rows, [{ value: total }], stats] = await Promise.all([
       db.select().from(appLanguage).where(where)
-        .orderBy(ascending ? asc(sortCol) : desc(sortCol))
+        .orderBy(...orderBy)
         .limit(query.size).offset(query.page * query.size),
       db.select({ value: count() }).from(appLanguage).where(where),
       getLanguageStats(),

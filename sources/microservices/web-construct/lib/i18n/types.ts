@@ -39,13 +39,23 @@ export const MAX_BULK_VALUES = 200
 export type TranslationParams = Record<string, string | number | Date | null | undefined>
 export type TranslateFn = (key: string, params?: TranslationParams) => string
 
-export type LanguageSortField = 'code' | 'locale' | 'name' | 'isActive' | 'isDefault' | 'createdAt'
+export type LanguageSortField = 'code' | 'locale' | 'name' | 'nativeName' | 'isActive' | 'isDefault' | 'createdAt'
 
 export interface LanguagesQuery {
   page: number
   size: number
-  search?: TextSearch
+  codeSearch?: TextSearch
+  localeSearch?: TextSearch
+  nameSearch?: TextSearch
+  nativeNameSearch?: TextSearch
   isActive?: boolean
+  isDefault?: boolean
+  translatedMin?: number
+  translatedMax?: number
+  missingMin?: number
+  missingMax?: number
+  createdFrom?: string
+  createdTo?: string
   sort?: LanguageSortField
   direction?: 'ASC' | 'DESC'
 }
