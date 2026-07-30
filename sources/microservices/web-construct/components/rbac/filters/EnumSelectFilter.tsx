@@ -2,6 +2,7 @@
 
 import { useGridFilter, type CustomFilterProps } from 'ag-grid-react'
 import { Check } from 'lucide-react'
+import { useI18n } from '@/context/I18nContext'
 
 export interface EnumFilterModel { value: string | number }
 export interface EnumFilterOption { value: string | number; label: string }
@@ -17,6 +18,7 @@ type Props = CustomFilterProps<unknown, unknown, EnumFilterModel> & { options: E
 const alwaysPass = () => true
 
 export default function EnumSelectFilter({ model, onModelChange, options, api }: Props) {
+  const { t } = useI18n()
   useGridFilter({ doesFilterPass: alwaysPass })
 
   // Explicit close-on-select: this filter has no "Apply" button, and AG Grid doesn't
@@ -38,7 +40,7 @@ export default function EnumSelectFilter({ model, onModelChange, options, api }:
         onClick={() => select(null)}
         className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded hover:bg-surface-hover ${model == null ? 'font-medium' : 'text-foreground-secondary'}`}
       >
-        <span className="flex-1">Tutti</span>
+        <span className="flex-1">{t('common.labels.all')}</span>
         {model == null && <Check size={13} className="text-primary shrink-0" />}
       </button>
       {options.map(opt => {

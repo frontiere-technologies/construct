@@ -2,8 +2,10 @@
 
 import React, { useState } from 'react'
 import { signOut } from 'next-auth/react'
+import { useI18n } from '@/context/I18nContext'
 
 export function ChangePasswordForm() {
+  const { t } = useI18n()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -13,19 +15,19 @@ export function ChangePasswordForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (newPassword.length < 8) {
-      setStatus({ type: 'error', message: 'La password deve contenere almeno 8 caratteri.' })
+      setStatus({ type: 'error', message: t('auth.change_password.err_min_length') })
       return
     }
     if (!/[A-Z]/.test(newPassword)) {
-      setStatus({ type: 'error', message: 'La password deve contenere almeno una lettera maiuscola.' })
+      setStatus({ type: 'error', message: t('auth.change_password.err_uppercase') })
       return
     }
     if (!/[0-9]/.test(newPassword)) {
-      setStatus({ type: 'error', message: 'La password deve contenere almeno un numero.' })
+      setStatus({ type: 'error', message: t('auth.change_password.err_digit') })
       return
     }
     if (newPassword !== confirmPassword) {
-      setStatus({ type: 'error', message: 'Le nuove password non coincidono.' })
+      setStatus({ type: 'error', message: t('auth.change_password.err_mismatch') })
       return
     }
     setSaving(true)
@@ -38,16 +40,16 @@ export function ChangePasswordForm() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setStatus({ type: 'error', message: data.error ?? 'Errore. Riprova.' })
+        setStatus({ type: 'error', message: data.error ?? t('auth.change_password.err_generic') })
       } else {
-        setStatus({ type: 'success', message: 'Password aggiornata. Stai per essere disconnesso…' })
+        setStatus({ type: 'success', message: t('auth.change_password.success') })
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')
         setTimeout(() => signOut({ callbackUrl: '/login?message=password-changed' }), 2000)
       }
     } catch {
-      setStatus({ type: 'error', message: 'Errore di rete. Riprova.' })
+      setStatus({ type: 'error', message: t('auth.change_password.err_network') })
     } finally {
       setSaving(false)
     }
@@ -59,11 +61,11 @@ export function ChangePasswordForm() {
   return (
     <div className="w-full rounded-xl border border-border-subtle p-6">
       <h2 className="text-sm font-semibold text-foreground-secondary mb-4">
-        Cambia password
+        {t('auth.change_password.title')}
       </h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className={labelCls}>Password attuale</label>
+          <label className={labelCls}>{t('auth.change_password.current_password')}</label>
           <input
             type="password"
             value={currentPassword}
@@ -73,7 +75,7 @@ export function ChangePasswordForm() {
           />
         </div>
         <div>
-          <label className={labelCls}>Nuova password</label>
+          <label className={labelCls}>{t('auth.change_password.new_password')}</label>
           <input
             type="password"
             value={newPassword}
@@ -82,10 +84,10 @@ export function ChangePasswordForm() {
             minLength={8}
             className={inputCls}
           />
-          <p className="text-xs text-gray-400 mt-1">Min. 8 caratteri, una maiuscola, un numero.</p>
+          <p className="text-xs text-gray-400 mt-1">{t('auth.change_password.hint')}</p>
         </div>
         <div>
-          <label className={labelCls}>Conferma nuova password</label>
+          <label className={labelCls}>{t('auth.change_password.confirm_password')}</label>
           <input
             type="password"
             value={confirmPassword}
@@ -100,7 +102,7 @@ export function ChangePasswordForm() {
           disabled={saving}
           className="w-full py-2 px-4 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
         >
-          {saving ? 'Salvataggio…' : 'Aggiorna password'}
+          {saving ? t('auth.change_password.submitting') : t('auth.change_password.submit')}
         </button>
 
         {status && (

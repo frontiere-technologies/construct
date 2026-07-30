@@ -1,4 +1,5 @@
 import os
+import subprocess
 import pytest
 from pathlib import Path
 from playwright.sync_api import sync_playwright
@@ -12,6 +13,26 @@ if _env_file.exists():
         if _line and not _line.startswith("#") and "=" in _line:
             _k, _v = _line.split("=", 1)
             os.environ.setdefault(_k.strip(), _v.strip())
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _reset_language_preferences() -> None:
+    # Clear users.id_language so the suite always starts from the default
+    # language. The suite asserts Italian copy, and a user left on English
+    # fails assertions in unrelated test files with no hint of the real cause.
+    subprocess.run(
+        ["node", "sources/devops/db/db.mjs", "query",
+         "update users set id_language = null where id_language is not null"],
+        cwd=REPO_ROOT, check=True, capture_output=True,
+    )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def clean_language_preferences():
+    _reset_language_preferences()
+    yield
+    _reset_language_preferences()
 
 
 @pytest.fixture(scope="session")

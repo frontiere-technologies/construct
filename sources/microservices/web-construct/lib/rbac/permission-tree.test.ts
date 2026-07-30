@@ -6,7 +6,7 @@ const row = (id: number, parent: number | null, type: number, name: string): Nav
   id_item: id, name, id_item_type: type, id_functionality_type: type === 2 ? 3 : null,
   functionality_link: null, icon_path: null, id_item_parent: parent, order_position: id,
   navbar_position: null, item_translation: { EN: { name } }, is_immutable: 0,
-  config_visibility: 0, no_permission_need_for_navigation: 0,
+  config_visibility: 0, no_permission_need_for_navigation: 0, open_in_new_tab: 1,
 })
 
 // root(0) > RBAC(2,cat) > Users(3,leaf), Funcs(4,leaf);  root(0) > Home(1,cat)

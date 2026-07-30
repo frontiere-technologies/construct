@@ -6,6 +6,8 @@ import { defaultThemeConfig } from '@/types/menu'
 import { saveThemeConfig } from '@/lib/theme-actions'
 import type { ThemeConfig } from '@/types/menu'
 import { PageContainer } from '@/components/PageContainer'
+import { useI18n } from '@/context/I18nContext'
+import type { TranslateFn } from '@/lib/i18n/types'
 
 interface ColorPickerProps {
   label: string
@@ -39,66 +41,82 @@ interface TokenRowProps {
   disabled?: boolean
 }
 
-const TokenRow: React.FC<TokenRowProps> = ({ label, lightValue, darkValue, onChangeLight, onChangeDark, disabled }) => (
+const TokenRow: React.FC<TokenRowProps & { lightLabel: string; darkLabel: string }> = (
+  { label, lightValue, darkValue, onChangeLight, onChangeDark, disabled, lightLabel, darkLabel },
+) => (
   <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4">
     <span className="text-sm text-foreground-secondary">{label}</span>
     <div className="flex items-center gap-1">
-      <span className="text-[10px] uppercase text-foreground-faint w-8">Light</span>
+      <span className="text-[10px] uppercase text-foreground-faint w-8">{lightLabel}</span>
       <input type="color" value={lightValue} onChange={e => onChangeLight(e.target.value)} disabled={disabled} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed" />
     </div>
     <div className="flex items-center gap-1">
-      <span className="text-[10px] uppercase text-foreground-faint w-8">Dark</span>
+      <span className="text-[10px] uppercase text-foreground-faint w-8">{darkLabel}</span>
       <input type="color" value={darkValue} onChange={e => onChangeDark(e.target.value)} disabled={disabled} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed" />
     </div>
   </div>
 )
 
 interface TokenGroup {
+  key: string
   title: string
-  rows: { label: string; lightKey: keyof ThemeConfig; darkKey: keyof ThemeConfig }[]
+  rows: { key: string; label: string; lightKey: keyof ThemeConfig; darkKey: keyof ThemeConfig }[]
 }
 
-const TOKEN_GROUPS: TokenGroup[] = [
-  {
-    title: 'Sfondi',
-    rows: [
-      { label: 'Page Background', lightKey: 'pageLight', darkKey: 'pageDark' },
-      { label: 'Surface', lightKey: 'surfaceLight', darkKey: 'surfaceDark' },
-      { label: 'Surface Overlay', lightKey: 'surfaceOverlayLight', darkKey: 'surfaceOverlayDark' },
-      { label: 'Surface Hover', lightKey: 'surfaceHoverLight', darkKey: 'surfaceHoverDark' },
-    ],
-  },
-  {
-    title: 'Border',
-    rows: [
-      { label: 'Border', lightKey: 'borderLight', darkKey: 'borderDark' },
-      { label: 'Border Subtle', lightKey: 'borderSubtleLight', darkKey: 'borderSubtleDark' },
-    ],
-  },
-  {
-    title: 'Testo',
-    rows: [
-      { label: 'Foreground', lightKey: 'foregroundLight', darkKey: 'foregroundDark' },
-      { label: 'Foreground Secondary', lightKey: 'foregroundSecondaryLight', darkKey: 'foregroundSecondaryDark' },
-      { label: 'Foreground Muted', lightKey: 'foregroundMutedLight', darkKey: 'foregroundMutedDark' },
-      { label: 'Foreground Faint', lightKey: 'foregroundFaintLight', darkKey: 'foregroundFaintDark' },
-    ],
-  },
-  {
-    title: 'Sidebar & Active Item',
-    rows: [
-      { label: 'Sidebar Background', lightKey: 'sidebarBgLight', darkKey: 'sidebarBgDark' },
-      { label: 'Sidebar Text', lightKey: 'sidebarTextLight', darkKey: 'sidebarTextDark' },
-      { label: 'Active Item Background', lightKey: 'activeItemBgLight', darkKey: 'activeItemBgDark' },
-      { label: 'Active Item Text', lightKey: 'activeItemTextLight', darkKey: 'activeItemTextDark' },
-    ],
-  },
-]
+/**
+ * Built from `t()` on every render (not a module-level constant): the group and
+ * row labels are translated strings, so they must follow the active UI language
+ * like everything else in this task, not be frozen at module-load time.
+ */
+function buildTokenGroups(t: TranslateFn): TokenGroup[] {
+  return [
+    {
+      key: 'backgrounds',
+      title: t('theme.section.backgrounds'),
+      rows: [
+        { key: 'page', label: t('theme.field.page_background'), lightKey: 'pageLight', darkKey: 'pageDark' },
+        { key: 'surface', label: t('theme.field.surface'), lightKey: 'surfaceLight', darkKey: 'surfaceDark' },
+        { key: 'surfaceOverlay', label: t('theme.field.surface_overlay'), lightKey: 'surfaceOverlayLight', darkKey: 'surfaceOverlayDark' },
+        { key: 'surfaceHover', label: t('theme.field.surface_hover'), lightKey: 'surfaceHoverLight', darkKey: 'surfaceHoverDark' },
+      ],
+    },
+    {
+      key: 'border',
+      title: t('theme.section.border'),
+      rows: [
+        { key: 'border', label: t('theme.field.border'), lightKey: 'borderLight', darkKey: 'borderDark' },
+        { key: 'borderSubtle', label: t('theme.field.border_subtle'), lightKey: 'borderSubtleLight', darkKey: 'borderSubtleDark' },
+      ],
+    },
+    {
+      key: 'text',
+      title: t('theme.section.text'),
+      rows: [
+        { key: 'foreground', label: t('theme.field.foreground'), lightKey: 'foregroundLight', darkKey: 'foregroundDark' },
+        { key: 'foregroundSecondary', label: t('theme.field.foreground_secondary'), lightKey: 'foregroundSecondaryLight', darkKey: 'foregroundSecondaryDark' },
+        { key: 'foregroundMuted', label: t('theme.field.foreground_muted'), lightKey: 'foregroundMutedLight', darkKey: 'foregroundMutedDark' },
+        { key: 'foregroundFaint', label: t('theme.field.foreground_faint'), lightKey: 'foregroundFaintLight', darkKey: 'foregroundFaintDark' },
+      ],
+    },
+    {
+      key: 'sidebar',
+      title: t('theme.section.sidebar'),
+      rows: [
+        { key: 'sidebarBg', label: t('theme.field.sidebar_bg'), lightKey: 'sidebarBgLight', darkKey: 'sidebarBgDark' },
+        { key: 'sidebarText', label: t('theme.field.sidebar_text'), lightKey: 'sidebarTextLight', darkKey: 'sidebarTextDark' },
+        { key: 'activeItemBg', label: t('theme.field.active_item_bg'), lightKey: 'activeItemBgLight', darkKey: 'activeItemBgDark' },
+        { key: 'activeItemText', label: t('theme.field.active_item_text'), lightKey: 'activeItemTextLight', darkKey: 'activeItemTextDark' },
+      ],
+    },
+  ]
+}
 
 export const AdminTheme: React.FC = () => {
+  const { t } = useI18n()
   const { settings, setSettings } = useUI()
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const tokenGroups = buildTokenGroups(t)
 
   const updateTheme = (key: keyof ThemeConfig, value: string) => {
     setSettings(prev => ({ ...prev, themeConfig: { ...prev.themeConfig, [key]: value } }))
@@ -118,27 +136,29 @@ export const AdminTheme: React.FC = () => {
   }
 
   return (
-    <PageContainer title="Theme & Styles" subtitle="Customize your application appearance">
+    <PageContainer title={t('theme.page.title')} subtitle={t('theme.page.subtitle')}>
         <div className="space-y-4">
-          <h3 className="font-medium text-foreground border-b pb-2 border-border">Global</h3>
+          <h3 className="font-medium text-foreground border-b pb-2 border-border">{t('theme.section.global')}</h3>
           <ColorPicker
-            label="Primary Color (Active Icons, Buttons)"
+            label={t('theme.field.primary_color')}
             value={settings.themeConfig.primaryColor}
             onChange={v => updateTheme('primaryColor', v)}
             disabled={saving}
           />
         </div>
 
-        {TOKEN_GROUPS.map(group => (
-          <details key={group.title} open>
+        {tokenGroups.map(group => (
+          <details key={group.key} open>
             <summary className="cursor-pointer font-medium text-foreground border-b pb-2 border-border">
               {group.title}
             </summary>
             <div className="space-y-3 mt-4">
               {group.rows.map(row => (
                 <TokenRow
-                  key={row.label}
+                  key={row.key}
                   label={row.label}
+                  lightLabel={t('theme.token.light')}
+                  darkLabel={t('theme.token.dark')}
                   lightValue={settings.themeConfig[row.lightKey]}
                   darkValue={settings.themeConfig[row.darkKey]}
                   onChangeLight={v => updateTheme(row.lightKey, v)}
@@ -154,14 +174,14 @@ export const AdminTheme: React.FC = () => {
           <div className="flex items-center gap-3">
             {saveStatus === 'idle' && (
               <span className="text-sm text-foreground-faint">
-                ℹ️ Ricordati di salvare i valori, altrimenti verranno persi alla chiusura dell&apos;applicazione.
+                {t('theme.banner.unsaved_hint')}
               </span>
             )}
             {saveStatus === 'success' && (
-              <span className="text-sm text-green-600 dark:text-green-400">Theme saved.</span>
+              <span className="text-sm text-green-600 dark:text-green-400">{t('theme.status.saved')}</span>
             )}
             {saveStatus === 'error' && (
-              <span className="text-sm text-red-600 dark:text-red-400">Save failed. Please try again.</span>
+              <span className="text-sm text-red-600 dark:text-red-400">{t('theme.status.save_failed')}</span>
             )}
           </div>
           <div className="flex gap-3">
@@ -170,14 +190,14 @@ export const AdminTheme: React.FC = () => {
               disabled={saving}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Valori di Default
+              {t('theme.actions.reset_defaults')}
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
               className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {saving ? 'Saving…' : 'Salva'}
+              {saving ? t('theme.status.saving') : t('common.actions.save')}
             </button>
           </div>
         </div>

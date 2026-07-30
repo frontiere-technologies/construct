@@ -11,6 +11,7 @@ import { createNavigationItem, updateNavigationItem } from '@/lib/rbac/navigatio
 import { isGenitoreLocked, buildGenitoreOptions, genitoreValue } from '@/lib/rbac/genitore-lock'
 import { ITEM_TYPES, resolveItemType } from '@/lib/rbac/item-type-options'
 import { ITEM_TYPE_FUNCTIONALITY } from '@/lib/rbac/types'
+import { useI18n } from '@/context/I18nContext'
 import type { CreateNavItemInput, ParentOption } from '@/lib/rbac/types'
 
 interface Initial {
@@ -27,8 +28,15 @@ export default function FunctionalityForm(
   { mode, funcId, initial, parents }:
   { mode: 'create' | 'edit'; funcId?: number; initial: Initial; parents: ParentOption[] },
 ) {
+  const { t } = useI18n()
   const router = useRouter()
   const genitoreLocked = isGenitoreLocked(parents.length)
+  const itemTypeLabels: Record<string, string> = {
+    category: t('functionalities.item_type.category'),
+    embedded: t('functionalities.item_type.embedded'),
+    external: t('functionalities.item_type.external'),
+    internal: t('functionalities.item_type.internal'),
+  }
   const [f, setF] = useState<Initial>(() =>
     mode === 'create' && parents.length === 0 ? { ...initial, idItemParent: null } : initial)
   const [busy, setBusy] = useState(false)
@@ -50,7 +58,7 @@ export default function FunctionalityForm(
     try {
       setError(null)
       if (mode === 'edit') {
-        if (funcId == null) { setError('ID funzionalità mancante'); return }
+        if (funcId == null) { setError(t('functionalities.form.missing_id_error')); return }
         const input: CreateNavItemInput = {
           name: itName, idItemType: f.idItemType,
           idFunctionalityType: isFunc ? f.idFunctionalityType : null,
@@ -74,63 +82,63 @@ export default function FunctionalityForm(
       }
       router.push('/functionalities')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Errore durante il salvataggio. Riprova.')
+      setError(err instanceof Error ? err.message : t('functionalities.form.save_error'))
     } finally { setBusy(false) }
   }
 
   const itTags = f.tagTranslations.IT ?? []
 
   return (
-    <PageContainer title={`Funzionalità / ${mode === 'create' ? 'Crea' : 'Modifica'}`}>
+    <PageContainer title={`${t('functionalities.list.title')} / ${mode === 'create' ? t('functionalities.form.create_label') : t('common.actions.edit')}`}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4 rounded-xl border border-border-subtle p-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Informazioni generali</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{t('functionalities.form.general_info')}</h2>
           <div className="flex items-start gap-3">
             <IconPicker compact value={f.iconPath} onChange={v => set('iconPath', v)} />
             <div className="flex-1 space-y-3">
               <input value={itName} onChange={e => set('translations', { ...f.translations, IT: { ...f.translations.IT, name: e.target.value } })}
-                placeholder="Nome funzionalità *" maxLength={100}
+                placeholder={t('functionalities.form.name_placeholder')} maxLength={100}
                 className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent" />
               <CustomSelect
                 data-testid="select-genitore"
                 value={genitoreValue(f.idItemParent)}
                 onChange={v => set('idItemParent', Number(v))}
                 options={buildGenitoreOptions(parents)}
-                placeholder="Genitore"
+                placeholder={t('functionalities.form.parent_placeholder')}
                 disabled={genitoreLocked}
                 title={
                   !genitoreLocked
                     ? undefined
                     : mode === 'create'
-                      ? 'Nessuna categoria disponibile: verrà creato alla radice'
-                      : 'Nessuna categoria disponibile come genitore'
+                      ? t('functionalities.form.parent_locked_create_hint')
+                      : t('functionalities.form.parent_locked_edit_hint')
                 }
               />
             </div>
           </div>
           <div>
             <textarea value={itDesc} onChange={e => set('translations', { ...f.translations, IT: { ...f.translations.IT, description: e.target.value } })}
-              placeholder="Descrizione *" maxLength={500} rows={3}
+              placeholder={t('functionalities.form.description_placeholder')} maxLength={500} rows={3}
               // At least twice a single-line input's height (px-3 py-2 text-sm ≈ 38px)
               className="w-full min-h-[76px] px-3 py-2 text-sm rounded-lg border border-border bg-transparent" />
             <div className="text-right text-[10px] text-gray-400">{itDesc.length}/500</div>
           </div>
-          <TagInput value={itTags} onChange={t => set('tagTranslations', { ...f.tagTranslations, IT: t })} />
+          <TagInput value={itTags} onChange={newTags => set('tagTranslations', { ...f.tagTranslations, IT: newTags })} />
 
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 pt-2">Tipologia</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 pt-2">{t('functionalities.form.type_heading')}</h2>
           <div className="space-y-3">
             <CustomSelect
               data-testid="select-tipologia"
               value={selectedType?.key ?? ''}
               onChange={v => {
-                const opt = ITEM_TYPES.find(t => t.key === v)
+                const opt = ITEM_TYPES.find(candidate => candidate.key === v)
                 if (opt) setF(prev => ({ ...prev, idItemType: opt.idItemType, idFunctionalityType: opt.idFunctionalityType }))
               }}
-              options={ITEM_TYPES.map(t => ({ value: t.key, label: t.label }))}
-              placeholder="Tipologia *"
+              options={ITEM_TYPES.map(opt => ({ value: opt.key, label: itemTypeLabels[opt.key] ?? opt.label }))}
+              placeholder={t('functionalities.form.type_placeholder')}
             />
             {isFunc && (
-              <input value={f.functionalityLink} onChange={e => set('functionalityLink', e.target.value)} placeholder="Link *"
+              <input value={f.functionalityLink} onChange={e => set('functionalityLink', e.target.value)} placeholder={t('functionalities.form.link_placeholder')}
                 className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent" />
             )}
             {selectedType?.key === 'external' && (
@@ -142,17 +150,17 @@ export default function FunctionalityForm(
                   onChange={e => set('openInNewTab', e.target.checked)}
                   className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
                 />
-                Apri in una nuova scheda
+                {t('functionalities.form.open_new_tab')}
               </label>
             )}
           </div>
         </div>
 
         <div className="rounded-xl border border-border-subtle p-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Gestione traduzioni</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">{t('functionalities.form.translations_heading')}</h2>
           <TranslationsAccordion
             translations={f.translations} tags={f.tagTranslations}
-            onTranslations={t => set('translations', t)} onTags={t => set('tagTranslations', t)} />
+            onTranslations={newTranslations => set('translations', newTranslations)} onTags={newTags => set('tagTranslations', newTags)} />
         </div>
       </div>
 
@@ -160,10 +168,10 @@ export default function FunctionalityForm(
         <div>{error && <p className="text-sm text-red-600">{error}</p>}</div>
         <div className="flex gap-3">
           <button onClick={() => router.push('/functionalities')} className="px-4 py-2 text-sm rounded-lg border border-border">
-            Annulla
+            {t('common.actions.cancel')}
           </button>
           <button onClick={submit} disabled={!valid || busy} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed">
-            Salva
+            {t('common.actions.save')}
           </button>
         </div>
       </div>

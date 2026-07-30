@@ -305,7 +305,7 @@ on conflict (id_role, id_item) do update set authorized = true;
 
 -- Explicit Administrator grant for Admin/Theme nav items
 insert into role_item (id_role, id_item, authorized)
-select 1, n.id_item from navigation_item n where n.id_item in (6,7)
+select 1, n.id_item, true from navigation_item n where n.id_item in (6,7)
 on conflict (id_role, id_item) do update set authorized = true;
 
 -- Migration: consolidate the former "RBAC" section (id 2) under Admin (id 6) and remove it.
@@ -329,10 +329,23 @@ insert into user_role (user_id, id_role)
 select id, 0 from users
 on conflict (user_id, id_role) do nothing;
 
--- Legacy admins get Administrator (id 1)
-insert into user_role (user_id, id_role)
-select id, 1 from users where role = 'admin'
-on conflict (user_id, id_role) do nothing;
+-- Legacy admins get Administrator (id 1).
+-- Guarded: `alter table users drop column if exists role` above has already
+-- removed the legacy column on every migrated database, and it never existed on
+-- a fresh one — so an unguarded reference to it makes this whole script
+-- unrunnable rather than idempotent. Kept for deployments still mid-migration.
+do $$ begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'users' and column_name = 'role'
+  ) then
+    execute $backfill$
+      insert into user_role (user_id, id_role)
+      select id, 1 from users where role = 'admin'
+      on conflict (user_id, id_role) do nothing
+    $backfill$;
+  end if;
+end $$;
 
 -- ============================================================
 -- RBAC: role list view (counts for the roles table)
@@ -394,3 +407,739 @@ begin
   end if;
 end;
 $$;
+
+-- ============================================================
+-- i18n: languages
+-- code    = lowercase BCP-47 primary subtag ('it', 'en')
+-- locale  = full BCP-47 tag used for Intl formatting ('it-IT')
+-- dictionary_version is bumped by trigger on every translation
+-- change and is what the server-side dictionary cache polls.
+-- ============================================================
+create sequence if not exists s_id_language start 100;
+
+create table if not exists app_language (
+  id_language        bigint      primary key default nextval('s_id_language'),
+  code               varchar(5)  not null unique,
+  locale             varchar(10) not null unique,
+  name               text        not null,
+  native_name        text        not null,
+  is_active          boolean     not null default true,
+  is_default         boolean     not null default false,
+  dictionary_version bigint      not null default 1,
+  created_at         timestamptz default now(),
+  updated_at         timestamptz default now()
+);
+alter table app_language enable row level security;
+alter sequence if exists s_id_language owned by app_language.id_language;
+
+do $$ begin
+  alter table app_language add constraint app_language_code_format
+    check (code ~ '^[a-z]{2,3}$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table app_language add constraint app_language_locale_format
+    check (locale ~ '^[a-z]{2,3}-[A-Z]{2}$');
+exception when duplicate_object then null; end $$;
+
+-- The default language can never be the inactive one (§2.3).
+do $$ begin
+  alter table app_language add constraint app_language_default_is_active
+    check (not is_default or is_active);
+exception when duplicate_object then null; end $$;
+
+-- At most one default (§2.3). "At least one" is enforced by the delete/update
+-- guards in language-actions.ts plus the seed.
+create unique index if not exists app_language_single_default
+  on app_language ((is_default)) where is_default;
+
+create or replace trigger app_language_updated_at
+  before update on app_language
+  for each row execute function set_updated_at();
+
+-- ============================================================
+-- i18n: translation keys
+-- `key` is language-independent and stable: modulo.sezione.elemento
+-- ============================================================
+create sequence if not exists s_id_translation_key start 1000;
+
+create table if not exists translation_key (
+  id_translation_key bigint       primary key default nextval('s_id_translation_key'),
+  key                varchar(200) not null unique,
+  description        text,
+  namespace          varchar(60)  not null,
+  module             varchar(60),
+  version            integer      not null default 1,
+  created_at         timestamptz  default now(),
+  updated_at         timestamptz  default now()
+);
+alter table translation_key enable row level security;
+alter sequence if exists s_id_translation_key owned by translation_key.id_translation_key;
+
+do $$ begin
+  alter table translation_key add constraint translation_key_format
+    check (key ~ '^[a-z0-9]+(_[a-z0-9]+)*(\.[a-z0-9]+(_[a-z0-9]+)*)+$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table translation_key add constraint translation_key_namespace_format
+    check (namespace ~ '^[a-z][a-z0-9_]*$');
+exception when duplicate_object then null; end $$;
+
+create index if not exists translation_key_namespace_idx on translation_key (namespace);
+create index if not exists translation_key_module_idx    on translation_key (module);
+
+create or replace trigger translation_key_updated_at
+  before update on translation_key
+  for each row execute function set_updated_at();
+
+-- ============================================================
+-- i18n: translated values (one row per key × language)
+-- ============================================================
+create sequence if not exists s_id_translation_value start 1000;
+
+create table if not exists translation_value (
+  id_translation_value bigint        primary key default nextval('s_id_translation_value'),
+  id_translation_key   bigint        not null references translation_key(id_translation_key) on delete cascade,
+  id_language          bigint        not null references app_language(id_language) on delete cascade,
+  value                varchar(1000) not null,
+  version              integer       not null default 1,
+  created_at           timestamptz   default now(),
+  updated_at           timestamptz   default now(),
+  constraint translation_value_key_language_unique unique (id_translation_key, id_language)
+);
+alter table translation_value enable row level security;
+alter sequence if exists s_id_translation_value owned by translation_value.id_translation_value;
+
+create index if not exists translation_value_language_idx on translation_value (id_language);
+
+create or replace trigger translation_value_updated_at
+  before update on translation_value
+  for each row execute function set_updated_at();
+
+-- ============================================================
+-- i18n: dictionary versioning
+-- A value change bumps only its own language (§11.3: invalidate the
+-- affected language, leave the others alone). A key change (insert,
+-- rename, delete) changes the shape of every dictionary, so it bumps all.
+-- ============================================================
+create or replace function public.trg_bump_dictionary_version()
+returns trigger language plpgsql as $$
+begin
+  if (tg_op = 'DELETE') then
+    update app_language set dictionary_version = dictionary_version + 1
+      where id_language = old.id_language;
+  else
+    update app_language set dictionary_version = dictionary_version + 1
+      where id_language = new.id_language;
+    if (tg_op = 'UPDATE' and old.id_language is distinct from new.id_language) then
+      update app_language set dictionary_version = dictionary_version + 1
+        where id_language = old.id_language;
+    end if;
+  end if;
+  return null;
+end;
+$$;
+
+create or replace trigger translation_value_bump_version
+  after insert or update or delete on translation_value
+  for each row execute function public.trg_bump_dictionary_version();
+
+create or replace function public.trg_bump_all_dictionary_versions()
+returns trigger language plpgsql as $$
+begin
+  update app_language set dictionary_version = dictionary_version + 1;
+  return null;
+end;
+$$;
+
+create or replace trigger translation_key_bump_versions
+  after insert or update or delete on translation_key
+  for each statement execute function public.trg_bump_all_dictionary_versions();
+
+-- ============================================================
+-- i18n: atomic default-language switch (§2.3).
+-- Clearing the old default first is required: app_language_single_default
+-- is a non-deferrable unique index, so two rows can never be default even
+-- momentarily within the statement sequence.
+-- ============================================================
+create or replace function public.set_default_language(p_id_language bigint)
+returns void language plpgsql as $$
+declare v_active boolean;
+begin
+  select is_active into v_active from app_language
+    where id_language = p_id_language for update;
+  if not found then
+    raise exception 'Language % not found', p_id_language;
+  end if;
+  if not v_active then
+    raise exception 'Language % is not active', p_id_language;
+  end if;
+  update app_language set is_default = false
+    where is_default and id_language <> p_id_language;
+  update app_language set is_default = true
+    where id_language = p_id_language;
+end;
+$$;
+
+-- ============================================================
+-- i18n: per-user preferred language (§5.3). ON DELETE SET NULL so
+-- deleting a language never deletes users — the resolver falls back
+-- to the default language for anyone left pointing at nothing.
+-- ============================================================
+alter table users add column if not exists id_language bigint
+  references app_language(id_language) on delete set null;
+
+create index if not exists users_id_language_idx on users (id_language);
+
+-- ============================================================
+-- i18n seed: languages. Italian is the default (§12.2) because every
+-- existing hardcoded label in this codebase is Italian — the seeded `it`
+-- values below are byte-identical to the strings they replace, which is
+-- what keeps the Playwright suite green.
+-- ============================================================
+insert into app_language (id_language, code, locale, name, native_name, is_active, is_default) values
+  (1, 'it', 'it-IT', 'Italiano', 'Italiano', true, true),
+  (2, 'en', 'en-US', 'English',  'English',  true, false)
+on conflict (code) do nothing;
+
+-- ============================================================
+-- i18n seed: catalog. `translation_seed(key, namespace, module, description, it, en)`
+-- is a transient staging table; each feature area appends its own block of
+-- VALUES and then calls apply_translation_seed(). Re-runnable: existing keys
+-- and existing values are left untouched (§12.5).
+-- ============================================================
+create or replace function public.apply_translation_seed(p_rows jsonb)
+returns text language plpgsql as $$
+declare
+  v_keys_before  bigint;
+  v_keys_after   bigint;
+  v_vals_before  bigint;
+  v_vals_after   bigint;
+begin
+  select count(*) into v_keys_before from translation_key;
+  select count(*) into v_vals_before from translation_value;
+
+  insert into translation_key (key, namespace, module, description)
+    select r.key, r.namespace, nullif(r.module, ''), nullif(r.description, '')
+    from jsonb_to_recordset(p_rows) as r(key text, namespace text, module text, description text, it text, en text)
+  on conflict (key) do nothing;
+
+  insert into translation_value (id_translation_key, id_language, value)
+    select tk.id_translation_key, l.id_language,
+           case l.code when 'it' then r.it else r.en end
+    from jsonb_to_recordset(p_rows) as r(key text, namespace text, module text, description text, it text, en text)
+    join translation_key tk on tk.key = r.key
+    join app_language l on l.code in ('it', 'en')
+    where case l.code when 'it' then r.it else r.en end is not null
+  on conflict (id_translation_key, id_language) do nothing;
+
+  select count(*) into v_keys_after from translation_key;
+  select count(*) into v_vals_after from translation_value;
+  return format('translation seed: %s keys added (%s total), %s values added (%s total)',
+                v_keys_after - v_keys_before, v_keys_after,
+                v_vals_after - v_vals_before, v_vals_after);
+end;
+$$;
+
+-- ---- core catalog -------------------------------------------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"common.actions.save",            "namespace":"common","module":"core","description":"Primary save button","it":"Salva","en":"Save"},
+    {"key":"common.actions.cancel",          "namespace":"common","module":"core","description":"Cancel / dismiss button","it":"Annulla","en":"Cancel"},
+    {"key":"common.actions.confirm",         "namespace":"common","module":"core","description":"Generic confirm button","it":"Conferma","en":"Confirm"},
+    {"key":"common.actions.edit",            "namespace":"common","module":"core","description":"Edit row action","it":"Modifica","en":"Edit"},
+    {"key":"common.actions.delete",          "namespace":"common","module":"core","description":"Delete row action","it":"Elimina","en":"Delete"},
+    {"key":"common.actions.open",            "namespace":"common","module":"core","description":"Open row action","it":"Apri","en":"Open"},
+    {"key":"common.actions.rename",          "namespace":"common","module":"core","description":"Rename row action","it":"Rinomina","en":"Rename"},
+    {"key":"common.actions.close",           "namespace":"common","module":"core","description":"Close panel","it":"Chiudi","en":"Close"},
+    {"key":"common.actions.search",          "namespace":"common","module":"core","description":"Search","it":"Cerca","en":"Search"},
+    {"key":"common.actions.reset_filters",   "namespace":"common","module":"core","description":"Clear every active filter","it":"Azzera filtri","en":"Clear filters"},
+    {"key":"common.states.loading",          "namespace":"common","module":"core","description":"Loading indicator","it":"Caricamento…","en":"Loading…"},
+    {"key":"common.states.saving",           "namespace":"common","module":"core","description":"Save in progress","it":"Salvataggio…","en":"Saving…"},
+    {"key":"common.states.saved",            "namespace":"common","module":"core","description":"Save succeeded","it":"Salvato","en":"Saved"},
+    {"key":"common.states.no_results",       "namespace":"common","module":"core","description":"Empty grid/list","it":"Nessun risultato","en":"No results"},
+    {"key":"common.labels.yes",              "namespace":"common","module":"core","description":"Boolean true","it":"Sì","en":"Yes"},
+    {"key":"common.labels.no",               "namespace":"common","module":"core","description":"Boolean false","it":"No","en":"No"},
+    {"key":"common.labels.all",              "namespace":"common","module":"core","description":"No filter selected","it":"Tutti","en":"All"},
+    {"key":"common.labels.actions",          "namespace":"common","module":"core","description":"Row-actions column header","it":"Azioni","en":"Actions"},
+    {"key":"common.labels.optional",         "namespace":"common","module":"core","description":"Optional field suffix","it":"(facoltativo)","en":"(optional)"},
+    {"key":"common.labels.columns",          "namespace":"common","module":"core","description":"Column visibility toggle","it":"Colonne","en":"Columns"},
+
+    {"key":"validation.required",            "namespace":"validation","module":"core","description":"Mandatory field","it":"Campo obbligatorio.","en":"This field is required."},
+    {"key":"validation.too_long",            "namespace":"validation","module":"core","description":"Value exceeds max length. {{max}} = limit","it":"Massimo {{max}} caratteri.","en":"Maximum {{max}} characters."},
+    {"key":"validation.invalid_format",      "namespace":"validation","module":"core","description":"Value does not match the expected format","it":"Formato non valido.","en":"Invalid format."},
+
+    {"key":"errors.generic",                 "namespace":"errors","module":"core","description":"Unexpected failure","it":"Errore interno.","en":"Internal error."},
+    {"key":"errors.unauthorized",            "namespace":"errors","module":"core","description":"403 response body","it":"Non autorizzato.","en":"Not authorized."},
+    {"key":"errors.bad_request",             "namespace":"errors","module":"core","description":"400 response body","it":"Corpo della richiesta non valido.","en":"Invalid request body."},
+
+    {"key":"grid.filter.contains",           "namespace":"grid","module":"core","description":"AG Grid: contains","it":"Contiene","en":"Contains"},
+    {"key":"grid.filter.in_range",           "namespace":"grid","module":"core","description":"AG Grid: in range","it":"Nell'intervallo","en":"In range"},
+    {"key":"grid.filter.range_start",        "namespace":"grid","module":"core","description":"AG Grid: range start","it":"Da","en":"From"},
+    {"key":"grid.filter.range_end",          "namespace":"grid","module":"core","description":"AG Grid: range end","it":"A","en":"To"},
+    {"key":"grid.filter.placeholder",        "namespace":"grid","module":"core","description":"AG Grid: filter input placeholder","it":"Filtra...","en":"Filter..."},
+    {"key":"grid.filter.apply",              "namespace":"grid","module":"core","description":"AG Grid: apply button","it":"Applica","en":"Apply"},
+    {"key":"grid.filter.reset",              "namespace":"grid","module":"core","description":"AG Grid: reset button","it":"Reset","en":"Reset"},
+    {"key":"grid.filter.clear",              "namespace":"grid","module":"core","description":"AG Grid: clear button","it":"Cancella","en":"Clear"},
+    {"key":"grid.no_rows",                   "namespace":"grid","module":"core","description":"AG Grid: empty state","it":"Nessun risultato","en":"No results"},
+    {"key":"grid.loading",                   "namespace":"grid","module":"core","description":"AG Grid: loading state","it":"Caricamento...","en":"Loading..."},
+
+    {"key":"nav.profile",                    "namespace":"nav","module":"core","description":"Sidebar: profile link","it":"Profilo","en":"Profile"},
+    {"key":"nav.logout",                     "namespace":"nav","module":"core","description":"Sidebar: sign out","it":"Esci","en":"Logout"},
+    {"key":"nav.account",                    "namespace":"nav","module":"core","description":"Sidebar: account panel title","it":"Account","en":"Account"},
+    {"key":"nav.theme_mode",                 "namespace":"nav","module":"core","description":"Sidebar: light/dark toggle","it":"Tema","en":"Theme Mode"},
+    {"key":"nav.theme_to_dark",              "namespace":"nav","module":"core","description":"Sidebar: switch to dark tooltip","it":"Passa al tema scuro","en":"Switch to Dark"},
+    {"key":"nav.theme_to_light",             "namespace":"nav","module":"core","description":"Sidebar: switch to light tooltip","it":"Passa al tema chiaro","en":"Switch to Light"},
+    {"key":"nav.collapse_menu",              "namespace":"nav","module":"core","description":"Sidebar: collapse tooltip","it":"Collassa menu","en":"Collapse menu"},
+    {"key":"nav.expand_menu",                "namespace":"nav","module":"core","description":"Sidebar: expand tooltip","it":"Espandi menu","en":"Expand menu"},
+    {"key":"nav.close_panel",                "namespace":"nav","module":"core","description":"Sidebar: close sub-column tooltip","it":"Chiudi pannello","en":"Close panel"},
+
+    {"key":"profile.language",               "namespace":"profile","module":"core","description":"Language switcher label","it":"Lingua","en":"Language"},
+
+    {"key":"language.title",                 "namespace":"language","module":"i18n","description":"Languages admin page title","it":"Lingue","en":"Languages"},
+    {"key":"language.subtitle",              "namespace":"language","module":"i18n","description":"Languages admin page subtitle","it":"Configura le lingue disponibili nell'applicazione","en":"Configure the languages available in the application"},
+    {"key":"language.default",               "namespace":"language","module":"i18n","description":"Default-language column/flag","it":"Predefinita","en":"Default"},
+    {"key":"language.active",                "namespace":"language","module":"i18n","description":"Active-language column/flag","it":"Attiva","en":"Active"},
+
+    {"key":"translation.title",              "namespace":"translation","module":"i18n","description":"Translations admin page title","it":"Traduzioni","en":"Translations"},
+    {"key":"translation.key",                "namespace":"translation","module":"i18n","description":"Translation key column","it":"Chiave","en":"Key"},
+    {"key":"translation.value",              "namespace":"translation","module":"i18n","description":"Translated value column","it":"Valore","en":"Value"},
+    {"key":"translation.missing",            "namespace":"translation","module":"i18n","description":"Missing-translation badge","it":"Mancante","en":"Missing"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Admin → Lingue nav item
+insert into navigation_item
+  (id_item, name, id_item_type, id_functionality_type, functionality_link, id_item_parent, order_position, icon_path, navbar_position, item_translation, is_immutable, config_visibility)
+values
+  (8, 'Languages', 2, 3, 'admin/languages', 6, 4, 'Languages', null, '{"EN":{"name":"Languages"},"IT":{"name":"Lingue"}}', 1, 0)
+on conflict (id_item) do nothing;
+
+insert into role_item (id_role, id_item, authorized)
+select 1, n.id_item, true from navigation_item n where n.id_item = 8
+on conflict (id_role, id_item) do update set authorized = true;
+
+-- ---- languages admin catalog -------------------------------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"language.form.create_title","namespace":"language","module":"i18n","description":"New-language modal title","it":"Nuova lingua","en":"New language"},
+    {"key":"language.form.edit_title",  "namespace":"language","module":"i18n","description":"Edit-language modal title","it":"Modifica lingua","en":"Edit language"},
+    {"key":"language.form.code",        "namespace":"language","module":"i18n","description":"Language code field","it":"Codice","en":"Code"},
+    {"key":"language.form.locale",      "namespace":"language","module":"i18n","description":"Locale field","it":"Locale","en":"Locale"},
+    {"key":"language.form.name",        "namespace":"language","module":"i18n","description":"Language name field","it":"Nome","en":"Name"},
+    {"key":"language.form.native_name", "namespace":"language","module":"i18n","description":"Native-name field","it":"Nome nativo","en":"Native name"},
+    {"key":"language.actions.create",   "namespace":"language","module":"i18n","description":"Create-language button","it":"Nuova lingua","en":"New language"},
+    {"key":"language.actions.activate", "namespace":"language","module":"i18n","description":"Activate row action","it":"Attiva","en":"Activate"},
+    {"key":"language.actions.deactivate","namespace":"language","module":"i18n","description":"Deactivate row action","it":"Disattiva","en":"Deactivate"},
+    {"key":"language.actions.set_default","namespace":"language","module":"i18n","description":"Promote to default row action","it":"Imposta come predefinita","en":"Set as default"},
+    {"key":"language.translated_count", "namespace":"language","module":"i18n","description":"Translated-values column","it":"Traduzioni","en":"Translations"},
+    {"key":"language.missing_count",    "namespace":"language","module":"i18n","description":"Missing-values column","it":"Mancanti","en":"Missing"},
+    {"key":"language.created_at",       "namespace":"language","module":"i18n","description":"Creation-date column","it":"Data di creazione","en":"Created at"},
+    {"key":"language.confirm.set_default","namespace":"language","module":"i18n","description":"Confirm promoting a language. {{name}} = language name","it":"Impostare «{{name}}» come lingua predefinita?","en":"Set “{{name}}” as the default language?"},
+    {"key":"language.confirm.delete_title","namespace":"language","module":"i18n","description":"Delete-language confirm title","it":"Elimina lingua","en":"Delete language"},
+    {"key":"language.confirm.delete_message","namespace":"language","module":"i18n","description":"Delete-language confirm body. {{name}} = language name","it":"Eliminare la lingua «{{name}}»? Tutte le sue traduzioni verranno rimosse.","en":"Delete the language “{{name}}”? All of its translations will be removed."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Admin → Traduzioni nav item
+insert into navigation_item
+  (id_item, name, id_item_type, id_functionality_type, functionality_link, id_item_parent, order_position, icon_path, navbar_position, item_translation, is_immutable, config_visibility)
+values
+  (9, 'Translations', 2, 3, 'admin/translations', 6, 5, 'Type', null, '{"EN":{"name":"Translations"},"IT":{"name":"Traduzioni"}}', 1, 0)
+on conflict (id_item) do nothing;
+
+insert into role_item (id_role, id_item, authorized)
+select 1, n.id_item, true from navigation_item n where n.id_item = 9
+on conflict (id_role, id_item) do update set authorized = true;
+
+-- ---- translations admin catalog ----------------------------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"translation.subtitle",        "namespace":"translation","module":"i18n","description":"Translations page subtitle","it":"Gestisci le etichette dell'interfaccia in tutte le lingue","en":"Manage interface labels in every language"},
+    {"key":"translation.description",     "namespace":"translation","module":"i18n","description":"Key description column/field","it":"Descrizione","en":"Description"},
+    {"key":"translation.namespace",       "namespace":"translation","module":"i18n","description":"Namespace column/field","it":"Namespace","en":"Namespace"},
+    {"key":"translation.module",          "namespace":"translation","module":"i18n","description":"Module column/field","it":"Modulo","en":"Module"},
+    {"key":"translation.status",          "namespace":"translation","module":"i18n","description":"Completeness column","it":"Stato","en":"Status"},
+    {"key":"translation.complete",        "namespace":"translation","module":"i18n","description":"Fully translated badge","it":"Completa","en":"Complete"},
+    {"key":"translation.updated_at",      "namespace":"translation","module":"i18n","description":"Last-modified column","it":"Ultima modifica","en":"Last updated"},
+    {"key":"translation.actions.create",  "namespace":"translation","module":"i18n","description":"New-key button","it":"Nuova chiave","en":"New key"},
+    {"key":"translation.actions.discard", "namespace":"translation","module":"i18n","description":"Discard unsaved edits","it":"Ripristina","en":"Discard changes"},
+    {"key":"translation.editor.title",    "namespace":"translation","module":"i18n","description":"Editor drawer subtitle","it":"Traduzioni per lingua","en":"Translations by language"},
+    {"key":"translation.filter.missing_only","namespace":"translation","module":"i18n","description":"Status filter: incomplete only","it":"Solo mancanti","en":"Missing only"},
+    {"key":"translation.filter.complete_only","namespace":"translation","module":"i18n","description":"Status filter: complete only","it":"Solo complete","en":"Complete only"},
+    {"key":"translation.conflict.title",  "namespace":"translation","module":"i18n","description":"Concurrent-edit banner title","it":"Conflitto di modifica","en":"Edit conflict"},
+    {"key":"translation.conflict.explanation","namespace":"translation","module":"i18n","description":"Concurrent-edit explanation","it":"Un altro amministratore ha modificato questa traduzione. Nessuna modifica è stata sovrascritta.","en":"Another administrator changed this translation. Nothing was overwritten."},
+    {"key":"translation.conflict.current","namespace":"translation","module":"i18n","description":"Label for the stored value","it":"Valore salvato","en":"Saved value"},
+    {"key":"translation.conflict.yours",  "namespace":"translation","module":"i18n","description":"Label for the attempted value","it":"Il tuo valore","en":"Your value"},
+    {"key":"translation.conflict.reload", "namespace":"translation","module":"i18n","description":"Reload-data button","it":"Ricarica i dati","en":"Reload data"},
+    {"key":"translation.confirm.delete_title","namespace":"translation","module":"i18n","description":"Delete-key confirm title","it":"Elimina chiave","en":"Delete key"},
+    {"key":"translation.confirm.delete_message","namespace":"translation","module":"i18n","description":"Delete-key confirm body. {{key}} = translation key","it":"Eliminare la chiave «{{key}}» e tutte le sue traduzioni?","en":"Delete the key “{{key}}” and all of its translations?"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- shared UI components (grid + filter drawer) -----------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"common.labels.filters",       "namespace":"common","module":"core","description":"Filter drawer title","it":"Filtri","en":"Filters"},
+    {"key":"common.actions.close_filters","namespace":"common","module":"core","description":"Close the filter drawer (aria-label)","it":"Chiudi filtri","en":"Close filters"},
+    {"key":"common.actions.apply",        "namespace":"common","module":"core","description":"Generic apply/confirm action","it":"Applica","en":"Apply"},
+    {"key":"common.actions.reset",        "namespace":"common","module":"core","description":"Generic reset action","it":"Reset","en":"Reset"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- app shell (sidebar account panel, dashboard, error/loading, embedded, icon picker) ----
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"errors.page_title",              "namespace":"errors","module":"core","description":"Error boundary heading","it":"Qualcosa è andato storto.","en":"Something went wrong."},
+    {"key":"errors.error_id",                "namespace":"errors","module":"core","description":"Error boundary digest label","it":"ID errore","en":"Error ID"},
+    {"key":"errors.retry",                   "namespace":"errors","module":"core","description":"Error boundary retry button","it":"Riprova","en":"Try again"},
+    {"key":"home.dashboard",                 "namespace":"home","module":"core","description":"Dashboard page title","it":"Dashboard","en":"Dashboard"},
+    {"key":"home.total_users",               "namespace":"home","module":"core","description":"Dashboard stat card label","it":"Utenti totali","en":"Total Users"},
+    {"key":"home.active_sessions",           "namespace":"home","module":"core","description":"Dashboard stat card label","it":"Sessioni attive","en":"Active Sessions"},
+    {"key":"home.revenue",                   "namespace":"home","module":"core","description":"Dashboard stat card label","it":"Ricavi","en":"Revenue"},
+    {"key":"home.content_area",              "namespace":"home","module":"core","description":"Dashboard placeholder section heading","it":"Area contenuti","en":"Content Area"},
+    {"key":"home.placeholder_body",          "namespace":"home","module":"core","description":"Dashboard placeholder paragraph. {{path}} = current route","it":"Questa è una pagina segnaposto per {{path}}. Naviga usando la barra laterale per vedere il cambiamento dello stato attivo.","en":"This is a placeholder page for {{path}}. Navigate using the sidebar to see the active state change."},
+    {"key":"home.placeholder_admin_hint",    "namespace":"home","module":"core","description":"Dashboard placeholder admin hint paragraph","it":"Vai al Pannello di amministrazione (in fondo alla barra laterale) per configurare dinamicamente la struttura del menu.","en":"Go to the Admin Panel (bottom of sidebar) to configure the menu structure dynamically."},
+    {"key":"embedded.loading",               "namespace":"embedded","module":"core","description":"Embedded iframe accessible title","it":"Contenuto incorporato","en":"Embedded content"},
+    {"key":"embedded.blocked_title",         "namespace":"embedded","module":"core","description":"Embed-blocked warning message","it":"⚠️ Questo sito non può essere visualizzato incorporato.","en":"⚠️ This site cannot be displayed embedded."},
+    {"key":"embedded.blocked_body",          "namespace":"embedded","module":"core","description":"Embed-blocked open-in-new-tab link","it":"Apri in una nuova scheda →","en":"Open in a new tab →"},
+    {"key":"icon_picker.select_placeholder", "namespace":"icon_picker","module":"core","description":"Icon picker trigger placeholder when empty","it":"Seleziona icona…","en":"Select icon…"},
+    {"key":"icon_picker.search_placeholder", "namespace":"icon_picker","module":"core","description":"Icon picker search input placeholder","it":"Cerca icone…","en":"Search icons…"},
+    {"key":"icon_picker.no_icon",            "namespace":"icon_picker","module":"core","description":"Icon picker none-option tooltip","it":"Nessuna icona","en":"No icon"},
+    {"key":"icon_picker.empty",              "namespace":"icon_picker","module":"core","description":"Icon picker none-option label","it":"Vuoto","en":"Empty"},
+    {"key":"icon_picker.no_results",         "namespace":"icon_picker","module":"core","description":"Icon picker empty search results message","it":"Nessuna icona trovata","en":"No icons found"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- authentication: login page (components/Login.tsx) ----------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"auth.login.error_credentials",     "namespace":"auth","module":"auth","description":"Login error: CredentialsSignin","it":"Email o password non corretti.","en":"Incorrect email or password."},
+    {"key":"auth.login.error_access_denied",   "namespace":"auth","module":"auth","description":"Login error: AccessDenied","it":"Accesso negato. Non sei autorizzato ad accedere.","en":"Access denied. You are not authorized to sign in."},
+    {"key":"auth.login.error_password_not_set","namespace":"auth","module":"auth","description":"Login error: PasswordNotSet","it":"Imposta prima la tua password tramite il link ricevuto via email.","en":"Set your password first using the link you received by email."},
+    {"key":"auth.login.error_oauth_signin",    "namespace":"auth","module":"auth","description":"Login error: OAuthSignin","it":"Errore durante l'accesso. Riprova.","en":"Error signing in. Please try again."},
+    {"key":"auth.login.error_oauth_callback",  "namespace":"auth","module":"auth","description":"Login error: OAuthCallback","it":"Errore durante il callback OAuth. Riprova.","en":"Error during the OAuth callback. Please try again."},
+    {"key":"auth.login.error_default",         "namespace":"auth","module":"auth","description":"Login error: fallback/Default","it":"Si è verificato un errore durante l'accesso. Riprova.","en":"An error occurred while signing in. Please try again."},
+    {"key":"auth.login.password_set_ok",       "namespace":"auth","module":"auth","description":"Success banner after set-password flow","it":"Password impostata con successo. Puoi accedere.","en":"Password set successfully. You can now sign in."},
+    {"key":"auth.login.password_changed_ok",   "namespace":"auth","module":"auth","description":"Success banner after change-password flow","it":"Password aggiornata. Accedi con la nuova password.","en":"Password updated. Sign in with your new password."},
+    {"key":"auth.login.tagline",               "namespace":"auth","module":"auth","description":"Login card header tagline","it":"Construct: the Frontiere technology foundations","en":"Construct: the Frontiere technology foundations"},
+    {"key":"auth.login.email",                 "namespace":"auth","module":"auth","description":"Email field label","it":"Email","en":"Email"},
+    {"key":"auth.login.email_placeholder",     "namespace":"auth","module":"auth","description":"Email field placeholder","it":"nome@esempio.it","en":"name@example.com"},
+    {"key":"auth.login.password",              "namespace":"auth","module":"auth","description":"Password field label","it":"Password","en":"Password"},
+    {"key":"auth.login.hide_password",         "namespace":"auth","module":"auth","description":"Toggle password visibility (hide) aria-label","it":"Nascondi password","en":"Hide password"},
+    {"key":"auth.login.show_password",         "namespace":"auth","module":"auth","description":"Toggle password visibility (show) aria-label","it":"Mostra password","en":"Show password"},
+    {"key":"auth.login.forgot_password",       "namespace":"auth","module":"auth","description":"Link to /forgot-password","it":"Password dimenticata?","en":"Forgot password?"},
+    {"key":"auth.login.submitting",            "namespace":"auth","module":"auth","description":"Submit button while signing in","it":"Accesso in corso…","en":"Signing in…"},
+    {"key":"auth.login.submit",                "namespace":"auth","module":"auth","description":"Submit button","it":"Accedi","en":"Sign in"},
+    {"key":"auth.login.divider",               "namespace":"auth","module":"auth","description":"Divider between credentials and OAuth","it":"oppure","en":"or"},
+    {"key":"auth.login.google",                "namespace":"auth","module":"auth","description":"Google sign-in button","it":"Continua con Google","en":"Continue with Google"},
+    {"key":"auth.login.help_question",         "namespace":"auth","module":"auth","description":"Footer help line, question part","it":"Problemi di accesso?","en":"Trouble signing in?"},
+    {"key":"auth.login.help_answer",           "namespace":"auth","module":"auth","description":"Footer help line, answer part","it":"Contatta l'amministratore.","en":"Contact your administrator."},
+    {"key":"auth.login.no_account",            "namespace":"auth","module":"auth","description":"Footer line before the register link","it":"Non hai un account?","en":"Don't have an account?"},
+    {"key":"auth.login.register",              "namespace":"auth","module":"auth","description":"Link to /register","it":"Registrati","en":"Sign up"},
+    {"key":"auth.login.test_toggle",           "namespace":"auth","module":"auth","description":"Test-mode expander toggle button","it":"Accesso test","en":"Test login"},
+    {"key":"auth.login.test_email_placeholder","namespace":"auth","module":"auth","description":"Test-mode email input placeholder","it":"Email di test","en":"Test email"},
+    {"key":"auth.login.test_submitting",       "namespace":"auth","module":"auth","description":"Test-mode submit button while signing in","it":"Accesso…","en":"Signing in…"},
+    {"key":"auth.login.test_submit",           "namespace":"auth","module":"auth","description":"Test-mode submit button","it":"Entra (test)","en":"Sign in (test)"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- authentication: register page (app/register/*) --------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"auth.register.confirm",            "namespace":"auth","module":"auth","description":"Confirmation shown after submitting the register form","it":"Se l'email è autorizzata riceverai un link per completare la registrazione.","en":"If the email is authorized you will receive a link to complete registration."},
+    {"key":"auth.register.back_to_login",      "namespace":"auth","module":"auth","description":"Back-to-login link","it":"← Torna al login","en":"← Back to login"},
+    {"key":"auth.register.intro",              "namespace":"auth","module":"auth","description":"Register form intro paragraph","it":"Inserisci la tua email per ricevere un link di registrazione.","en":"Enter your email to receive a registration link."},
+    {"key":"auth.register.email",              "namespace":"auth","module":"auth","description":"Email field label","it":"Email","en":"Email"},
+    {"key":"auth.register.email_placeholder",  "namespace":"auth","module":"auth","description":"Email field placeholder","it":"nome@esempio.it","en":"name@example.com"},
+    {"key":"auth.register.error",              "namespace":"auth","module":"auth","description":"Register form submission error","it":"Errore. Riprova tra qualche istante.","en":"Error. Please try again shortly."},
+    {"key":"auth.register.submitting",         "namespace":"auth","module":"auth","description":"Submit button while sending","it":"Invio…","en":"Sending…"},
+    {"key":"auth.register.submit",             "namespace":"auth","module":"auth","description":"Submit button","it":"Registrati","en":"Sign up"},
+    {"key":"auth.register.subtitle",           "namespace":"auth","module":"auth","description":"Register page header subtitle","it":"Crea il tuo account","en":"Create your account"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- authentication: forgot-password page (app/forgot-password/*) ------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"auth.forgot.confirm",              "namespace":"auth","module":"auth","description":"Confirmation shown after submitting the forgot-password form","it":"Se l'email è registrata riceverai un link per reimpostare la password.","en":"If the email is registered you will receive a link to reset your password."},
+    {"key":"auth.forgot.back_to_login",        "namespace":"auth","module":"auth","description":"Back-to-login link","it":"← Torna al login","en":"← Back to login"},
+    {"key":"auth.forgot.intro",                "namespace":"auth","module":"auth","description":"Forgot-password form intro paragraph","it":"Inserisci la tua email per ricevere un link di reset.","en":"Enter your email to receive a reset link."},
+    {"key":"auth.forgot.email",                "namespace":"auth","module":"auth","description":"Email field label","it":"Email","en":"Email"},
+    {"key":"auth.forgot.email_placeholder",    "namespace":"auth","module":"auth","description":"Email field placeholder","it":"nome@esempio.it","en":"name@example.com"},
+    {"key":"auth.forgot.error",                "namespace":"auth","module":"auth","description":"Forgot-password form submission error","it":"Errore. Riprova tra qualche istante.","en":"Error. Please try again shortly."},
+    {"key":"auth.forgot.submitting",           "namespace":"auth","module":"auth","description":"Submit button while sending","it":"Invio…","en":"Sending…"},
+    {"key":"auth.forgot.submit",               "namespace":"auth","module":"auth","description":"Submit button","it":"Invia link","en":"Send link"},
+    {"key":"auth.forgot.subtitle",             "namespace":"auth","module":"auth","description":"Forgot-password page header subtitle","it":"Reimposta la tua password","en":"Reset your password"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- authentication: set-password page (app/set-password/*) ------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"auth.set_password.invalid_expired",       "namespace":"auth","module":"auth","description":"Invalid-or-expired token message","it":"Link non valido o scaduto.","en":"Invalid or expired link."},
+    {"key":"auth.set_password.invalid_expired_help",  "namespace":"auth","module":"auth","description":"Invalid-or-expired token help line","it":"Contatta l'amministratore per ricevere un nuovo invito.","en":"Contact your administrator for a new invitation."},
+    {"key":"auth.set_password.invalid",               "namespace":"auth","module":"auth","description":"Missing/malformed token message","it":"Link non valido.","en":"Invalid link."},
+    {"key":"auth.set_password.invalid_help",          "namespace":"auth","module":"auth","description":"Missing/malformed token help line","it":"Contatta l'amministratore.","en":"Contact your administrator."},
+    {"key":"auth.set_password.subtitle",              "namespace":"auth","module":"auth","description":"Set-password page header subtitle","it":"Imposta la tua password","en":"Set your password"},
+    {"key":"auth.set_password.err_min_length",        "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno 8 caratteri.","en":"The password must be at least 8 characters long."},
+    {"key":"auth.set_password.err_uppercase",         "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno una lettera maiuscola.","en":"The password must contain at least one uppercase letter."},
+    {"key":"auth.set_password.err_digit",              "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno un numero.","en":"The password must contain at least one digit."},
+    {"key":"auth.set_password.err_mismatch",          "namespace":"auth","module":"auth","description":"Password/confirm mismatch error","it":"Le password non corrispondono.","en":"The passwords do not match."},
+    {"key":"auth.set_password.err_unknown",           "namespace":"auth","module":"auth","description":"Fallback API error","it":"Errore sconosciuto.","en":"Unknown error."},
+    {"key":"auth.set_password.new_password",          "namespace":"auth","module":"auth","description":"New-password field label","it":"Nuova password","en":"New password"},
+    {"key":"auth.set_password.new_password_placeholder","namespace":"auth","module":"auth","description":"New-password field placeholder","it":"Min. 8 caratteri, una maiuscola, un numero","en":"Min. 8 characters, one uppercase letter, one digit"},
+    {"key":"auth.set_password.hide_password",         "namespace":"auth","module":"auth","description":"Toggle password visibility (hide) aria-label","it":"Nascondi password","en":"Hide password"},
+    {"key":"auth.set_password.show_password",         "namespace":"auth","module":"auth","description":"Toggle password visibility (show) aria-label","it":"Mostra password","en":"Show password"},
+    {"key":"auth.set_password.confirm_password",      "namespace":"auth","module":"auth","description":"Confirm-password field label","it":"Conferma password","en":"Confirm password"},
+    {"key":"auth.set_password.confirm_password_placeholder","namespace":"auth","module":"auth","description":"Confirm-password field placeholder","it":"Ripeti la password","en":"Repeat the password"},
+    {"key":"auth.set_password.submitting",            "namespace":"auth","module":"auth","description":"Submit button while saving","it":"Salvataggio…","en":"Saving…"},
+    {"key":"auth.set_password.submit",                "namespace":"auth","module":"auth","description":"Submit button","it":"Imposta password","en":"Set password"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- authentication: change-password form (components/ChangePasswordForm.tsx) --
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"auth.change_password.title",              "namespace":"auth","module":"auth","description":"Card heading","it":"Cambia password","en":"Change password"},
+    {"key":"auth.change_password.current_password",   "namespace":"auth","module":"auth","description":"Current-password field label","it":"Password attuale","en":"Current password"},
+    {"key":"auth.change_password.new_password",       "namespace":"auth","module":"auth","description":"New-password field label","it":"Nuova password","en":"New password"},
+    {"key":"auth.change_password.hint",               "namespace":"auth","module":"auth","description":"New-password requirements hint","it":"Min. 8 caratteri, una maiuscola, un numero.","en":"Min. 8 characters, one uppercase letter, one digit."},
+    {"key":"auth.change_password.confirm_password",   "namespace":"auth","module":"auth","description":"Confirm-password field label","it":"Conferma nuova password","en":"Confirm new password"},
+    {"key":"auth.change_password.err_min_length",     "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno 8 caratteri.","en":"The password must be at least 8 characters long."},
+    {"key":"auth.change_password.err_uppercase",      "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno una lettera maiuscola.","en":"The password must contain at least one uppercase letter."},
+    {"key":"auth.change_password.err_digit",          "namespace":"auth","module":"auth","description":"Client-side password validation error","it":"La password deve contenere almeno un numero.","en":"The password must contain at least one digit."},
+    {"key":"auth.change_password.err_mismatch",       "namespace":"auth","module":"auth","description":"New/confirm mismatch error","it":"Le nuove password non coincidono.","en":"The new passwords do not match."},
+    {"key":"auth.change_password.err_generic",        "namespace":"auth","module":"auth","description":"Generic API error fallback","it":"Errore. Riprova.","en":"Error. Please try again."},
+    {"key":"auth.change_password.err_network",        "namespace":"auth","module":"auth","description":"Network/fetch failure","it":"Errore di rete. Riprova.","en":"Network error. Please try again."},
+    {"key":"auth.change_password.success",            "namespace":"auth","module":"auth","description":"Success message before sign-out","it":"Password aggiornata. Stai per essere disconnesso…","en":"Password updated. You are about to be signed out…"},
+    {"key":"auth.change_password.submitting",         "namespace":"auth","module":"auth","description":"Submit button while saving","it":"Salvataggio…","en":"Saving…"},
+    {"key":"auth.change_password.submit",             "namespace":"auth","module":"auth","description":"Submit button","it":"Aggiorna password","en":"Update password"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- validation: Zod message keys (lib/validations.ts VALIDATION_KEYS) --
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"validation.password.min_length", "namespace":"validation","module":"core","description":"passwordSchema.min(8) message","it":"La password deve contenere almeno 8 caratteri.","en":"The password must be at least 8 characters long."},
+    {"key":"validation.password.uppercase",  "namespace":"validation","module":"core","description":"passwordSchema uppercase regex message","it":"La password deve contenere almeno una lettera maiuscola.","en":"The password must contain at least one uppercase letter."},
+    {"key":"validation.password.digit",      "namespace":"validation","module":"core","description":"passwordSchema digit regex message","it":"La password deve contenere almeno un numero.","en":"The password must contain at least one digit."},
+    {"key":"validation.email.invalid",       "namespace":"validation","module":"core","description":"emailSchema.email() message","it":"Email non valida.","en":"Invalid email."},
+    {"key":"validation.phone.invalid",       "namespace":"validation","module":"core","description":"phoneSchema E.164 regex message","it":"Numero di telefono non valido. Usa il formato internazionale, es. +391234567890.","en":"Invalid phone number. Use the international format, e.g. +391234567890."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- profile page (components/ProfileForm.tsx) ---------------------------
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"profile.title",              "namespace":"profile","module":"core","description":"Profile page title","it":"Profilo","en":"Profile"},
+    {"key":"profile.subtitle",           "namespace":"profile","module":"core","description":"Profile page subtitle","it":"Gestisci le impostazioni del tuo account","en":"Manage your account settings"},
+    {"key":"profile.email",              "namespace":"profile","module":"core","description":"Email field label","it":"Email","en":"Email"},
+    {"key":"profile.first_name",         "namespace":"profile","module":"core","description":"First name field label","it":"Nome","en":"First name"},
+    {"key":"profile.last_name",          "namespace":"profile","module":"core","description":"Last name field label","it":"Cognome","en":"Last name"},
+    {"key":"profile.username",           "namespace":"profile","module":"core","description":"Username field label","it":"Username","en":"Username"},
+    {"key":"profile.phone",              "namespace":"profile","module":"core","description":"Phone field label","it":"Telefono","en":"Phone"},
+    {"key":"profile.saved",              "namespace":"profile","module":"core","description":"Profile save success message","it":"Profilo salvato.","en":"Profile saved."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- rbac: roles admin (components/rbac/roles/*, app/(protected)/roles-permissions) ----
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"roles.list.title",              "namespace":"roles","module":"rbac","description":"Roles page title (also used as the role-detail breadcrumb)","it":"Ruoli & permessi","en":"Roles & permissions"},
+    {"key":"roles.list.id",                 "namespace":"roles","module":"rbac","description":"ID column header","it":"ID","en":"ID"},
+    {"key":"roles.form.name",               "namespace":"roles","module":"rbac","description":"Role-name field/column: create modal, rename modal and description column header","it":"Nome ruolo","en":"Role name"},
+    {"key":"roles.list.associated_users",   "namespace":"roles","module":"rbac","description":"Associated-users column header (also role-detail subtitle, interpolated with the count)","it":"Utenti associati","en":"Associated users"},
+    {"key":"roles.list.has_permissions",    "namespace":"roles","module":"rbac","description":"Has-permissions column header","it":"Ha permessi","en":"Has permissions"},
+    {"key":"roles.list.created_at",         "namespace":"roles","module":"rbac","description":"Created-at column header","it":"Data di creazione","en":"Created at"},
+    {"key":"roles.list.updated_at",         "namespace":"roles","module":"rbac","description":"Updated-at column header","it":"Ultimo aggiornamento","en":"Last updated"},
+    {"key":"roles.actions.create",          "namespace":"roles","module":"rbac","description":"New-role button","it":"Nuovo ruolo","en":"New role"},
+    {"key":"roles.confirm.delete_title",    "namespace":"roles","module":"rbac","description":"Delete-role confirm title","it":"Elimina ruolo","en":"Delete role"},
+    {"key":"roles.confirm.delete_message",  "namespace":"roles","module":"rbac","description":"Delete-role confirm body. {{name}} = role name","it":"Eliminare il ruolo \"{{name}}\"?","en":"Delete the role \"{{name}}\"?"},
+    {"key":"roles.form.create_title",       "namespace":"roles","module":"rbac","description":"Create-role modal heading","it":"Crea nuovo ruolo","en":"Create new role"},
+    {"key":"roles.form.create_subtitle",    "namespace":"roles","module":"rbac","description":"Create-role modal help text","it":"Per procedere con la creazione di un nuovo ruolo, inserisci il nome del ruolo desiderato","en":"To create a new role, enter the desired role name"},
+    {"key":"roles.rename.title",            "namespace":"roles","module":"rbac","description":"Rename-role modal heading","it":"Rinomina ruolo","en":"Rename role"},
+    {"key":"roles.detail.title",            "namespace":"roles","module":"rbac","description":"Role-detail breadcrumb suffix","it":"Dettagli","en":"Details"},
+    {"key":"roles.detail.tab_sections",     "namespace":"roles","module":"rbac","description":"Permissions-tree tab: sections","it":"Sezioni","en":"Sections"},
+    {"key":"roles.detail.tab_operations",   "namespace":"roles","module":"rbac","description":"Permissions-tree tab: operations","it":"Operazioni","en":"Operations"},
+    {"key":"roles.detail.system_readonly_hint","namespace":"roles","module":"rbac","description":"Save-button tooltip for SYSTEM roles","it":"I ruoli di sistema non sono modificabili","en":"System roles cannot be edited"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- rbac: users admin (components/rbac/users/*, app/(protected)/user-management) ----
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"users.list.title",              "namespace":"users","module":"rbac","description":"Users page title","it":"Utenti","en":"Users"},
+    {"key":"users.list.name",               "namespace":"users","module":"rbac","description":"User (name) column header","it":"Utente","en":"User"},
+    {"key":"users.list.email",              "namespace":"users","module":"rbac","description":"Email column header","it":"Email","en":"Email"},
+    {"key":"users.list.roles",              "namespace":"users","module":"rbac","description":"Roles column header (also the manage-roles modal field label)","it":"Ruoli","en":"Roles"},
+    {"key":"users.list.status",             "namespace":"users","module":"rbac","description":"Status column header","it":"Stato","en":"Status"},
+    {"key":"users.list.created_at",         "namespace":"users","module":"rbac","description":"Created-at column header","it":"Creato","en":"Created"},
+    {"key":"users.list.updated_at",         "namespace":"users","module":"rbac","description":"Updated-at column header","it":"Aggiornato","en":"Updated"},
+    {"key":"users.actions.manage_roles",    "namespace":"users","module":"rbac","description":"Row-menu action + manage-roles modal title prefix","it":"Gestisci ruoli","en":"Manage roles"},
+    {"key":"users.actions.activate",        "namespace":"users","module":"rbac","description":"Row-menu action: activate a user","it":"Attiva","en":"Activate"},
+    {"key":"users.actions.deactivate",      "namespace":"users","module":"rbac","description":"Row-menu action: deactivate a user","it":"Disattiva","en":"Deactivate"},
+    {"key":"users.status.active",           "namespace":"users","module":"rbac","description":"Active-status badge/filter option","it":"Attivo","en":"Active"},
+    {"key":"users.status.deactivated",      "namespace":"users","module":"rbac","description":"Deactivated-status badge/filter option","it":"Disattivato","en":"Deactivated"},
+    {"key":"users.confirm.deactivate",      "namespace":"users","module":"rbac","description":"Native-confirm message. {{email}} = user email","it":"Disattivare {{email}}?","en":"Deactivate {{email}}?"},
+    {"key":"users.confirm.activate",        "namespace":"users","module":"rbac","description":"Native-confirm message. {{email}} = user email","it":"Attivare {{email}}?","en":"Activate {{email}}?"},
+    {"key":"users.roles.always_assigned",   "namespace":"users","module":"rbac","description":"Locked-role suffix in the manage-roles list","it":"sempre assegnato","en":"always assigned"},
+    {"key":"users.roles.save_error",        "namespace":"users","module":"rbac","description":"Manage-roles save failure fallback","it":"Errore durante il salvataggio","en":"Error while saving"},
+    {"key":"users.roles.remove_label",      "namespace":"users","module":"rbac","description":"Remove-role chip aria-label. {{name}} = role name","it":"Rimuovi {{name}}","en":"Remove {{name}}"},
+    {"key":"users.roles.search_placeholder","namespace":"users","module":"rbac","description":"Role multi-select search input placeholder","it":"Cerca un ruolo…","en":"Search a role…"},
+    {"key":"users.roles.no_results",        "namespace":"users","module":"rbac","description":"Role multi-select empty-results message","it":"Nessun ruolo trovato","en":"No role found"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- rbac: functionalities admin (components/rbac/functionalities/*, app/(protected)/functionalities/**) ----
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"functionalities.list.title",               "namespace":"functionalities","module":"rbac","description":"Functionalities tree page title (also the form's title prefix)","it":"Funzionalità","en":"Functionalities"},
+    {"key":"functionalities.list.clear_filters_label",  "namespace":"functionalities","module":"rbac","description":"Clear-filters button aria-label (tree toolbar)","it":"Rimuovi filtri","en":"Clear filters"},
+    {"key":"functionalities.actions.create",            "namespace":"functionalities","module":"rbac","description":"Create-new button (tree toolbar)","it":"Crea nuovo","en":"Create new"},
+    {"key":"functionalities.tree.add_child",            "namespace":"functionalities","module":"rbac","description":"Add-sub-item row action tooltip","it":"Aggiungi sotto-elemento","en":"Add sub-item"},
+    {"key":"functionalities.tree.confirm_delete",       "namespace":"functionalities","module":"rbac","description":"Native-confirm message. {{name}} = item name","it":"Eliminare \"{{name}}\" e tutti i suoi figli?","en":"Delete \"{{name}}\" and all its children?"},
+    {"key":"functionalities.tree.move_failed",          "namespace":"functionalities","module":"rbac","description":"Drag-and-drop move failure fallback","it":"Spostamento non riuscito.","en":"Move failed."},
+    {"key":"functionalities.tree.delete_failed",        "namespace":"functionalities","module":"rbac","description":"Delete failure fallback","it":"Eliminazione non riuscita.","en":"Delete failed."},
+    {"key":"functionalities.form.create_label",         "namespace":"functionalities","module":"rbac","description":"Form title suffix in create mode","it":"Crea","en":"Create"},
+    {"key":"functionalities.form.general_info",         "namespace":"functionalities","module":"rbac","description":"Form section heading","it":"Informazioni generali","en":"General information"},
+    {"key":"functionalities.form.name_placeholder",     "namespace":"functionalities","module":"rbac","description":"Required IT name field placeholder","it":"Nome funzionalità *","en":"Functionality name *"},
+    {"key":"functionalities.form.description_placeholder","namespace":"functionalities","module":"rbac","description":"Required IT description field placeholder","it":"Descrizione *","en":"Description *"},
+    {"key":"functionalities.form.parent_placeholder",   "namespace":"functionalities","module":"rbac","description":"Genitore (parent) select placeholder","it":"Genitore","en":"Parent"},
+    {"key":"functionalities.form.parent_locked_create_hint","namespace":"functionalities","module":"rbac","description":"Genitore disabled-select tooltip, create mode","it":"Nessuna categoria disponibile: verrà creato alla radice","en":"No category available: it will be created at the root"},
+    {"key":"functionalities.form.parent_locked_edit_hint","namespace":"functionalities","module":"rbac","description":"Genitore disabled-select tooltip, edit mode","it":"Nessuna categoria disponibile come genitore","en":"No category available as parent"},
+    {"key":"functionalities.form.type_heading",         "namespace":"functionalities","module":"rbac","description":"Tipologia section heading","it":"Tipologia","en":"Type"},
+    {"key":"functionalities.form.type_placeholder",     "namespace":"functionalities","module":"rbac","description":"Tipologia select placeholder","it":"Tipologia *","en":"Type *"},
+    {"key":"functionalities.form.link_placeholder",     "namespace":"functionalities","module":"rbac","description":"Link field placeholder","it":"Link *","en":"Link *"},
+    {"key":"functionalities.form.open_new_tab",         "namespace":"functionalities","module":"rbac","description":"External-link new-tab checkbox label","it":"Apri in una nuova scheda","en":"Open in a new tab"},
+    {"key":"functionalities.form.translations_heading", "namespace":"functionalities","module":"rbac","description":"Translations panel heading","it":"Gestione traduzioni","en":"Translations management"},
+    {"key":"functionalities.form.missing_id_error",     "namespace":"functionalities","module":"rbac","description":"Edit-mode guard error (missing funcId)","it":"ID funzionalità mancante","en":"Missing functionality ID"},
+    {"key":"functionalities.form.save_error",           "namespace":"functionalities","module":"rbac","description":"Generic save failure fallback","it":"Errore durante il salvataggio. Riprova.","en":"Error while saving. Please try again."},
+    {"key":"functionalities.form.name_placeholder_optional","namespace":"functionalities","module":"rbac","description":"Per-locale name placeholder in the translations accordion","it":"Nome funzionalità","en":"Functionality name"},
+    {"key":"functionalities.form.description_placeholder_optional","namespace":"functionalities","module":"rbac","description":"Per-locale description placeholder in the translations accordion","it":"Descrizione","en":"Description"},
+    {"key":"functionalities.form.tag_placeholder",      "namespace":"functionalities","module":"rbac","description":"TagInput default placeholder","it":"Inserisci un tag e premi invio","en":"Enter a tag and press enter"},
+    {"key":"functionalities.item_type.category",        "namespace":"functionalities","module":"rbac","description":"Tipologia option: category","it":"Category","en":"Category"},
+    {"key":"functionalities.item_type.embedded",        "namespace":"functionalities","module":"rbac","description":"Tipologia option: embedded external link","it":"Link esterno embedded (iframe)","en":"Embedded external link (iframe)"},
+    {"key":"functionalities.item_type.external",        "namespace":"functionalities","module":"rbac","description":"Tipologia option: external link","it":"Link esterno (http[s])","en":"External link (http[s])"},
+    {"key":"functionalities.item_type.internal",         "namespace":"functionalities","module":"rbac","description":"Tipologia option: internal link","it":"Link interno (/path)","en":"Internal link (/path)"},
+    {"key":"functionalities.locale.en",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: English","it":"Inglese","en":"English"},
+    {"key":"functionalities.locale.it",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Italian","it":"Italiano","en":"Italian"},
+    {"key":"functionalities.locale.de",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: German","it":"Tedesco","en":"German"},
+    {"key":"functionalities.locale.fr",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: French","it":"Francese","en":"French"},
+    {"key":"functionalities.locale.es",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Spanish","it":"Spagnolo","en":"Spanish"},
+    {"key":"functionalities.locale.nl",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Dutch","it":"Olandese","en":"Dutch"},
+    {"key":"functionalities.locale.pt",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Portuguese","it":"Portoghese","en":"Portuguese"},
+    {"key":"functionalities.locale.sk",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Slovak","it":"Slovacco","en":"Slovak"},
+    {"key":"functionalities.locale.ro",                 "namespace":"functionalities","module":"rbac","description":"Translations-accordion content-language name: Romanian","it":"Rumeno","en":"Romanian"},
+    {"key":"functionalities.icon.select_label",         "namespace":"functionalities","module":"rbac","description":"Icon-picker trigger aria-label when empty","it":"Seleziona icona","en":"Select icon"},
+    {"key":"functionalities.icon.selected_label",       "namespace":"functionalities","module":"rbac","description":"Icon-picker trigger aria-label when set. {{value}} = icon name or 'custom SVG' label","it":"Icona selezionata: {{value}}","en":"Selected icon: {{value}}"},
+    {"key":"functionalities.icon.custom_svg",           "namespace":"functionalities","module":"rbac","description":"Icon-picker aria-label value for a custom uploaded SVG","it":"SVG personalizzato","en":"Custom SVG"},
+    {"key":"functionalities.icon.label",                "namespace":"functionalities","module":"rbac","description":"Icon-picker trigger caption (non-compact mode)","it":"Icona","en":"Icon"},
+    {"key":"functionalities.icon.remove_label",         "namespace":"functionalities","module":"rbac","description":"Icon-picker clear-icon button aria-label","it":"Rimuovi icona","en":"Remove icon"},
+    {"key":"functionalities.icon.tab_library",          "namespace":"functionalities","module":"rbac","description":"Icon-picker tab: library","it":"Libreria","en":"Library"},
+    {"key":"functionalities.icon.tab_upload",            "namespace":"functionalities","module":"rbac","description":"Icon-picker tab: upload SVG","it":"Carica SVG","en":"Upload SVG"},
+    {"key":"functionalities.icon.svg_only_error",       "namespace":"functionalities","module":"rbac","description":"Icon-picker upload error: non-SVG file","it":"Solo file SVG","en":"SVG files only"},
+    {"key":"functionalities.icon.drop_prefix",          "namespace":"functionalities","module":"rbac","description":"Icon-picker upload hint, text before the underlined link","it":"Trascina o","en":"Drag or"},
+    {"key":"functionalities.icon.choose_file",          "namespace":"functionalities","module":"rbac","description":"Icon-picker upload hint, underlined link text","it":"scegli il file","en":"choose a file"},
+    {"key":"functionalities.icon.format_hint",          "namespace":"functionalities","module":"rbac","description":"Icon-picker upload tab format hint","it":"Formato: SVG","en":"Format: SVG"},
+    {"key":"functionalities.icon.requirements_heading", "namespace":"functionalities","module":"rbac","description":"Icon-picker SVG requirements heading","it":"Requisiti SVG","en":"SVG requirements"},
+    {"key":"functionalities.icon.req_dimensions_prefix","namespace":"functionalities","module":"rbac","description":"SVG requirement line 1, text before <code>","it":"Dimensioni: ","en":"Dimensions: "},
+    {"key":"functionalities.icon.req_dimensions_suffix","namespace":"functionalities","module":"rbac","description":"SVG requirement line 1, text after <code>","it":" (24×24 px)","en":" (24×24 px)"},
+    {"key":"functionalities.icon.req_colors_prefix",    "namespace":"functionalities","module":"rbac","description":"SVG requirement line 2, text before <code>","it":"Colori: usa ","en":"Colors: use "},
+    {"key":"functionalities.icon.req_colors_suffix",    "namespace":"functionalities","module":"rbac","description":"SVG requirement line 2, text after <code>","it":", evita valori hardcoded","en":", avoid hardcoded values"},
+    {"key":"functionalities.icon.req_stroke_prefix",    "namespace":"functionalities","module":"rbac","description":"SVG requirement line 3, text before <code>","it":"Stroke: ","en":"Stroke: "},
+    {"key":"functionalities.icon.req_stroke_suffix",    "namespace":"functionalities","module":"rbac","description":"SVG requirement line 3, text after <code>","it":", stile outline","en":", outline style"},
+    {"key":"functionalities.icon.req_no_script_prefix", "namespace":"functionalities","module":"rbac","description":"SVG requirement line 4, text before <code>","it":"Nessun elemento ","en":"No "},
+    {"key":"functionalities.icon.req_no_script_suffix", "namespace":"functionalities","module":"rbac","description":"SVG requirement line 4, text after <code>","it":" o stile esterno","en":" or external style"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- ---- theme admin (components/AdminTheme.tsx) ----------------------------
+-- Several of these `it` values are already English in the source (a pre-existing
+-- inconsistency: this app's default active language is Italian, but AdminTheme.tsx
+-- was never localized) — the `it` seed is a byte-exact copy of the current literal
+-- either way, per this task's brief (§ critical strings), so `it` and `en` are
+-- identical for those rows rather than inventing a translation that would change
+-- what's on screen today.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"theme.page.title",              "namespace":"theme","module":"rbac","description":"Theme admin page title","it":"Theme & Styles","en":"Theme & Styles"},
+    {"key":"theme.page.subtitle",           "namespace":"theme","module":"rbac","description":"Theme admin page subtitle","it":"Customize your application appearance","en":"Customize your application appearance"},
+    {"key":"theme.section.global",          "namespace":"theme","module":"rbac","description":"Global section heading","it":"Global","en":"Global"},
+    {"key":"theme.field.primary_color",     "namespace":"theme","module":"rbac","description":"Primary-color field label","it":"Primary Color (Active Icons, Buttons)","en":"Primary Color (Active Icons, Buttons)"},
+    {"key":"theme.section.backgrounds",     "namespace":"theme","module":"rbac","description":"Backgrounds token-group title","it":"Sfondi","en":"Backgrounds"},
+    {"key":"theme.field.page_background",   "namespace":"theme","module":"rbac","description":"Page-background field label","it":"Page Background","en":"Page Background"},
+    {"key":"theme.field.surface",           "namespace":"theme","module":"rbac","description":"Surface field label","it":"Surface","en":"Surface"},
+    {"key":"theme.field.surface_overlay",   "namespace":"theme","module":"rbac","description":"Surface-overlay field label","it":"Surface Overlay","en":"Surface Overlay"},
+    {"key":"theme.field.surface_hover",     "namespace":"theme","module":"rbac","description":"Surface-hover field label","it":"Surface Hover","en":"Surface Hover"},
+    {"key":"theme.section.border",          "namespace":"theme","module":"rbac","description":"Border token-group title","it":"Border","en":"Border"},
+    {"key":"theme.field.border",            "namespace":"theme","module":"rbac","description":"Border field label","it":"Border","en":"Border"},
+    {"key":"theme.field.border_subtle",     "namespace":"theme","module":"rbac","description":"Border-subtle field label","it":"Border Subtle","en":"Border Subtle"},
+    {"key":"theme.section.text",            "namespace":"theme","module":"rbac","description":"Text token-group title","it":"Testo","en":"Text"},
+    {"key":"theme.field.foreground",        "namespace":"theme","module":"rbac","description":"Foreground field label","it":"Foreground","en":"Foreground"},
+    {"key":"theme.field.foreground_secondary","namespace":"theme","module":"rbac","description":"Foreground-secondary field label","it":"Foreground Secondary","en":"Foreground Secondary"},
+    {"key":"theme.field.foreground_muted",   "namespace":"theme","module":"rbac","description":"Foreground-muted field label","it":"Foreground Muted","en":"Foreground Muted"},
+    {"key":"theme.field.foreground_faint",  "namespace":"theme","module":"rbac","description":"Foreground-faint field label","it":"Foreground Faint","en":"Foreground Faint"},
+    {"key":"theme.section.sidebar",         "namespace":"theme","module":"rbac","description":"Sidebar/active-item token-group title","it":"Sidebar & Active Item","en":"Sidebar & Active Item"},
+    {"key":"theme.field.sidebar_bg",        "namespace":"theme","module":"rbac","description":"Sidebar-background field label","it":"Sidebar Background","en":"Sidebar Background"},
+    {"key":"theme.field.sidebar_text",      "namespace":"theme","module":"rbac","description":"Sidebar-text field label","it":"Sidebar Text","en":"Sidebar Text"},
+    {"key":"theme.field.active_item_bg",    "namespace":"theme","module":"rbac","description":"Active-item-background field label","it":"Active Item Background","en":"Active Item Background"},
+    {"key":"theme.field.active_item_text",  "namespace":"theme","module":"rbac","description":"Active-item-text field label","it":"Active Item Text","en":"Active Item Text"},
+    {"key":"theme.token.light",             "namespace":"theme","module":"rbac","description":"Light-value column caption in each token row","it":"Light","en":"Light"},
+    {"key":"theme.token.dark",              "namespace":"theme","module":"rbac","description":"Dark-value column caption in each token row","it":"Dark","en":"Dark"},
+    {"key":"theme.banner.unsaved_hint",     "namespace":"theme","module":"rbac","description":"Idle-state footer hint","it":"ℹ️ Ricordati di salvare i valori, altrimenti verranno persi alla chiusura dell'applicazione.","en":"ℹ️ Remember to save your values, or they will be lost when the application closes."},
+    {"key":"theme.status.saved",            "namespace":"theme","module":"rbac","description":"Save-success footer message","it":"Theme saved.","en":"Theme saved."},
+    {"key":"theme.status.save_failed",      "namespace":"theme","module":"rbac","description":"Save-failure footer message","it":"Save failed. Please try again.","en":"Save failed. Please try again."},
+    {"key":"theme.status.saving",           "namespace":"theme","module":"rbac","description":"Save-button label while saving","it":"Saving…","en":"Saving…"},
+    {"key":"theme.actions.reset_defaults",  "namespace":"theme","module":"rbac","description":"Reset-to-defaults button","it":"Valori di Default","en":"Default Values"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;

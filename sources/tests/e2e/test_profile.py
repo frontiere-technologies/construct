@@ -15,7 +15,7 @@ def test_profile_navigation_from_sidebar(logged_in_page, test_email):
 
     l1.locator(f"button:has-text('{test_email}')").click()
     page.locator("aside").nth(1).wait_for(state="visible", timeout=5_000)
-    page.locator("aside").nth(1).get_by_text("Profile").click()
+    page.locator("aside").nth(1).get_by_text("Profilo").click()
     page.wait_for_url("**/profile", timeout=10_000)
     assert "/profile" in page.url
 
@@ -38,7 +38,7 @@ def test_profile_save_and_persist(profile_page, base_url):
     first_name_input = page.locator('input[type="text"]').first
     first_name_input.fill("E2E Test User")
     page.get_by_role("button", name="Salva").click()
-    page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
+    page.locator("text=Profilo salvato.").wait_for(state="visible", timeout=10_000)
 
     page.reload()
     page.wait_for_load_state("networkidle")
@@ -48,7 +48,7 @@ def test_profile_save_and_persist(profile_page, base_url):
     # Cleanup
     page.locator('input[type="text"]').first.fill("")
     page.get_by_role("button", name="Salva").click()
-    page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
+    page.locator("text=Profilo salvato.").wait_for(state="visible", timeout=10_000)
 
 
 def test_profile_phone_rejects_invalid_format(profile_page):
@@ -69,7 +69,7 @@ def test_profile_phone_accepts_e164_format(profile_page):
     phone_input = page.locator('input[type="tel"]')
     phone_input.fill("+14155552671")
     page.get_by_role("button", name="Salva").click()
-    page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
+    page.locator("text=Profilo salvato.").wait_for(state="visible", timeout=10_000)
 
     page.reload()
     page.wait_for_load_state("networkidle")
@@ -79,7 +79,7 @@ def test_profile_phone_accepts_e164_format(profile_page):
     # Cleanup
     page.locator('input[type="tel"]').fill("")
     page.get_by_role("button", name="Salva").click()
-    page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
+    page.locator("text=Profilo salvato.").wait_for(state="visible", timeout=10_000)
 
 
 def test_profile_phone_trims_whitespace_on_persist(profile_page):
@@ -89,7 +89,7 @@ def test_profile_phone_trims_whitespace_on_persist(profile_page):
     # Submit a whitespace-padded valid E.164 number
     phone_input.fill("  +14155552671  ")
     page.get_by_role("button", name="Salva").click()
-    page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
+    page.locator("text=Profilo salvato.").wait_for(state="visible", timeout=10_000)
 
     page.reload()
     page.wait_for_load_state("networkidle")
@@ -100,7 +100,7 @@ def test_profile_phone_trims_whitespace_on_persist(profile_page):
     # Cleanup
     page.locator('input[type="tel"]').fill("")
     page.get_by_role("button", name="Salva").click()
-    page.locator("text=Profile saved.").wait_for(state="visible", timeout=10_000)
+    page.locator("text=Profilo salvato.").wait_for(state="visible", timeout=10_000)
 
 
 def test_profile_annulla_discards_changes(profile_page):

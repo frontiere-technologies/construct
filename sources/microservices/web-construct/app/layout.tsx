@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Providers } from './providers'
+import { getI18nBundle } from '@/lib/i18n/server'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -7,11 +8,15 @@ export const metadata: Metadata = {
   description: 'Construct application',
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Resolved in the root layout so /login, /register and the rest of the public
+  // surface are translated too, not just the protected area.
+  const i18n = await getI18nBundle()
+
   return (
-    <html lang="en">
+    <html lang={i18n.language.code}>
       <body>
-        <Providers>
+        <Providers i18n={i18n}>
           {children}
         </Providers>
       </body>

@@ -11,6 +11,7 @@ import StatusBadge from './StatusBadge'
 import ManageRolesModal from './ManageRolesModal'
 import { setUserStatus } from '@/lib/rbac/users-actions'
 import { createUsersDatasource } from './usersDatasource'
+import { useI18n } from '@/context/I18nContext'
 import {
   usersUrlParamsToFilterModel, usersUrlParamsToSortModel, usersFilterModelToSearchParams,
   type UsersGridFilterModel,
@@ -29,16 +30,8 @@ interface Props {
   createdTo: string | null
 }
 
-const COLUMN_LABELS = [
-  { colId: 'firstName', label: 'Utente' },
-  { colId: 'email', label: 'Email' },
-  { colId: 'roles', label: 'Ruoli' },
-  { colId: 'status', label: 'Stato' },
-  { colId: 'dateIns', label: 'Creato' },
-  { colId: 'dateMod', label: 'Aggiornato' },
-]
-
 export default function UsersTableClient(props: Props) {
+  const { t, fmt } = useI18n()
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
@@ -59,9 +52,12 @@ export default function UsersTableClient(props: Props) {
 
   const toggleStatus = async (u: UserDTO) => {
     const next = u.status.idUserStatus === USER_STATUS_ACTIVE ? USER_STATUS_DEACTIVATED : USER_STATUS_ACTIVE
-    if (!confirm(next === USER_STATUS_DEACTIVATED ? `Disattivare ${u.email}?` : `Attivare ${u.email}?`)) return
+    const confirmMessage = next === USER_STATUS_DEACTIVATED
+      ? t('users.confirm.deactivate', { email: u.email })
+      : t('users.confirm.activate', { email: u.email })
+    if (!confirm(confirmMessage)) return
     try { await setUserStatus(u.id, next); router.refresh(); gridApiRef.current?.refreshInfiniteCache() }
-    catch (e) { alert(e instanceof Error ? e.message : 'Errore') }
+    catch (e) { alert(e instanceof Error ? e.message : t('errors.generic')) }
   }
 
   const fullName = (u: UserDTO) => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email
@@ -76,37 +72,46 @@ export default function UsersTableClient(props: Props) {
 
   const columnDefs = useMemo<ColDef<UserDTO>[]>(() => [
     actionsColumnDef<UserDTO>(u => [
-      { label: 'Gestisci ruoli', onClick: () => setManaging(u) },
-      { label: u.status.idUserStatus === USER_STATUS_ACTIVE ? 'Disattiva' : 'Attiva', onClick: () => toggleStatus(u) },
+      { label: t('users.actions.manage_roles'), onClick: () => setManaging(u) },
+      { label: u.status.idUserStatus === USER_STATUS_ACTIVE ? t('users.actions.deactivate') : t('users.actions.activate'), onClick: () => toggleStatus(u) },
     ]),
     {
-      colId: 'firstName', headerName: 'Utente', sortable: true,
+      colId: 'firstName', headerName: t('users.list.name'), sortable: true,
       valueGetter: p => p.data ? fullName(p.data) : '',
       filter: 'agTextColumnFilter',
       filterParams: { filterOptions: ['contains'], buttons: ['apply', 'reset'] },
     },
-    { field: 'email', headerName: 'Email', sortable: true, filter: false },
+    { field: 'email', headerName: t('users.list.email'), sortable: true, filter: false },
     {
-      colId: 'roles', headerName: 'Ruoli', sortable: false, filter: EnumSelectFilter,
+      colId: 'roles', headerName: t('users.list.roles'), sortable: false, filter: EnumSelectFilter,
       filterParams: { options: props.allRoles.map(r => ({ value: r.id, label: r.name })) },
       valueGetter: p => p.data ? (p.data.roles.map(r => r.name).join(', ') || '—') : '',
     },
     {
-      colId: 'status', headerName: 'Stato', sortable: true, filter: EnumSelectFilter,
-      filterParams: { options: [{ value: USER_STATUS_ACTIVE, label: 'Attivo' }, { value: USER_STATUS_DEACTIVATED, label: 'Disattivato' }] },
+      colId: 'status', headerName: t('users.list.status'), sortable: true, filter: EnumSelectFilter,
+      filterParams: { options: [{ value: USER_STATUS_ACTIVE, label: t('users.status.active') }, { value: USER_STATUS_DEACTIVATED, label: t('users.status.deactivated') }] },
       cellRenderer: (p: { data?: UserDTO }) => p.data ? <StatusBadge status={p.data.status} /> : null,
     },
     {
-      colId: 'dateIns', headerName: 'Creato', sortable: true,
+      colId: 'dateIns', headerName: t('users.list.created_at'), sortable: true,
       filter: 'agDateColumnFilter',
       filterParams: { filterOptions: ['inRange'], defaultOption: 'inRange', buttons: ['apply', 'reset'] },
-      valueGetter: p => p.data ? new Date(p.data.createdAt).toLocaleDateString() : '',
+      valueGetter: p => p.data ? fmt.date(p.data.createdAt) : '',
     },
     {
-      colId: 'dateMod', headerName: 'Aggiornato', sortable: true, filter: false,
-      valueGetter: p => p.data?.updatedAt ? new Date(p.data.updatedAt).toLocaleDateString() : '—',
+      colId: 'dateMod', headerName: t('users.list.updated_at'), sortable: true, filter: false,
+      valueGetter: p => p.data?.updatedAt ? fmt.date(p.data.updatedAt) : '—',
     },
-  ], [allRolesKey]) // eslint-disable-line react-hooks/exhaustive-deps -- allRolesKey stands in for props.allRoles (see comment above)
+  ], [allRolesKey, t, fmt]) // eslint-disable-line react-hooks/exhaustive-deps -- allRolesKey stands in for props.allRoles (see comment above); toggleStatus is intentionally omitted too, same as before this change
+
+  const columnLabels = useMemo(() => [
+    { colId: 'firstName', label: t('users.list.name') },
+    { colId: 'email', label: t('users.list.email') },
+    { colId: 'roles', label: t('users.list.roles') },
+    { colId: 'status', label: t('users.list.status') },
+    { colId: 'dateIns', label: t('users.list.created_at') },
+    { colId: 'dateMod', label: t('users.list.updated_at') },
+  ], [t])
 
   const onFilterChanged = (event: FilterChangedEvent<UserDTO>) => {
     const model = event.api.getFilterModel() as UsersGridFilterModel
@@ -126,7 +131,7 @@ export default function UsersTableClient(props: Props) {
   return (
     <>
       <div className="flex justify-end mb-3">
-        <ColumnVisibilityToggle gridApi={gridApi} columns={COLUMN_LABELS} />
+        <ColumnVisibilityToggle gridApi={gridApi} columns={columnLabels} />
       </div>
       <DataGrid<UserDTO>
         columnDefs={columnDefs}

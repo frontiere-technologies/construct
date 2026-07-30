@@ -1,4 +1,5 @@
 import { themeQuartz, type ColDef } from 'ag-grid-community'
+import type { TranslateFn } from '@/lib/i18n/types'
 
 /**
  * The `columnPinning` slice of AG Grid's `initialState`, derived from the column
@@ -41,15 +42,23 @@ export const appGridTheme = themeQuartz.withParams({
   pinnedColumnBorder: false,
 })
 
-export const itLocaleText = {
-  contains: 'Contiene',
-  inRange: "Nell'intervallo",
-  inRangeStart: 'Da',
-  inRangeEnd: 'A',
-  filterOoo: 'Filtra...',
-  applyFilter: 'Applica',
-  resetFilter: 'Reset',
-  clearFilter: 'Cancella',
-  noRowsToShow: 'Nessun risultato',
-  loadingOoo: 'Caricamento...',
+/**
+ * AG Grid's built-in strings. Built per render from the active dictionary
+ * rather than exported as a constant — a constant is evaluated once at module
+ * load, so it would freeze the grid's chrome in whatever language the first
+ * request happened to use.
+ */
+export function gridLocaleText(t: TranslateFn): Record<string, string> {
+  return {
+    contains: t('grid.filter.contains'),
+    inRange: t('grid.filter.in_range'),
+    inRangeStart: t('grid.filter.range_start'),
+    inRangeEnd: t('grid.filter.range_end'),
+    filterOoo: t('grid.filter.placeholder'),
+    applyFilter: t('grid.filter.apply'),
+    resetFilter: t('grid.filter.reset'),
+    clearFilter: t('grid.filter.clear'),
+    noRowsToShow: t('grid.no_rows'),
+    loadingOoo: t('grid.loading'),
+  }
 }

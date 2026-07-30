@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { useI18n } from '@/context/I18nContext'
 
 export function EmbeddedFrame({ url }: { url: string }) {
   const [loading, setLoading] = useState(true)
+  const { t } = useI18n()
 
   return (
     <div className="relative h-full w-full min-h-[600px]">
@@ -14,7 +16,7 @@ export function EmbeddedFrame({ url }: { url: string }) {
       )}
       <iframe
         src={url}
-        title="Embedded content"
+        title={t('embedded.loading')}
         data-testid="embedded-iframe"
         onLoad={() => setLoading(false)}
         className="h-full w-full min-h-[600px] border-0"

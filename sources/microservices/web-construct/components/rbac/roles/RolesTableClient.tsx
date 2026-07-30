@@ -12,16 +12,12 @@ import CreateRoleModal from './CreateRoleModal'
 import RenameRoleModal from './RenameRoleModal'
 import { deleteRole } from '@/lib/rbac/roles-actions'
 import { createRolesDatasource } from './rolesDatasource'
+import { useI18n } from '@/context/I18nContext'
 import {
   rolesUrlParamsToFilterModel, rolesUrlParamsToSortModel, rolesFilterModelToSearchParams,
   type RolesGridFilterModel,
 } from '@/lib/rbac/roles-grid-query'
 import type { RolePageItemDto } from '@/lib/rbac/types'
-
-function fmtDate(d: string | null): string {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
 interface Props {
   sortField: string
@@ -32,16 +28,8 @@ interface Props {
   endDateIns: string | null
 }
 
-const COLUMN_LABELS = [
-  { colId: 'id', label: 'ID' },
-  { colId: 'description', label: 'Nome ruolo' },
-  { colId: 'associatedUsers', label: 'Utenti associati' },
-  { colId: 'hasPermissions', label: 'Ha permessi' },
-  { colId: 'dateIns', label: 'Data di creazione' },
-  { colId: 'dateMod', label: 'Ultimo aggiornamento' },
-]
-
 export default function RolesTableClient(props: Props) {
+  const { t, fmt } = useI18n()
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
@@ -66,35 +54,44 @@ export default function RolesTableClient(props: Props) {
 
   const columnDefs = useMemo<ColDef<RolePageItemDto>[]>(() => [
     actionsColumnDef<RolePageItemDto>(r => [
-      { label: 'Apri', onClick: () => router.push(`/roles-permissions/${r.id}`) },
-      { label: 'Rinomina', disabled: r.roleType !== 'SERVICE', onClick: () => setRenaming(r) },
-      { label: 'Elimina', disabled: r.roleType === 'SYSTEM', onClick: () => setDeleting(r) },
+      { label: t('common.actions.open'), onClick: () => router.push(`/roles-permissions/${r.id}`) },
+      { label: t('common.actions.rename'), disabled: r.roleType !== 'SERVICE', onClick: () => setRenaming(r) },
+      { label: t('common.actions.delete'), disabled: r.roleType === 'SYSTEM', onClick: () => setDeleting(r) },
     ]),
-    { field: 'id', headerName: 'ID', sortable: true, filter: false },
+    { field: 'id', headerName: t('roles.list.id'), sortable: true, filter: false },
     {
-      field: 'description', headerName: 'Nome ruolo', sortable: true,
+      field: 'description', headerName: t('roles.form.name'), sortable: true,
       filter: 'agTextColumnFilter',
       filterParams: { filterOptions: ['contains'], buttons: ['apply', 'reset'] },
       cellRenderer: (p: { data?: RolePageItemDto }) => p.data ? <span className="font-medium">{p.data.description}</span> : null,
     },
-    { field: 'associatedUsers', headerName: 'Utenti associati', sortable: true, filter: false },
+    { field: 'associatedUsers', headerName: t('roles.list.associated_users'), sortable: true, filter: false },
     {
-      colId: 'hasPermissions', headerName: 'Ha permessi', sortable: true, filter: EnumSelectFilter,
-      filterParams: { options: [{ value: 'true', label: 'Sì' }, { value: 'false', label: 'No' }] },
+      colId: 'hasPermissions', headerName: t('roles.list.has_permissions'), sortable: true, filter: EnumSelectFilter,
+      filterParams: { options: [{ value: 'true', label: t('common.labels.yes') }, { value: 'false', label: t('common.labels.no') }] },
       cellRenderer: (p: { data?: RolePageItemDto }) => p.data ? (
         <span className={`px-2 py-0.5 rounded-full text-xs ${p.data.hasPermissions ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-          {p.data.hasPermissions ? 'Sì' : 'No'}
+          {p.data.hasPermissions ? t('common.labels.yes') : t('common.labels.no')}
         </span>
       ) : null,
     },
     {
-      colId: 'dateIns', headerName: 'Data di creazione', sortable: true,
+      colId: 'dateIns', headerName: t('roles.list.created_at'), sortable: true,
       filter: 'agDateColumnFilter',
       filterParams: { filterOptions: ['inRange'], defaultOption: 'inRange', buttons: ['apply', 'reset'] },
-      valueGetter: p => p.data ? fmtDate(p.data.dateIns) : '',
+      valueGetter: p => p.data ? fmt.date(p.data.dateIns) : '',
     },
-    { field: 'dateMod', headerName: 'Ultimo aggiornamento', sortable: true, filter: false, valueGetter: p => p.data ? fmtDate(p.data.dateMod) : '' },
-  ], [router])
+    { field: 'dateMod', headerName: t('roles.list.updated_at'), sortable: true, filter: false, valueGetter: p => p.data ? fmt.date(p.data.dateMod) : '' },
+  ], [router, t, fmt])
+
+  const columnLabels = useMemo(() => [
+    { colId: 'id', label: t('roles.list.id') },
+    { colId: 'description', label: t('roles.form.name') },
+    { colId: 'associatedUsers', label: t('roles.list.associated_users') },
+    { colId: 'hasPermissions', label: t('roles.list.has_permissions') },
+    { colId: 'dateIns', label: t('roles.list.created_at') },
+    { colId: 'dateMod', label: t('roles.list.updated_at') },
+  ], [t])
 
   const onFilterChanged = (event: FilterChangedEvent<RolePageItemDto>) => {
     const model = event.api.getFilterModel() as RolesGridFilterModel
@@ -114,8 +111,8 @@ export default function RolesTableClient(props: Props) {
   return (
     <>
       <div className="flex justify-end items-center gap-2 mb-3">
-        <ColumnVisibilityToggle gridApi={gridApi} columns={COLUMN_LABELS} />
-        <button onClick={() => setShowCreate(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">Nuovo ruolo</button>
+        <ColumnVisibilityToggle gridApi={gridApi} columns={columnLabels} />
+        <button onClick={() => setShowCreate(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">{t('roles.actions.create')}</button>
       </div>
       <DataGrid<RolePageItemDto>
         columnDefs={columnDefs}
@@ -131,9 +128,9 @@ export default function RolesTableClient(props: Props) {
       {renaming && <RenameRoleModal roleId={renaming.id} currentName={renaming.description} onClose={() => { setRenaming(null); gridApi?.refreshInfiniteCache() }} />}
       {deleting && (
         <ConfirmModal
-          title="Elimina ruolo"
-          message={`Eliminare il ruolo "${deleting.description}"?`}
-          confirmLabel="Elimina"
+          title={t('roles.confirm.delete_title')}
+          message={t('roles.confirm.delete_message', { name: deleting.description })}
+          confirmLabel={t('common.actions.delete')}
           onCancel={() => setDeleting(null)}
           onConfirm={async () => {
             await deleteRole(deleting.id)

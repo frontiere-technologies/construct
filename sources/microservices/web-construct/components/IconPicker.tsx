@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { IconRenderer } from './IconRenderer';
+import { useI18n } from '@/context/I18nContext';
 
 const ALL_ICON_NAMES: string[] = Object.keys(dynamicIconImports).map(
   kebab => kebab.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('')
@@ -23,6 +24,7 @@ interface IconPickerProps {
 }
 
 export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,7 +56,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
         <div className="w-6 h-6 flex items-center justify-center">
           <IconRenderer name={value} size={18} />
         </div>
-        <span className="flex-1 text-sm">{value || 'Select icon…'}</span>
+        <span className="flex-1 text-sm">{value || t('icon_picker.select_placeholder')}</span>
       </button>
 
       {open && (
@@ -63,7 +65,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
             <input
               autoFocus
               type="text"
-              placeholder="Search icons…"
+              placeholder={t('icon_picker.search_placeholder')}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-700 focus:outline-none"
@@ -72,12 +74,12 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
           <div className="grid grid-cols-6 gap-1 p-2 max-h-64 overflow-y-auto">
             <button
               type="button"
-              title="Nessuna icona"
+              title={t('icon_picker.no_icon')}
               onClick={() => { onChange(''); setOpen(false); setSearch(''); }}
               className={`flex flex-col items-center justify-center p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 gap-1 ${!value ? 'bg-blue-100 dark:bg-blue-900/50' : ''}`}
             >
               <div className="w-[18px] h-[18px] flex items-center justify-center border border-dashed border-gray-400 rounded-sm text-gray-400 text-[10px] leading-none">—</div>
-              <span className="text-[9px] text-gray-500 truncate w-full text-center leading-tight">Vuoto</span>
+              <span className="text-[9px] text-gray-500 truncate w-full text-center leading-tight">{t('icon_picker.empty')}</span>
             </button>
             {filtered.map(name => (
               <IconItemBoundary key={name}>
@@ -93,7 +95,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange }) => {
               </IconItemBoundary>
             ))}
             {filtered.length === 0 && (
-              <p className="col-span-6 text-center text-sm text-gray-400 py-4">No icons found</p>
+              <p className="col-span-6 text-center text-sm text-gray-400 py-4">{t('icon_picker.no_results')}</p>
             )}
           </div>
         </div>
