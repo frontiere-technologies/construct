@@ -102,6 +102,31 @@ describe('rolesUrlParamsToFilterModel / rolesFilterModelToSearchParams', () => {
     })
   })
 
+  it.each([
+    ['created', 'startDateIns', 'endDateIns'],
+    ['updated', 'startDateMod', 'endDateMod'],
+  ] as const)('carries the %s URL through the model and query while dropping a terminal upper', (_label, lowerField, upperField) => {
+    const params = parseRolesGridUrlParams({
+      [lowerField]: '9999-12-31',
+      [upperField]: '9999-12-31',
+    })
+    const query = buildRolesGridQuery(0, 50, [], rolesUrlParamsToFilterModel(params))
+
+    expect(query[lowerField]).toBe('9999-12-31')
+    expect(query[upperField]).toBeUndefined()
+  })
+
+  it.each([
+    ['created', 'startDateIns', 'endDateIns'],
+    ['updated', 'startDateMod', 'endDateMod'],
+  ] as const)('carries a valid one-sided %s upper URL below the maximum through the model and query', (_label, lowerField, upperField) => {
+    const params = parseRolesGridUrlParams({ [upperField]: '9999-12-30' })
+    const query = buildRolesGridQuery(0, 50, [], rolesUrlParamsToFilterModel(params))
+
+    expect(query[lowerField]).toBeUndefined()
+    expect(query[upperField]).toBe('9999-12-30')
+  })
+
   it('produces an empty model when nothing is set', () => {
     expect(rolesUrlParamsToFilterModel({ search: '', hasPermission: null, startDateIns: null, endDateIns: null, sortField: 'id', sortDir: 'ASC' })).toEqual({})
   })

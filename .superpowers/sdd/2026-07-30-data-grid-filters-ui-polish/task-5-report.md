@@ -39,3 +39,14 @@ Verifiche del fix round: 126 test mirati superati, `npx tsc --noEmit` superato; 
 - Entrambi i service applicano un guard difensivo prima di calcolare `nextDay`; `9999-12-31` resta valido come limite inferiore.
 
 Verifiche del fix round: 94 test mirati superati, `npx tsc --noEmit` superato; lint senza errori e con 4 warning preesistenti non correlati.
+
+## Fix round 4/5
+
+- Aggiunte asserzioni dirette e mutation-sensitive sui quattro limiti superiori terminali nei service: Users `createdTo`/`updatedTo` e Roles `endDateIns`/`endDateMod` devono fallire con l'errore difensivo prima di generare SQL con `nextDay`.
+- Aggiunte asserzioni SQL `gte` per i quattro limiti inferiori corrispondenti, confermando che `9999-12-31` resta valido per Users `createdFrom`/`updatedFrom` e Roles `startDateIns`/`startDateMod`.
+- Aggiunte regressioni complete URL → modello AG Grid → `buildQuery` per entrambe le colonne data di Users e Roles: il limite superiore terminale viene eliminato preservando quello inferiore, mentre il limite superiore monolaterale valido `9999-12-30` arriva alla query.
+- Nessun file di produzione è stato modificato nel risultato finale.
+
+Evidenza RED: rimossi temporaneamente i quattro guard dei service, i test mirati hanno prodotto esattamente 4 failure (`createdTo`, `updatedTo`, `endDateIns`, `endDateMod`); rimossi temporaneamente i guard URL/page, le nuove catene complete hanno fallito per entrambe le colonne Users e Roles. Tutte le mutazioni temporanee sono state ripristinate.
+
+Verifiche del fix round: 64 test mirati superati; `npx tsc --noEmit` superato; lint senza errori e con 4 warning preesistenti non correlati.

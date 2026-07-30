@@ -92,4 +92,22 @@ describe('applyUserFilters', () => {
     expect(rendered.sql).toContain('"users"."updated_at" <')
     expect(rendered.params).toEqual(['2026-07-31'])
   })
+
+  it.each([
+    ['createdTo', 'createdTo exceeds the supported inclusive upper bound'],
+    ['updatedTo', 'updatedTo exceeds the supported inclusive upper bound'],
+  ] as const)('rejects terminal %s before building next-day SQL', (field, message) => {
+    expect(() => applyUserFilters({ ...baseQuery, [field]: '9999-12-31' }, null))
+      .toThrowError(message)
+  })
+
+  it.each([
+    ['createdFrom', 'created_at'],
+    ['updatedFrom', 'updated_at'],
+  ] as const)('keeps terminal %s valid as an inclusive lower SQL bound', (field, column) => {
+    const [rendered] = render({ ...baseQuery, [field]: '9999-12-31' }, null)
+
+    expect(rendered.sql).toContain(`"users"."${column}" >=`)
+    expect(rendered.params).toEqual(['9999-12-31'])
+  })
 })

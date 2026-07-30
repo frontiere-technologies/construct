@@ -79,4 +79,22 @@ describe('applyFilters', () => {
     const [rendered] = render({ ...baseQuery, endDateIns: '2026-12-31' })
     expect(rendered.params).toEqual(['2027-01-01'])
   })
+
+  it.each([
+    ['endDateIns', 'endDateIns exceeds the supported inclusive upper bound'],
+    ['endDateMod', 'endDateMod exceeds the supported inclusive upper bound'],
+  ] as const)('rejects terminal %s before building next-day SQL', (field, message) => {
+    expect(() => applyFilters({ ...baseQuery, [field]: '9999-12-31' }))
+      .toThrowError(message)
+  })
+
+  it.each([
+    ['startDateIns', 'date_ins'],
+    ['startDateMod', 'date_mod'],
+  ] as const)('keeps terminal %s valid as an inclusive lower SQL bound', (field, column) => {
+    const [rendered] = render({ ...baseQuery, [field]: '9999-12-31' })
+
+    expect(rendered.sql).toContain(`"role_list_view"."${column}" >=`)
+    expect(rendered.params).toEqual(['9999-12-31'])
+  })
 })

@@ -1,8 +1,19 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   buildUsersGridQuery, parseUsersGridIntegerParam,
   parseUsersGridDateParam, usersUrlParamsToFilterModel, usersFilterModelToSearchParams,
 } from './users-grid-query'
+import UserManagementPage from '@/app/(protected)/user-management/page'
+
+vi.mock('@/lib/rbac/roles-service', () => ({ getAllRoles: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/lib/i18n/server', () => ({ getI18n: vi.fn().mockResolvedValue({ t: (key: string) => key }) }))
+vi.mock('@/components/rbac/users/UsersTableClient', () => ({ default: () => null }))
+
+async function buildUserQueryFromUrl(searchParams: Record<string, string | undefined>) {
+  const page = await UserManagementPage({ searchParams: Promise.resolve(searchParams) })
+  const clientProps = page.props.children.props as Parameters<typeof usersUrlParamsToFilterModel>[0]
+  return buildUsersGridQuery(0, 50, [], usersUrlParamsToFilterModel(clientProps))
+}
 
 describe('buildUsersGridQuery', () => {
   it('defaults to page 0, dateIns/DESC sort, no filters', () => {
@@ -95,6 +106,29 @@ describe('usersUrlParamsToFilterModel / usersFilterModelToSearchParams', () => {
   it('drops unsupported upper dates while keeping valid lower dates for both user columns', () => {
     expect(parseUsersGridDateParam('9999-12-31', true)).toBeNull()
     expect(parseUsersGridDateParam('9999-12-31')).toBe('9999-12-31')
+  })
+
+  it.each([
+    ['created', 'createdFrom', 'createdTo'],
+    ['updated', 'updatedFrom', 'updatedTo'],
+  ] as const)('carries the %s URL through the page model and query while dropping a terminal upper', async (_label, lowerField, upperField) => {
+    const query = await buildUserQueryFromUrl({
+      [lowerField]: '9999-12-31',
+      [upperField]: '9999-12-31',
+    })
+
+    expect(query[lowerField]).toBe('9999-12-31')
+    expect(query[upperField]).toBeUndefined()
+  })
+
+  it.each([
+    ['created', 'createdFrom', 'createdTo'],
+    ['updated', 'updatedFrom', 'updatedTo'],
+  ] as const)('carries a valid one-sided %s upper URL below the maximum through the page model and query', async (_label, lowerField, upperField) => {
+    const query = await buildUserQueryFromUrl({ [upperField]: '9999-12-30' })
+
+    expect(query[lowerField]).toBeUndefined()
+    expect(query[upperField]).toBe('9999-12-30')
   })
 
   it('serialises both OR conditions so navigation does not discard the compound filter', () => {
