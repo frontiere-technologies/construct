@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { translationKey, translationValue } from '@/lib/db/schema'
 import { MAX_VALUE_LENGTH, type SaveTranslationsInput } from './types'
@@ -82,7 +82,7 @@ describeIntegration('translation actions against the database', () => {
     expect(page.elements[0].values.en.value).toBe('Hello')
   })
 
-  it('rejects a stale keyVersion once the metadata has changed, without touching the stored value', async () => {
+  it('rejects a stale keyVersion when the snapshot is already stale (non-racing case, caught by the early JS check)', async () => {
     const keyId = await createKey()
     // Bumps translation_key.version from 1 to 2 (metadata — description — actually changed).
     const first = await saveTranslations(saveInput(keyId, {
@@ -107,7 +107,75 @@ describeIntegration('translation actions against the database', () => {
     expect(valueRow.value).toBe('Ciao')
   })
 
-  it('rejects a stale per-value version, reporting the conflict and leaving the stored value unchanged', async () => {
+  /**
+   * The `saveTranslations` call below never reaches the predicate-guarded
+   * `UPDATE ... WHERE version = ...` in a racing state: its own SELECT
+   * (statement 1 of the two-layer conflict check) already observes the
+   * updated row and throws via the early JS comparison — mechanism 1, not
+   * mechanism 2. See the companion "real DB-level race" test further below
+   * for a genuine interleaved-transaction exercise of mechanism 2.
+   */
+  it('rejects a stale keyVersion via the real DB-level race (concurrent transaction wins the lock first)', async () => {
+    const keyId = await createKey()
+    const [initialKeyRow] = await db.select().from(translationKey).where(eq(translationKey.idTranslationKey, keyId))
+    expect(initialKeyRow.version).toBe(1)
+
+    // Signals that flip a manually-driven "locker" transaction between its
+    // two phases: acquire the row lock, then (once released) perform its own
+    // legitimate, version-bumping write and commit.
+    let lockerHasLock!: () => void
+    const lockerAcquiredLock = new Promise<void>(resolve => { lockerHasLock = resolve })
+    let releaseLocker!: () => void
+    const lockerMayContinue = new Promise<void>(resolve => { releaseLocker = resolve })
+
+    const lockerDone = db.transaction(async lockerTx => {
+      // A plain SELECT takes no lock under READ COMMITTED — FOR UPDATE is
+      // what makes the racing saveTranslations() call below actually block
+      // on ITS update instead of racing ahead of us.
+      await lockerTx.execute(sql`select id_translation_key from translation_key where id_translation_key = ${keyId} for update`)
+      lockerHasLock()
+      await lockerMayContinue
+      // The "other admin" who commits a metadata edit while our racer sits
+      // blocked on its own predicate-guarded UPDATE.
+      await lockerTx.update(translationKey)
+        .set({ version: 2 })
+        .where(and(eq(translationKey.idTranslationKey, keyId), eq(translationKey.version, 1)))
+    })
+
+    await lockerAcquiredLock
+
+    // A metadata change (different description) so this takes the
+    // `metadataChanged` branch and attempts `UPDATE translation_key ... WHERE
+    // version = 1` — which blocks behind the locker's FOR UPDATE above. Its
+    // own early JS check (`keyRow.version !== input.keyVersion`) still passes
+    // here, since the locker hasn't committed its bump yet.
+    const racerPromise = saveTranslations(saveInput(keyId, {
+      keyVersion: 1,
+      description: 'aggiornata durante la race',
+      values: [],
+    }))
+
+    // No clean signal exists for "the racer's UPDATE is now blocked waiting
+    // on the lock" — a short, generous fixed delay is the standard technique
+    // here; Postgres's lock wait queue guarantees correctness regardless of
+    // the exact delay length, as long as it's long enough for the racer to
+    // have reached its blocked UPDATE.
+    await new Promise(resolve => setTimeout(resolve, 300))
+    releaseLocker()
+
+    const [stale] = await Promise.all([racerPromise, lockerDone])
+
+    expect(stale.ok).toBe(false)
+    expect(!stale.ok && 'error' in stale ? stale.error : null).toMatch(/modificata/i)
+
+    const [finalKeyRow] = await db.select().from(translationKey).where(eq(translationKey.idTranslationKey, keyId))
+    // The locker's write won; the racer's blocked UPDATE found 0 matching
+    // rows once it unblocked and was correctly rejected, not silently lost.
+    expect(finalKeyRow.version).toBe(2)
+    expect(finalKeyRow.description).toBeNull()
+  })
+
+  it('rejects a stale per-value version when the snapshot is already stale (non-racing case, caught by the early JS check)', async () => {
     const keyId = await createKey()
     await saveTranslations(saveInput(keyId, {
       values: [{ languageCode: 'it', value: 'Ciao', version: null }],
@@ -131,6 +199,72 @@ describeIntegration('translation actions against the database', () => {
 
     const [valueRow] = await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))
     expect(valueRow.value).toBe('Ciao concorrente')
+  })
+
+  /**
+   * Companion to the keyVersion race test above: a genuine interleaved
+   * two-transaction race, this time on `translation_value`, so it would fail
+   * if the predicate-guarded `UPDATE ... WHERE version = ...` (lines ~257-277
+   * of translation-actions.ts) were removed and only the early JS comparison
+   * remained.
+   */
+  it('rejects a stale per-value version via the real DB-level race (concurrent transaction wins the lock first)', async () => {
+    const keyId = await createKey()
+    await saveTranslations(saveInput(keyId, {
+      values: [{ languageCode: 'it', value: 'Ciao', version: null }],
+    }))
+    const [initialValueRow] = await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))
+    const valueId = initialValueRow.idTranslationValue
+    expect(initialValueRow.version).toBe(1)
+
+    let lockerHasLock!: () => void
+    const lockerAcquiredLock = new Promise<void>(resolve => { lockerHasLock = resolve })
+    let releaseLocker!: () => void
+    const lockerMayContinue = new Promise<void>(resolve => { releaseLocker = resolve })
+
+    const lockerDone = db.transaction(async lockerTx => {
+      // Takes the row lock a plain SELECT never would under READ COMMITTED —
+      // this is what makes saveTranslations()'s own UPDATE below block
+      // instead of racing to completion first.
+      await lockerTx.execute(sql`select id_translation_value from translation_value where id_translation_value = ${valueId} for update`)
+      lockerHasLock()
+      await lockerMayContinue
+      // The "other admin" who commits first while our racer sits blocked on
+      // its own predicate-guarded UPDATE.
+      await lockerTx.update(translationValue)
+        .set({ value: 'Ciao concorrente', version: 2 })
+        .where(and(eq(translationValue.idTranslationValue, valueId), eq(translationValue.version, 1)))
+    })
+
+    await lockerAcquiredLock
+
+    // saveTranslations()'s own SELECT (no FOR UPDATE) is non-blocking under
+    // READ COMMITTED, so it reads version 1 (the locker hasn't committed
+    // yet), passes its early JS check, and then blocks on its own
+    // predicate-guarded `UPDATE ... WHERE version = 1` — because the locker
+    // above is holding the row lock.
+    const racerPromise = saveTranslations(saveInput(keyId, {
+      values: [{ languageCode: 'it', value: 'Ciao ormai vecchio', version: 1 }],
+    }))
+
+    // See the identical rationale on the keyVersion race test above: a short,
+    // generous fixed delay is the standard, reliable technique for "give the
+    // other side time to reach its blocked state" here.
+    await new Promise(resolve => setTimeout(resolve, 300))
+    releaseLocker()
+
+    const [stale] = await Promise.all([racerPromise, lockerDone])
+
+    expect(stale.ok).toBe(false)
+    expect(!stale.ok && 'conflicts' in stale ? stale.conflicts : null).toEqual([
+      { languageCode: 'it', currentValue: 'Ciao concorrente', attemptedValue: 'Ciao ormai vecchio' },
+    ])
+
+    const [finalValueRow] = await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))
+    // The locker's write won; the racer's blocked UPDATE found 0 matching
+    // rows once it unblocked and was correctly rejected, not silently lost.
+    expect(finalValueRow.value).toBe('Ciao concorrente')
+    expect(finalValueRow.version).toBe(2)
   })
 
   it('deletes the value row on an empty value and reports the language as missing', async () => {
