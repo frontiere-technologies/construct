@@ -7,6 +7,7 @@ import type {
   LanguageDto, TranslationRowDto, TranslationsPage, TranslationsQuery, TranslationValueDto,
 } from './types'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
+import { isSupportedTranslationUpdatedTo } from './translation-grid-boundaries'
 
 const SORT_COLUMN = {
   key: translationKey.key,
@@ -26,6 +27,12 @@ function sortColumnFor(sort: TranslationsQuery['sort']) {
   return sort && Object.hasOwn(SORT_COLUMN, sort)
     ? SORT_COLUMN[sort]
     : SORT_COLUMN.key
+}
+
+export function translationOrderBy(query: TranslationsQuery): SQL[] {
+  const sortCol = sortColumnFor(query.sort)
+  const ascending = (query.direction ?? 'ASC') === 'ASC'
+  return [ascending ? asc(sortCol) : desc(sortCol), asc(translationKey.idTranslationKey)]
 }
 
 /**
@@ -63,7 +70,12 @@ export function applyTranslationFilters(query: TranslationsQuery, languages: Lan
   if (query.namespace) conditions.push(eq(translationKey.namespace, query.namespace))
   if (query.module) conditions.push(eq(translationKey.module, query.module))
   if (query.updatedFrom) conditions.push(gte(translationKey.updatedAt, query.updatedFrom))
-  if (query.updatedTo) conditions.push(lt(translationKey.updatedAt, nextDay(query.updatedTo)))
+  if (query.updatedTo) {
+    if (!isSupportedTranslationUpdatedTo(query.updatedTo)) {
+      throw new Error('updatedTo exceeds the supported inclusive upper bound')
+    }
+    conditions.push(lt(translationKey.updatedAt, nextDay(query.updatedTo)))
+  }
 
   const addTextSearch = (search: TranslationsQuery['search'], column: Parameters<typeof ilike>[0]) => {
     const textSearch = normalizeTextSearch(search)
@@ -108,20 +120,18 @@ export async function listTranslations(query: TranslationsQuery): Promise<Transl
   }
 
   const where = conditions.length ? and(...conditions) : undefined
-  const sortCol = sortColumnFor(query.sort)
-  const ascending = (query.direction ?? 'ASC') === 'ASC'
-
   let keyRows: (typeof translationKey.$inferSelect)[]
   let total: number
   try {
-    const [rows, [{ value }]] = await Promise.all([
-      db.select().from(translationKey).where(where)
-        .orderBy(ascending ? asc(sortCol) : desc(sortCol))
-        .limit(query.size).offset(query.page * query.size),
-      db.select({ value: count() }).from(translationKey).where(where),
-    ])
-    keyRows = rows
-    total = value
+    const page = await db.transaction(async tx => {
+      const rows = await tx.select().from(translationKey).where(where)
+        .orderBy(...translationOrderBy(query))
+        .limit(query.size).offset(query.page * query.size)
+      const [{ value }] = await tx.select({ value: count() }).from(translationKey).where(where)
+      return { rows, total: value }
+    }, { isolationLevel: 'repeatable read', accessMode: 'read only' })
+    keyRows = page.rows
+    total = page.total
   } catch (err) {
     throw new Error(`Failed to list translations: ${err instanceof Error ? err.message : String(err)}`)
   }

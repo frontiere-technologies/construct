@@ -7,6 +7,7 @@ import DataGrid from '@/components/ui/DataGrid'
 import GridToolbar from '@/components/ui/GridToolbar'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { resetGridFilters } from '@/components/ui/grid-reset'
+import { useGridUrlSync } from '@/components/ui/grid-url-sync'
 import { DATE_FILTER, NUMBER_FILTER, TEXT_FILTER } from '@/components/ui/gridColumnFilters'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
@@ -57,12 +58,8 @@ export default function RolesTableClient(props: Props) {
   // which could otherwise stay stale at `null` from before onGridReady fired.
   const gridApiRef = useRef<GridApi<RolePageItemDto> | null>(null)
 
-  const setParam = (updates: Record<string, string | null>) => {
-    const next = new URLSearchParams(sp.toString())
-    for (const [k, v] of Object.entries(updates)) { if (v === null) { next.delete(k) } else { next.set(k, v) } }
-    next.delete('page')
-    router.push(`${pathname}?${next.toString()}`)
-  }
+  const gridUrlSync = useGridUrlSync(pathname, sp.toString(), url => router.replace(url))
+  const setParam = (updates: Record<string, string | null>) => gridUrlSync.update(updates)
 
   const datasource = useMemo(() => createRolesDatasource(), [])
 

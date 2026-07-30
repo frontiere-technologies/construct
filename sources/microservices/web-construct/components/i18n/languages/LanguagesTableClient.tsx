@@ -7,6 +7,7 @@ import DataGrid from '@/components/ui/DataGrid'
 import GridToolbar from '@/components/ui/GridToolbar'
 import { DATE_FILTER, NUMBER_FILTER, TEXT_FILTER } from '@/components/ui/gridColumnFilters'
 import { resetGridFilters } from '@/components/ui/grid-reset'
+import { useGridUrlSync } from '@/components/ui/grid-url-sync'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
@@ -105,12 +106,8 @@ export default function LanguagesTableClient(props: Props) {
     { colId: 'createdAt', label: t('language.created_at') },
   ], [t])
 
-  const setParam = (updates: Record<string, string | null>) => {
-    const next = new URLSearchParams(sp.toString())
-    for (const [k, v] of Object.entries(updates)) { if (v === null) next.delete(k); else next.set(k, v) }
-    next.delete('page')
-    router.push(`${pathname}?${next.toString()}`)
-  }
+  const gridUrlSync = useGridUrlSync(pathname, sp.toString(), url => router.replace(url))
+  const setParam = (updates: Record<string, string | null>) => gridUrlSync.update(updates)
 
   return (
     <>

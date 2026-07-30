@@ -97,13 +97,15 @@ function parseDate(value: string | undefined): string | null {
 }
 
 function orderedDateRange(from: string | null, to: string | null): [string | null, string | null] {
-  return from != null && to != null && from > to ? [null, null] : [from, to]
+  return !from || !to || from > to ? [null, null] : [from, to]
 }
 
 /** Converts untrusted URL values into the subset AG Grid can safely render. */
 export function parseTranslationsGridUrlParams(
   params: Record<string, string | undefined>,
+  activeLanguageCodes: readonly string[] = [],
 ): TranslationsUrlParams {
+  const activeCodes = new Set(activeLanguageCodes)
   const parsedTo = parseDate(params.updatedTo)
   const [updatedFrom, updatedTo] = orderedDateRange(
     parseDate(params.updatedFrom),
@@ -131,7 +133,8 @@ export function parseTranslationsGridUrlParams(
   }
   const dynamicParams = result as Record<string, string | null | undefined>
   for (const key of Object.keys(params)) {
-    if (!/^value_[a-z]{2,3}$/.test(key) || !params[key]) continue
+    const code = key.startsWith('value_') ? key.slice('value_'.length) : ''
+    if (!/^value_[a-z]{2,3}$/.test(key) || !activeCodes.has(code) || !params[key]) continue
     dynamicParams[key] = params[key]
     dynamicParams[`${key}2`] = params[`${key}2`] ?? ''
     dynamicParams[`${key}Operator`] = params[`${key}Operator`] === 'AND' || params[`${key}Operator`] === 'OR'

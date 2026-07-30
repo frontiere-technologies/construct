@@ -138,7 +138,7 @@ describe('translations URL round-trip', () => {
     const params = parseTranslationsGridUrlParams({
       updatedFrom: '2026-07-31', updatedTo: '2026-07-01', status: 'partial',
       sort: '__proto__', direction: 'UP', value_en: 'save', value_en2: 'now', value_enOperator: 'XOR',
-    })
+    }, ['en'])
 
     expect(params).toMatchObject({
       updatedFrom: null, updatedTo: null, status: null, sortField: 'key', sortDir: 'ASC',
@@ -155,11 +155,16 @@ describe('translations URL round-trip', () => {
     })
   })
 
-  it('keeps a valid upper updated-date bound from the URL', () => {
-    const params = parseTranslationsGridUrlParams({ updatedTo: '2026-07-30' })
+  it('drops a one-sided updated-date URL range before constructing AG Grid state', () => {
+    const params = parseTranslationsGridUrlParams({ updatedTo: '2026-07-30' }, ['en'])
 
-    expect(translationsUrlParamsToFilterModel(params)).toEqual({
-      updatedAt: { dateFrom: undefined, dateTo: '2026-07-30' },
-    })
+    expect(translationsUrlParamsToFilterModel(params)).toEqual({})
+  })
+
+  it('keeps dynamic filters only for active language codes', () => {
+    const params = parseTranslationsGridUrlParams({ value_en: 'save', value_fr: 'enregistrer' }, ['en'])
+
+    expect(params).toMatchObject({ value_en: 'save' })
+    expect(params).not.toHaveProperty('value_fr')
   })
 })

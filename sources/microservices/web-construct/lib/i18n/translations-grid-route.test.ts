@@ -4,10 +4,12 @@ import type { NextRequest } from 'next/server'
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   listTranslations: vi.fn(),
+  listActiveLanguages: vi.fn(),
 }))
 
 vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
 vi.mock('@/lib/i18n/translation-service', () => ({ listTranslations: mocks.listTranslations }))
+vi.mock('@/lib/i18n/language-service', () => ({ listActiveLanguages: mocks.listActiveLanguages }))
 
 import { POST } from '@/app/api/i18n/translations-grid/route'
 
@@ -24,6 +26,7 @@ describe('POST /api/i18n/translations-grid', () => {
     mocks.listTranslations.mockClear()
     mocks.auth.mockResolvedValue({ user: { id: 'admin', isAdmin: true } })
     mocks.listTranslations.mockResolvedValue({ elements: [], total: 0 })
+    mocks.listActiveLanguages.mockResolvedValue([{ code: 'en', isActive: true }])
   })
 
   it.each([
@@ -32,6 +35,8 @@ describe('POST /api/i18n/translations-grid', () => {
     ['the unsupported terminal updated-to date', { updatedTo: '9999-12-31' }],
     ['an invalid status', { status: 'partial' }],
     ['an invalid value search', { valueSearches: { en: { operator: 'AND', conditions: [] } } }],
+    ['an unknown status language', { languageCode: 'zz', status: 'missing' }],
+    ['an inactive value-search language', { valueSearches: { fr: 'enregistrer' } }],
   ])('returns 400 for %s before it reaches the service', async (_label, invalid) => {
     const response = await POST(request({ page: 0, size: 50, ...invalid }))
 
@@ -52,5 +57,12 @@ describe('POST /api/i18n/translations-grid', () => {
 
     expect(response.status).toBe(200)
     expect(mocks.listTranslations).toHaveBeenCalledWith(payload)
+  })
+
+  it('rejects a raw own __proto__ value-search key before Zod can discard it', async () => {
+    const response = await POST(request(JSON.parse('{"page":0,"size":50,"valueSearches":{"__proto__":"save"}}')))
+
+    expect(response.status).toBe(400)
+    expect(mocks.listTranslations).not.toHaveBeenCalled()
   })
 })

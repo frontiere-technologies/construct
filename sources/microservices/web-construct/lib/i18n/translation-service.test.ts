@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PgDialect } from 'drizzle-orm/pg-core'
-import { applyTranslationFilters } from './translation-service'
+import { applyTranslationFilters, translationOrderBy } from './translation-service'
 import type { LanguageDto } from './types'
 
 const dialect = new PgDialect()
@@ -184,6 +184,21 @@ describe('applyTranslationFilters', () => {
     expect(rendered.map(condition => condition.params)).toEqual([
       ['2026-07-01'],
       ['2026-07-31'],
+    ])
+  })
+
+  it('rejects an unsupported updated upper bound before computing the next day', () => {
+    expect(() => applyTranslationFilters({ page: 0, size: 50, updatedTo: '9999-12-31' }, languages))
+      .toThrow('updatedTo exceeds the supported inclusive upper bound')
+  })
+
+  it('uses the translation key id as a stable ordering tie-breaker', () => {
+    const rendered = translationOrderBy({ page: 0, size: 50, sort: 'updatedAt', direction: 'DESC' })
+      .map(order => dialect.sqlToQuery(order).sql)
+
+    expect(rendered).toEqual([
+      '"translation_key"."updated_at" desc',
+      '"translation_key"."id_translation_key" asc',
     ])
   })
 })

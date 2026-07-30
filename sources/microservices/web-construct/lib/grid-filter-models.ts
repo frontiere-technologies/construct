@@ -10,6 +10,8 @@ export interface NumberRange {
 }
 
 export interface GridDateFilterModel {
+  filterType?: 'date'
+  type?: 'inRange'
   dateFrom?: string
   dateTo?: string
 }
@@ -44,9 +46,11 @@ export function gridDateFilterToRange(model?: GridDateFilterModel): DateRange | 
 }
 
 export function dateRangeToGridFilter(range?: DateRange): GridDateFilterModel | undefined {
-  if (!range?.from && !range?.to) return undefined
+  if (!range?.from || !range?.to) return undefined
 
   return {
+    filterType: 'date',
+    type: 'inRange',
     dateFrom: range.from?.slice(0, 10),
     dateTo: range.to?.slice(0, 10),
   }

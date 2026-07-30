@@ -7,6 +7,7 @@ import DataGrid from '@/components/ui/DataGrid'
 import GridToolbar from '@/components/ui/GridToolbar'
 import { DATE_FILTER, TEXT_FILTER } from '@/components/ui/gridColumnFilters'
 import { resetGridFilters } from '@/components/ui/grid-reset'
+import { useGridUrlSync } from '@/components/ui/grid-url-sync'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
 import StatusBadge from './StatusBadge'
@@ -52,12 +53,8 @@ export default function UsersTableClient(props: Props) {
   // which could otherwise stay stale at `null` from before onGridReady fired.
   const gridApiRef = useRef<GridApi<UserDTO> | null>(null)
 
-  const setParam = (updates: Record<string, string | null>) => {
-    const p = new URLSearchParams(sp.toString())
-    for (const [k, v] of Object.entries(updates)) { if (v === null) { p.delete(k) } else { p.set(k, v) } }
-    p.delete('page')
-    router.push(`${pathname}?${p.toString()}`)
-  }
+  const gridUrlSync = useGridUrlSync(pathname, sp.toString(), url => router.replace(url))
+  const setParam = (updates: Record<string, string | null>) => gridUrlSync.update(updates)
 
   const toggleStatus = async (u: UserDTO) => {
     const next = u.status.idUserStatus === USER_STATUS_ACTIVE ? USER_STATUS_DEACTIVATED : USER_STATUS_ACTIVE

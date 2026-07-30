@@ -33,7 +33,15 @@ describe('grid filter models', () => {
 
   it('round-trips a date range using YYYY-MM-DD values', () => {
     const model = dateRangeToGridFilter({ from: '2026-07-01', to: '2026-07-30' })
+    expect(model).toEqual({
+      filterType: 'date', type: 'inRange', dateFrom: '2026-07-01', dateTo: '2026-07-30',
+    })
     expect(gridDateFilterToRange(model)).toEqual({ from: '2026-07-01', to: '2026-07-30' })
+  })
+
+  it('does not build an invalid AG Grid date model from one URL bound', () => {
+    expect(dateRangeToGridFilter({ from: '2026-07-01' })).toBeUndefined()
+    expect(dateRangeToGridFilter({ to: '2026-07-30' })).toBeUndefined()
   })
 
   it('strips timestamps from a grid date filter', () => {

@@ -7,6 +7,7 @@ import DataGrid from '@/components/ui/DataGrid'
 import GridToolbar from '@/components/ui/GridToolbar'
 import { DATE_FILTER } from '@/components/ui/gridColumnFilters'
 import { resetGridFilters } from '@/components/ui/grid-reset'
+import { useGridUrlSync } from '@/components/ui/grid-url-sync'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
@@ -120,10 +121,14 @@ export default function TranslationsTableClient(props: Props) {
     { colId: 'updatedAt', label: t('translation.updated_at') },
   ], [t, languages])
 
+  const gridUrlSync = useGridUrlSync(pathname, sp.toString(), url => router.replace(url))
   const setParam = (updates: Record<string, string | null>) => {
-    const next = new URLSearchParams(sp.toString())
-    for (const [k, v] of Object.entries(updates)) { if (v === null) next.delete(k); else next.set(k, v) }
-    router.push(`${pathname}?${next.toString()}`)
+    const activeCodes = new Set(languages.map(language => language.code))
+    const stale = Object.fromEntries([...sp.keys()]
+      .filter(key => /^value_[a-z]{2,3}(?:2|Operator)?$/.test(key)
+        && !activeCodes.has(key.replace(/^value_/, '').replace(/(?:2|Operator)$/, '')))
+      .map(key => [key, null]))
+    gridUrlSync.update({ ...stale, ...updates })
   }
 
   return (
