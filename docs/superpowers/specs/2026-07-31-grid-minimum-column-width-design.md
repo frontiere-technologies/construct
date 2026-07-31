@@ -6,9 +6,9 @@ Increase the shared minimum width for grid data columns from 20 px to 112 px. Th
 
 ## Scope
 
-- [ ] ID=GRID-MIN-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Readable minimum grid width, Fix description=Set the shared minimum width for every non-actions grid column to 112 px.
-- [ ] ID=GRID-MIN-2, Severity=Medium, Complexity=Low, Priority=P1, Title=Preserve fixed actions column, Fix description=Keep the actions column definition and fixed sizing unchanged.
-- [ ] ID=GRID-MIN-3, Severity=Medium, Complexity=Low, Priority=P1, Title=Regression coverage, Fix description=Update the sizing unit test to prove the 112 px minimum is applied without mutating caller definitions.
+- [✅] ID=GRID-MIN-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Readable minimum grid width, Fix description=Set the shared minimum width for every non-actions grid column to 112 px.
+- [✅] ID=GRID-MIN-2, Severity=Medium, Complexity=Low, Priority=P1, Title=Preserve fixed actions column, Fix description=Keep the actions column definition and fixed sizing unchanged.
+- [✅] ID=GRID-MIN-3, Severity=Medium, Complexity=Low, Priority=P1, Title=Regression coverage, Fix description=Update the sizing unit test to prove the 112 px minimum is applied without mutating caller definitions.
 
 ## Design
 
@@ -22,7 +22,7 @@ The change does not add new runtime failure modes or affect filtering, sorting, 
 
 ## Verification
 
-- [ ] Update the focused unit test first and confirm it fails because the current minimum is 20 px.
-- [ ] Change the shared constant to 112 px and confirm the focused test passes.
-- [ ] Run the complete unit suite, TypeScript check, lint, and production build.
+- [✅] Update the focused unit test first and confirm it fails because the current minimum is 20 px.
+- [✅] Change the shared constant to 112 px and confirm the focused test passes.
+- [✅] Run the complete unit suite, TypeScript check, lint, and production build.
 - [ ] Verify in the browser that a data column cannot shrink below 112 px and that the header title prefix plus filter control remain visible.
