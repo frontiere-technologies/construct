@@ -4,7 +4,7 @@
 
 **Goal:** Show simple Complete/Missing status labels and make every data column shrinkable to AG Grid's 20 px technical minimum while keeping the actions column fixed.
 
-**Architecture:** Keep translation label selection in a small pure helper and enforce the resizing invariant at the shared `DataGrid` boundary. Translation columns retain their current initial visual widths by converting restrictive `minWidth` declarations into `width` declarations; the shared normalizer supplies `minWidth: 20` to every non-actions column.
+**Architecture:** Keep translation label selection in a small pure helper and enforce the resizing invariant at the shared `DataGrid` boundary. Translation columns retain their current initial visual widths by converting restrictive `minWidth` declarations into create-only `initialWidth` declarations; the shared normalizer supplies `minWidth: 20` to every non-actions column without resetting user-resized state when definitions refresh.
 
 **Tech Stack:** Next.js 16, React 19, TypeScript, AG Grid Community, Vitest.
 
@@ -107,6 +107,7 @@ git commit -m "fix(i18n): simplify translation status labels"
 **Files:**
 - Create: `sources/microservices/web-construct/components/ui/gridColumnSizing.ts`
 - Create: `sources/microservices/web-construct/components/ui/gridColumnSizing.test.ts`
+- Create: `sources/microservices/web-construct/components/i18n/translations/TranslationsTableClient.test.tsx`
 - Modify: `sources/microservices/web-construct/components/ui/DataGrid.tsx:27-56`
 - Modify: `sources/microservices/web-construct/components/i18n/translations/TranslationsTableClient.tsx:60-90`
 
@@ -126,8 +127,8 @@ describe('normalizeGridColumnDefs', () => {
     const actions: ColDef = { colId: 'actions', width: 56, resizable: false }
     const columns: ColDef[] = [
       actions,
-      { field: 'key', width: 260, minWidth: 260, resizable: false },
-      { field: 'description', width: 200 },
+      { field: 'key', initialWidth: 260, minWidth: 260, resizable: false },
+      { field: 'description', initialWidth: 200 },
     ]
 
     const normalized = normalizeGridColumnDefs(columns)
@@ -135,8 +136,8 @@ describe('normalizeGridColumnDefs', () => {
     expect(GRID_MIN_COLUMN_WIDTH).toBe(20)
     expect(normalized[0]).toBe(actions)
     expect(normalized[0]).toMatchObject({ colId: 'actions', width: 56, resizable: false })
-    expect(normalized[1]).toMatchObject({ field: 'key', width: 260, minWidth: 20, resizable: true })
-    expect(normalized[2]).toMatchObject({ field: 'description', width: 200, minWidth: 20, resizable: true })
+    expect(normalized[1]).toMatchObject({ field: 'key', initialWidth: 260, minWidth: 20, resizable: true })
+    expect(normalized[2]).toMatchObject({ field: 'description', initialWidth: 200, minWidth: 20, resizable: true })
     expect(columns[1]).toMatchObject({ minWidth: 260, resizable: false })
   })
 })
@@ -172,7 +173,7 @@ const normalizedColumnDefs = useMemo(() => normalizeGridColumnDefs(columnDefs), 
 
 Pass `normalizedColumnDefs` to both `AgGridReact.columnDefs` and `columnPinningState()`.
 
-- [✅] **Step 4: Preserve translation initial widths**
+- [✅] **Step 4: Preserve translation initial widths without resetting user resize state**
 
 In `TranslationsTableClient.tsx`, replace the three restrictive sizing declarations:
 
@@ -182,23 +183,23 @@ minWidth: 200
 minWidth: 200
 ```
 
-with the equivalent initial widths:
+with the equivalent create-only initial widths:
 
 ```ts
-width: 260
-width: 200
-width: 200
+initialWidth: 260
+initialWidth: 200
+initialWidth: 200
 ```
 
-The shared normalizer then supplies `minWidth: 20` at runtime.
+The shared normalizer then supplies `minWidth: 20` at runtime. `TranslationsTableClient.test.tsx` renders the component across a props-driven column-definition rebuild and asserts that these columns expose `initialWidth` without stateful `width`, protecting resize persistence at the AG Grid boundary.
 
 - [✅] **Step 5: Run focused tests and verify GREEN**
 
 ```bash
-npm test -- components/ui/gridColumnSizing.test.ts components/rbac/GridRowActionsMenu.test.ts
+npm test -- components/i18n/translations/TranslationsTableClient.test.tsx components/ui/gridColumnSizing.test.ts components/rbac/GridRowActionsMenu.test.ts
 ```
 
-Expected: all tests passed; actions remains non-resizable.
+Expected: all tests passed; actions remains non-resizable and Translations definitions use only create-time widths across a rebuild.
 
 - [✅] **Step 6: Commit Task 2**
 
@@ -206,6 +207,7 @@ Expected: all tests passed; actions remains non-resizable.
 git add sources/microservices/web-construct/components/ui/gridColumnSizing.ts \
   sources/microservices/web-construct/components/ui/gridColumnSizing.test.ts \
   sources/microservices/web-construct/components/ui/DataGrid.tsx \
+  sources/microservices/web-construct/components/i18n/translations/TranslationsTableClient.test.tsx \
   sources/microservices/web-construct/components/i18n/translations/TranslationsTableClient.tsx
 git commit -m "fix(grid): allow unrestricted data column shrinking"
 ```
@@ -240,7 +242,7 @@ Open `http://localhost:3000/admin/translations?sort=key&direction=ASC`, open the
 
 - [✅] **Step 3: Verify resizing in the browser**
 
-On each of Utenti, Ruoli, Lingue and Traduzioni, drag at least one data-column divider left below its former content width and confirm it reaches approximately 20 px. Confirm the `...` actions column has no resize handle and remains 56 px.
+On each of Utenti, Ruoli, Lingue and Traduzioni, drag at least one data-column divider left below its former content width and confirm it reaches approximately 20 px. Confirm the `...` actions column has no resize handle and remains 56 px. In Traduzioni, keep the resized width, apply a filter or sort that updates the URL and column definitions, and confirm the width remains unchanged.
 
 - [✅] **Step 4: Complete tracking and commit**
 

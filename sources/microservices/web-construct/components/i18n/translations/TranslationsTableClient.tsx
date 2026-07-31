@@ -62,10 +62,10 @@ export default function TranslationsTableClient(props: Props) {
     {
       field: 'key', headerName: t('translation.key'), sortable: true,
       ...textFilter,
-      width: 260,
+      initialWidth: 260,
       cellRenderer: (p: { data?: TranslationRowDto }) => p.data ? <span className="font-mono text-xs">{p.data.key}</span> : null,
     },
-    { field: 'description', headerName: t('translation.description'), sortable: false, ...textFilter, width: 200 },
+    { field: 'description', headerName: t('translation.description'), sortable: false, ...textFilter, initialWidth: 200 },
     {
       colId: 'namespace', field: 'namespace', headerName: t('translation.namespace'), sortable: true,
       filter: EnumSelectFilter,
@@ -84,7 +84,7 @@ export default function TranslationsTableClient(props: Props) {
       headerName: language.nativeName,
       sortable: false,
       ...textFilter,
-      width: 200,
+      initialWidth: 200,
       valueGetter: p => p.data && Object.hasOwn(p.data.values, language.code) ? p.data.values[language.code].value : '',
       cellRenderer: (p: { data?: TranslationRowDto }) => (
         <TranslationValueCell row={p.data} code={language.code} missingLabel={t('translation.missing')} />
