@@ -52,6 +52,19 @@ describeIntegration('translation actions against the database', () => {
     expect(page.elements[0].missingCodes.sort()).toEqual(['en', 'it'])
   })
 
+  it('applies every compound key-filter condition to the key column only', async () => {
+    const descriptionOnly = `description_only_${unique()}`
+    await createKey({ description: descriptionOnly })
+
+    const page = await listTranslations({
+      page: 0,
+      size: 50,
+      search: { operator: 'AND', conditions: [key, descriptionOnly] },
+    })
+
+    expect(page.elements).toHaveLength(0)
+  })
+
   it('rejects a duplicate key', async () => {
     await createTranslationKey(keyInput())
     const second = await createTranslationKey(keyInput())
