@@ -28,7 +28,7 @@
 - Consumes: `normalizeGridColumnDefs<T>(columnDefs: ColDef<T>[]): ColDef<T>[]` and `GRID_MIN_COLUMN_WIDTH` from `components/ui/gridColumnSizing.ts`.
 - Produces: `GRID_MIN_COLUMN_WIDTH = 112`; normalized non-actions definitions with `resizable: true` and `minWidth: 112`; unchanged actions definitions.
 
-- [ ] **Step 1: Change the focused assertion to describe the required minimum**
+- [✅] **Step 1: Change the focused assertion to describe the required minimum**
 
 Update the existing test so its name and assertions require 112 px:
 
@@ -52,7 +52,7 @@ it('keeps actions fixed and gives every data column a readable resize minimum', 
 })
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [✅] **Step 2: Run the focused test and verify RED**
 
 Run from `sources/microservices/web-construct`:
 
@@ -62,7 +62,7 @@ npm test -- components/ui/gridColumnSizing.test.ts
 
 Expected: FAIL because `GRID_MIN_COLUMN_WIDTH` and normalized `minWidth` values are still `20`.
 
-- [ ] **Step 3: Implement the minimal shared change**
+- [✅] **Step 3: Implement the minimal shared change**
 
 In `gridColumnSizing.ts`, change only the shared constant:
 
@@ -72,7 +72,7 @@ export const GRID_MIN_COLUMN_WIDTH = 112
 
 Keep `normalizeGridColumnDefs` otherwise unchanged.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [✅] **Step 4: Run the focused test and verify GREEN**
 
 Run:
 
@@ -82,7 +82,7 @@ npm test -- components/ui/gridColumnSizing.test.ts
 
 Expected: PASS with the actions definition preserved, both data definitions normalized to 112 px, and the input definition unmodified.
 
-- [ ] **Step 5: Run complete automated verification**
+- [✅] **Step 5: Run complete automated verification**
 
 Run from `sources/microservices/web-construct`:
 
