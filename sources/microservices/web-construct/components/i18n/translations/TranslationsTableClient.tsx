@@ -22,6 +22,7 @@ import { createTranslationsDatasource } from './translationsDatasource'
 import TranslationEditorDrawer from './TranslationEditorDrawer'
 import CreateTranslationKeyModal from './CreateTranslationKeyModal'
 import TranslationValueCell from './TranslationValueCell'
+import { translationStatusFilterOptions } from './translationStatusFilter'
 
 interface Props {
   /** Full URL state, including dynamic value_<languageCode> filters (Task 4 consumes it). */
@@ -91,12 +92,7 @@ export default function TranslationsTableClient(props: Props) {
     })),
     {
       colId: 'status', headerName: t('translation.status'), sortable: false, filter: EnumSelectFilter,
-      filterParams: {
-        options: [
-          { value: 'missing', label: t('translation.filter.missing_only') },
-          { value: 'complete', label: t('translation.filter.complete_only') },
-        ],
-      },
+      filterParams: { options: translationStatusFilterOptions(t) },
       width: 140,
       valueGetter: p => p.data ? (p.data.missingCodes.length ? t('translation.missing') : t('translation.complete')) : '',
     },
