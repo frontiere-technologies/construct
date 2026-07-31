@@ -1,11 +1,13 @@
 import { cache } from 'react'
-import { and, asc, count, desc, eq, ilike, inArray, isNotNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, lt, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { listActiveLanguages } from './language-service'
 import type {
-  TranslationRowDto, TranslationsPage, TranslationsQuery, TranslationValueDto,
+  LanguageDto, TranslationRowDto, TranslationsPage, TranslationsQuery, TranslationValueDto,
 } from './types'
+import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
+import { isSupportedTranslationUpdatedTo } from './translation-grid-boundaries'
 
 const SORT_COLUMN = {
   key: translationKey.key,
@@ -25,6 +27,12 @@ function sortColumnFor(sort: TranslationsQuery['sort']) {
   return sort && Object.hasOwn(SORT_COLUMN, sort)
     ? SORT_COLUMN[sort]
     : SORT_COLUMN.key
+}
+
+export function translationOrderBy(query: TranslationsQuery): SQL[] {
+  const sortCol = sortColumnFor(query.sort)
+  const ascending = (query.direction ?? 'ASC') === 'ASC'
+  return [ascending ? asc(sortCol) : desc(sortCol), asc(translationKey.idTranslationKey)]
 }
 
 /**
@@ -51,6 +59,51 @@ function statusCondition(status: 'missing' | 'complete', languageIds: number[]):
     : sql`${translated} < ${languageIds.length}`
 }
 
+function nextDay(date: string): string {
+  const next = new Date(`${date}T00:00:00.000Z`)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return next.toISOString().slice(0, 10)
+}
+
+export function applyTranslationFilters(query: TranslationsQuery, languages: LanguageDto[]): SQL[] {
+  const conditions: SQL[] = []
+  if (query.namespace) conditions.push(eq(translationKey.namespace, query.namespace))
+  if (query.module) conditions.push(eq(translationKey.module, query.module))
+  if (query.updatedFrom) conditions.push(gte(translationKey.updatedAt, query.updatedFrom))
+  if (query.updatedTo) {
+    if (!isSupportedTranslationUpdatedTo(query.updatedTo)) {
+      throw new Error('updatedTo exceeds the supported inclusive upper bound')
+    }
+    conditions.push(lt(translationKey.updatedAt, nextDay(query.updatedTo)))
+  }
+
+  const addTextSearch = (search: TranslationsQuery['search'], column: Parameters<typeof ilike>[0]) => {
+    const textSearch = normalizeTextSearch(search)
+    if (!textSearch) return
+    const termConditions = textSearch.conditions.map(term =>
+      sql`${column} ilike ${`%${escapeLikePattern(term)}%`} escape '\\'`,
+    )
+    conditions.push((textSearch.operator === 'OR' ? or(...termConditions) : and(...termConditions))!)
+  }
+
+  addTextSearch(query.search, translationKey.key)
+  addTextSearch(query.descriptionSearch, translationKey.description)
+
+  for (const [code, search] of Object.entries(query.valueSearches ?? {})) {
+    const language = languages.find(candidate => candidate.isActive && candidate.code === code)
+    if (!language) continue
+    const value = sql<string>`coalesce((
+      select ${translationValue.value}
+      from ${translationValue}
+      where ${translationValue.idTranslationKey} = ${translationKey.idTranslationKey}
+        and ${translationValue.idLanguage} = ${language.id}
+    ), '')`
+    addTextSearch(search, value)
+  }
+
+  return conditions
+}
+
 export async function listTranslations(query: TranslationsQuery): Promise<TranslationsPage> {
   const languages = await listActiveLanguages()
   const scoped = query.languageCode
@@ -58,18 +111,7 @@ export async function listTranslations(query: TranslationsQuery): Promise<Transl
     : languages
   const languageIds = scoped.map(l => l.id)
 
-  const conditions: SQL[] = []
-  if (query.namespace) conditions.push(eq(translationKey.namespace, query.namespace))
-  if (query.module) conditions.push(eq(translationKey.module, query.module))
-  if (query.search) {
-    const pattern = `%${query.search}%`
-    // Search spans the key, the description and the translated text (§4.2).
-    conditions.push(or(
-      ilike(translationKey.key, pattern),
-      ilike(translationKey.description, pattern),
-      sql`exists (select 1 from ${translationValue} tv where tv.id_translation_key = ${translationKey.idTranslationKey} and tv.value ilike ${pattern}${languageIds.length ? sql` and tv.id_language = any(${sql.raw(`'{${languageIds.join(',')}}'::bigint[]`)})` : sql``})`,
-    )!)
-  }
+  const conditions = applyTranslationFilters(query, languages)
   // `status` can arrive as `'all'` from an untrusted request body even though
   // the grid itself never sends it (`buildTranslationsGridQuery` omits it) —
   // treat that the same as "no status filter" rather than querying for it.
@@ -78,20 +120,18 @@ export async function listTranslations(query: TranslationsQuery): Promise<Transl
   }
 
   const where = conditions.length ? and(...conditions) : undefined
-  const sortCol = sortColumnFor(query.sort)
-  const ascending = (query.direction ?? 'ASC') === 'ASC'
-
   let keyRows: (typeof translationKey.$inferSelect)[]
   let total: number
   try {
-    const [rows, [{ value }]] = await Promise.all([
-      db.select().from(translationKey).where(where)
-        .orderBy(ascending ? asc(sortCol) : desc(sortCol))
-        .limit(query.size).offset(query.page * query.size),
-      db.select({ value: count() }).from(translationKey).where(where),
-    ])
-    keyRows = rows
-    total = value
+    const page = await db.transaction(async tx => {
+      const rows = await tx.select().from(translationKey).where(where)
+        .orderBy(...translationOrderBy(query))
+        .limit(query.size).offset(query.page * query.size)
+      const [{ value }] = await tx.select({ value: count() }).from(translationKey).where(where)
+      return { rows, total: value }
+    }, { isolationLevel: 'repeatable read', accessMode: 'read only' })
+    keyRows = page.rows
+    total = page.total
   } catch (err) {
     throw new Error(`Failed to list translations: ${err instanceof Error ? err.message : String(err)}`)
   }

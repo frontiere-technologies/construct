@@ -188,7 +188,7 @@ export const AdminTheme: React.FC = () => {
             <button
               onClick={handleReset}
               disabled={saving}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm text-gray-600 enabled:hover:text-gray-900 dark:text-gray-400 dark:enabled:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t('theme.actions.reset_defaults')}
             </button>

@@ -100,7 +100,7 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
             {...dragAttributes}
             data-testid="drag-handle"
             disabled={!canDrag}
-            className={`p-0.5 text-gray-400 touch-none ${canDrag ? 'cursor-grab active:cursor-grabbing hover:text-gray-600' : 'opacity-30 cursor-not-allowed'}`}
+            className={`p-0.5 text-gray-400 touch-none ${canDrag ? 'cursor-grab active:cursor-grabbing enabled:hover:text-gray-600' : 'opacity-30 cursor-not-allowed'}`}
           >
             <GripVertical size={14} />
           </button>

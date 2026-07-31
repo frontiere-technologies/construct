@@ -49,7 +49,7 @@ export default function CustomSelect({
             : 'border-border'}
           ${disabled
             ? 'opacity-50 cursor-not-allowed'
-            : 'hover:border-gray-300 dark:hover:border-gray-600 cursor-pointer'}`}
+            : 'enabled:hover:border-gray-300 dark:enabled:hover:border-gray-600 cursor-pointer'}`}
       >
         <span className={showPlaceholder ? 'text-gray-400' : 'text-foreground'}>
           {selectedLabel ?? placeholder ?? '—'}

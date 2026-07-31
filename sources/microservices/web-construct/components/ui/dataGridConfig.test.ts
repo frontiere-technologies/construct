@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ColDef } from 'ag-grid-community'
-import { columnPinningState } from './dataGridConfig'
+import { appGridThemeParams, columnPinningState } from './dataGridConfig'
 
 describe('columnPinningState', () => {
   it('collects left- and right-pinned columns by id', () => {
@@ -22,5 +22,13 @@ describe('columnPinningState', () => {
     expect(columnPinningState([{ field: 'email' }, { colId: 'roles' }])).toEqual({
       leftColIds: [], rightColIds: [],
     })
+  })
+})
+
+describe('appGridThemeParams', () => {
+  it('uses theme tokens for the neutral light header', () => {
+    expect(appGridThemeParams.headerBackgroundColor).toBe('var(--theme-surface-hover)')
+    expect(appGridThemeParams.headerTextColor).toBe('var(--theme-foreground)')
+    expect(appGridThemeParams.pinnedColumnBorder).toBe(false)
   })
 })

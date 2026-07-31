@@ -138,7 +138,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
+              className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue enabled:hover:bg-brand-blue enabled:hover:text-white"
             >
               {loading ? t('auth.login.submitting') : t('auth.login.submit')}
             </button>
@@ -197,7 +197,7 @@ function LoginForm() {
                   <button
                     type="submit"
                     disabled={testLoading}
-                    className="bg-gray-500 text-white rounded-lg py-2 text-xs font-semibold hover:bg-gray-600 disabled:opacity-50 transition"
+                    className="bg-gray-500 text-white rounded-lg py-2 text-xs font-semibold enabled:hover:bg-gray-600 disabled:opacity-50 transition"
                   >
                     {testLoading ? t('auth.login.test_submitting') : t('auth.login.test_submit')}
                   </button>

@@ -4,7 +4,10 @@ import React, { useMemo, useRef, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import DataGrid from '@/components/ui/DataGrid'
-import ColumnVisibilityToggle from '@/components/ui/ColumnVisibilityToggle'
+import GridToolbar from '@/components/ui/GridToolbar'
+import { DATE_FILTER } from '@/components/ui/gridColumnFilters'
+import { resetGridFilters } from '@/components/ui/grid-reset'
+import { useGridUrlSync } from '@/components/ui/grid-url-sync'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
@@ -12,33 +15,28 @@ import { useI18n } from '@/context/I18nContext'
 import { deleteTranslationKey } from '@/lib/i18n/translation-actions'
 import {
   translationsFilterModelToSearchParams, translationsUrlParamsToFilterModel,
-  translationsUrlParamsToSortModel, type TranslationsGridFilterModel,
+  translationsUrlParamsToSortModel, type TranslationsGridFilterModel, type TranslationsUrlParams,
 } from '@/lib/i18n/translations-grid-query'
 import type { TranslationRowDto } from '@/lib/i18n/types'
 import { createTranslationsDatasource } from './translationsDatasource'
 import TranslationEditorDrawer from './TranslationEditorDrawer'
 import CreateTranslationKeyModal from './CreateTranslationKeyModal'
+import TranslationValueCell from './TranslationValueCell'
+import { translationStatusFilterOptions } from './translationStatusFilter'
 
 interface Props {
-  search: string
-  namespace: string | null
-  module: string | null
-  language: string | null
-  status: string | null
-  sortField: string
-  sortDir: 'ASC' | 'DESC'
+  /** Full URL state, including dynamic value_<languageCode> filters (Task 4 consumes it). */
+  urlParams: TranslationsUrlParams
   namespaces: string[]
   modules: string[]
 }
 
-// The row's `values` map is keyed by DB-sourced language codes and arrives
-// over JSON, so it is a plain object by the time it reaches the grid —
-// `Object.hasOwn` keeps a lookup for an unexpected code (e.g. `constructor`)
-// from resolving to an inherited Object.prototype member instead of "missing".
-function valueFor(row: TranslationRowDto | undefined, code: string): string | undefined {
-  if (!row || !Object.hasOwn(row.values, code)) return undefined
-  return row.values[code].value
+const textFilter = {
+  filter: 'agTextColumnFilter' as const,
+  filterParams: { filterOptions: ['contains'], buttons: ['apply', 'reset'] },
 }
+
+const TRANSLATION_DATE_FILTER = DATE_FILTER as Pick<ColDef<TranslationRowDto>, 'filter' | 'filterParams'>
 
 export default function TranslationsTableClient(props: Props) {
   const { t, fmt, languages } = useI18n()
@@ -63,12 +61,11 @@ export default function TranslationsTableClient(props: Props) {
     ]),
     {
       field: 'key', headerName: t('translation.key'), sortable: true,
-      filter: 'agTextColumnFilter',
-      filterParams: { filterOptions: ['contains'], buttons: ['apply', 'reset'] },
-      minWidth: 260,
+      ...textFilter,
+      initialWidth: 260,
       cellRenderer: (p: { data?: TranslationRowDto }) => p.data ? <span className="font-mono text-xs">{p.data.key}</span> : null,
     },
-    { field: 'description', headerName: t('translation.description'), sortable: false, filter: false, minWidth: 200 },
+    { field: 'description', headerName: t('translation.description'), sortable: false, ...textFilter, initialWidth: 200 },
     {
       colId: 'namespace', field: 'namespace', headerName: t('translation.namespace'), sortable: true,
       filter: EnumSelectFilter,
@@ -86,24 +83,16 @@ export default function TranslationsTableClient(props: Props) {
       colId: `value_${language.code}`,
       headerName: language.nativeName,
       sortable: false,
-      filter: false,
-      minWidth: 200,
-      valueGetter: p => valueFor(p.data, language.code) ?? '',
-      cellRenderer: (p: { data?: TranslationRowDto }) => {
-        const value = valueFor(p.data, language.code)
-        return value
-          ? <span>{value}</span>
-          : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">{t('translation.missing')}</span>
-      },
+      ...textFilter,
+      initialWidth: 200,
+      valueGetter: p => p.data && Object.hasOwn(p.data.values, language.code) ? p.data.values[language.code].value : '',
+      cellRenderer: (p: { data?: TranslationRowDto }) => (
+        <TranslationValueCell row={p.data} code={language.code} missingLabel={t('translation.missing')} />
+      ),
     })),
     {
       colId: 'status', headerName: t('translation.status'), sortable: false, filter: EnumSelectFilter,
-      filterParams: {
-        options: [
-          { value: 'missing', label: t('translation.filter.missing_only') },
-          { value: 'complete', label: t('translation.filter.complete_only') },
-        ],
-      },
+      filterParams: { options: translationStatusFilterOptions(t) },
       width: 140,
       valueGetter: p => p.data ? (p.data.missingCodes.length ? t('translation.missing') : t('translation.complete')) : '',
     },
@@ -113,7 +102,7 @@ export default function TranslationsTableClient(props: Props) {
       valueGetter: () => '',
     },
     {
-      colId: 'updatedAt', headerName: t('translation.updated_at'), sortable: true, filter: false, width: 160,
+      colId: 'updatedAt', headerName: t('translation.updated_at'), sortable: true, ...TRANSLATION_DATE_FILTER, width: 160,
       valueGetter: p => p.data ? fmt.dateTime(p.data.updatedAt) : '',
     },
   ], [t, fmt, languages, props.namespaces, props.modules])
@@ -128,28 +117,30 @@ export default function TranslationsTableClient(props: Props) {
     { colId: 'updatedAt', label: t('translation.updated_at') },
   ], [t, languages])
 
+  const gridUrlSync = useGridUrlSync(pathname, sp.toString(), url => router.replace(url))
   const setParam = (updates: Record<string, string | null>) => {
-    const next = new URLSearchParams(sp.toString())
-    for (const [k, v] of Object.entries(updates)) { if (v === null) next.delete(k); else next.set(k, v) }
-    router.push(`${pathname}?${next.toString()}`)
-  }
-
-  const clearFilters = () => {
-    gridApiRef.current?.setFilterModel(null)
-    router.push(pathname)
+    const activeCodes = new Set(languages.map(language => language.code))
+    const stale = Object.fromEntries([...sp.keys()]
+      .filter(key => /^value_[a-z]{2,3}(?:2|Operator)?$/.test(key)
+        && !activeCodes.has(key.replace(/^value_/, '').replace(/(?:2|Operator)$/, '')))
+      .map(key => [key, null]))
+    gridUrlSync.update({ ...stale, ...updates })
   }
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-end gap-2">
-        <button onClick={clearFilters} className="rounded-lg border border-border px-3 py-2 text-sm">
-          {t('common.actions.reset_filters')}
-        </button>
-        <ColumnVisibilityToggle gridApi={gridApi} columns={columnLabels} />
+      <GridToolbar
+        gridApi={gridApi}
+        columns={columnLabels}
+        onClearFilters={() => resetGridFilters(
+          gridApiRef.current,
+          () => setParam(translationsFilterModelToSearchParams({}, languages.map(language => language.code))),
+        )}
+      >
         <button onClick={() => setCreating(true)} className="rounded-lg bg-gray-900 px-3 py-2 text-sm text-white">
           {t('translation.actions.create')}
         </button>
-      </div>
+      </GridToolbar>
 
       {error && <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
@@ -157,10 +148,13 @@ export default function TranslationsTableClient(props: Props) {
         columnDefs={columnDefs}
         datasource={datasource}
         getRowId={r => String(r.id)}
-        initialFilterModel={translationsUrlParamsToFilterModel(props) as Record<string, unknown>}
-        initialSortModel={translationsUrlParamsToSortModel(props)}
+        initialFilterModel={translationsUrlParamsToFilterModel(props.urlParams) as Record<string, unknown>}
+        initialSortModel={translationsUrlParamsToSortModel(props.urlParams)}
         onFilterChanged={(e: FilterChangedEvent<TranslationRowDto>) =>
-          setParam(translationsFilterModelToSearchParams(e.api.getFilterModel() as TranslationsGridFilterModel))}
+          setParam(translationsFilterModelToSearchParams(
+            e.api.getFilterModel() as TranslationsGridFilterModel,
+            languages.map(language => language.code),
+          ))}
         onSortChanged={(e: SortChangedEvent<TranslationRowDto>) => {
           const active = e.api.getColumnState().find(c => c.sort)
           setParam({ sort: active?.colId ?? null, direction: active ? (active.sort === 'asc' ? 'ASC' : 'DESC') : null })

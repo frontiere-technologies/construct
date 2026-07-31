@@ -4,7 +4,10 @@ import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import DataGrid from '@/components/ui/DataGrid'
-import ColumnVisibilityToggle from '@/components/ui/ColumnVisibilityToggle'
+import GridToolbar from '@/components/ui/GridToolbar'
+import { DATE_FILTER, NUMBER_FILTER, TEXT_FILTER } from '@/components/ui/gridColumnFilters'
+import { resetGridFilters } from '@/components/ui/grid-reset'
+import { useGridUrlSync } from '@/components/ui/grid-url-sync'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
@@ -12,18 +15,17 @@ import { useI18n } from '@/context/I18nContext'
 import { deleteLanguage, setDefaultLanguage, setLanguageActive } from '@/lib/i18n/language-actions'
 import {
   languagesFilterModelToSearchParams, languagesUrlParamsToFilterModel, languagesUrlParamsToSortModel,
-  type LanguagesGridFilterModel,
+  type LanguagesGridFilterModel, type LanguagesUrlParams,
 } from '@/lib/i18n/languages-grid-query'
 import type { LanguagePageItemDto } from '@/lib/i18n/types'
 import { createLanguagesDatasource } from './languagesDatasource'
 import LanguageFormModal from './LanguageFormModal'
 
-interface Props {
-  search: string
-  isActive: boolean | null
-  sortField: string
-  sortDir: 'ASC' | 'DESC'
-}
+type Props = LanguagesUrlParams
+
+const LANGUAGE_TEXT_FILTER = TEXT_FILTER as Pick<ColDef<LanguagePageItemDto>, 'filter' | 'filterParams'>
+const LANGUAGE_NUMBER_FILTER = NUMBER_FILTER as Pick<ColDef<LanguagePageItemDto>, 'filter' | 'filterParams'>
+const LANGUAGE_DATE_FILTER = DATE_FILTER as Pick<ColDef<LanguagePageItemDto>, 'filter' | 'filterParams'>
 
 export default function LanguagesTableClient(props: Props) {
   const { t, fmt } = useI18n()
@@ -67,27 +69,27 @@ export default function LanguagesTableClient(props: Props) {
       },
       { label: t('common.actions.delete'), disabled: row.isDefault, onClick: () => setDeleting(row) },
     ]),
-    { field: 'code', headerName: t('language.form.code'), sortable: true, filter: false, width: 100 },
-    { field: 'locale', headerName: t('language.form.locale'), sortable: true, filter: false, width: 120 },
+    { field: 'code', headerName: t('language.form.code'), sortable: true, width: 100, ...LANGUAGE_TEXT_FILTER },
+    { field: 'locale', headerName: t('language.form.locale'), sortable: true, width: 120, ...LANGUAGE_TEXT_FILTER },
     {
       field: 'name', headerName: t('language.form.name'), sortable: true,
-      filter: 'agTextColumnFilter',
-      filterParams: { filterOptions: ['contains'], buttons: ['apply', 'reset'] },
+      ...LANGUAGE_TEXT_FILTER,
     },
-    { field: 'nativeName', headerName: t('language.form.native_name'), sortable: true, filter: false },
+    { field: 'nativeName', headerName: t('language.form.native_name'), sortable: true, ...LANGUAGE_TEXT_FILTER },
     {
       colId: 'isActive', headerName: t('language.active'), sortable: true, filter: EnumSelectFilter,
       filterParams: { options: [{ value: 'true', label: t('common.labels.yes') }, { value: 'false', label: t('common.labels.no') }] },
       valueGetter: p => p.data ? (p.data.isActive ? t('common.labels.yes') : t('common.labels.no')) : '',
     },
     {
-      colId: 'isDefault', headerName: t('language.default'), sortable: true, filter: false,
+      colId: 'isDefault', headerName: t('language.default'), sortable: true, filter: EnumSelectFilter,
+      filterParams: { options: [{ value: 'true', label: t('common.labels.yes') }, { value: 'false', label: t('common.labels.no') }] },
       valueGetter: p => p.data ? (p.data.isDefault ? t('common.labels.yes') : t('common.labels.no')) : '',
     },
-    { field: 'translated', headerName: t('language.translated_count'), sortable: false, filter: false },
-    { field: 'missing', headerName: t('language.missing_count'), sortable: false, filter: false },
+    { field: 'translated', headerName: t('language.translated_count'), sortable: false, ...LANGUAGE_NUMBER_FILTER },
+    { field: 'missing', headerName: t('language.missing_count'), sortable: false, ...LANGUAGE_NUMBER_FILTER },
     {
-      colId: 'createdAt', headerName: t('language.created_at'), sortable: true, filter: false,
+      colId: 'createdAt', headerName: t('language.created_at'), sortable: true, ...LANGUAGE_DATE_FILTER,
       valueGetter: p => p.data ? fmt.date(p.data.createdAt) : '',
     },
   ], [t, fmt, run])
@@ -104,20 +106,23 @@ export default function LanguagesTableClient(props: Props) {
     { colId: 'createdAt', label: t('language.created_at') },
   ], [t])
 
-  const setParam = (updates: Record<string, string | null>) => {
-    const next = new URLSearchParams(sp.toString())
-    for (const [k, v] of Object.entries(updates)) { if (v === null) next.delete(k); else next.set(k, v) }
-    router.push(`${pathname}?${next.toString()}`)
-  }
+  const gridUrlSync = useGridUrlSync(pathname, sp.toString(), url => router.replace(url))
+  const setParam = (updates: Record<string, string | null>) => gridUrlSync.update(updates)
 
   return (
     <>
-      <div className="flex justify-end items-center gap-2 mb-3">
-        <ColumnVisibilityToggle gridApi={gridApi} columns={columnLabels} />
+      <GridToolbar
+        gridApi={gridApi}
+        columns={columnLabels}
+        onClearFilters={() => resetGridFilters(
+          gridApiRef.current,
+          () => setParam(languagesFilterModelToSearchParams({})),
+        )}
+      >
         <button onClick={() => setCreating(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">
           {t('language.actions.create')}
         </button>
-      </div>
+      </GridToolbar>
 
       {error && <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 

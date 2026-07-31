@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { and, asc, count, desc, eq, gte, ilike, inArray, lt, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, inArray, lt, lte, or, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { navigationItem, roleItem, roleListView } from '@/lib/db/schema'
 import { toNavigationItemRow } from './nav-row-mapper'
@@ -9,7 +9,8 @@ import {
   type RoleType, type UserNavigationTreeDto,
   ROOT_ID, OPERATIONS_ID,
 } from './types'
-import { nextDay } from './date-utils'
+import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
+import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 
 const SORT_COLUMN = {
   id: roleListView.id,
@@ -22,10 +23,26 @@ const SORT_COLUMN = {
 
 export function applyFilters(query: RolesQuery): SQL[] {
   const conditions: SQL[] = []
-  if (query.search) conditions.push(ilike(roleListView.description, `%${query.search}%`))
+  const textSearch = normalizeTextSearch(query.search)
+  if (textSearch) {
+    const termConditions = textSearch.conditions.map(term => ilike(roleListView.description, `%${escapeLikePattern(term)}%`))
+    conditions.push((textSearch.operator === 'OR' ? or(...termConditions) : and(...termConditions))!)
+  }
+  if (query.idMin != null) conditions.push(gte(roleListView.id, query.idMin))
+  if (query.idMax != null) conditions.push(lte(roleListView.id, query.idMax))
+  if (query.associatedUsersMin != null) conditions.push(gte(roleListView.associatedUsers, query.associatedUsersMin))
+  if (query.associatedUsersMax != null) conditions.push(lte(roleListView.associatedUsers, query.associatedUsersMax))
   if (query.hasPermission != null) conditions.push(eq(roleListView.hasPermissions, query.hasPermission))
   if (query.startDateIns) conditions.push(gte(roleListView.dateIns, query.startDateIns))
-  if (query.endDateIns) conditions.push(lt(roleListView.dateIns, nextDay(query.endDateIns)))
+  if (query.endDateIns) {
+    if (!isSupportedRbacInclusiveDateTo(query.endDateIns)) throw new Error('endDateIns exceeds the supported inclusive upper bound')
+    conditions.push(lt(roleListView.dateIns, nextDay(query.endDateIns)))
+  }
+  if (query.startDateMod) conditions.push(gte(roleListView.dateMod, query.startDateMod))
+  if (query.endDateMod) {
+    if (!isSupportedRbacInclusiveDateTo(query.endDateMod)) throw new Error('endDateMod exceeds the supported inclusive upper bound')
+    conditions.push(lt(roleListView.dateMod, nextDay(query.endDateMod)))
+  }
   return conditions
 }
 

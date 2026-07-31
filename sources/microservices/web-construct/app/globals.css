@@ -1,12 +1,19 @@
 @import "tailwindcss";
 @source "../**/*.{ts,tsx,js,jsx}";
 
-/* The grid theme draws a static divider after every header cell (see
-   `headerColumnBorder` in dataGridConfig.ts), which is what gives non-resizable
-   columns a separator at all. The pinned actions column is the one exception:
-   it should blend into the row, so it gets no divider against its neighbour. */
-.ag-header-cell[col-id="actions"]::after {
-  display: none;
+button:not(:disabled) {
+  cursor: pointer;
+  transition: transform 150ms ease, filter 150ms ease;
+}
+
+button:not(:disabled):hover {
+  transform: translateY(-1px);
+  filter: brightness(0.98);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  filter: opacity(0.6);
 }
 
 :root {

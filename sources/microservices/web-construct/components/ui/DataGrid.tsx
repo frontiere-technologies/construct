@@ -8,6 +8,7 @@ import {
   type FilterChangedEvent, type SortChangedEvent,
 } from 'ag-grid-community'
 import { appGridTheme, gridLocaleText, columnPinningState } from './dataGridConfig'
+import { normalizeGridColumnDefs } from './gridColumnSizing'
 import { useI18n } from '@/context/I18nContext'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -32,6 +33,7 @@ export default function DataGrid<T>({
 }: DataGridProps<T>) {
   const { t } = useI18n()
   const localeText = useMemo(() => gridLocaleText(t), [t])
+  const normalizedColumnDefs = useMemo(() => normalizeGridColumnDefs(columnDefs), [columnDefs])
   const defaultColDef = useMemo<ColDef<T>>(() => ({
     resizable: true,
     sortable: true,
@@ -43,7 +45,7 @@ export default function DataGrid<T>({
       <AgGridReact<T>
         theme={appGridTheme}
         localeText={localeText}
-        columnDefs={columnDefs}
+        columnDefs={normalizedColumnDefs}
         defaultColDef={defaultColDef}
         rowModelType="infinite"
         datasource={datasource}
@@ -55,7 +57,7 @@ export default function DataGrid<T>({
           sort: initialSortModel ? { sortModel: initialSortModel } : undefined,
           // Restores the `pinned` flags that `initialState` would otherwise wipe --
           // see `columnPinningState`.
-          columnPinning: columnPinningState(columnDefs),
+          columnPinning: columnPinningState(normalizedColumnDefs),
         }}
         onFilterChanged={onFilterChanged}
         onSortChanged={onSortChanged}

@@ -1,3 +1,5 @@
+import type { TextSearch } from '@/lib/grid-text-search'
+
 /** A language's whole dictionary, flattened: translation key → translated value. */
 export type Dictionary = Record<string, string>
 
@@ -37,13 +39,23 @@ export const MAX_BULK_VALUES = 200
 export type TranslationParams = Record<string, string | number | Date | null | undefined>
 export type TranslateFn = (key: string, params?: TranslationParams) => string
 
-export type LanguageSortField = 'code' | 'locale' | 'name' | 'isActive' | 'isDefault' | 'createdAt'
+export type LanguageSortField = 'code' | 'locale' | 'name' | 'nativeName' | 'isActive' | 'isDefault' | 'createdAt'
 
 export interface LanguagesQuery {
   page: number
   size: number
-  search?: string
+  codeSearch?: TextSearch
+  localeSearch?: TextSearch
+  nameSearch?: TextSearch
+  nativeNameSearch?: TextSearch
   isActive?: boolean
+  isDefault?: boolean
+  translatedMin?: number
+  translatedMax?: number
+  missingMin?: number
+  missingMax?: number
+  createdFrom?: string
+  createdTo?: string
   sort?: LanguageSortField
   direction?: 'ASC' | 'DESC'
 }
@@ -66,13 +78,19 @@ export type TranslationSortField = 'key' | 'namespace' | 'module' | 'updatedAt'
 export interface TranslationsQuery {
   page: number
   size: number
-  /** Matched against key, description and translated value. */
-  search?: string
-  /** Restrict the missing/complete check — and the value search — to one language. */
+  /** Filter attached to the translation-key grid column; matched against key only. */
+  search?: TextSearch
+  /** Filter attached to the translation-key description column. */
+  descriptionSearch?: TextSearch
+  /** Filters attached to the dynamic per-language value columns, keyed by language code. */
+  valueSearches?: Record<string, TextSearch>
+  /** Restrict the missing/complete check to one language. */
   languageCode?: string
   namespace?: string
   module?: string
   status?: TranslationStatusFilter
+  updatedFrom?: string
+  updatedTo?: string
   sort?: TranslationSortField
   direction?: 'ASC' | 'DESC'
 }

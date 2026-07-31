@@ -1,13 +1,20 @@
 import { cache } from 'react'
-import { and, asc, count, desc, eq, ne, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, lt, lte, ne, or, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
+import { alias } from 'drizzle-orm/pg-core'
 import { createLogger } from '@/lib/logger'
 import { FALLBACK_LANGUAGE, type LanguageDto, type LanguagePageItemDto, type LanguagesPage, type LanguagesQuery } from './types'
+import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
+import { nextDay } from '@/lib/rbac/date-utils'
+import { isSupportedLanguageCreatedTo } from './language-grid-boundaries'
 
 const log = createLogger('i18n-language-service')
 
-function toDto(row: typeof appLanguage.$inferSelect): LanguageDto {
+type LanguageBaseRow = Pick<typeof appLanguage.$inferSelect,
+  'idLanguage' | 'code' | 'locale' | 'name' | 'nativeName' | 'isActive' | 'isDefault'>
+
+function toDto(row: LanguageBaseRow): LanguageDto {
   return {
     id: Number(row.idLanguage),
     code: row.code,
@@ -93,55 +100,201 @@ const LANGUAGE_SORT_COLUMN = {
   code: appLanguage.code,
   locale: appLanguage.locale,
   name: appLanguage.name,
+  nativeName: appLanguage.nativeName,
   isActive: appLanguage.isActive,
   isDefault: appLanguage.isDefault,
   createdAt: appLanguage.createdAt,
 } as const
 
-function sortColumnFor(sort: LanguagesQuery['sort']) {
+interface LanguageSortSource {
+  idLanguage: SQLWrapper
+  code: SQLWrapper
+  locale: SQLWrapper
+  name: SQLWrapper
+  nativeName: SQLWrapper
+  isActive: SQLWrapper
+  isDefault: SQLWrapper
+  createdAt: SQLWrapper
+}
+
+function sortColumnFor(sort: LanguagesQuery['sort'], source: LanguageSortSource = appLanguage) {
   // `sort` arrives from a request body, so it is an arbitrary string as far as
   // the runtime is concerned: bare indexing would return Object.prototype for
   // '__proto__' and undefined for anything unrecognised, both of which blow up
   // inside orderBy() rather than degrading.
-  return sort && Object.hasOwn(LANGUAGE_SORT_COLUMN, sort)
-    ? LANGUAGE_SORT_COLUMN[sort]
-    : LANGUAGE_SORT_COLUMN.code
+  const columns = {
+    code: source.code,
+    locale: source.locale,
+    name: source.name,
+    nativeName: source.nativeName,
+    isActive: source.isActive,
+    isDefault: source.isDefault,
+    createdAt: source.createdAt,
+  } as const
+  return sort && Object.hasOwn(LANGUAGE_SORT_COLUMN, sort) ? columns[sort] : columns.code
+}
+
+export function languageOrderBy(query: LanguagesQuery, source: LanguageSortSource = appLanguage): SQL[] {
+  const sortCol = sortColumnFor(query.sort, source)
+  const ascending = (query.direction ?? 'ASC') === 'ASC'
+  return [ascending ? asc(sortCol) : desc(sortCol), asc(source.idLanguage)]
+}
+
+function textSearchCondition(
+  search: LanguagesQuery['nameSearch'],
+  column: SQLWrapper,
+): SQL | undefined {
+  const textSearch = normalizeTextSearch(search)
+  if (!textSearch) return undefined
+  const termConditions = textSearch.conditions.map(term =>
+    sql`${column} ilike ${`%${escapeLikePattern(term)}%`} escape '\\'`,
+  )
+  return textSearch.operator === 'OR' ? or(...termConditions)! : and(...termConditions)!
+}
+
+function translatedCount(): SQL<number> {
+  return sql<number>`(
+    select count(*)::int from ${translationValue}
+    where ${translationValue.idLanguage} = ${appLanguage.idLanguage}
+      and ${translationValue.value} <> ''
+  )`
+}
+
+function missingCount(): SQL<number> {
+  return sql<number>`((select count(*)::int from ${translationKey}) - ${translatedCount()})`
+}
+
+interface LanguageFilterSource {
+  code: SQLWrapper
+  locale: SQLWrapper
+  name: SQLWrapper
+  nativeName: SQLWrapper
+  isActive: SQLWrapper
+  isDefault: SQLWrapper
+  translated: SQLWrapper
+  missing: SQLWrapper
+  createdAt: SQLWrapper
+}
+
+function baseLanguageFilterSource(): LanguageFilterSource {
+  return {
+    code: appLanguage.code,
+    locale: appLanguage.locale,
+    name: appLanguage.name,
+    nativeName: appLanguage.nativeName,
+    isActive: appLanguage.isActive,
+    isDefault: appLanguage.isDefault,
+    translated: translatedCount(),
+    missing: missingCount(),
+    createdAt: appLanguage.createdAt,
+  }
+}
+
+export function applyLanguageFilters(
+  query: LanguagesQuery,
+  source: LanguageFilterSource = baseLanguageFilterSource(),
+): SQL[] {
+  const conditions: SQL[] = []
+  const textFilters = [
+    textSearchCondition(query.codeSearch, source.code),
+    textSearchCondition(query.localeSearch, source.locale),
+    textSearchCondition(query.nameSearch, source.name),
+    textSearchCondition(query.nativeNameSearch, source.nativeName),
+  ]
+  for (const condition of textFilters) if (condition) conditions.push(condition)
+  if (query.isActive != null) conditions.push(eq(source.isActive, query.isActive))
+  if (query.isDefault != null) conditions.push(eq(source.isDefault, query.isDefault))
+  if (query.translatedMin != null) conditions.push(gte(source.translated, query.translatedMin))
+  if (query.translatedMax != null) conditions.push(lte(source.translated, query.translatedMax))
+  if (query.missingMin != null) conditions.push(gte(source.missing, query.missingMin))
+  if (query.missingMax != null) conditions.push(lte(source.missing, query.missingMax))
+  if (query.createdFrom) conditions.push(gte(source.createdAt, query.createdFrom))
+  if (query.createdTo) {
+    if (!isSupportedLanguageCreatedTo(query.createdTo)) {
+      throw new Error('createdTo exceeds the supported inclusive upper bound')
+    }
+    conditions.push(lt(source.createdAt, nextDay(query.createdTo)))
+  }
+  return conditions
+}
+
+type LanguageQueryExecutor = Pick<typeof db, 'select'>
+
+export function buildLanguageRowsQuery(executor: LanguageQueryExecutor) {
+  const languageBase = alias(appLanguage, 'language_base')
+  const projectedTranslated = sql<number>`(
+    select count(*)::int from ${translationValue}
+    where ${sql.raw('"translation_value"."id_language"')} = ${sql.raw('"language_base"."id_language"')}
+      and ${sql.raw('"translation_value"."value"')} <> ''
+  )`
+  const counts = executor.select({
+    idLanguage: languageBase.idLanguage,
+    code: languageBase.code,
+    locale: languageBase.locale,
+    name: languageBase.name,
+    nativeName: languageBase.nativeName,
+    isActive: languageBase.isActive,
+    isDefault: languageBase.isDefault,
+    createdAt: languageBase.createdAt,
+    updatedAt: languageBase.updatedAt,
+    translated: projectedTranslated.as('translated'),
+    totalKeys: sql<number>`(select count(*)::int from ${translationKey})`.as('total_keys'),
+  }).from(languageBase).as('language_counts')
+
+  return executor.select({
+    idLanguage: counts.idLanguage,
+    code: counts.code,
+    locale: counts.locale,
+    name: counts.name,
+    nativeName: counts.nativeName,
+    isActive: counts.isActive,
+    isDefault: counts.isDefault,
+    createdAt: counts.createdAt,
+    updatedAt: counts.updatedAt,
+    translated: counts.translated,
+    missing: sql<number>`${counts.totalKeys} - ${counts.translated}`.as('missing'),
+  }).from(counts)
+}
+
+function languageRows(executor: LanguageQueryExecutor) {
+  return buildLanguageRowsQuery(executor).as('language_rows')
+}
+
+export function buildLanguagePageQuery(executor: LanguageQueryExecutor, query: LanguagesQuery) {
+  const source = languageRows(executor)
+  const conditions = applyLanguageFilters(query, source)
+  const where = conditions.length ? and(...conditions) : undefined
+  return executor.select().from(source).where(where)
+    .orderBy(...languageOrderBy(query, source))
+    .limit(query.size).offset(query.page * query.size)
+}
+
+export function buildLanguageTotalQuery(executor: LanguageQueryExecutor, query: LanguagesQuery) {
+  const source = languageRows(executor)
+  const conditions = applyLanguageFilters(query, source)
+  const where = conditions.length ? and(...conditions) : undefined
+  return executor.select({ value: count() }).from(source).where(where)
 }
 
 /**
- * Page of languages for the admin grid (§2.4), with per-row translated/missing
- * counts folded in from `getLanguageStats`. Unlike `listLanguages` above, this
- * throws on failure: it feeds an admin grid, where "no rows" and "the query
- * failed" must not look identical.
+ * Page of languages for the admin grid (§2.4). Counts used by filters and counts
+ * returned to the client come from the same derived row. Page and total run in
+ * one repeatable-read snapshot, including when the requested page is empty.
  */
 export async function listLanguagesPage(query: LanguagesQuery): Promise<LanguagesPage> {
-  const conditions: SQL[] = []
-  if (query.search) conditions.push(sql`(${appLanguage.name} ilike ${'%' + query.search + '%'} or ${appLanguage.nativeName} ilike ${'%' + query.search + '%'} or ${appLanguage.code} ilike ${'%' + query.search + '%'} or ${appLanguage.locale} ilike ${'%' + query.search + '%'})`)
-  if (query.isActive != null) conditions.push(eq(appLanguage.isActive, query.isActive))
-  const where = conditions.length ? and(...conditions) : undefined
-
-  const sortCol = sortColumnFor(query.sort)
-  const ascending = (query.direction ?? 'ASC') === 'ASC'
-
   try {
-    const [rows, [{ value: total }], stats] = await Promise.all([
-      db.select().from(appLanguage).where(where)
-        .orderBy(ascending ? asc(sortCol) : desc(sortCol))
-        .limit(query.size).offset(query.page * query.size),
-      db.select({ value: count() }).from(appLanguage).where(where),
-      getLanguageStats(),
-    ])
-    const elements: LanguagePageItemDto[] = rows.map(row => {
-      const stat = stats.get(row.code)
-      return {
+    return await db.transaction(async tx => {
+      const rows = await buildLanguagePageQuery(tx, query)
+      const [{ value: total }] = await buildLanguageTotalQuery(tx, query)
+      const elements: LanguagePageItemDto[] = rows.map(row => ({
         ...toDto(row),
-        translated: stat?.translated ?? 0,
-        missing: stat?.missing ?? 0,
+        translated: row.translated,
+        missing: row.missing,
         createdAt: row.createdAt ?? null,
         updatedAt: row.updatedAt ?? null,
-      }
-    })
-    return { total, elements }
+      }))
+      return { total, elements }
+    }, { isolationLevel: 'repeatable read', accessMode: 'read only' })
   } catch (err) {
     throw new Error(`Failed to list languages: ${err instanceof Error ? err.message : String(err)}`)
   }

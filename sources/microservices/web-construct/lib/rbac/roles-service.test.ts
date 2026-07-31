@@ -29,6 +29,35 @@ describe('applyFilters', () => {
     expect(rendered[1].params).toEqual([true])
   })
 
+  it('joins compound text conditions with OR', () => {
+    const [rendered] = render({
+      ...baseQuery,
+      search: { operator: 'OR', conditions: ['Admin', 'Editor'] },
+    })
+
+    expect(rendered.sql).toContain(' or ')
+    expect(rendered.params).toEqual(['%Admin%', '%Editor%'])
+  })
+
+  it('uses inclusive numeric bounds and both inclusive date ranges together', () => {
+    const rendered = render({
+      ...baseQuery,
+      idMin: 10, idMax: 20,
+      associatedUsersMin: 3, associatedUsersMax: 3,
+      startDateIns: '2026-06-01', endDateIns: '2026-06-30',
+      startDateMod: '2026-07-01', endDateMod: '2026-07-30',
+    })
+
+    expect(rendered.flatMap(item => item.params)).toEqual([
+      10, 20, 3, 3,
+      '2026-06-01', '2026-07-01',
+      '2026-07-01', '2026-07-31',
+    ])
+    expect(rendered.map(item => item.sql).join(' ')).toContain('"role_list_view"."id" >=')
+    expect(rendered.map(item => item.sql).join(' ')).toContain('"role_list_view"."associated_users" <=')
+    expect(rendered.map(item => item.sql).join(' ')).toContain('"role_list_view"."date_mod" <')
+  })
+
   it('applies gte on date_ins when startDateIns is set', () => {
     const [rendered] = render({ ...baseQuery, startDateIns: '2026-06-01' })
     expect(rendered.sql).toContain('"role_list_view"."date_ins" >=')
@@ -49,5 +78,23 @@ describe('applyFilters', () => {
   it('rolls over to the next year when endDateIns is the last day of the year', () => {
     const [rendered] = render({ ...baseQuery, endDateIns: '2026-12-31' })
     expect(rendered.params).toEqual(['2027-01-01'])
+  })
+
+  it.each([
+    ['endDateIns', 'endDateIns exceeds the supported inclusive upper bound'],
+    ['endDateMod', 'endDateMod exceeds the supported inclusive upper bound'],
+  ] as const)('rejects terminal %s before building next-day SQL', (field, message) => {
+    expect(() => applyFilters({ ...baseQuery, [field]: '9999-12-31' }))
+      .toThrowError(message)
+  })
+
+  it.each([
+    ['startDateIns', 'date_ins'],
+    ['startDateMod', 'date_mod'],
+  ] as const)('keeps terminal %s valid as an inclusive lower SQL bound', (field, column) => {
+    const [rendered] = render({ ...baseQuery, [field]: '9999-12-31' })
+
+    expect(rendered.sql).toContain(`"role_list_view"."${column}" >=`)
+    expect(rendered.params).toEqual(['9999-12-31'])
   })
 })

@@ -4,7 +4,10 @@ import React, { useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import DataGrid from '@/components/ui/DataGrid'
-import ColumnVisibilityToggle from '@/components/ui/ColumnVisibilityToggle'
+import GridToolbar from '@/components/ui/GridToolbar'
+import { DATE_FILTER, TEXT_FILTER } from '@/components/ui/gridColumnFilters'
+import { resetGridFilters } from '@/components/ui/grid-reset'
+import { useGridUrlSync } from '@/components/ui/grid-url-sync'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
 import StatusBadge from './StatusBadge'
@@ -23,11 +26,18 @@ interface Props {
   sortField: string
   sortDir: 'ASC' | 'DESC'
   search: string
+  search2: string
+  searchOperator: 'AND' | 'OR' | null
+  emailSearch: string
+  emailSearch2: string
+  emailSearchOperator: 'AND' | 'OR' | null
   allRoles: { id: number; name: string }[]
   roleId: number | null
   statusId: number | null
   createdFrom: string | null
   createdTo: string | null
+  updatedFrom: string | null
+  updatedTo: string | null
 }
 
 export default function UsersTableClient(props: Props) {
@@ -43,12 +53,8 @@ export default function UsersTableClient(props: Props) {
   // which could otherwise stay stale at `null` from before onGridReady fired.
   const gridApiRef = useRef<GridApi<UserDTO> | null>(null)
 
-  const setParam = (updates: Record<string, string | null>) => {
-    const p = new URLSearchParams(sp.toString())
-    for (const [k, v] of Object.entries(updates)) { if (v === null) { p.delete(k) } else { p.set(k, v) } }
-    p.delete('page')
-    router.push(`${pathname}?${p.toString()}`)
-  }
+  const gridUrlSync = useGridUrlSync(pathname, sp.toString(), url => router.replace(url))
+  const setParam = (updates: Record<string, string | null>) => gridUrlSync.update(updates)
 
   const toggleStatus = async (u: UserDTO) => {
     const next = u.status.idUserStatus === USER_STATUS_ACTIVE ? USER_STATUS_DEACTIVATED : USER_STATUS_ACTIVE
@@ -69,6 +75,8 @@ export default function UsersTableClient(props: Props) {
   // Keying the memo on this derived string instead of the array itself avoids rebuilding
   // columnDefs (and the Ruolo filter's option list) on every unrelated interaction.
   const allRolesKey = props.allRoles.map(r => `${r.id}:${r.name}`).join('|')
+  const textFilter = TEXT_FILTER as Pick<ColDef<UserDTO>, 'filter' | 'filterParams'>
+  const dateFilter = DATE_FILTER as Pick<ColDef<UserDTO>, 'filter' | 'filterParams'>
 
   const columnDefs = useMemo<ColDef<UserDTO>[]>(() => [
     actionsColumnDef<UserDTO>(u => [
@@ -78,10 +86,9 @@ export default function UsersTableClient(props: Props) {
     {
       colId: 'firstName', headerName: t('users.list.name'), sortable: true,
       valueGetter: p => p.data ? fullName(p.data) : '',
-      filter: 'agTextColumnFilter',
-      filterParams: { filterOptions: ['contains'], buttons: ['apply', 'reset'] },
+      ...textFilter,
     },
-    { field: 'email', headerName: t('users.list.email'), sortable: true, filter: false },
+    { field: 'email', headerName: t('users.list.email'), sortable: true, ...textFilter },
     {
       colId: 'roles', headerName: t('users.list.roles'), sortable: false, filter: EnumSelectFilter,
       filterParams: { options: props.allRoles.map(r => ({ value: r.id, label: r.name })) },
@@ -94,12 +101,12 @@ export default function UsersTableClient(props: Props) {
     },
     {
       colId: 'dateIns', headerName: t('users.list.created_at'), sortable: true,
-      filter: 'agDateColumnFilter',
-      filterParams: { filterOptions: ['inRange'], defaultOption: 'inRange', buttons: ['apply', 'reset'] },
+      ...dateFilter,
       valueGetter: p => p.data ? fmt.date(p.data.createdAt) : '',
     },
     {
-      colId: 'dateMod', headerName: t('users.list.updated_at'), sortable: true, filter: false,
+      colId: 'dateMod', headerName: t('users.list.updated_at'), sortable: true,
+      ...dateFilter,
       valueGetter: p => p.data?.updatedAt ? fmt.date(p.data.updatedAt) : '—',
     },
   ], [allRolesKey, t, fmt]) // eslint-disable-line react-hooks/exhaustive-deps -- allRolesKey stands in for props.allRoles (see comment above); toggleStatus is intentionally omitted too, same as before this change
@@ -130,9 +137,11 @@ export default function UsersTableClient(props: Props) {
 
   return (
     <>
-      <div className="flex justify-end mb-3">
-        <ColumnVisibilityToggle gridApi={gridApi} columns={columnLabels} />
-      </div>
+      <GridToolbar
+        gridApi={gridApi}
+        columns={columnLabels}
+        onClearFilters={() => resetGridFilters(gridApiRef.current, () => setParam(usersFilterModelToSearchParams({})))}
+      />
       <DataGrid<UserDTO>
         columnDefs={columnDefs}
         datasource={datasource}

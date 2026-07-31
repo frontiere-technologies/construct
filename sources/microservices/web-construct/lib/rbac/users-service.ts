@@ -1,11 +1,12 @@
 import { cache } from 'react'
-import { and, asc, desc, count, gte, ilike, inArray, lt, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, count, gte, ilike, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { users, userRole } from '@/lib/db/schema'
 import { getAllRoles } from './roles-service'
-import { nextDay } from './date-utils'
+import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
 import { USER_SORT_COLUMN, buildUserDtos, type UserRow, type UserRoleRow } from './user-mappers'
 import type { UserDTO, UsersQuery } from './types'
+import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 
 const SORT_COLUMNS = {
   first_name: users.firstName,
@@ -26,19 +27,36 @@ async function candidateUserIds(roleIds: number[] | undefined): Promise<string[]
   }
 }
 
+function textSearchCondition(
+  search: UsersQuery['nameSearch'],
+  columns: Parameters<typeof ilike>[0][],
+): SQL | undefined {
+  const textSearch = normalizeTextSearch(search)
+  if (!textSearch) return undefined
+  const termConditions = textSearch.conditions.map(term => {
+    const matches = columns.map(column => sql`${column} ilike ${`%${escapeLikePattern(term)}%`} escape '\\'`)
+    return matches.length === 1 ? matches[0] : or(...matches)!
+  })
+  return textSearch.operator === 'OR' ? or(...termConditions)! : and(...termConditions)!
+}
+
 export function applyUserFilters(query: UsersQuery, ids: string[] | null): SQL[] {
   const conditions: SQL[] = []
-  if (query.search) {
-    const s = query.search.replace(/[%,()&]/g, '')
-    conditions.push(or(
-      ilike(users.firstName, `%${s}%`),
-      ilike(users.lastName, `%${s}%`),
-      ilike(users.email, `%${s}%`),
-    )!)
-  }
+  const nameCondition = textSearchCondition(query.nameSearch, [users.firstName, users.lastName])
+  const emailCondition = textSearchCondition(query.emailSearch, [users.email])
+  if (nameCondition) conditions.push(nameCondition)
+  if (emailCondition) conditions.push(emailCondition)
   if (query.statuses?.length) conditions.push(inArray(users.idUserStatus, query.statuses))
   if (query.createdFrom) conditions.push(gte(users.createdAt, query.createdFrom))
-  if (query.createdTo) conditions.push(lt(users.createdAt, nextDay(query.createdTo)))
+  if (query.createdTo) {
+    if (!isSupportedRbacInclusiveDateTo(query.createdTo)) throw new Error('createdTo exceeds the supported inclusive upper bound')
+    conditions.push(lt(users.createdAt, nextDay(query.createdTo)))
+  }
+  if (query.updatedFrom) conditions.push(gte(users.updatedAt, query.updatedFrom))
+  if (query.updatedTo) {
+    if (!isSupportedRbacInclusiveDateTo(query.updatedTo)) throw new Error('updatedTo exceeds the supported inclusive upper bound')
+    conditions.push(lt(users.updatedAt, nextDay(query.updatedTo)))
+  }
   if (ids) conditions.push(inArray(users.id, ids.length ? ids : ['00000000-0000-0000-0000-000000000000']))
   return conditions
 }

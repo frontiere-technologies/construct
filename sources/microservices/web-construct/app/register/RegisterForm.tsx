@@ -63,7 +63,7 @@ export function RegisterForm() {
       <button
         type="submit"
         disabled={status === 'sending'}
-        className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
+        className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue enabled:hover:bg-brand-blue enabled:hover:text-white"
       >
         {status === 'sending' ? t('auth.register.submitting') : t('auth.register.submit')}
       </button>
