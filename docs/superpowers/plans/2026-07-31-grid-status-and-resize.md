@@ -30,7 +30,7 @@
 - Consumes: `TranslateFn` from `@/lib/i18n/types`.
 - Produces: `translationStatusFilterOptions(t: TranslateFn): Array<{ value: 'missing' | 'complete'; label: string }>`.
 
-- [ ] **Step 1: Write the failing label test**
+- [✅] **Step 1: Write the failing label test**
 
 ```ts
 import { describe, expect, it } from 'vitest'
@@ -54,7 +54,7 @@ describe('translationStatusFilterOptions', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [✅] **Step 2: Run the test and verify RED**
 
 Run from `sources/microservices/web-construct`:
 
@@ -64,7 +64,7 @@ npm test -- components/i18n/translations/translationStatusFilter.test.ts
 
 Expected: FAIL because `translationStatusFilter` does not exist.
 
-- [ ] **Step 3: Implement the pure option builder**
+- [✅] **Step 3: Implement the pure option builder**
 
 ```ts
 import type { TranslateFn } from '@/lib/i18n/types'
@@ -83,7 +83,7 @@ Import the helper in `TranslationsTableClient.tsx` and replace the inline `filte
 filterParams: { options: translationStatusFilterOptions(t) },
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [✅] **Step 4: Run the focused test and verify GREEN**
 
 ```bash
 npm test -- components/i18n/translations/translationStatusFilter.test.ts
@@ -91,7 +91,7 @@ npm test -- components/i18n/translations/translationStatusFilter.test.ts
 
 Expected: 1 test passed.
 
-- [ ] **Step 5: Commit Task 1**
+- [✅] **Step 5: Commit Task 1**
 
 ```bash
 git add sources/microservices/web-construct/components/i18n/translations/translationStatusFilter.ts \
@@ -114,7 +114,7 @@ git commit -m "fix(i18n): simplify translation status labels"
 - Consumes: `ColDef<T>[]` from AG Grid.
 - Produces: `GRID_MIN_COLUMN_WIDTH = 20` and `normalizeGridColumnDefs<T>(columnDefs: ColDef<T>[]): ColDef<T>[]`.
 
-- [ ] **Step 1: Write the failing sizing tests**
+- [✅] **Step 1: Write the failing sizing tests**
 
 ```ts
 import { describe, expect, it } from 'vitest'
@@ -142,7 +142,7 @@ describe('normalizeGridColumnDefs', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [✅] **Step 2: Run the test and verify RED**
 
 ```bash
 npm test -- components/ui/gridColumnSizing.test.ts
@@ -150,7 +150,7 @@ npm test -- components/ui/gridColumnSizing.test.ts
 
 Expected: FAIL because `gridColumnSizing` does not exist.
 
-- [ ] **Step 3: Implement the shared normalizer**
+- [✅] **Step 3: Implement the shared normalizer**
 
 ```ts
 import type { ColDef } from 'ag-grid-community'
@@ -172,7 +172,7 @@ const normalizedColumnDefs = useMemo(() => normalizeGridColumnDefs(columnDefs), 
 
 Pass `normalizedColumnDefs` to both `AgGridReact.columnDefs` and `columnPinningState()`.
 
-- [ ] **Step 4: Preserve translation initial widths**
+- [✅] **Step 4: Preserve translation initial widths**
 
 In `TranslationsTableClient.tsx`, replace the three restrictive sizing declarations:
 
@@ -192,7 +192,7 @@ width: 200
 
 The shared normalizer then supplies `minWidth: 20` at runtime.
 
-- [ ] **Step 5: Run focused tests and verify GREEN**
+- [✅] **Step 5: Run focused tests and verify GREEN**
 
 ```bash
 npm test -- components/ui/gridColumnSizing.test.ts components/rbac/GridRowActionsMenu.test.ts
@@ -200,7 +200,7 @@ npm test -- components/ui/gridColumnSizing.test.ts components/rbac/GridRowAction
 
 Expected: all tests passed; actions remains non-resizable.
 
-- [ ] **Step 6: Commit Task 2**
+- [✅] **Step 6: Commit Task 2**
 
 ```bash
 git add sources/microservices/web-construct/components/ui/gridColumnSizing.ts \
@@ -221,7 +221,7 @@ git commit -m "fix(grid): allow unrestricted data column shrinking"
 - Consumes: completed Task 1 and Task 2 behavior.
 - Produces: verified implementation and completed plan checklist.
 
-- [ ] **Step 1: Run the full automated gate**
+- [✅] **Step 1: Run the full automated gate**
 
 From `sources/microservices/web-construct` run:
 
@@ -234,15 +234,15 @@ npm run build
 
 Expected: all tests and build pass; lint has no errors. Existing unrelated warnings may remain.
 
-- [ ] **Step 2: Verify Status in the browser**
+- [✅] **Step 2: Verify Status in the browser**
 
 Open `http://localhost:3000/admin/translations?sort=key&direction=ASC`, open the Status filter and confirm the only choices are `Complete` and `Missing` in English, or `Completa` and `Mancante` in Italian.
 
-- [ ] **Step 3: Verify resizing in the browser**
+- [✅] **Step 3: Verify resizing in the browser**
 
 On each of Utenti, Ruoli, Lingue and Traduzioni, drag at least one data-column divider left below its former content width and confirm it reaches approximately 20 px. Confirm the `...` actions column has no resize handle and remains 56 px.
 
-- [ ] **Step 4: Complete tracking and commit**
+- [✅] **Step 4: Complete tracking and commit**
 
 Change every completed checkbox in this plan from `- [ ]` to `- [✅]`, then run:
 
