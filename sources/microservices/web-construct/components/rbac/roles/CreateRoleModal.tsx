@@ -38,7 +38,7 @@ export default function CreateRoleModal({ onClose }: { onClose: () => void }) {
           className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface-overlay mb-6"
         />
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
+          <button data-dialog-close onClick={onClose} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
           <button
             onClick={submit} disabled={!name.trim() || busy}
             className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"

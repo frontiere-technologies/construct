@@ -69,3 +69,38 @@ No database-mutating integration or E2E tests were run.
 - Confirmed the build type-checks every migrated component.
 - Confirmed `git diff --check` completed before the build command; no whitespace errors were emitted.
 - Preserved the prior responsive/sidebar task work; no related files were edited.
+
+## Fix round 1
+
+### Files changed
+
+- `sources/microservices/web-construct/components/ui/AccessibleDialog.tsx`
+- `sources/microservices/web-construct/components/ui/AccessibleDialog.test.tsx`
+- `sources/microservices/web-construct/components/ui/dialogConsumers.test.ts`
+- `sources/microservices/web-construct/components/ui/ConfirmModal.tsx`
+- `sources/microservices/web-construct/components/i18n/languages/LanguageFormModal.tsx`
+- `sources/microservices/web-construct/components/i18n/translations/CreateTranslationKeyModal.tsx`
+- `sources/microservices/web-construct/components/i18n/translations/TranslationEditorDrawer.tsx`
+- `sources/microservices/web-construct/components/rbac/users/ManageRolesModal.tsx`
+- `sources/microservices/web-construct/components/rbac/roles/CreateRoleModal.tsx`
+- `sources/microservices/web-construct/components/rbac/roles/RenameRoleModal.tsx`
+
+### Resolution
+
+- Added a capture-phase `data-dialog-close` guard to `AccessibleDialog`. When `busy`, it prevents marked internal close controls from delivering their `onClick` close request, complementing the existing Escape/backdrop guards.
+- Marked every busy-capable dialog's cancel, close, and drawer reload/close controls. This keeps the dialog mounted during its pending mutation without changing normal-state visuals or close behavior.
+- Added `aria-label={t('common.actions.close')}` to the Manage Roles icon-only close control.
+
+### Exact verification commands and results
+
+1. RED: `npm test -- components/ui/AccessibleDialog.test.tsx`
+
+   Result: 1 expected failure. Before the guard, a busy dialog's marked Cancel invoked `onClose` once.
+
+2. GREEN: `npm test -- components/ui/AccessibleDialog.test.tsx components/ui/dialogConsumers.test.ts`
+
+   Result: 2 test files passed; 24 tests passed.
+
+3. Typecheck/build: `npm run build`
+
+   Result: production compilation and TypeScript completed successfully; all 27 static pages generated. The initial sandboxed attempt was blocked by Turbopack's local port binding, and the approved elevated re-run passed.

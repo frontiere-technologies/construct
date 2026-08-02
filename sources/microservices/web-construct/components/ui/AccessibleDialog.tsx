@@ -80,6 +80,13 @@ export default function AccessibleDialog({
     if (event.target === event.currentTarget && !busy) onClose()
   }
 
+  const handlePanelClickCapture = (event: MouseEvent<HTMLDivElement>) => {
+    if (busy && event.target instanceof Element && event.target.closest('[data-dialog-close]')) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+  }
+
   return (
     <div
       className={`fixed inset-0 z-50 flex bg-black/40 ${align === 'right' ? 'justify-end' : 'items-center justify-center'}`}
@@ -94,6 +101,7 @@ export default function AccessibleDialog({
         tabIndex={-1}
         className={panelClassName}
         onKeyDown={handleKeyDown}
+        onClickCapture={handlePanelClickCapture}
       >
         {children}
       </div>

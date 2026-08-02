@@ -71,7 +71,7 @@ export default function LanguageFormModal({ language, onClose }: Props) {
         {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <div className="flex justify-end gap-2 mt-6">
-          <button onClick={() => onClose(false)} className="px-3 py-2 text-sm rounded-lg border border-border">
+          <button data-dialog-close onClick={() => onClose(false)} className="px-3 py-2 text-sm rounded-lg border border-border">
             {t('common.actions.cancel')}
           </button>
           <button

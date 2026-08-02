@@ -35,7 +35,7 @@ export default function ConfirmModal({ title, message, confirmLabel, onConfirm, 
         <h2 id={titleId} className="text-lg font-bold mb-2">{title}</h2>
         <p id={descriptionId} className="text-sm text-gray-500 mb-6">{message}</p>
         <div className="flex justify-end gap-2">
-          <button data-dialog-initial-focus onClick={onCancel} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
+          <button data-dialog-initial-focus data-dialog-close onClick={onCancel} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
           <button
             onClick={confirm} disabled={busy}
             className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"

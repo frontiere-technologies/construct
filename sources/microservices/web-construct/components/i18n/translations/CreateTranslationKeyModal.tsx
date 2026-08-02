@@ -68,7 +68,7 @@ export default function CreateTranslationKeyModal({ onClose }: { onClose: (saved
         {error && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <div className="flex justify-end gap-2 mt-6">
-          <button onClick={() => onClose(false)} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
+          <button data-dialog-close onClick={() => onClose(false)} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
           <button onClick={save} disabled={saving} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed">
             {saving ? t('common.states.saving') : t('common.actions.save')}
           </button>

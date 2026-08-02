@@ -10,7 +10,15 @@ import AccessibleDialog from './AccessibleDialog'
 let root: Root | undefined
 let container: HTMLDivElement | undefined
 
-function renderDialog({ busy = false, onClose = vi.fn() }: { busy?: boolean; onClose?: ReturnType<typeof vi.fn> } = {}) {
+function renderDialog({
+  busy = false,
+  onClose = vi.fn(),
+  children,
+}: {
+  busy?: boolean
+  onClose?: ReturnType<typeof vi.fn>
+  children?: React.ReactNode
+} = {}) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -18,9 +26,11 @@ function renderDialog({ busy = false, onClose = vi.fn() }: { busy?: boolean; onC
   act(() => {
     root?.render(
       <AccessibleDialog titleId="dialog-title" onClose={onClose} busy={busy}>
-        <h2 id="dialog-title">Title</h2>
-        <button data-dialog-initial-focus>Cancel</button>
-        <button>Save</button>
+        {children ?? <>
+          <h2 id="dialog-title">Title</h2>
+          <button data-dialog-initial-focus>Cancel</button>
+          <button>Save</button>
+        </>}
       </AccessibleDialog>,
     )
   })
@@ -87,6 +97,23 @@ describe('AccessibleDialog', () => {
     const busy = renderDialog({ busy: true })
     pressKey(busy.dialog, 'Escape')
     expect(busy.onClose).not.toHaveBeenCalled()
+  })
+
+  it('suppresses marked internal close controls while busy', () => {
+    const onClose = vi.fn()
+    const { dialog } = renderDialog({
+      busy: true,
+      onClose,
+      children: <>
+        <h2 id="dialog-title">Title</h2>
+        <button data-dialog-initial-focus data-dialog-close onClick={onClose}>Cancel</button>
+        <button>Save</button>
+      </>,
+    })
+
+    act(() => (dialog.querySelector('[data-dialog-close]') as HTMLButtonElement).click())
+
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('closes only when the backdrop itself is clicked and is not busy', () => {
