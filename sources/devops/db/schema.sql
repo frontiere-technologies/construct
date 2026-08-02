@@ -1,10 +1,12 @@
+-- GENERATED FILE. Edit sources/devops/db/migrations/*.sql instead.
+-- Migration: 0001_baseline.sql
 -- ============================================================
 -- construct — Supabase Schema
 -- Auth: Auth.js v5 (NextAuth) handles authentication.
 --       Supabase is used as PostgreSQL database only.
---       RLS is enabled on all tables — all client access is
---       blocked by default. Server-side code uses createAdminClient()
---       (service_role key) which bypasses RLS entirely.
+--       RLS is enabled on all tables. The server uses a direct
+--       PostgreSQL connection through Drizzle; no browser database
+--       client or Supabase service-role API key is used.
 -- ============================================================
 
 -- menu_items replaced by navigation_item (RBAC). Drop if present.
@@ -16,7 +18,7 @@ drop function if exists public.update_menu_orders(jsonb);
 -- Profili utente provisionati da Auth.js al primo login OIDC.
 -- PK: UUID generato dall'app (non collegato a auth.users).
 -- Lookup per upsert: email (unique constraint).
--- RLS enabled — all access via createAdminClient() (service_role)
+-- RLS enabled — application access is server-side through lib/db.ts.
 -- ============================================================
 create table if not exists users (
   id           uuid        primary key default gen_random_uuid(),
@@ -43,10 +45,6 @@ alter table users add column if not exists password_hash text;
 -- Migration: track how the user authenticates (google, microsoft-entra-id, keycloak, credentials, test)
 alter table users add column if not exists auth_provider text;
 
--- Migration: drop the legacy single-role string column. RBAC replaces it with the
--- N:N role / user_role model (see below); the test-credentials upsert no longer writes it.
-alter table users drop column if exists role;
-
 -- ============================================================
 -- Tabella: password_set_tokens
 -- One-time tokens for the "set password" invite flow.
@@ -62,6 +60,51 @@ create table if not exists password_set_tokens (
 
 alter table password_set_tokens enable row level security;
 
+-- Atomically consume one password token and update its user's password. The row
+-- lock serializes concurrent claims; sibling tokens are invalidated in the same
+-- transaction so no older reset link remains reusable after success.
+create or replace function public.consume_password_set_token(
+  p_token text,
+  p_password_hash text
+) returns text
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  token_row public.password_set_tokens%rowtype;
+begin
+  select * into token_row
+  from public.password_set_tokens
+  where token = p_token
+  for update;
+
+  if not found then return 'invalid'; end if;
+  if token_row.used_at is not null then return 'used'; end if;
+  if token_row.expires_at < now() then return 'expired'; end if;
+
+  update public.users
+  set password_hash = p_password_hash
+  where id = token_row.user_id;
+  if not found then raise exception 'password token references a missing user'; end if;
+
+  update public.password_set_tokens
+  set used_at = now()
+  where user_id = token_row.user_id and used_at is null;
+
+  return 'ok';
+end;
+$$;
+revoke all on function public.consume_password_set_token(text, text) from public;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on function public.consume_password_set_token(text, text) from anon;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke all on function public.consume_password_set_token(text, text) from authenticated;
+  end if;
+end $$;
+
 -- ============================================================
 -- Tabella: allowed_domains
 -- Domains permitted for Google OAuth sign-in.
@@ -74,6 +117,69 @@ create table if not exists allowed_domains (
 );
 
 alter table allowed_domains enable row level security;
+
+-- Shared, database-backed abuse control for all authentication entry points.
+-- Only keyed HMAC identifiers are stored; raw IP addresses, emails, and reset
+-- tokens never enter this table.
+create table if not exists auth_rate_limit (
+  scope           text        not null,
+  dimension       text        not null check (dimension in ('ip', 'account')),
+  identifier_hash varchar(64) not null,
+  window_start    timestamptz not null,
+  attempts        integer     not null check (attempts > 0),
+  primary key (scope, dimension, identifier_hash, window_start)
+);
+alter table auth_rate_limit enable row level security;
+
+create or replace function public.check_auth_rate_limit(
+  p_scope text,
+  p_ip_hash text,
+  p_account_hash text,
+  p_ip_limit integer,
+  p_account_limit integer,
+  p_window_seconds integer
+) returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  bucket_start timestamptz;
+  allowed boolean;
+begin
+  if p_ip_limit < 1 or p_account_limit < 1 or p_window_seconds < 1 or p_window_seconds > 86400 then
+    raise exception 'invalid authentication rate-limit configuration';
+  end if;
+  bucket_start := date_bin(make_interval(secs => p_window_seconds), clock_timestamp(), timestamptz '1970-01-01');
+
+  with bumped as (
+    insert into public.auth_rate_limit (scope, dimension, identifier_hash, window_start, attempts)
+    values
+      (p_scope, 'ip', p_ip_hash, bucket_start, 1),
+      (p_scope, 'account', p_account_hash, bucket_start, 1)
+    on conflict (scope, dimension, identifier_hash, window_start)
+    do update set attempts = public.auth_rate_limit.attempts + 1
+    returning dimension, attempts
+  )
+  select bool_and(case when dimension = 'ip' then attempts <= p_ip_limit else attempts <= p_account_limit end)
+  into allowed
+  from bumped;
+
+  if random() < 0.01 then
+    delete from public.auth_rate_limit where window_start < clock_timestamp() - interval '2 days';
+  end if;
+  return coalesce(allowed, false);
+end;
+$$;
+revoke all on function public.check_auth_rate_limit(text, text, text, integer, integer, integer) from public;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on function public.check_auth_rate_limit(text, text, text, integer, integer, integer) from anon;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke all on function public.check_auth_rate_limit(text, text, text, integer, integer, integer) from authenticated;
+  end if;
+end $$;
 
 -- Seed: frontiere.io as the first allowed domain
 insert into allowed_domains (domain, active)
@@ -329,23 +435,40 @@ insert into user_role (user_id, id_role)
 select id, 0 from users
 on conflict (user_id, id_role) do nothing;
 
--- Legacy admins get Administrator (id 1).
--- Guarded: `alter table users drop column if exists role` above has already
--- removed the legacy column on every migrated database, and it never existed on
--- a fresh one — so an unguarded reference to it makes this whole script
--- unrunnable rather than idempotent. Kept for deployments still mid-migration.
-do $$ begin
+-- Legacy admins get Administrator (id 1), then the source column is dropped.
+-- The dynamic statements keep fresh installs valid (they never had users.role),
+-- while this single DO block makes backfill, verification, and drop atomic.
+do $$
+declare
+  legacy_admin_count bigint;
+  migrated_admin_count bigint;
+begin
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'users' and column_name = 'role'
   ) then
+    execute 'select count(*) from public.users where role = ''admin'''
+      into legacy_admin_count;
     execute $backfill$
       insert into user_role (user_id, id_role)
       select id, 1 from users where role = 'admin'
       on conflict (user_id, id_role) do nothing
     $backfill$;
+    execute $verify$
+      select count(*)
+      from public.users u
+      join public.user_role ur on ur.user_id = u.id and ur.id_role = 1
+      where u.role = 'admin'
+    $verify$ into migrated_admin_count;
+    if migrated_admin_count <> legacy_admin_count then
+      raise exception 'legacy administrator migration incomplete: expected %, migrated %',
+        legacy_admin_count, migrated_admin_count;
+    end if;
+    alter table public.users drop column role;
+    raise notice 'Migrated % legacy administrator assignment(s) before dropping users.role', legacy_admin_count;
   end if;
-end $$;
+end
+$$;
 
 -- ============================================================
 -- RBAC: role list view (counts for the roles table)
@@ -1143,3 +1266,303 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- Migration: 0002_runtime_boundary.sql
+-- Server-only database boundary. The application login is a member of this
+-- NOLOGIN role; migration ownership stays on a separate operator identity.
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'construct_runtime') then
+    create role construct_runtime nologin;
+  end if;
+  alter role construct_runtime
+    nologin nosuperuser nocreatedb nocreaterole noreplication nobypassrls;
+end
+$$;
+
+revoke create on schema public from public;
+grant usage on schema public to construct_runtime;
+
+-- Supabase Data API roles are deliberately outside the application boundary.
+do $$
+declare
+  api_role text;
+  relation record;
+begin
+  foreach api_role in array array['anon', 'authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = api_role) then
+      for relation in
+        select c.relname
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'S')
+      loop
+        execute format('revoke all on public.%I from %I', relation.relname, api_role);
+      end loop;
+    end if;
+  end loop;
+end
+$$;
+
+-- The runtime role receives row access but never ownership, DDL, role, or
+-- migration-history privileges. RLS policies are role-specific because the
+-- server connection is the sole trusted application principal.
+do $$
+declare
+  relation record;
+begin
+  for relation in
+    select c.relname, c.relrowsecurity
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind in ('r', 'p')
+      and c.relname <> 'construct_schema_migration'
+  loop
+    execute format('revoke all on table public.%I from public', relation.relname);
+    execute format('grant select, insert, update, delete on table public.%I to construct_runtime', relation.relname);
+    if relation.relrowsecurity then
+      execute format('drop policy if exists construct_runtime_server_access on public.%I', relation.relname);
+      execute format(
+        'create policy construct_runtime_server_access on public.%I for all to construct_runtime using (true) with check (true)',
+        relation.relname
+      );
+    end if;
+  end loop;
+end
+$$;
+
+revoke all on table public.construct_schema_migration from public, construct_runtime;
+
+do $$
+declare
+  sequence_row record;
+begin
+  for sequence_row in
+    select c.relname
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind = 'S'
+  loop
+    execute format('revoke all on sequence public.%I from public', sequence_row.relname);
+    execute format('grant usage, select on sequence public.%I to construct_runtime', sequence_row.relname);
+  end loop;
+end
+$$;
+
+alter view public.role_list_view set (security_invoker = true);
+revoke all on table public.role_list_view from public;
+grant select on table public.role_list_view to construct_runtime;
+
+-- Eliminate search-path injection on functions callable by the server. Their
+-- bodies use qualified application relations (the two legacy bodies below are
+-- normalized first).
+create or replace function public.apply_role_permission_deltas(
+  p_role_id bigint, p_grant_ids bigint[], p_revoke_ids bigint[]
+) returns void language plpgsql security invoker set search_path = '' as $$
+begin
+  if array_length(p_grant_ids, 1) is not null then
+    insert into public.role_item (id_role, id_item, authorized)
+      select p_role_id, unnest(p_grant_ids), true
+      on conflict (id_role, id_item) do update set authorized = true;
+  end if;
+  if array_length(p_revoke_ids, 1) is not null then
+    delete from public.role_item where id_role = p_role_id and id_item = any(p_revoke_ids);
+  end if;
+  update public.role set date_mod = now() where id_role = p_role_id;
+end;
+$$;
+
+create or replace function public.set_default_language(p_id_language bigint)
+returns void language plpgsql security invoker set search_path = '' as $$
+declare v_active boolean;
+begin
+  select is_active into v_active from public.app_language
+    where id_language = p_id_language for update;
+  if not found then raise exception 'Language % not found', p_id_language; end if;
+  if not v_active then raise exception 'Language % is not active', p_id_language; end if;
+  update public.app_language set is_default = false
+    where is_default and id_language <> p_id_language;
+  update public.app_language set is_default = true
+    where id_language = p_id_language;
+end;
+$$;
+
+alter function public.consume_password_set_token(text, text) set search_path = '';
+alter function public.check_auth_rate_limit(text, text, text, integer, integer, integer) set search_path = '';
+alter function public.replace_user_roles(uuid, bigint[]) set search_path = '';
+alter function public.replace_item_tags(bigint, jsonb) set search_path = '';
+
+revoke execute on all functions in schema public from public;
+grant execute on function public.consume_password_set_token(text, text) to construct_runtime;
+grant execute on function public.check_auth_rate_limit(text, text, text, integer, integer, integer) to construct_runtime;
+grant execute on function public.replace_user_roles(uuid, bigint[]) to construct_runtime;
+grant execute on function public.apply_role_permission_deltas(bigint, bigint[], bigint[]) to construct_runtime;
+grant execute on function public.replace_item_tags(bigint, jsonb) to construct_runtime;
+grant execute on function public.set_default_language(bigint) to construct_runtime;
+
+alter default privileges in schema public revoke all on tables from public;
+alter default privileges in schema public grant select, insert, update, delete on tables to construct_runtime;
+alter default privileges in schema public revoke all on sequences from public;
+alter default privileges in schema public grant usage, select on sequences to construct_runtime;
+alter default privileges in schema public revoke execute on functions from public;
+
+create index if not exists user_role_id_role_user_id_idx
+  on public.user_role (id_role, user_id);
+create index if not exists navigation_item_parent_order_idx
+  on public.navigation_item (id_item_parent, order_position);
+
+-- Migration: 0003_admin_invariant.sql
+-- Serialize all administrator-membership/status mutations across sessions so
+-- their post-condition is checked against one authoritative database state.
+create or replace function public.replace_user_roles_guarded(
+  p_user_id uuid,
+  p_role_ids bigint[]
+) returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  requested_roles bigint[] := array(
+    select distinct value from unnest(array_append(coalesce(p_role_ids, '{}'::bigint[]), 0::bigint)) value
+  );
+begin
+  perform pg_catalog.pg_advisory_xact_lock(49374202);
+
+  if not exists (select 1 from public.users where id = p_user_id) then
+    raise exception using errcode = 'P0001', message = 'user_not_found';
+  end if;
+  if exists (
+    select 1 from unnest(requested_roles) requested(id_role)
+    where not exists (select 1 from public.role r where r.id_role = requested.id_role)
+  ) then
+    raise exception using errcode = 'P0001', message = 'invalid_role';
+  end if;
+
+  delete from public.user_role where user_id = p_user_id;
+  insert into public.user_role (user_id, id_role)
+    select p_user_id, unnest(requested_roles);
+
+  if not exists (
+    select 1
+    from public.users u
+    join public.user_role ur on ur.user_id = u.id
+    where u.id_user_status = 2 and ur.id_role = 1
+  ) then
+    raise exception using errcode = 'P0001', message = 'last_active_administrator';
+  end if;
+end;
+$$;
+
+create or replace function public.set_user_status_guarded(
+  p_user_id uuid,
+  p_status bigint
+) returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  perform pg_catalog.pg_advisory_xact_lock(49374202);
+  if p_status not in (1, 2) then
+    raise exception using errcode = 'P0001', message = 'invalid_user_status';
+  end if;
+
+  update public.users
+  set id_user_status = p_status, last_status_ts = clock_timestamp()
+  where id = p_user_id;
+  if not found then
+    raise exception using errcode = 'P0001', message = 'user_not_found';
+  end if;
+
+  if not exists (
+    select 1
+    from public.users u
+    join public.user_role ur on ur.user_id = u.id
+    where u.id_user_status = 2 and ur.id_role = 1
+  ) then
+    raise exception using errcode = 'P0001', message = 'last_active_administrator';
+  end if;
+end;
+$$;
+
+revoke all on function public.replace_user_roles_guarded(uuid, bigint[]) from public;
+revoke all on function public.set_user_status_guarded(uuid, bigint) from public;
+grant execute on function public.replace_user_roles_guarded(uuid, bigint[]) to construct_runtime;
+grant execute on function public.set_user_status_guarded(uuid, bigint) to construct_runtime;
+
+-- Migration: 0004_invitation_lifecycle.sql
+alter table public.password_set_tokens
+  add column if not exists purpose text not null default 'reset',
+  add column if not exists delivery_status text not null default 'sent',
+  add column if not exists delivery_attempted_at timestamptz,
+  add column if not exists delivered_at timestamptz,
+  add column if not exists delivery_error_code varchar(64),
+  add column if not exists superseded_at timestamptz,
+  add column if not exists requested_by uuid references public.users(id) on delete set null;
+
+do $$ begin
+  alter table public.password_set_tokens add constraint password_set_tokens_purpose_check
+    check (purpose in ('reset', 'invitation'));
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.password_set_tokens add constraint password_set_tokens_delivery_status_check
+    check (delivery_status in ('pending', 'sent', 'failed'));
+exception when duplicate_object then null; end $$;
+
+create index if not exists password_set_tokens_invitation_state_idx
+  on public.password_set_tokens (user_id, purpose, delivery_status, created_at desc)
+  where used_at is null and superseded_at is null;
+
+create or replace function public.consume_password_set_token(
+  p_token text,
+  p_password_hash text
+) returns text
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  token_row public.password_set_tokens%rowtype;
+begin
+  select * into token_row
+  from public.password_set_tokens
+  where token = p_token
+  for update;
+
+  if not found then return 'invalid'; end if;
+  if token_row.used_at is not null then return 'used'; end if;
+  if token_row.superseded_at is not null then return 'superseded'; end if;
+  if token_row.expires_at < now() then return 'expired'; end if;
+  if token_row.purpose = 'invitation' and token_row.delivery_status <> 'sent' then
+    return 'undelivered';
+  end if;
+
+  update public.users set password_hash = p_password_hash where id = token_row.user_id;
+  if not found then raise exception 'password token references a missing user'; end if;
+
+  update public.password_set_tokens
+  set used_at = now()
+  where user_id = token_row.user_id and used_at is null;
+  return 'ok';
+end;
+$$;
+
+revoke all on function public.consume_password_set_token(text, text) from public;
+grant execute on function public.consume_password_set_token(text, text) to construct_runtime;
+
+-- Migration: 0005_data_api_default_privileges.sql
+-- Keep future objects closed to Supabase Data API principals as well as the
+-- application objects that existed when the runtime boundary was introduced.
+do $$
+declare
+  api_role text;
+begin
+  foreach api_role in array array['anon', 'authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = api_role) then
+      execute format('alter default privileges in schema public revoke all on tables from %I', api_role);
+      execute format('alter default privileges in schema public revoke all on sequences from %I', api_role);
+      execute format('alter default privileges in schema public revoke execute on functions from %I', api_role);
+    end if;
+  end loop;
+end
+$$;

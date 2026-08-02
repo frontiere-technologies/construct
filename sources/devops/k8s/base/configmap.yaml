@@ -9,4 +9,3 @@ data:
   MAIL_PROVIDER: "resend"
   AUTH_URL: "http://construct.local"
   RESEND_FROM: "noreply@frontiere.io"
-  NEXT_PUBLIC_AUTH_TEST_MODE: "false"

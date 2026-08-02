@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-construct-config
+  namespace: construct
+data:
+  AUTH_URL: https://construct.example.com

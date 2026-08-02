@@ -8,6 +8,7 @@ import { appLanguage, users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { listActiveLanguages } from './language-service'
 import { LANG_COOKIE, LANG_COOKIE_MAX_AGE, LANG_SESSION_COOKIE } from './types'
+import { shouldUseSecureCookies } from './cookie-security'
 
 const log = createLogger('i18n-preference')
 
@@ -41,7 +42,7 @@ export async function setPreferredLanguage(code: string): Promise<{ error: strin
     path: '/',
     httpOnly: true,
     sameSite: 'lax' as const,
-    secure: process.env.NODE_ENV === 'production',
+    secure: shouldUseSecureCookies(process.env.AUTH_URL ?? process.env.NEXTAUTH_URL, process.env.NODE_ENV),
   }
   store.set(LANG_SESSION_COOKIE, language.code, common)
   store.set(LANG_COOKIE, language.code, { ...common, maxAge: LANG_COOKIE_MAX_AGE })

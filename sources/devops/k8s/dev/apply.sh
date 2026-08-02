@@ -10,16 +10,16 @@ if [ ! -f "$SCRIPT_DIR/secret.env" ]; then
 fi
 
 echo "→ Creazione namespace construct..."
-kubectl create namespace construct --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f "$SCRIPT_DIR/../base/namespace.yaml"
 
 echo "→ Applicazione secret..."
-kubectl create secret generic web-construct-secret \
+kubectl create secret generic web-construct-runtime-secret \
   --from-env-file="$SCRIPT_DIR/secret.env" \
   --namespace=construct \
   --dry-run=client -o yaml | kubectl apply -f -
 
-echo "→ Applicazione manifest..."
-kubectl apply -f "$SCRIPT_DIR"
+echo "→ Applicazione base + overlay di sviluppo..."
+kubectl apply -k "$SCRIPT_DIR/../overlays/dev"
 
 echo ""
 echo "✓ Deploy completato. Attendi che il pod sia Ready:"

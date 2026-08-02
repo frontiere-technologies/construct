@@ -1,6 +1,7 @@
 'use client'
 
 import React, { lazy, Suspense, useMemo, memo } from 'react'
+import Image from 'next/image'
 import type { ComponentType } from 'react'
 import type { LucideProps } from 'lucide-react'
 import { HelpCircle } from 'lucide-react'
@@ -38,13 +39,14 @@ export const IconRenderer: React.FC<IconRendererProps> = memo(({ name, className
 
   if (isImagePath(name)) {
     return (
-      <img
-        src={name}
+      <Image
+        src={name?.startsWith('/') || name?.startsWith('http') ? name! : `/${name ?? ''}`}
         alt=""
         width={size}
         height={size}
         className={className}
         style={{ objectFit: 'contain' }}
+        unoptimized
       />
     )
   }

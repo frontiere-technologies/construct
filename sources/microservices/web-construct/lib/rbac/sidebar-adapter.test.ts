@@ -80,6 +80,14 @@ describe('mapNavigationToSidebar', () => {
     const embed = result.find(i => i.id === '200')!
     expect(embed.route).toBe('/embedded/200')
   })
+
+  it('uses the configured default language before the legacy English fallback', () => {
+    const localized = fn(300, 0, 'database name', 'localized', {
+      item_translation: { IT: { name: 'Italiano' }, EN: { name: 'English' } },
+    })
+    const [menuItem] = mapNavigationToSidebar([cat(0, null, 'root'), localized], new Set([300]), 'DE', 'IT')
+    expect(menuItem.label).toBe('Italiano')
+  })
 })
 
 describe('mapNavigationToSidebar external-link target', () => {

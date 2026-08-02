@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { and, asc, desc, count, gte, ilike, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, count, eq, exists, gte, ilike, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { users, userRole } from '@/lib/db/schema'
 import { getAllRoles } from './roles-service'
@@ -17,16 +17,6 @@ const SORT_COLUMNS = {
   id_user_status: users.idUserStatus,
 } as const
 
-async function candidateUserIds(roleIds: number[] | undefined): Promise<string[] | null> {
-  if (!roleIds?.length) return null
-  try {
-    const rows = await db.select({ userId: userRole.userId }).from(userRole).where(inArray(userRole.idRole, roleIds))
-    return Array.from(new Set(rows.map(r => r.userId)))
-  } catch (err) {
-    throw new Error(`Failed to filter by role: ${err instanceof Error ? err.message : String(err)}`)
-  }
-}
-
 function textSearchCondition(
   search: UsersQuery['nameSearch'],
   columns: Parameters<typeof ilike>[0][],
@@ -40,7 +30,7 @@ function textSearchCondition(
   return textSearch.operator === 'OR' ? or(...termConditions)! : and(...termConditions)!
 }
 
-export function applyUserFilters(query: UsersQuery, ids: string[] | null): SQL[] {
+export function applyUserFilters(query: UsersQuery, roleIds: number[] | undefined): SQL[] {
   const conditions: SQL[] = []
   const nameCondition = textSearchCondition(query.nameSearch, [users.firstName, users.lastName])
   const emailCondition = textSearchCondition(query.emailSearch, [users.email])
@@ -57,13 +47,18 @@ export function applyUserFilters(query: UsersQuery, ids: string[] | null): SQL[]
     if (!isSupportedRbacInclusiveDateTo(query.updatedTo)) throw new Error('updatedTo exceeds the supported inclusive upper bound')
     conditions.push(lt(users.updatedAt, nextDay(query.updatedTo)))
   }
-  if (ids) conditions.push(inArray(users.id, ids.length ? ids : ['00000000-0000-0000-0000-000000000000']))
+  if (roleIds?.length) {
+    conditions.push(exists(
+      db.select({ one: sql`1` })
+        .from(userRole)
+        .where(and(eq(userRole.userId, users.id), inArray(userRole.idRole, roleIds))),
+    ))
+  }
   return conditions
 }
 
 export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserDTO[]; total: number }> => {
-  const ids = await candidateUserIds(query.roleIds)
-  const conditions = applyUserFilters(query, ids)
+  const conditions = applyUserFilters(query, query.roleIds)
   const where = conditions.length ? and(...conditions) : undefined
   const ascending = (query.direction ?? 'DESC') === 'ASC'
   const from = query.page * query.size
@@ -110,8 +105,7 @@ export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserD
 })
 
 export const countUsers = cache(async (query: UsersQuery): Promise<number> => {
-  const ids = await candidateUserIds(query.roleIds)
-  const conditions = applyUserFilters(query, ids)
+  const conditions = applyUserFilters(query, query.roleIds)
   const where = conditions.length ? and(...conditions) : undefined
   try {
     const [{ value }] = await db.select({ value: count() }).from(users).where(where)

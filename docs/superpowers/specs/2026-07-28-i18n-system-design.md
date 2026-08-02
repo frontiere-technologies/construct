@@ -21,7 +21,7 @@ This document records the decisions this plan actually made and why, written aft
 - [x] ✅ ID=DEC-4, Title=Trigger-driven dictionary versioning — a DB trigger bumps `app_language.dictionary_version`, not app-level pub/sub or manual cache-busting.
 - [x] ✅ ID=DEC-5, Title=Drawer-based translations editor — one key's full row of languages edited in a side drawer, not inline grid cells.
 - [x] ✅ ID=DEC-6, Title=Optimistic locking on both key and value — two independent version counters, not one.
-- [x] ✅ ID=DEC-7, Title=Pino structured audit instead of an audit table — no new persistence subsystem.
+- [x] ✅ ID=DEC-7, Title=Pino structured diagnostics instead of an audit table — no durability claim.
 - [x] ✅ ID=DEC-8, Title=Rate limiting deliberately out of scope — access control and bounded responses/payloads reduce exposure, but the lack of request-rate controls remains an accepted trade-off.
 
 ---
@@ -84,11 +84,11 @@ A second mapping table (UI language code → content locale) was deliberately no
 
 **Tied to Task 9's fix:** the first implementation compared versions in JavaScript after a plain `SELECT` (no row lock under READ COMMITTED) and then issued the `UPDATE`/`DELETE` keyed only by primary key — a genuine lost-update bug, since two concurrent requests could both pass the JS check before either write landed. The final implementation in `lib/i18n/translation-actions.ts` moves the version into the `UPDATE ... WHERE id = ... AND version = ...` predicate itself for **both** counters independently, so the database — not application-level JavaScript — is what actually enforces "you may only write if your version is still current." The real two-transaction interleavings are versioned in `lib/i18n/translation-actions.integration.test.ts`: one transaction's write blocks on the other's row lock, then re-evaluates its own `WHERE version = ...` against the committed row and correctly affects zero rows for both key and per-value versions.
 
-## DEC-7 — Pino audit instead of an audit table
+## DEC-7 — Pino diagnostics instead of an audit table
 
-**Decision:** Every admin i18n mutation (language create/update/activate/deactivate/delete/set-default, translation key create/delete, translation value save) emits a structured Pino log event via `lib/i18n/audit.ts#auditI18n()`, tagged `module: 'i18n-audit'`, `audit: 'i18n'`. There is no new `i18n_audit_log` table.
+**Decision:** Every admin i18n mutation (language create/update/activate/deactivate/delete/set-default, translation key create/delete, translation value save) emits a structured, best-effort diagnostic Pino event via `lib/i18n/audit.ts#auditI18n()`, tagged `module: 'i18n-audit'`, `audit: 'i18n'`. There is no new `i18n_audit_log` table and no completeness or compliance guarantee.
 
-**Why (documented in the plan, `docs/superpowers/plans/2026-07-28-i18n-system.md:25`):** "No audit table, no audit service. §13.1 is conditional (\"se il progetto dispone già di un sistema di audit\") — this plan adds structured Pino audit events instead of a new table, the least invasive option." The original spec's audit requirement is conditional on an existing audit system, and this repo has none — no audit table, no audit service, for any of its existing admin mutations (roles, functionalities, users). Building one specifically for i18n would introduce a new persistence subsystem (a table, a write path, a retention policy, a query/reporting surface) that the rest of the admin surface doesn't have, for a single feature. Structured Pino events (already the app's logging backbone, per `lib/logger.ts`) carry the same who/what/when information — actor, event type, entity id, before/after for updates — at a fraction of the implementation and storage footprint, and land wherever the rest of the app's logs already land.
+**Why:** This template has no durable audit subsystem for any administrative surface. Building one only for i18n would create misleading partial coverage. The diagnostic events retain useful actor/event/entity context, while the production operator owns stdout collection, access controls, alerting, retention, and periodic redaction tests. Because recording failures are swallowed after a mutation commits, these events must never be used as proof that every mutation was captured.
 
 ## DEC-8 — Rate limiting deliberately out of scope
 

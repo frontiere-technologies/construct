@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from './db/schema'
+import { resolveDatabaseUrl } from './test-database'
 
 // Supavisor transaction-mode pooling does not support prepared statements
 // across the pooled connection — prepare: false is required, not optional.
@@ -11,6 +12,6 @@ import * as schema from './db/schema'
 // saturated pool silently blocked new connections for the full 30s default
 // instead of failing fast — a wider pool absorbs the same concurrency
 // without queuing, and a shorter timeout surfaces genuine exhaustion quickly.
-const client = postgres(process.env.DATABASE_URL!, { prepare: false, max: 20, connect_timeout: 10 })
+const client = postgres(resolveDatabaseUrl(process.env), { prepare: false, max: 20, connect_timeout: 10 })
 
 export const db = drizzle(client, { schema })

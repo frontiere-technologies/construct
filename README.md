@@ -1,313 +1,225 @@
 # Construct
 
-**Construct** is a production-ready application template built with Next.js 15 and React 19. Clone it, configure your providers, and start building your product — authentication, authorization, navigation, user profiles, and theming are already wired up.
+Construct is a production-ready application template built with Next.js 16 and React 19. Authentication, live authorization checks, database-driven navigation, user profiles, internationalization, and theming are included.
 
-Read also the ./CLAUDE.md file.
+Read [CLAUDE.md](./CLAUDE.md) for repository-specific engineering rules.
 
----
-
-## What's Included
+## Included features
 
 | Feature | Description |
 |---|---|
-| **Authentication** | OIDC login via Google, Keycloak, Microsoft Entra ID. Test credentials for local development. |
-| **Authorization (RBAC)** | Role-based access control. Each user has a role (`admin` or `user`). Routes and menu items are filtered by role automatically. |
-| **Dynamic Menu** | Database-driven navigation with support for nested items, icons, role visibility, drag-to-reorder, and collapsible sections. |
-| **Menu Builder** | Admin UI to create, edit, reorder, and delete menu items without touching code. |
-| **User Profile** | Each user can edit their first/last name, username, and phone number. Avatar and email come from the OIDC provider. |
-| **Theming** | Customizable color palette (primary, sidebar, text, active states) stored per-user in the database. Dark mode supported. |
-| **Protected Layout** | All routes are automatically protected. Unauthenticated users are redirected to login. |
-| **Admin Panel** | Dedicated `/admin` area (role-gated at middleware level) for menu management and theme configuration. |
+| Authentication | Auth.js v5 with Google, Microsoft Entra ID, Keycloak, and local email/password |
+| Authorization | Multi-role RBAC through `role`, `user_role`, and `role_item`; deactivation and demotion take effect on the next request |
+| Navigation | Database-driven category/functionality tree with tags, translations, permissions, and transactional reordering |
+| Administration | User status/role management, navigation builder, permissions, languages, translations, and theme configuration |
+| Internationalization | Database-backed UI dictionaries with language fallback and optimistic-lock editing |
+| Testing | Vitest unit tests, disposable-database integration tests, and Python/Playwright E2E tests |
+| Deployment | Standalone Next.js container, reusable Kustomize base, dev overlay, and hardened production example |
 
----
+## Technology
 
-## Tech Stack
+- Next.js 16 App Router, React 19, and TypeScript
+- Tailwind CSS v4 and Lucide icons
+- Auth.js v5, bcrypt, and Zod
+- PostgreSQL hosted by Supabase, accessed directly with Drizzle and `postgres.js` (Supabase Auth is not used)
+- Pino logging, Nodemailer/Resend email, Vitest, pytest, and Playwright
 
-| Layer | Technology |
-|---|---|
-| Frontend | Next.js 16 (App Router), React 19, TypeScript |
-| Styling | Tailwind CSS v4, CSS custom properties |
-| Icons | Lucide React |
-| Drag & Drop | dnd-kit (`@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`) |
-| Authentication | Auth.js v5 (NextAuth) — OIDC providers |
-| Password hashing | bcryptjs |
-| HTML sanitization | isomorphic-dompurify |
-| Database | PostgreSQL via Supabase (database only, not Supabase Auth) |
-| Validation | Zod |
-| Email | Nodemailer + Resend |
-| Logging | Pino |
-| Testing | Vitest (unit) + Python/Playwright via `uv` (E2E) |
-| Deployment | Kubernetes — self-contained manifest directories per environment |
+## Repository layout
 
----
-
-## Architecture
-
-```
+```text
 construct/
-- sources/microservices/web-construct/  # Next.js 15 application
-    - app/
-        - login/                  # Login page (OIDC + test credentials)
-        - api/auth/               # Auth.js route handler
-        - (protected)/            # All protected routes
-            - page.tsx            # Dashboard (home)
-            - profile/            # User profile
-            - admin/
-                - menu-builder/   # Menu management
-                - theme/          # Theme configuration
-    - components/                 # React components (Sidebar, Login, ProfileForm, …)
-    - context/                    # AuthContext, UIContext (theme + settings)
-    - lib/                        # Server actions, services, Supabase client, Auth.js config
-    - types/                      # TypeScript types
-    - middleware.ts               # Route protection + admin RBAC enforcement
-- sources/devops/
-    - db/schema.sql               # Database schema (users + menu_items)
-    - k8s/dev/                    # Kubernetes manifests — self-contained per environment
-- sources/tests/e2e/              # Playwright E2E test suite
+├── sources/microservices/web-construct/
+│   ├── app/                     # App Router pages, server actions, and API routes
+│   ├── components/              # Shared client/server UI
+│   ├── context/                 # UI and i18n contexts
+│   ├── lib/                     # Auth, database, RBAC, i18n, and service code
+│   ├── types/                   # Shared TypeScript declarations
+│   └── proxy.ts                 # Authentication and admin-route admission
+├── sources/devops/db/migrations/ # Ordered immutable SQL migrations
+├── sources/devops/db/schema.sql  # Generated migration snapshot; never hand-edit
+├── sources/devops/k8s/base/      # Reusable Kubernetes resources
+├── sources/devops/k8s/overlays/  # Development and production-example overlays
+└── sources/tests/e2e/           # Python/Playwright E2E suite
 ```
 
-### Authentication Flow
+## Authentication and authorization
 
-1. Unauthenticated request → middleware redirects to `/login`
-2. User chooses an OIDC provider → redirected to provider login
-3. Provider callback hits `/api/auth/callback/[provider]`
-4. Auth.js `jwt()` callback:
-   - Upserts user in `users` table (email as unique key)
-   - Assigns `role: 'user'` on first login
-   - Stores `userId` and `role` in the JWT
-5. `session()` callback exposes `session.user.id` and `session.user.role`
-6. Middleware allows the request; protected layout loads menu filtered by role
+1. `proxy.ts` redirects unauthenticated or deactivated requests to `/login`.
+2. Auth.js validates an OIDC identity or an internal bcrypt password.
+3. OIDC identities are upserted into `users`; every first-time user receives Registered user role `0`.
+4. The JWT callback reloads the user's current `id_user_status` and role IDs from PostgreSQL on each request.
+5. The session exposes `id`, `roleIds`, `isAdmin`, `accountActive`, and the authentication provider.
+6. Privileged server actions reload status and roles again through `requireAdmin()`.
 
-### Authorization Model
+This means deactivating an account or removing Administrator role `1` revokes authority without waiting for the JWT to expire.
 
-Authorization is enforced at two levels:
-
-- **Middleware** (`middleware.ts`): blocks `/admin/*` for non-admin users, redirects unauthenticated requests to `/login`
-- **Menu visibility**: each menu item has a `roles: string[]` field; the sidebar renders only items where the user's role is included
-
-Roles are stored in the `users.role` column. The default role on first login is `'user'`. To promote a user to admin:
+To assign Administrator role safely:
 
 ```sql
-UPDATE users SET role = 'admin' WHERE email = 'user@example.com';
+insert into user_role (user_id, id_role)
+select id, 1 from users where email = 'user@example.com'
+on conflict (user_id, id_role) do nothing;
 ```
 
-### Menu System
+Use Admin → Users for normal role and status management. PostgreSQL serializes role/status changes and rejects any mutation that would remove the final active administrator; the UI also blocks self-demotion and self-deactivation early.
 
-Menu items are stored in the `menu_items` PostgreSQL table and fetched server-side (with caching). Each item supports:
+## Navigation
 
-- **Type**: `link` (navigates to a route) or `container` (collapsible folder)
-- **Position**: `top`, `main`, or `bottom` (sidebar sections)
-- **Role visibility**: only shown to users whose role is in the `roles` array
-- **Tree structure**: items can be nested via `parent_id`
-- **Order**: drag-to-reorder (atomic DB update via RPC)
-- **System items**: flagged items (admin panel, support) cannot be deleted via the UI
+`navigation_item` stores categories and functionalities, `navigation_item_tag` stores localized tags, and `role_item` stores role grants. Mutating operations are wrapped in database transactions and serialized with a transaction-scoped advisory lock, so item fields, tags, parent changes, and sibling order commit or roll back together.
 
-The Admin → Menu Builder page provides a full CRUD interface. No code changes needed.
+Use Admin → Menu Builder and Admin → Roles & Permissions rather than editing navigation rows manually.
 
-### Theming
+`user_role(id_role, user_id)` and `navigation_item(id_item_parent, order_position)` support reverse role lookup and sibling scans. Keep the current request-local full navigation read until production measurements show it is material—for example, sustained sidebar query p95 above the derived application's database budget or a navigation catalogue large enough to dominate request time. At that point add cache/invalidation from observed traces, not from row count alone.
 
-Theme configuration is a set of CSS custom properties (primary color, sidebar backgrounds, text colors, active item colors). The `UIContext` manages theme state client-side, persists to `localStorage`, and syncs to the `users.theme_config` column in the database. Dark mode is toggled by adding the `dark` class to `<html>`.
+## Internationalization
 
----
-
-## Internationalization (i18n)
-
-Every UI label in the app is resolved at render time through a database-backed dictionary — there is no i18n framework (`next-intl`, `i18next`, …) and no `[locale]` route segments; every route stays exactly where it is.
-
-### Data model
-
-Three tables in `sources/devops/db/schema.sql`:
+UI copy is stored in three tables:
 
 | Table | Purpose |
 |---|---|
-| `app_language` | One row per language: `code` (lowercase BCP-47 primary subtag, e.g. `it`, `en`), `locale` (full BCP-47 tag for `Intl` formatting, e.g. `it-IT`), `name`, `native_name`, `is_active`, `is_default`, `dictionary_version` (bumped by trigger on every translation change). At most one row can have `is_default = true` (partial unique index); the default row can never be inactive. |
-| `translation_key` | One row per translation key: `key` (dot-separated, e.g. `common.actions.save`), `namespace`, `module`, `description`, `version` (optimistic-lock counter for metadata edits). |
-| `translation_value` | One row per key × language: `value` (plain text, max 1000 chars), `version` (optimistic-lock counter for the value itself). Unique on `(id_translation_key, id_language)`. |
+| `app_language` | Language code, BCP-47 locale, active/default state, and dictionary version |
+| `translation_key` | Stable dot-separated key plus namespace/module metadata |
+| `translation_value` | One optimistic-locked value per key and language |
 
-`users.id_language` (FK to `app_language`, nullable) stores each user's saved preference. This is a separate concept from the pre-existing `navigation_item.item_translation` (content translations for menu items, keyed by the **uppercase** locale from `SUPPORTED_LOCALES` in `lib/rbac/types.ts`) — the protected layout bridges the two with `language.code.toUpperCase()`, falling back to `DEFAULT_LOCALE` when a newly added UI language has no matching content translations yet.
+Language resolution order is session switch, user profile, persistent cookie, browser `Accept-Language`, then the database default. A missing value falls back to the default language; development renders `[missing: key]` and production renders the bare key.
 
-### Language resolution order
+Use `/admin/languages` to manage languages and `/admin/translations` to manage keys and values. `app_language` also drives the navigation authoring locale list and configured fallback. Seed-time additions belong in a new ordered migration, never directly in generated `sources/devops/db/schema.sql`.
 
-`lib/i18n/resolve-language.ts#resolveActiveLanguage` picks the active language in this order, skipping any candidate that is missing, deleted, or deactivated:
+The structured `i18n-audit` Pino records are best-effort diagnostics, not a durable or compliance-grade audit system. A production deployment must route stdout/stderr to its log platform and define retention, access controls, monitoring, and redaction tests; a logging failure does not roll back a completed mutation.
 
-1. **session** — an explicit in-session switch (`construct_lang_session` cookie)
-2. **profile** — the authenticated user's `users.id_language`
-3. **cookie** — a persistent, 1-year `construct_lang` cookie (anonymous visitors)
-4. **browser** — the `Accept-Language` header, negotiated against active languages
-5. **default** — the `app_language` row with `is_default = true`
+## Local setup
 
-### Fallback chain
-
-`lib/i18n/translator.ts#createTranslator` looks up each key in the active language's dictionary, then the **default** language's dictionary (so a missing `en` value falls back to `it` when `it` is the default), and finally renders `[missing: key]` in development or the bare key in production — `t()` never throws.
-
-### Cache and invalidation
-
-`lib/i18n/dictionary-service.ts` loads one dictionary per language per version and keeps it in an in-memory `DictionaryStore` (`lib/i18n/dictionary-cache.ts`). `app_language.dictionary_version` is bumped by DB triggers: a `translation_value` insert/update/delete bumps only the affected language; a `translation_key` insert/update/delete bumps **every** language's version (a key change reshapes every dictionary, even if only its description or namespace changed — a deliberately coarse invalidation in exchange for one trigger instead of per-column change detection). The service polls the version table on a short TTL and drops its cache for a language whenever the version it holds is stale; an admin's own edit invalidates synchronously so they see their change immediately.
-
-### Admin pages
-
-- **`/admin/languages`** — create, edit, activate/deactivate, delete, and set the default language.
-- **`/admin/translations`** — a paged, filterable grid of every translation key with one column per active language; a drawer-based editor opens per key. Both the key's metadata (namespace/module/description) and each per-language value carry their own version, so editing metadata and editing a value's text are independent optimistic locks — a stale save (someone else edited first) shows a "Conflitto di modifica" banner with the saved value, the attempted value, and a reload action, instead of silently overwriting the concurrent edit.
-
-### Adding a language
-
-Use the **`/admin/languages`** UI — no schema or code change is needed. A newly added language has no translation values yet, so every key falls back to the default language until an admin fills in its values from `/admin/translations`.
-
-### Adding a translation key
-
-- **At seed time** — add a new entry to the relevant `apply_translation_seed(...)` call in `sources/devops/db/schema.sql` and re-run `node sources/devops/db/db.mjs apply`; the seed function is idempotent (existing keys/values are left untouched, only new ones are inserted).
-- **At runtime** — use the "Nuova chiave" button on `/admin/translations`, which opens a modal to create the key (namespace, module, description) and then fill in its values from the editor drawer.
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- A Supabase project (or local Supabase via CLI)
-- At least one OIDC provider configured (or test credentials enabled for local dev)
-
-### 1. Clone and install
+Requirements: Node.js 22+, npm, a PostgreSQL/Supabase database, and at least one OIDC provider (or local-only test credentials).
 
 ```bash
-git clone <repo-url> my-app
-cd my-app
+git clone <repo-url> construct
+cd construct
 npm run install:all
-```
-
-### 2. Set up the database
-
-Apply the schema to your database:
-
-```bash
-# Using Supabase CLI (local)
-supabase db push --file sources/devops/db/schema.sql
-
-# Or run the SQL directly in the Supabase dashboard / psql
-psql $DATABASE_URL -f sources/devops/db/schema.sql
-```
-
-### 3. Configure environment variables
-
-```bash
 cp sources/microservices/web-construct/.env.template sources/microservices/web-construct/.env.local
 ```
 
-Edit `.env.local`:
+Configure at minimum:
 
 ```env
-# Database
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+DATABASE_URL=postgresql://postgres.project:password@pooler-host:6543/postgres
+AUTH_SECRET=<output of: openssl rand -base64 32>
+AUTH_URL=http://localhost:3000
 
-# Auth.js
-AUTH_SECRET=generate-with-openssl-rand-base64-32
-
-# OIDC Providers (configure at least one, or enable test credentials)
+# Configure one or more providers:
+AUTH_GOOGLE_ID=
+AUTH_GOOGLE_SECRET=
 AUTH_MICROSOFT_ENTRA_ID_ID=
 AUTH_MICROSOFT_ENTRA_ID_SECRET=
 AUTH_MICROSOFT_ENTRA_ID_TENANT_ID=
-
-AUTH_GOOGLE_ID=
-AUTH_GOOGLE_SECRET=
-
 AUTH_KEYCLOAK_ID=
 AUTH_KEYCLOAK_SECRET=
 AUTH_KEYCLOAK_ISSUER=
-
-# Local development only
-NEXT_PUBLIC_AUTH_TEST_MODE=true
-AUTH_TEST_CREDENTIALS=true
 ```
 
-### 4. Run
+`DATABASE_URL` must use a dedicated limited login inheriting only `construct_runtime`. Browser code never connects to Supabase/PostgREST; all data access crosses the Next.js server boundary. Keep the owner-level migration URL outside the web directory/process; use `sources/devops/db/operator.env.example` only as an operator-side template:
+
+```bash
+export MIGRATION_DATABASE_URL='postgresql://...operator-only...'
+export CONSTRUCT_RUNTIME_DB_USER='construct_app'
+export CONSTRUCT_RUNTIME_DB_PASSWORD='<at-least-24-random-characters>'
+node sources/devops/db/db.mjs apply
+node sources/devops/db/db.mjs provision-runtime-role
+```
+
+Then put the new limited login in `DATABASE_URL` and start the app:
 
 ```bash
 cd sources/microservices/web-construct
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). You will be redirected to `/login`.
+Open [http://localhost:3000](http://localhost:3000).
 
----
+### Local test credentials
 
-## E2E Tests
+The test provider is available only outside production and only when both flags are true:
 
-Tests use Python + Playwright via `uv`:
-
-```bash
-# Run all tests
-uv run pytest
-
-# Run a specific suite
-uv run pytest sources/tests/e2e/test_sidebar.py
-
-# Coverage includes:
-# - Authentication flow (redirect, provider buttons, test login)
-# - RBAC (admin routes blocked for non-admin)
-# - Sidebar navigation and active state highlighting
-# - Profile form save
-# - Menu Builder CRUD
+```env
+AUTH_TEST_CREDENTIALS=true
+NEXT_PUBLIC_AUTH_TEST_MODE=true
 ```
 
----
+Production startup fails closed if either flag is enabled. Container and Kubernetes production templates do not expose these switches.
 
-## Adding New Pages
+## Verification
 
-1. Create a new file under `sources/microservices/web-construct/app/(protected)/your-page/page.tsx` — it is automatically protected by the middleware.
-2. Add a corresponding menu item via the Admin → Menu Builder UI (or directly in the DB).
-3. Optionally restrict it to `admin` role by setting `roles: ['admin']` in the menu item.
+Unit and static checks do not mutate a database:
 
-No changes to middleware, layout, or navigation code required.
+```bash
+cd sources/microservices/web-construct
+npm test
+npm run test:migrations
+npm run test:docs-contract
+npm run schema:check
+npm run lint -- --max-warnings=0
+npm run build
+npm audit --omit=dev
+```
 
----
+### Database integration and E2E tests
+
+Mutating tests require a separate disposable database. Commands refuse to run unless `TEST_DATABASE_URL` exists, differs from `DATABASE_URL`, and `TEST_DATABASE_DISPOSABLE=1` explicitly confirms the target can be destroyed or changed. Never use a shared development, staging, or production database.
+
+```bash
+export TEST_DATABASE_URL='postgresql://...dedicated-test-database...'
+export TEST_DATABASE_DISPOSABLE=1
+node sources/devops/db/db.mjs test-apply
+
+cd sources/microservices/web-construct
+npm run test:integration
+
+# Start the app against the same disposable database for E2E:
+DATABASE_URL="$TEST_DATABASE_URL" \
+  AUTH_TEST_CREDENTIALS=true \
+  NEXT_PUBLIC_AUTH_TEST_MODE=true \
+  npm run dev
+```
+
+In another terminal:
+
+```bash
+cp sources/tests/e2e/.env.test.example sources/tests/e2e/.env.test
+# Fill TEST_EMAIL, TEST_EMAIL_USER, TEST_DATABASE_URL, and TEST_DATABASE_DISPOSABLE=1.
+uv sync --locked
+uv run playwright install chromium
+uv run pytest sources/tests/e2e
+```
+
+The E2E fixture resets only its named users and removes the exact registration account created by that run, including after failures.
+
+## Adding application pages
+
+1. Add `app/(protected)/your-page/page.tsx`; the route is automatically protected by `proxy.ts`.
+2. Add its navigation item in Admin → Menu Builder.
+3. Grant access in Admin → Roles & Permissions.
+
+New server mutations must perform explicit authorization and validate their input. Use `lib/db.ts` for database access and keep multi-statement logical mutations in one transaction or validated PostgreSQL function.
 
 ## Deployment
 
-Kubernetes manifests are in `sources/devops/k8s/`. Each environment has its own self-contained directory with all the manifests it needs (Deployment, Service, ConfigMap, Ingress).
+The image is built from `sources/microservices/web-construct/Dockerfile` and runs as a non-root user. The Kubernetes base includes dedicated liveness/readiness endpoints, a read-only root filesystem, dropped capabilities, restricted egress, rolling updates, and separate runtime/migration secrets.
 
-```
-sources/devops/k8s/
-└── dev/
-    ├── deployment.yaml
-    ├── service.yaml
-    ├── configmap.yaml
-    ├── ingress.yaml
-    ├── secret.env.example   # copy to secret.env and fill in real values (gitignored)
-    └── apply.sh             # creates namespace + secret + applies all manifests
-```
-
-Deploy to local Docker Desktop K8s:
+For local Kubernetes development:
 
 ```bash
 cd sources/devops/k8s/dev
-cp secret.env.example secret.env   # fill in real values
+cp secret.env.example secret.env
+# Fill DATABASE_URL, AUTH_SECRET, provider secrets, and mail credentials.
 bash apply.sh
 ```
 
-To add staging or prod, create `sources/devops/k8s/staging/` or `sources/devops/k8s/prod/` with their own set of files.
+Validate both overlays before deployment:
 
----
+```bash
+bash sources/devops/k8s/validate.sh
+kubectl kustomize sources/devops/k8s/overlays/production-example
+```
 
-## Extending the Template
+The production example uses two replicas, TLS, a PodDisruptionBudget, and an immutable image-digest placeholder. Replace every example value for the derived application and follow [the production deployment runbook](docs/runbooks/production-deployment.md), including backup, checksummed migrations, role provisioning, rollout/rollback, restore approval, rotation, and log retention. The web pod receives only the limited `DATABASE_URL`; `MIGRATION_DATABASE_URL` belongs only to the operator or one-shot migration Job.
 
-This template is intentionally minimal outside of its core features. When building your product on top of it:
-
-- **New features** go under `app/(protected)/` — protected by default
-- **Shared UI components** go in `components/`
-- **Server actions** go in `lib/` — use Supabase service-role client from `lib/supabase-server.ts`
-- **New roles** are managed in the Admin area (`/roles-permissions`): create a SERVICE role and grant it navigation permissions (the legacy single `users.role` string column has been replaced by the N:N `role` / `user_role` / `role_item` model)
-- **New providers** can be added in `lib/auth.ts` following the existing pattern
-
----
-
-## RBAC rollout note (CARRY-5)
-
-The session JWT carries `roleIds` and `isAdmin`, populated at login. **Users who were logged in before the RBAC deploy hold a token without these claims** and fail closed — empty sidebar and no admin access — until their token refreshes or they log back in. This is safe (no privilege leak) but visible to active users during a rollout.
-
-Mitigation when deploying RBAC to an environment with live sessions:
-
-- **Preferred:** force re-authentication — set a short NextAuth session `maxAge` for the release window (so stale tokens expire quickly), or invalidate existing sessions, then restore the normal `maxAge`.
-- **Minimum:** include a release note telling users to log out and back in once after the deploy.
+The pod network policy permits DNS and required public HTTP/HTTPS, SMTP, and database pooler ports while excluding private, loopback, link-local, multicast, and reserved IPv4 destinations. Embedded-page checks additionally validate every DNS answer and pin the validated address through the outbound request.

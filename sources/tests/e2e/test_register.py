@@ -1,6 +1,4 @@
 """E2e tests for the self-registration flow (dedicated /register page)."""
-import time
-
 import pytest
 from playwright.sync_api import expect
 from helpers import nav
@@ -35,11 +33,10 @@ def test_register_unauthorized_domain_shows_confirmation(page, base_url):
     expect(page.get_by_text(REGISTER_CONFIRM)).to_be_visible(timeout=15_000)
 
 
-def test_register_authorized_domain_shows_confirmation(page, base_url):
+def test_register_authorized_domain_shows_confirmation(page, base_url, registration_email):
     """Submitting an authorized domain shows the confirmation message."""
     nav(page, f"{base_url}/register")
-    unique_email = f"register-test-{int(time.time())}@frontiere.io"
-    page.locator('input[type="email"]').fill(unique_email)
+    page.locator('input[type="email"]').fill(registration_email)
     page.locator('button[type="submit"]').click()
     expect(page.get_by_text(REGISTER_CONFIRM)).to_be_visible(timeout=10_000)
 

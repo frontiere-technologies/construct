@@ -2,6 +2,7 @@
 
 import React, { Suspense, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
@@ -10,7 +11,6 @@ import { useI18n } from '@/context/I18nContext'
 const ERROR_KEYS: Record<string, string> = {
   CredentialsSignin: 'auth.login.error_credentials',
   AccessDenied: 'auth.login.error_access_denied',
-  PasswordNotSet: 'auth.login.error_password_not_set',
   OAuthSignin: 'auth.login.error_oauth_signin',
   OAuthCallback: 'auth.login.error_oauth_callback',
   Default: 'auth.login.error_default',
@@ -69,7 +69,7 @@ function LoginForm() {
 
         {/* Header */}
         <div className="px-8 py-5 text-center" style={{ backgroundColor: '#0f2336' }}>
-          <img src="/logo.svg" alt="Construct" className="mx-auto" style={{ width: 140, height: 140 }} />
+          <Image src="/logo.svg" alt="Construct" width={140} height={140} priority className="mx-auto" />
           <p className="mt-6 text-xs" style={{ color: '#7fa8c4' }}>
             {t('auth.login.tagline')}
           </p>

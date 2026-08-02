@@ -12,35 +12,82 @@ function mockFetchOnce(response: Response) {
   return fn
 }
 
+function check(
+  url: string,
+  dependencies?: Parameters<typeof checkEmbeddable>[1],
+) {
+  return checkEmbeddable(url, dependencies ?? {
+    resolveHost: async () => [{ address: '93.184.216.34', family: 4 }],
+    request: async (target, method) => fetch(target, { method }),
+  })
+}
+
 describe('checkEmbeddable', () => {
+  it('rejects a hostname when DNS resolves it to a private address', async () => {
+    const request = vi.fn().mockResolvedValue(new Response(null, { status: 200 }))
+    const result = await check('https://internal.example', {
+      resolveHost: async () => [{ address: '10.0.0.8', family: 4 }],
+      request,
+    })
+    expect(result).toBe(false)
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('rejects a hostname if any DNS answer is reserved', async () => {
+    const request = vi.fn().mockResolvedValue(new Response(null, { status: 200 }))
+    const result = await check('https://mixed.example', {
+      resolveHost: async () => [
+        { address: '93.184.216.34', family: 4 },
+        { address: '169.254.169.254', family: 4 },
+      ],
+      request,
+    })
+    expect(result).toBe(false)
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('pins the validated DNS answer through the outbound request', async () => {
+    const request = vi.fn().mockResolvedValue(new Response(null, { status: 200 }))
+    const result = await check('https://public.example/path', {
+      resolveHost: async () => [{ address: '93.184.216.34', family: 4 }],
+      request,
+    })
+    expect(result).toBe(true)
+    expect(request).toHaveBeenCalledWith(
+      new URL('https://public.example/path'),
+      'HEAD',
+      { address: '93.184.216.34', family: 4 },
+    )
+  })
+
   it('returns true when no blocking headers are present', async () => {
     mockFetchOnce(new Response(null, { status: 200 }))
-    expect(await checkEmbeddable('https://example.com')).toBe(true)
+    expect(await check('https://example.com')).toBe(true)
   })
 
   it('returns false when X-Frame-Options is DENY', async () => {
     mockFetchOnce(new Response(null, { status: 200, headers: { 'X-Frame-Options': 'DENY' } }))
-    expect(await checkEmbeddable('https://example.com')).toBe(false)
+    expect(await check('https://example.com')).toBe(false)
   })
 
   it('returns false when X-Frame-Options is SAMEORIGIN', async () => {
     mockFetchOnce(new Response(null, { status: 200, headers: { 'X-Frame-Options': 'SAMEORIGIN' } }))
-    expect(await checkEmbeddable('https://example.com')).toBe(false)
+    expect(await check('https://example.com')).toBe(false)
   })
 
   it('returns false when X-Frame-Options is comma-combined (repeated header sent as "DENY, DENY")', async () => {
     mockFetchOnce(new Response(null, { status: 200, headers: { 'X-Frame-Options': 'DENY, DENY' } }))
-    expect(await checkEmbeddable('https://example.com')).toBe(false)
+    expect(await check('https://example.com')).toBe(false)
   })
 
   it('returns false when CSP frame-ancestors is \'none\'', async () => {
     mockFetchOnce(new Response(null, { status: 200, headers: { 'Content-Security-Policy': "frame-ancestors 'none'" } }))
-    expect(await checkEmbeddable('https://example.com')).toBe(false)
+    expect(await check('https://example.com')).toBe(false)
   })
 
   it('returns true when CSP frame-ancestors allows *', async () => {
     mockFetchOnce(new Response(null, { status: 200, headers: { 'Content-Security-Policy': 'frame-ancestors *' } }))
-    expect(await checkEmbeddable('https://example.com')).toBe(true)
+    expect(await check('https://example.com')).toBe(true)
   })
 
   it('returns true when CSP frame-ancestors explicitly lists this app\'s own origin', async () => {
@@ -49,7 +96,7 @@ describe('checkEmbeddable', () => {
       status: 200,
       headers: { 'Content-Security-Policy': 'frame-ancestors https://app.example.com' },
     }))
-    expect(await checkEmbeddable('https://example.com')).toBe(true)
+    expect(await check('https://example.com')).toBe(true)
   })
 
   it('falls back to GET when HEAD returns 405', async () => {
@@ -57,7 +104,7 @@ describe('checkEmbeddable', () => {
       .mockResolvedValueOnce(new Response(null, { status: 405 }))
       .mockResolvedValueOnce(new Response(null, { status: 200 }))
     vi.stubGlobal('fetch', fn)
-    expect(await checkEmbeddable('https://example.com')).toBe(true)
+    expect(await check('https://example.com')).toBe(true)
     expect(fn).toHaveBeenCalledTimes(2)
     expect(fn.mock.calls[0][1]?.method).toBe('HEAD')
     expect(fn.mock.calls[1][1]?.method).toBe('GET')
@@ -65,67 +112,67 @@ describe('checkEmbeddable', () => {
 
   it('returns false when fetch throws (network error / timeout)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')))
-    expect(await checkEmbeddable('https://example.com')).toBe(false)
+    expect(await check('https://example.com')).toBe(false)
   })
 
   it('returns false for a non-http(s) URL without calling fetch', async () => {
     const fn = mockFetchOnce(new Response(null, { status: 200 }))
-    expect(await checkEmbeddable('javascript:alert(1)')).toBe(false)
+    expect(await check('javascript:alert(1)')).toBe(false)
     expect(fn).not.toHaveBeenCalled()
   })
 
   it('returns false for a loopback literal (127.0.0.1) without calling fetch', async () => {
     const fn = mockFetchOnce(new Response(null, { status: 200 }))
-    expect(await checkEmbeddable('http://127.0.0.1/x')).toBe(false)
+    expect(await check('http://127.0.0.1/x')).toBe(false)
     expect(fn).not.toHaveBeenCalled()
   })
 
   it('returns false for a link-local literal (169.254.169.254, cloud metadata) without calling fetch', async () => {
     const fn = mockFetchOnce(new Response(null, { status: 200 }))
-    expect(await checkEmbeddable('http://169.254.169.254/')).toBe(false)
+    expect(await check('http://169.254.169.254/')).toBe(false)
     expect(fn).not.toHaveBeenCalled()
   })
 
   it('returns false when the response is a 3xx redirect', async () => {
     mockFetchOnce(new Response(null, { status: 302 }))
-    expect(await checkEmbeddable('https://example.com')).toBe(false)
+    expect(await check('https://example.com')).toBe(false)
   })
 
   it('returns false for an IPv4-mapped IPv6 loopback literal ([::ffff:127.0.0.1]) without calling fetch', async () => {
     const fn = mockFetchOnce(new Response(null, { status: 200 }))
-    expect(await checkEmbeddable('http://[::ffff:127.0.0.1]/')).toBe(false)
+    expect(await check('http://[::ffff:127.0.0.1]/')).toBe(false)
     expect(fn).not.toHaveBeenCalled()
   })
 
   it('returns false for an IPv4-mapped IPv6 cloud-metadata literal ([::ffff:a9fe:a9fe], 169.254.169.254) without calling fetch', async () => {
     const fn = mockFetchOnce(new Response(null, { status: 200 }))
-    expect(await checkEmbeddable('http://[::ffff:a9fe:a9fe]/')).toBe(false)
+    expect(await check('http://[::ffff:a9fe:a9fe]/')).toBe(false)
     expect(fn).not.toHaveBeenCalled()
   })
 
   it('returns false for the unspecified IPv6 address ([::]) without calling fetch', async () => {
     const fn = mockFetchOnce(new Response(null, { status: 200 }))
-    expect(await checkEmbeddable('http://[::]/')).toBe(false)
+    expect(await check('http://[::]/')).toBe(false)
     expect(fn).not.toHaveBeenCalled()
   })
 
   it('returns false for the IPv4-mapped IPv6 form of 0.0.0.0 ([::ffff:0:0]) without calling fetch', async () => {
     // new URL('http://[::ffff:0:0]/').hostname === '[::ffff:0:0]'
     const fn = mockFetchOnce(new Response(null, { status: 200 }))
-    expect(await checkEmbeddable('http://[::ffff:0:0]/')).toBe(false)
+    expect(await check('http://[::ffff:0:0]/')).toBe(false)
     expect(fn).not.toHaveBeenCalled()
   })
 
   it('returns false for the IPv4-mapped IPv6 dotted-decimal form of 0.0.0.0 ([::ffff:0.0.0.0]) without calling fetch', async () => {
     // new URL('http://[::ffff:0.0.0.0]/').hostname === '[::ffff:0:0]' (canonicalized by the WHATWG URL parser)
     const fn = mockFetchOnce(new Response(null, { status: 200 }))
-    expect(await checkEmbeddable('http://[::ffff:0.0.0.0]/')).toBe(false)
+    expect(await check('http://[::ffff:0.0.0.0]/')).toBe(false)
     expect(fn).not.toHaveBeenCalled()
   })
 
   it('returns false for a trailing-dot localhost (localhost.) without calling fetch', async () => {
     const fn = mockFetchOnce(new Response(null, { status: 200 }))
-    expect(await checkEmbeddable('http://localhost./')).toBe(false)
+    expect(await check('http://localhost./')).toBe(false)
     expect(fn).not.toHaveBeenCalled()
   })
 
@@ -134,7 +181,7 @@ describe('checkEmbeddable', () => {
       status: 200,
       headers: { 'Content-Security-Policy': "frame-ancestors 'none', default-src *" },
     }))
-    expect(await checkEmbeddable('https://example.com')).toBe(false)
+    expect(await check('https://example.com')).toBe(false)
   })
 
   it('returns false when CSP has an unrelated policy followed by a comma-joined blocking frame-ancestors policy', async () => {
@@ -142,7 +189,7 @@ describe('checkEmbeddable', () => {
       status: 200,
       headers: { 'Content-Security-Policy': "default-src 'self', frame-ancestors 'none'" },
     }))
-    expect(await checkEmbeddable('https://example.com')).toBe(false)
+    expect(await check('https://example.com')).toBe(false)
   })
 })
 

@@ -4,7 +4,7 @@ import {
   parseUsersGridDateParam, parseUsersGridUrlParams,
   usersUrlParamsToFilterModel, usersFilterModelToSearchParams,
 } from './users-grid-query'
-import UserManagementPage from '@/app/(protected)/user-management/page'
+import UserManagementPage from '@/app/(protected)/(admin)/user-management/page'
 
 vi.mock('@/lib/rbac/roles-service', () => ({ getAllRoles: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/lib/i18n/server', () => ({ getI18n: vi.fn().mockResolvedValue({ t: (key: string) => key }) }))

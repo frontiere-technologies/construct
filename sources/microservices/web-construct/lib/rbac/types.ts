@@ -1,7 +1,6 @@
 import type { TextSearch } from '@/lib/grid-text-search'
 
-export const SUPPORTED_LOCALES = ['EN', 'IT', 'DE', 'FR', 'ES', 'NL', 'PT', 'SK', 'RO'] as const
-export type Locale = (typeof SUPPORTED_LOCALES)[number]
+export type Locale = string
 export const DEFAULT_LOCALE: Locale = 'EN'
 
 export const ROLE_REGISTERED = 0

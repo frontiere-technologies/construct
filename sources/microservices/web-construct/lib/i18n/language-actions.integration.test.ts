@@ -16,14 +16,25 @@ const { createLanguage, deleteLanguage, setDefaultLanguage, setLanguageActive, u
 
 describeIntegration('language actions against the database', () => {
   let code: string
+  let originalDefaultId: number
 
   // `app_language.code` is validated against `^[a-z]{2,3}$` (language-rules.ts) —
   // lowercase letters only, no digits. `unique()`'s base36 suffix can contain
   // digits, so they are folded into letters (0-9 → a-j) rather than sliced raw,
   // which a literal `t${unique().slice(-2)}` would occasionally produce (e.g.
   // "t08") and fail the very first `createLanguage` call with a validation error.
-  beforeEach(() => { code = unique().slice(-3).replace(/[0-9]/g, d => String.fromCharCode(97 + Number(d))) })
-  afterEach(cleanupTestData)
+  beforeEach(async () => {
+    code = unique().slice(-3).replace(/[0-9]/g, d => String.fromCharCode(97 + Number(d)))
+    const [original] = await db.select({ id: appLanguage.idLanguage }).from(appLanguage).where(eq(appLanguage.isDefault, true))
+    originalDefaultId = Number(original.id)
+  })
+  afterEach(async () => {
+    await db.transaction(async tx => {
+      await tx.update(appLanguage).set({ isDefault: false }).where(eq(appLanguage.isDefault, true))
+      await tx.update(appLanguage).set({ isDefault: true }).where(eq(appLanguage.idLanguage, originalDefaultId))
+    })
+    await cleanupTestData()
+  })
 
   const input = (over: Partial<{ code: string; locale: string; isActive: boolean }> = {}) => ({
     code, locale: 'zz-ZZ', name: `zzz_i18n_test_${code}`, nativeName: `zzz_i18n_test_${code}`,
