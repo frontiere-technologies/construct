@@ -343,9 +343,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     setHoverPreviewOpen(false)
   }, [])
 
-  // Closes the preview on a real route change; container-expand clicks
-  // inside the preview don't change the route, so they don't close it.
+  // Close the preview on a real route change; container-expand clicks inside
+  // the preview don't change the route, so they don't close it. Cancel both
+  // timers too: an `mouseenter` scheduled just before navigation can otherwise
+  // fire after this effect and reopen the preview on the destination page.
   useEffect(() => {
+    hoveringRef.current = false
+    if (openTimerRef.current) clearTimeout(openTimerRef.current)
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
     setHoverPreviewOpen(false)
   }, [pathname])
 

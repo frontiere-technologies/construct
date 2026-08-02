@@ -8,7 +8,9 @@ import { Sidebar } from './Sidebar'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/unmatched-route' }))
+const navigation = vi.hoisted(() => ({ pathname: '/unmatched-route' }))
+
+vi.mock('next/navigation', () => ({ usePathname: () => navigation.pathname }))
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
     <a href={href} {...props}>{children}</a>
@@ -55,6 +57,7 @@ function buttonNamed(name: string) {
 }
 
 beforeEach(() => {
+  navigation.pathname = '/unmatched-route'
   localStorage.clear()
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
@@ -67,6 +70,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   act(() => root?.unmount())
   container?.remove()
   root = undefined
@@ -114,5 +118,31 @@ describe('Sidebar disclosure accessibility', () => {
 
     expect(archive.getAttribute('aria-expanded')).toBe('false')
     expect(document.getElementById(panelId!)).toBeNull()
+  })
+
+  it('cancels a pending hover-open timer when navigation closes the preview', () => {
+    vi.useFakeTimers()
+    renderSidebar()
+
+    const masterToggle = document.querySelector<HTMLButtonElement>('[data-testid="sidebar-master-toggle"]')!
+    act(() => masterToggle.click())
+    const rail = document.querySelector<HTMLElement>('aside')!
+
+    act(() => {
+      rail.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+      vi.advanceTimersByTime(200)
+    })
+    const preview = document.querySelector<HTMLElement>('[data-testid="sidebar-hover-preview"]')!
+    expect(preview).not.toBeNull()
+
+    // Entering the newly mounted overlay schedules another open timer. A route
+    // change must cancel it as well as closing the currently visible preview.
+    act(() => preview.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })))
+    navigation.pathname = '/profile'
+    act(() => root?.render(<Sidebar menuItems={menuItems} />))
+    expect(document.querySelector('[data-testid="sidebar-hover-preview"]')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(200))
+    expect(document.querySelector('[data-testid="sidebar-hover-preview"]')).toBeNull()
   })
 })
