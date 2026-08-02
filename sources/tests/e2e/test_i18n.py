@@ -108,7 +108,7 @@ def _restore_i18n_content() -> None:
     poisoned by this file's own content.
     """
     subprocess.run(
-        ["node", "sources/devops/db/db.mjs", "query",
+        ["node", "sources/devops/db/db.mjs", "test-query",
          "update translation_value set value = 'Save' "
          "from translation_key, app_language "
          "where translation_value.id_translation_key = translation_key.id_translation_key "

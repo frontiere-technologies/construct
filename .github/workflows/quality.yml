@@ -151,4 +151,12 @@ jobs:
           done
           sed -n '1,240p' /tmp/construct-next.log
           exit 1
-      - run: uv run pytest sources/tests/e2e
+      - name: Run browser E2E tests
+        run: |
+          if uv run pytest sources/tests/e2e; then
+            exit 0
+          fi
+          echo "::group::Next.js server log"
+          tail -n 400 /tmp/construct-next.log
+          echo "::endgroup::"
+          exit 1
