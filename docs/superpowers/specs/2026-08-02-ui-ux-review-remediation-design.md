@@ -10,7 +10,7 @@ Resolve every actionable finding in `docs/reviews/2026-07-31-ui-ux-tester.md` wi
 - [✅] ID=HIGH-A11Y-02, Severity=High, Complexity=Medium, Priority=P1, Title=Create accessible modal focus boundaries, Fix description=Introduce one shared dialog focus primitive and apply it to FilterDrawer, ConfirmModal, LanguageFormModal, CreateTranslationKeyModal, TranslationEditorDrawer, ManageRolesModal, CreateRoleModal, and RenameRoleModal.
 - [✅] ID=MED-A11Y-03, Severity=Medium, Complexity=Medium, Priority=P2, Title=Complete CustomSelect listbox accessibility, Fix description=Preserve the existing visual component while implementing a complete ARIA listbox contract, keyboard navigation, active-option state, selection, dismissal, and focus behavior.
 - [✅] ID=MED-A11Y-04, Severity=Medium, Complexity=Low, Priority=P2, Title=Name and expose sidebar control state, Fix description=Add translated accessible names and expanded/checked state to icon-only and expanded sidebar controls, including account, theme, column toggles, close controls, and master expansion.
-- [ ] ID=LOW-A11Y-05, Severity=Low, Complexity=Low, Priority=P3, Title=Announce route loading, Fix description=Render the protected-route loading fallback as a live status and keep the animated spinner decorative.
+- [✅] ID=LOW-A11Y-05, Severity=Low, Complexity=Low, Priority=P3, Title=Announce route loading, Fix description=Render the protected-route loading fallback as a live status and keep the animated spinner decorative.
 
 ## Architecture
 

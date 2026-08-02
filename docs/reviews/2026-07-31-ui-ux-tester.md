@@ -72,7 +72,7 @@ Severity counts: Critical 0, High 2, Medium 2, Low 1.
 
   Recommendation: add translated names and semantic state in Sidebar, then validate the accessible tree in both expanded and icon-only states.
 
-- [ ] ID=LOW-A11Y-05, Severity=Low, Complexity=Low, Priority=P3, Title=Route loading state is not announced as a live status, Fix description=Expose the loading component as `role="status"` with an appropriate accessible name (or use a visually-hidden live status), and mark the decorative spinner `aria-hidden="true"` when the status container owns the announcement.
+- [✅] ID=LOW-A11Y-05, Severity=Low, Complexity=Low, Priority=P3, Title=Route loading state is not announced as a live status, Fix description=Expose the loading component as `role="status"` with an appropriate accessible name (or use a visually-hidden live status), and mark the decorative spinner `aria-hidden="true"` when the status container owns the announcement.
 
   Flow/state: route transition/loading fallback for all protected pages.
 
