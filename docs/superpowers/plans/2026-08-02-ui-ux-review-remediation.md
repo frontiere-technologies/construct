@@ -35,7 +35,7 @@
 **Interfaces:**
 - Produces `resolveSidebarPresentation(isNarrowViewport: boolean, masterCollapsed: boolean, persistedColumnCollapsed: boolean): { masterCollapsed: boolean; columnCollapsed: boolean; showColumnToggle: boolean }`.
 
-- [ ] **Step 1: Write the failing responsive-state test**
+- [✅] **Step 1: Write the failing responsive-state test**
 
 ```ts
 import { describe, expect, it } from 'vitest'
@@ -56,13 +56,13 @@ describe('resolveSidebarPresentation', () => {
 })
 ```
 
-- [ ] **Step 2: Verify RED**
+- [✅] **Step 2: Verify RED**
 
 Run `npm test -- components/sidebarPresentation.test.ts` from `sources/microservices/web-construct`.
 
 Expected: FAIL because `sidebarPresentation.ts` does not exist.
 
-- [ ] **Step 3: Implement the presentation helper**
+- [✅] **Step 3: Implement the presentation helper**
 
 ```ts
 export function resolveSidebarPresentation(isNarrowViewport: boolean, masterCollapsed: boolean, persistedColumnCollapsed: boolean) {
@@ -74,7 +74,7 @@ export function resolveSidebarPresentation(isNarrowViewport: boolean, masterColl
 }
 ```
 
-- [ ] **Step 4: Write failing sidebar accessibility contract tests**
+- [✅] **Step 4: Write failing sidebar accessibility contract tests**
 
 Read `Sidebar.tsx` and assert these exact contracts:
 
@@ -89,7 +89,7 @@ expect(source).toContain("aria-label={t('nav.expand_menu')}")
 
 Run `npm test -- components/Sidebar.accessibility.test.ts` and confirm it fails because the semantics are absent.
 
-- [ ] **Step 5: Integrate responsive and accessibility behavior**
+- [✅] **Step 5: Integrate responsive and accessibility behavior**
 
 Use the helper for column 1 and every sub-column. Render columns whenever `masterCollapsed` is false, including narrow viewports. Extend `ColToggleStack` with `toggleTitle: string` and `showToggle?: boolean`; hide only its chevron below 768 px. Preserve the close/master-collapse action.
 
@@ -110,7 +110,7 @@ aria-expanded={false}
 
 Give the user panel `id="sidebar-user-panel"`. Add `aria-label={item.label}` to icon-only `L1Item` and `SubItem` links/buttons. Hover preview remains only for explicit master collapse.
 
-- [ ] **Step 6: Replace contradictory E2E expectations**
+- [✅] **Step 6: Replace contradictory E2E expectations**
 
 Replace the two narrow-rail tests with 767/768 px tests: at 767 px assert the first and opened sub-column remain visible at icon width and column toggles are hidden; at 768 px assert persisted text widths and toggles return. Syntax-check only:
 
@@ -118,7 +118,7 @@ Replace the two narrow-rail tests with 767/768 px tests: at 767 px assert the fi
 uv run python -m py_compile sources/tests/e2e/test_sidebar.py
 ```
 
-- [ ] **Step 7: Verify and commit Task 1**
+- [✅] **Step 7: Verify and commit Task 1**
 
 Run:
 
@@ -148,7 +148,7 @@ After PASS, mark `HIGH-UIUX-01` and `MED-A11Y-04` `- [✅]` in the review and de
 **Interfaces:**
 - Produces `AccessibleDialog({ titleId, descriptionId?, onClose, busy?, align?, panelClassName, children })`.
 
-- [ ] **Step 1: Write failing jsdom behavior tests**
+- [✅] **Step 1: Write failing jsdom behavior tests**
 
 Use `// @vitest-environment jsdom`, `createRoot`, and React `act` to render:
 
@@ -162,13 +162,13 @@ Use `// @vitest-environment jsdom`, `createRoot`, and React `act` to render:
 
 Assert dialog role, `aria-modal`, `aria-labelledby`, initial focus, Tab and Shift+Tab wrapping, Escape close, busy suppression, backdrop behavior, and restoration to the pre-dialog trigger.
 
-- [ ] **Step 2: Verify RED**
+- [✅] **Step 2: Verify RED**
 
 Run `npm test -- components/ui/AccessibleDialog.test.tsx`.
 
 Expected: FAIL because `AccessibleDialog` does not exist.
 
-- [ ] **Step 3: Implement AccessibleDialog**
+- [✅] **Step 3: Implement AccessibleDialog**
 
 Use a panel ref and this selector:
 
@@ -182,11 +182,11 @@ const FOCUSABLE = [
 
 Capture `document.activeElement` on mount. Focus `[data-dialog-initial-focus]`, then `[autofocus]`, then the first enabled focusable. Handle only unmodified Escape and Tab. Restore focus only when the prior element is connected. Close from backdrop only when target equals currentTarget and `busy` is false.
 
-- [ ] **Step 4: Convert all eight consumers**
+- [✅] **Step 4: Convert all eight consumers**
 
 Each consumer uses `useId()`, gives its heading that ID, passes description IDs where copy exists, passes `busy`/`saving`, and marks the intended initial control. Preserve panel classes and use `align="right"` for drawers. Remove duplicated overlay/stop-propagation behavior.
 
-- [ ] **Step 5: Add consumer contract test and verify GREEN**
+- [✅] **Step 5: Add consumer contract test and verify GREEN**
 
 `dialogConsumers.test.ts` reads all eight source files and asserts each imports/renders `AccessibleDialog` and supplies `titleId`.
 
@@ -194,7 +194,7 @@ Each consumer uses `useId()`, gives its heading that ID, passes description IDs 
 npm test -- components/ui/AccessibleDialog.test.tsx components/ui/dialogConsumers.test.ts
 ```
 
-- [ ] **Step 6: Mark and commit Task 2**
+- [✅] **Step 6: Mark and commit Task 2**
 
 After PASS, mark `HIGH-A11Y-02` `- [✅]` in review/design and commit with `fix(a11y): centralize accessible dialog focus`.
 
@@ -210,7 +210,7 @@ After PASS, mark `HIGH-A11Y-02` `- [✅]` in review/design and commit with `fix(
 **Interfaces:**
 - Adds required `ariaLabel: string`; preserves all existing value/options/style props.
 
-- [ ] **Step 1: Write failing jsdom tests**
+- [✅] **Step 1: Write failing jsdom tests**
 
 Render three options and assert:
 
@@ -224,22 +224,22 @@ expect(trigger.getAttribute('aria-expanded')).toBe('false')
 
 Also prove an empty option set does not open a popup.
 
-- [ ] **Step 2: Verify RED**
+- [✅] **Step 2: Verify RED**
 
 Run `npm test -- components/rbac/CustomSelect.test.tsx` and confirm failure on missing ARIA/keyboard behavior.
 
-- [ ] **Step 3: Implement the listbox contract**
+- [✅] **Step 3: Implement the listbox contract**
 
 Add trigger/list refs, `useId`, active index, trigger ARIA, focused listbox with `aria-activedescendant`, stable option IDs, and option selected state. Reuse the proven `LanguageSwitcher` key model: wrapping arrows, Home/End, Enter/Space selection, Escape close, and focus return. Outside dismissal must not steal focus from an element the user explicitly selected.
 
-- [ ] **Step 4: Label both consumers**
+- [✅] **Step 4: Label both consumers**
 
 ```tsx
 ariaLabel={t('functionalities.form.parent_placeholder')}
 ariaLabel={t('functionalities.form.type_heading')}
 ```
 
-- [ ] **Step 5: Verify, mark, and commit Task 3**
+- [✅] **Step 5: Verify, mark, and commit Task 3**
 
 Run `npm test -- components/rbac/CustomSelect.test.tsx`. After PASS, mark `MED-A11Y-03` `- [✅]` and commit with `fix(a11y): complete CustomSelect listbox behavior`.
 
@@ -255,7 +255,7 @@ Run `npm test -- components/rbac/CustomSelect.test.tsx`. After PASS, mark `MED-A
 **Interfaces:**
 - Produces `LoadingStatus({ label }: { label: string })`.
 
-- [ ] **Step 1: Write failing static-render test**
+- [✅] **Step 1: Write failing static-render test**
 
 ```tsx
 const html = renderToStaticMarkup(<LoadingStatus label="Loading…" />)
@@ -264,13 +264,13 @@ expect(html).toContain('aria-label="Loading…"')
 expect(html).toContain('aria-hidden="true"')
 ```
 
-- [ ] **Step 2: Verify RED**
+- [✅] **Step 2: Verify RED**
 
 Run `npm test -- components/ui/LoadingStatus.test.tsx`.
 
 Expected: FAIL because the component does not exist.
 
-- [ ] **Step 3: Implement and use LoadingStatus**
+- [✅] **Step 3: Implement and use LoadingStatus**
 
 ```tsx
 export default function LoadingStatus({ label }: { label: string }) {
@@ -284,7 +284,7 @@ export default function LoadingStatus({ label }: { label: string }) {
 
 Resolve `common.states.loading` in the route loading component and pass it as `label`.
 
-- [ ] **Step 4: Verify, mark, and commit Task 4**
+- [✅] **Step 4: Verify, mark, and commit Task 4**
 
 Run `npm test -- components/ui/LoadingStatus.test.tsx`. After PASS, mark `LOW-A11Y-05` `- [✅]` and commit with `fix(a11y): announce protected route loading`.
 
@@ -295,7 +295,7 @@ Run `npm test -- components/ui/LoadingStatus.test.tsx`. After PASS, mark `LOW-A1
 - Modify: `docs/superpowers/specs/2026-08-02-ui-ux-review-remediation-design.md`
 - Verify: all Task 1-4 files
 
-- [ ] **Step 1: Run complete gates**
+- [✅] **Step 1: Run complete gates**
 
 From `sources/microservices/web-construct`:
 
@@ -308,7 +308,7 @@ npm run build
 
 Expected: no test, type, lint-error, or build failures. Report existing unrelated warnings.
 
-- [ ] **Step 2: Run non-mutating repository checks**
+- [✅] **Step 2: Run non-mutating repository checks**
 
 From the repository root:
 
@@ -319,6 +319,6 @@ git diff --check
 
 Do not run database-mutating E2E/integration suites without a disposable database.
 
-- [ ] **Step 3: Verify ledgers and commit bookkeeping**
+- [✅] **Step 3: Verify ledgers and commit bookkeeping**
 
 Confirm all five review and design scope IDs are `- [✅]`, mark only completed plan steps, and commit documentation with `docs: complete UI accessibility remediation`.

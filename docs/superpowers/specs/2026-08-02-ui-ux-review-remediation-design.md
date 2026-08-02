@@ -58,13 +58,13 @@ The protected-route loading wrapper owns `role="status"` and an accessible loadi
 
 ## Testing
 
-- [ ] Add focused failing unit tests for responsive sidebar derivation at 767 px and restored state at 768 px or wider.
-- [ ] Add focused failing DOM tests for dialog semantics, initial focus, Tab wrapping, Escape behavior, busy-state blocking, and trigger-focus restoration.
+- [✅] Add focused failing unit tests for responsive sidebar derivation at 767 px and restored state at 768 px or wider.
+- [✅] Add focused failing DOM tests for dialog semantics, initial focus, Tab wrapping, Escape behavior, busy-state blocking, and trigger-focus restoration.
 - [✅] Add focused DOM tests for CustomSelect ARIA attributes and keyboard selection/dismissal.
-- [ ] Add focused assertions for sidebar control accessible names and switch/panel state.
-- [ ] Add a static-render test for the live loading status and decorative spinner.
-- [ ] Update the existing sidebar E2E expectations so narrow viewports assert visible icon columns instead of a hover-only rail.
-- [ ] Run the complete unit suite, TypeScript, lint, production build, and safe non-mutating UI checks available in the environment.
+- [✅] Add focused assertions for sidebar control accessible names and switch/panel state.
+- [✅] Add a static-render test for the live loading status and decorative spinner.
+- [✅] Update the existing sidebar E2E expectations so narrow viewports assert visible icon columns instead of a hover-only rail.
+- [✅] Run the complete unit suite, TypeScript, lint, production build, and safe non-mutating UI checks available in the environment.
 
 ## Non-goals
 
