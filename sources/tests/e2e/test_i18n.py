@@ -184,7 +184,7 @@ def test_a_missing_english_translation_falls_back_to_italian(logged_in_page, bas
     try:
         _open_translations(page, base_url)
         page.get_by_role("button", name="Nuova chiave").click()
-        page.get_by_label("Chiave").fill(key)
+        page.get_by_role("dialog").get_by_label("Chiave").fill(key)
         page.get_by_label("Namespace").fill("zzz_e2e")
         page.get_by_role("button", name="Salva").click()
         page.wait_for_load_state("networkidle")

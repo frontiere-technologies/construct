@@ -1,6 +1,6 @@
 import re
 import time
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 
 from playwright.sync_api import expect
 from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows
@@ -83,6 +83,17 @@ def test_toggle_permission_persists(logged_in_page, base_url):
     # toggle a switch and save via the page's own Annulla/Salva footer.
     page.locator('[data-testid="perm-toggle"]').first.click()
     save_btn = page.get_by_role("button", name="Salva")
+    # Make the transient busy state observable even when the server action is
+    # faster than Playwright's assertion polling interval.
+    page.evaluate(
+        """() => {
+            const originalFetch = window.fetch.bind(window);
+            window.fetch = async (...args) => {
+                await new Promise(resolve => setTimeout(resolve, 750));
+                return originalFetch(...args);
+            };
+        }"""
+    )
     save_btn.click()
 
     # Wait for the save request to settle before reloading: the button disables
@@ -147,7 +158,10 @@ def test_filter_by_creation_date_range(logged_in_page, base_url):
     # today for both bounds leaves the (custom) Applica button permanently disabled,
     # so use today..tomorrow (the role created above still falls inside that range).
     date_inputs = page.locator('.ag-filter input[type="date"]')
-    today = date.today()
+    # PostgreSQL stores the creation timestamp in UTC. Derive the filter dates
+    # from UTC too, otherwise a run just after local midnight can exclude the
+    # role that was created a few seconds earlier on the previous UTC date.
+    today = datetime.now(timezone.utc).date()
     tomorrow = today + timedelta(days=1)
     date_inputs.nth(0).fill(today.strftime("%Y-%m-%d"))
     date_inputs.nth(1).fill(tomorrow.strftime("%Y-%m-%d"))
@@ -193,14 +207,12 @@ def test_filter_by_has_permission_and_reset(logged_in_page, base_url):
     expect(rows).to_have_count(baseline)
 
 
-def test_actions_column_header_has_label_and_no_divider(logged_in_page, base_url):
-    """Regression test mirroring test_users.py: the actions column ("...") shows
-    a real header label and no divider against its neighbour ("ID"), while the
-    other columns keep the theme's static header divider."""
+def test_actions_column_header_is_empty_and_has_no_divider(logged_in_page, base_url):
+    """The icon-only actions column has no redundant text label or divider."""
     page = logged_in_page
     nav(page, f"{base_url}/roles-permissions")
     actions_header = page.locator('.ag-header-cell[col-id="actions"]')
-    expect(actions_header).to_have_text("...")
+    expect(actions_header).to_have_text("")
 
     assert actions_header.evaluate("el => getComputedStyle(el, '::after').display") == "none", \
         "The actions column must not draw a divider against the first text column"

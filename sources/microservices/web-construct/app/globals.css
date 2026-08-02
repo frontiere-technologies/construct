@@ -16,6 +16,13 @@ button:disabled {
   filter: opacity(0.6);
 }
 
+/* Header separators are provided by the AG Grid theme. The pinned, icon-only
+   actions column is the exception: it must visually blend into the first data
+   column instead of drawing an extra divider. */
+.ag-header-cell[col-id="actions"]::after {
+  display: none;
+}
+
 :root {
   --theme-primary: #2563eb;
   --theme-sidebar-bg: #ffffff;

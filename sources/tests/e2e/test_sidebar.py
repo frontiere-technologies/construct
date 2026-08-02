@@ -1,3 +1,5 @@
+from playwright.sync_api import expect
+
 from helpers import ensure_l1_expanded, ensure_l1_collapsed, ensure_l2_open, l1_btn
 
 
@@ -181,8 +183,10 @@ def test_767_viewport_keeps_visible_columns_icon_only(logged_in_page):
     )
     assert page.locator("aside").first.is_visible(), "L1 should remain visible below 768px"
     assert page.locator("aside").nth(1).is_visible(), "Opened L2 should remain visible below 768px"
-    assert page.locator("aside").first.bounding_box()["width"] <= 70, "L1 should be icon-only below 768px"
-    assert page.locator("aside").nth(1).bounding_box()["width"] <= 70, "L2 should be icon-only below 768px"
+    # Widths animate for 300 ms; use retrying CSS assertions instead of reading
+    # the first transition frame immediately after matchMedia changes.
+    expect(page.locator("aside").first).to_have_css("width", "64px")
+    expect(page.locator("aside").nth(1)).to_have_css("width", "56px")
     assert page.locator('[data-testid="sidebar-toggle"]').count() == 0, "Column toggles should be hidden below 768px"
 
 

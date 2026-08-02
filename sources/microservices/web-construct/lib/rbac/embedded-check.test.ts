@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { checkEmbeddable, isHttpUrl } from './embedded-check'
+import { checkEmbeddable, createPinnedLookup, isHttpUrl } from './embedded-check'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -190,6 +190,27 @@ describe('checkEmbeddable', () => {
       headers: { 'Content-Security-Policy': "default-src 'self', frame-ancestors 'none'" },
     }))
     expect(await check('https://example.com')).toBe(false)
+  })
+})
+
+describe('createPinnedLookup', () => {
+  it('returns an address list when Node requests all DNS results', () => {
+    const callback = vi.fn()
+    createPinnedLookup({ address: '93.184.216.34', family: 4 })(
+      'example.com', { all: true }, callback,
+    )
+    expect(callback).toHaveBeenCalledWith(
+      null,
+      [{ address: '93.184.216.34', family: 4 }],
+    )
+  })
+
+  it('returns the scalar callback shape for a normal lookup', () => {
+    const callback = vi.fn()
+    createPinnedLookup({ address: '93.184.216.34', family: 4 })(
+      'example.com', { all: false }, callback,
+    )
+    expect(callback).toHaveBeenCalledWith(null, '93.184.216.34', 4)
   })
 })
 

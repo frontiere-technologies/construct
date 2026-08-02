@@ -13,7 +13,9 @@ def _select_tipologia(page, label: str):
     instead of firing onChange.
     """
     page.locator('[data-testid="select-tipologia"]').click()
-    page.locator('.max-h-56.overflow-y-auto').get_by_role("button", name=label, exact=True).click()
+    page.get_by_role("listbox", name="Tipologia").get_by_role(
+        "option", name=label, exact=True
+    ).click()
 
 
 def _create_functionality(page, base_url, name, link):
@@ -285,11 +287,11 @@ def test_genitore_dropdown_lists_root_and_categories(logged_in_page, base_url):
         genitore = page.locator('[data-testid="select-genitore"]')
         expect(genitore).to_be_enabled()
         genitore.click()
-        menu = page.locator('.max-h-56.overflow-y-auto')
-        expect(menu.get_by_role("button", name="Root", exact=True)).to_be_visible()
-        expect(menu.get_by_role("button", name=name, exact=True)).to_be_visible()
+        menu = page.get_by_role("listbox", name="Genitore")
+        expect(menu.get_by_role("option", name="Root", exact=True)).to_be_visible()
+        expect(menu.get_by_role("option", name=name, exact=True)).to_be_visible()
 
-        menu.get_by_role("button", name=name, exact=True).click()
+        menu.get_by_role("option", name=name, exact=True).click()
         expect(genitore).to_have_text(name)
 
         genitore.click()
@@ -364,7 +366,9 @@ def test_external_link_new_tab_flag(logged_in_page, base_url):
 def _pick_genitore(page, label: str):
     """Open the Genitore dropdown and click an option by label (scoped to the open panel)."""
     page.locator('[data-testid="select-genitore"]').click()
-    page.locator('.max-h-56.overflow-y-auto').get_by_role("button", name=label, exact=True).click()
+    page.get_by_role("listbox", name="Genitore").get_by_role(
+        "option", name=label, exact=True
+    ).click()
 
 
 def _row_padding_left(page, name: str):
@@ -444,10 +448,10 @@ def test_edit_genitore_excludes_own_subtree(logged_in_page, base_url):
         prow.locator('[data-testid="nav-edit"]').click()
         page.wait_for_url("**/edit", timeout=10_000)
         page.locator('[data-testid="select-genitore"]').click()
-        menu = page.locator('.max-h-56.overflow-y-auto')
-        expect(menu.get_by_role("button", name="Root", exact=True)).to_be_visible()
-        expect(menu.get_by_role("button", name=parent, exact=True)).to_have_count(0)
-        expect(menu.get_by_role("button", name=child, exact=True)).to_have_count(0)
+        menu = page.get_by_role("listbox", name="Genitore")
+        expect(menu.get_by_role("option", name="Root", exact=True)).to_be_visible()
+        expect(menu.get_by_role("option", name=parent, exact=True)).to_have_count(0)
+        expect(menu.get_by_role("option", name=child, exact=True)).to_have_count(0)
     finally:
         _delete_functionality(page, base_url, child)
         _delete_functionality(page, base_url, parent)
@@ -464,17 +468,17 @@ def test_genitore_dropdown_lists_every_category(logged_in_page, base_url):
         genitore = page.locator('[data-testid="select-genitore"]')
         expect(genitore).to_be_enabled()
         genitore.click()
-        menu = page.locator('.max-h-56.overflow-y-auto')
-        expect(menu.get_by_role("button", name="Genitore", exact=True)).to_have_count(0)
+        menu = page.get_by_role("listbox", name="Genitore")
+        expect(menu.get_by_role("option", name="Genitore", exact=True)).to_have_count(0)
         for label in ("Root", "Home", "Admin", name):
-            expect(menu.get_by_role("button", name=label, exact=True)).to_be_visible()
+            expect(menu.get_by_role("option", name=label, exact=True)).to_be_visible()
         # Home (pinned top), Root, Admin (pinned bottom), then the user categories
-        labels = [t.strip() for t in menu.get_by_role("button").all_inner_texts()]
+        labels = [t.strip() for t in menu.get_by_role("option").all_inner_texts()]
         assert labels[:3] == ["Home", "Root", "Admin"], f"Unexpected Genitore order: {labels}"
         assert name in labels[3:], f"{name} should follow the pinned sections: {labels}"
         # Operations is not a placement target
-        expect(menu.get_by_role("button", name="Operations", exact=True)).to_have_count(0)
-        expect(menu.get_by_role("button", name="Operazioni", exact=True)).to_have_count(0)
+        expect(menu.get_by_role("option", name="Operations", exact=True)).to_have_count(0)
+        expect(menu.get_by_role("option", name="Operazioni", exact=True)).to_have_count(0)
     finally:
         _delete_functionality(page, base_url, name)
 

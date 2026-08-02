@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns/promises'
 import http from 'node:http'
 import https from 'node:https'
-import { isIP } from 'node:net'
+import { isIP, type LookupFunction } from 'node:net'
 
 const FETCH_TIMEOUT_MS = 4000
 
@@ -144,6 +144,16 @@ async function resolveHost(hostname: string): Promise<ResolvedAddress[]> {
   return lookup(host, { all: true, verbatim: true })
 }
 
+export function createPinnedLookup(pinned: ResolvedAddress): LookupFunction {
+  return (_hostname, options, callback) => {
+    // Node's Happy Eyeballs connection path requests `all: true` and requires
+    // the callback's array form. Returning the scalar overload in that case is
+    // interpreted as an invalid/undefined IP address on Node 22+.
+    if (options.all) callback(null, [pinned])
+    else callback(null, pinned.address, pinned.family)
+  }
+}
+
 function requestPinned(url: URL, method: 'HEAD' | 'GET', pinned: ResolvedAddress): Promise<Response> {
   return new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? https : http
@@ -155,7 +165,7 @@ function requestPinned(url: URL, method: 'HEAD' | 'GET', pinned: ResolvedAddress
       method,
       headers: { host: url.host, 'user-agent': 'Construct-Embeddability-Check/1.0' },
       servername: url.hostname.replace(/^\[|\]$/g, ''),
-      lookup: (_hostname, _options, callback) => callback(null, pinned.address, pinned.family),
+      lookup: createPinnedLookup(pinned),
     }, response => {
       const headers = new Headers()
       for (const [name, value] of Object.entries(response.headers)) {
