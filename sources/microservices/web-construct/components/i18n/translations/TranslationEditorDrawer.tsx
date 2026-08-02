@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useId, useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
 import { saveTranslations } from '@/lib/i18n/translation-actions'
 import { MAX_VALUE_LENGTH, type TranslationConflict, type TranslationRowDto } from '@/lib/i18n/types'
+import AccessibleDialog from '@/components/ui/AccessibleDialog'
 
 interface Props {
   row: TranslationRowDto
@@ -37,6 +38,8 @@ export default function TranslationEditorDrawer({ row, onClose }: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conflicts, setConflicts] = useState<TranslationConflict[] | null>(null)
+  const titleId = useId()
+  const descriptionId = useId()
 
   const dirty =
     description !== (row.description ?? '') ||
@@ -78,20 +81,23 @@ export default function TranslationEditorDrawer({ row, onClose }: Props) {
   const field = 'w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={() => onClose(false)}>
+    <AccessibleDialog
+      titleId={titleId}
+      descriptionId={descriptionId}
+      onClose={() => onClose(false)}
+      busy={saving}
+      align="right"
+      panelClassName="h-full w-full max-w-xl overflow-y-auto bg-surface-overlay p-6 shadow-xl"
+    >
       <aside
-        role="dialog"
-        aria-label={t('translation.editor.title')}
         data-testid="translation-editor"
-        className="h-full w-full max-w-xl overflow-y-auto bg-surface-overlay p-6 shadow-xl"
-        onClick={e => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold">{row.key}</h2>
-            <p className="text-sm text-foreground-muted">{t('translation.editor.title')}</p>
+            <h2 id={titleId} className="truncate text-lg font-bold">{row.key}</h2>
+            <p id={descriptionId} className="text-sm text-foreground-muted">{t('translation.editor.title')}</p>
           </div>
-          <button onClick={() => onClose(false)} aria-label={t('common.actions.close')} className="rounded p-1 hover:bg-surface-hover">
+          <button data-dialog-initial-focus onClick={() => onClose(false)} aria-label={t('common.actions.close')} className="rounded p-1 hover:bg-surface-hover">
             <X size={18} />
           </button>
         </div>
@@ -179,6 +185,6 @@ export default function TranslationEditorDrawer({ row, onClose }: Props) {
           </button>
         </div>
       </aside>
-    </div>
+    </AccessibleDialog>
   )
 }

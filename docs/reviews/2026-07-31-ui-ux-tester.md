@@ -24,7 +24,7 @@ Severity counts: Critical 0, High 2, Medium 2, Low 1.
 
   Recommendation: implement the documented `effCol*Collapsed` render-time overrides independently from `masterCollapsed`, then cover 767/768 px with touch-equivalent and keyboard regression tests.
 
-- [ ] ID=HIGH-A11Y-02, Severity=High, Complexity=Medium, Priority=P1, Title=Drawers and modal workflows do not establish an accessible modal focus boundary, Fix description=Use a shared accessible dialog primitive (or equivalent) for Filter Drawer, confirmations, role/language/translation modals, and the translation editor: `role="dialog"`, `aria-modal="true"`, programmatic label/description, initial focus, focus trap, Escape close where safe, and focus restoration to the invoking control. Keep backdrop click as a supplemental pointer affordance only.
+- [✅] ID=HIGH-A11Y-02, Severity=High, Complexity=Medium, Priority=P1, Title=Drawers and modal workflows do not establish an accessible modal focus boundary, Fix description=Use a shared accessible dialog primitive (or equivalent) for Filter Drawer, confirmations, role/language/translation modals, and the translation editor: `role="dialog"`, `aria-modal="true"`, programmatic label/description, initial focus, focus trap, Escape close where safe, and focus restoration to the invoking control. Keep backdrop click as a supplemental pointer affordance only.
 
   Flow/state: opening Filters, creating/editing a language or translation key, confirming destructive actions, managing roles, and creating/renaming a role.
 

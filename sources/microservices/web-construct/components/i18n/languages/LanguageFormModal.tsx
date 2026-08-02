@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useId, useState } from 'react'
 import { useI18n } from '@/context/I18nContext'
 import { createLanguage, updateLanguage } from '@/lib/i18n/language-actions'
 import type { LanguagePageItemDto } from '@/lib/i18n/types'
+import AccessibleDialog from '@/components/ui/AccessibleDialog'
 
 interface Props {
   language: LanguagePageItemDto | null
@@ -19,6 +20,7 @@ export default function LanguageFormModal({ language, onClose }: Props) {
   const [isActive, setIsActive] = useState(language?.isActive ?? true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const titleId = useId()
 
   const save = async () => {
     setSaving(true)
@@ -33,16 +35,20 @@ export default function LanguageFormModal({ language, onClose }: Props) {
   const field = 'w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => onClose(false)}>
-      <div className="w-full max-w-md rounded-xl bg-surface-overlay p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-bold mb-4">
+    <AccessibleDialog
+      titleId={titleId}
+      onClose={() => onClose(false)}
+      busy={saving}
+      panelClassName="w-full max-w-md rounded-xl bg-surface-overlay p-6 shadow-xl"
+    >
+        <h2 id={titleId} className="text-lg font-bold mb-4">
           {language ? t('language.form.edit_title') : t('language.form.create_title')}
         </h2>
 
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-code">{t('language.form.code')}</label>
-            <input id="lang-code" value={code} onChange={e => setCode(e.target.value)} placeholder="it" className={field} />
+            <input data-dialog-initial-focus id="lang-code" value={code} onChange={e => setCode(e.target.value)} placeholder="it" className={field} />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-locale">{t('language.form.locale')}</label>
@@ -75,7 +81,6 @@ export default function LanguageFormModal({ language, onClose }: Props) {
             {saving ? t('common.states.saving') : t('common.actions.save')}
           </button>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
