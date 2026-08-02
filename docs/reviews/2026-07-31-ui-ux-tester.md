@@ -8,7 +8,7 @@ Severity counts: Critical 0, High 2, Medium 2, Low 1.
 
 ## Actionable findings
 
-- [ ] ID=HIGH-UIUX-01, Severity=High, Complexity=Medium, Priority=P1, Title=Small viewports hide all navigation behind hover-only preview, Fix description=Restore the documented responsive contract: below 768 px force each visible sidebar column to icon-only mode while keeping the sidebar rendered and its meaningful controls available; keep `masterCollapsed` exclusively user-controlled. If the rail/preview design remains intentional, add an explicit touch/keyboard-open control that works at the narrow breakpoint and update the approved specification and tests.
+- [✅] ID=HIGH-UIUX-01, Severity=High, Complexity=Medium, Priority=P1, Title=Small viewports hide all navigation behind hover-only preview, Fix description=Restore the documented responsive contract: below 768 px force each visible sidebar column to icon-only mode while keeping the sidebar rendered and its meaningful controls available; keep `masterCollapsed` exclusively user-controlled. If the rail/preview design remains intentional, add an explicit touch/keyboard-open control that works at the narrow breakpoint and update the approved specification and tests.
 
   Flow/state: protected navigation at a viewport of 767 px or below, including touch devices and keyboard-only use.
 
@@ -56,7 +56,7 @@ Severity counts: Critical 0, High 2, Medium 2, Low 1.
 
   Recommendation: prefer the native element unless custom rendering is necessary; otherwise adopt a proven accessible primitive and test keyboard behavior as part of each consuming flow.
 
-- [ ] ID=MED-A11Y-04, Severity=Medium, Complexity=Low, Priority=P2, Title=Icon-only sidebar controls have no accessible names or state, Fix description=Give every icon-only interactive control an explicit translated `aria-label`; model the theme control as a labelled `role="switch"` with `aria-checked`, and expose expanded/collapsed state where the control changes a panel or column. Ensure the compact account button remains named when its visible email text is hidden.
+- [✅] ID=MED-A11Y-04, Severity=Medium, Complexity=Low, Priority=P2, Title=Icon-only sidebar controls have no accessible names or state, Fix description=Give every icon-only interactive control an explicit translated `aria-label`; model the theme control as a labelled `role="switch"` with `aria-checked`, and expose expanded/collapsed state where the control changes a panel or column. Ensure the compact account button remains named when its visible email text is hidden.
 
   Flow/state: collapsed sidebar columns, account panel, theme mode, and sidebar column/master controls.
 

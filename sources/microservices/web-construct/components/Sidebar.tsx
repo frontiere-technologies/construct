@@ -14,6 +14,7 @@ import type { MenuItem } from '@/types/menu'
 import { activeAncestorIds, activeAncestorPath, togglePathAt, navHighlight, type NavHighlight } from '@/lib/sidebar-highlight'
 import { IconRenderer } from './IconRenderer'
 import LanguageSwitcher from './LanguageSwitcher'
+import { resolveSidebarPresentation } from './sidebarPresentation'
 
 // One visual language for every column: the current page (and the sections holding it) carry
 // the ring, while a section that is merely expanded gets a softer fill so it can't be mistaken
@@ -64,26 +65,33 @@ const ColToggleStack: React.FC<{
   onClose: () => void
   closeTestId: string
   closeTitle?: string
+  toggleTitle: string
+  showToggle?: boolean
   anchorClassName: string
-}> = ({ collapsed, onToggleCollapse, onClose, closeTestId, closeTitle, anchorClassName }) => (
+}> = ({ collapsed, onToggleCollapse, onClose, closeTestId, closeTitle, toggleTitle, showToggle = true, anchorClassName }) => (
   <div className={clsx('absolute flex flex-col gap-0.5 z-10', anchorClassName)}>
     <button
       data-testid={closeTestId}
       onClick={onClose}
       title={closeTitle}
+      aria-label={closeTitle}
       className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
     >
       <X size={12} className="text-sidebar-text/60" />
     </button>
-    <button
-      data-testid="sidebar-toggle"
-      onClick={onToggleCollapse}
-      className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
-    >
-      {collapsed
-        ? <ChevronRight size={12} className="text-sidebar-text/60" />
-        : <ChevronLeft size={12} className="text-sidebar-text/60" />}
-    </button>
+    {showToggle && (
+      <button
+        data-testid="sidebar-toggle"
+        onClick={onToggleCollapse}
+        aria-label={toggleTitle}
+        aria-expanded={!collapsed}
+        className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
+      >
+        {collapsed
+          ? <ChevronRight size={12} className="text-sidebar-text/60" />
+          : <ChevronLeft size={12} className="text-sidebar-text/60" />}
+      </button>
+    )}
   </div>
 )
 
@@ -128,6 +136,7 @@ const L1Item: React.FC<L1ItemProps> = ({
         rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
         onMouseEnter={tooltipEnter}
         onMouseLeave={tooltipLeave}
+        aria-label={isCollapsed ? item.label : undefined}
         className={cls}
       >
         {content}
@@ -135,7 +144,7 @@ const L1Item: React.FC<L1ItemProps> = ({
     )
   }
   return (
-    <button onClick={onClick} onMouseEnter={tooltipEnter} onMouseLeave={tooltipLeave} className={cls}>
+    <button onClick={onClick} onMouseEnter={tooltipEnter} onMouseLeave={tooltipLeave} aria-label={isCollapsed ? item.label : undefined} className={cls}>
       {content}
     </button>
   )
@@ -175,7 +184,7 @@ const SubItem: React.FC<SubItemProps> = ({
 
   if (hasChildren) {
     return (
-      <button onClick={onContainerClick} onMouseEnter={tooltipEnter} onMouseLeave={tooltipLeave} className={cls}>
+      <button onClick={onContainerClick} onMouseEnter={tooltipEnter} onMouseLeave={tooltipLeave} aria-label={isCollapsed ? item.label : undefined} className={cls}>
         {icon}{label}
       </button>
     )
@@ -189,6 +198,7 @@ const SubItem: React.FC<SubItemProps> = ({
         rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
         onMouseEnter={tooltipEnter}
         onMouseLeave={tooltipLeave}
+        aria-label={isCollapsed ? item.label : undefined}
         className={cls}
       >
         {icon}{label}
@@ -288,11 +298,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     }, 180)
   }, [])
 
-  // Below this viewport width, force the sidebar into the same collapsed-rail +
-  // hover-preview state as a manual master-collapse. This never touches the
-  // persisted master/col1/col2/col3 preference — it's a pure render-time
-  // override — and it's the reason effMasterCollapsed (not masterCollapsed) is
-  // used for hoverPreviewOpen/rail rendering.
+  // Narrow viewports override column presentation only; persisted preferences
+  // remain untouched and master collapse stays an explicit user action.
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
 
   useEffect(() => {
@@ -303,24 +310,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
-  const effMasterCollapsed = isNarrowViewport || masterCollapsed
+  const col1Presentation = resolveSidebarPresentation(isNarrowViewport, masterCollapsed, col1Collapsed)
 
-  // col1's close button: collapses the sidebar when pinned expanded (as
-  // before), and also dismisses the hover-preview overlay when clicked from
-  // inside it -- setMasterCollapsed(true) alone is a no-op there since it's
-  // already true, so without this the button did nothing visible. Clearing
-  // the timers and hoveringRef mirrors the masterCollapsed effect below. Below
-  // the narrow-viewport breakpoint the collapse is already forced regardless
-  // of the persisted preference, so skip setMasterCollapsed there -- otherwise
-  // dismissing the preview on a narrow window would silently pin the sidebar
-  // collapsed for the next time the window is widened past 768px.
+  // Col1's close button collapses the sidebar when pinned expanded and dismisses
+  // the hover-preview overlay when clicked from inside it.
   const handleMasterClose = useCallback(() => {
-    if (!isNarrowViewport) setMasterCollapsed(true)
+    setMasterCollapsed(true)
     hoveringRef.current = false
     if (openTimerRef.current) clearTimeout(openTimerRef.current)
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
     setHoverPreviewOpen(false)
-  }, [isNarrowViewport])
+  }, [])
 
   // Closes the preview on a real route change; container-expand clicks
   // inside the preview don't change the route, so they don't close it.
@@ -336,19 +336,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   // the next time the rail is re-collapsed. Also cancel any pending open/close
   // timers so one scheduled right before can't fire late and flip the state back.
   useEffect(() => {
-    if (!effMasterCollapsed) {
+    if (!col1Presentation.masterCollapsed) {
       if (openTimerRef.current) clearTimeout(openTimerRef.current)
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
       setHoverPreviewOpen(false)
     }
-  }, [effMasterCollapsed])
+  }, [col1Presentation.masterCollapsed])
 
   useEffect(() => () => {
     if (openTimerRef.current) clearTimeout(openTimerRef.current)
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
   }, [])
 
-  const effCol1Collapsed = col1Collapsed
+  const effCol1Collapsed = col1Presentation.columnCollapsed
+  const userPanelPresentation = resolveSidebarPresentation(isNarrowViewport, masterCollapsed, isSubCollapsed(1))
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const showTooltip = useCallback((e: React.MouseEvent, text: string) => {
@@ -451,7 +452,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
 
   const userPanelItemCls = clsx(
     'w-full flex items-center rounded-lg py-2 px-3 transition-colors duration-200 text-sm',
-    isSubCollapsed(1) ? 'justify-center' : 'gap-3',
+    userPanelPresentation.columnCollapsed ? 'justify-center' : 'gap-3',
     'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
   )
 
@@ -467,6 +468,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           onClose={handleMasterClose}
           closeTestId="sidebar-master-toggle"
           closeTitle={t('nav.collapse_menu')}
+          toggleTitle={effCol1Collapsed ? t('nav.expand_menu') : t('nav.collapse_menu')}
+          showToggle={col1Presentation.showColumnToggle}
           anchorClassName="-right-[9px] bottom-[9px]"
         />
 
@@ -503,6 +506,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             <button
               data-testid="sidebar-account-button"
               onClick={handleUserClick}
+              aria-label={t('nav.account')}
+              aria-expanded={userPanelOpen}
+              aria-controls="sidebar-user-panel"
               onMouseEnter={effCol1Collapsed ? e => showTooltip(e, authUser?.email?.split('@')[0] ?? t('nav.account')) : undefined}
               onMouseLeave={effCol1Collapsed ? hideTooltip : undefined}
               className={clsx(
@@ -529,19 +535,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
       </aside>
 
       {userPanelOpen && (
-        <aside className={clsx(
+        <aside id="sidebar-user-panel" className={clsx(
           'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
-          isSubCollapsed(1) ? ICON_SUB_W : TEXT_SUB_W
+          userPanelPresentation.columnCollapsed ? ICON_SUB_W : TEXT_SUB_W
         )}>
           <ColToggleStack
-            collapsed={isSubCollapsed(1)}
+            collapsed={userPanelPresentation.columnCollapsed}
             onToggleCollapse={() => toggleSubCollapsed(1)}
             onClose={() => setUserPanelOpen(false)}
             closeTestId="sidebar-col-close"
             closeTitle={t('nav.close_panel')}
+            toggleTitle={userPanelPresentation.columnCollapsed ? t('nav.expand_menu') : t('nav.collapse_menu')}
+            showToggle={userPanelPresentation.showColumnToggle}
             anchorClassName="-right-[9px] bottom-[9px]"
           />
-          {!isSubCollapsed(1) && (
+          {!userPanelPresentation.columnCollapsed && (
             <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
               <TruncatedSpan
                 text={authUser?.email?.split('@')[0] ?? t('nav.account')}
@@ -556,23 +564,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             {/* Profile */}
             <Link
               href="/profile"
-              onMouseEnter={isSubCollapsed(1) ? e => showTooltip(e, t('nav.profile')) : undefined}
-              onMouseLeave={isSubCollapsed(1) ? hideTooltip : undefined}
+              onMouseEnter={userPanelPresentation.columnCollapsed ? e => showTooltip(e, t('nav.profile')) : undefined}
+              onMouseLeave={userPanelPresentation.columnCollapsed ? hideTooltip : undefined}
+              aria-label={userPanelPresentation.columnCollapsed ? t('nav.profile') : undefined}
               className={clsx(
                 userPanelItemCls,
                 pathname === '/profile' ? 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70' : ''
               )}
             >
               <User size={16} className={pathname === '/profile' ? 'text-primary' : ''} />
-              {!isSubCollapsed(1) && <span>{t('nav.profile')}</span>}
+              {!userPanelPresentation.columnCollapsed && <span>{t('nav.profile')}</span>}
             </Link>
 
             {/* Theme Mode */}
-            {isSubCollapsed(1) ? (
+            {userPanelPresentation.columnCollapsed ? (
               <button
                 onClick={toggleTheme}
                 onMouseEnter={e => showTooltip(e, settings.theme === 'light' ? t('nav.theme_to_dark') : t('nav.theme_to_light'))}
                 onMouseLeave={hideTooltip}
+                role="switch"
+                aria-checked={settings.theme === 'dark'}
+                aria-label={t('nav.theme_mode')}
                 className={userPanelItemCls}
               >
                 {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
@@ -583,6 +595,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                 <span className="flex-1">{t('nav.theme_mode')}</span>
                 <button
                   onClick={toggleTheme}
+                  role="switch"
+                  aria-checked={settings.theme === 'dark'}
+                  aria-label={t('nav.theme_mode')}
                   className={clsx(
                     'relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 flex-shrink-0',
                     settings.theme === 'dark' ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
@@ -596,19 +611,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               </div>
             )}
 
-            <LanguageSwitcher collapsed={isSubCollapsed(1)} itemClassName={userPanelItemCls} />
+            <LanguageSwitcher collapsed={userPanelPresentation.columnCollapsed} itemClassName={userPanelItemCls} />
           </div>
 
           {/* Logout — pinned to bottom, aligned with the user row in col1 */}
           <div className="p-2 border-t border-sidebar-text/10">
             <button
               onClick={signOut}
-              onMouseEnter={isSubCollapsed(1) ? e => showTooltip(e, t('nav.logout')) : undefined}
-              onMouseLeave={isSubCollapsed(1) ? hideTooltip : undefined}
+              onMouseEnter={userPanelPresentation.columnCollapsed ? e => showTooltip(e, t('nav.logout')) : undefined}
+              onMouseLeave={userPanelPresentation.columnCollapsed ? hideTooltip : undefined}
+              aria-label={userPanelPresentation.columnCollapsed ? t('nav.logout') : undefined}
               className={userPanelItemCls}
             >
               <LogOut size={16} />
-              {!isSubCollapsed(1) && <span>{t('nav.logout')}</span>}
+              {!userPanelPresentation.columnCollapsed && <span>{t('nav.logout')}</span>}
             </button>
           </div>
         </aside>
@@ -616,7 +632,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
 
       {/* One column per open panel: level 2, 3, 4, ... all rendered by the same code. */}
       {!userPanelOpen && subColumns.map(({ parent, items }, k) => {
-        const collapsed = isSubCollapsed(k + 1)
+        const presentation = resolveSidebarPresentation(isNarrowViewport, masterCollapsed, isSubCollapsed(k + 1))
+        const collapsed = presentation.columnCollapsed
         return (
           <aside key={parent.id} data-testid={`sidebar-col-${k + 2}`} className={clsx(
             'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
@@ -628,6 +645,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               onClose={() => setOpenPath(prev => prev.slice(0, k))}
               closeTestId="sidebar-col-close"
               closeTitle={t('nav.close_panel')}
+              toggleTitle={collapsed ? t('nav.expand_menu') : t('nav.collapse_menu')}
+              showToggle={presentation.showColumnToggle}
               anchorClassName="-right-[9px] bottom-[9px]"
             />
             {!collapsed && (
@@ -666,9 +685,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         document.body
       )}
 
-      {!effMasterCollapsed && renderSidebarColumns()}
+      {!col1Presentation.masterCollapsed && renderSidebarColumns()}
 
-      {effMasterCollapsed && hoverPreviewOpen && createPortal(
+      {col1Presentation.masterCollapsed && hoverPreviewOpen && createPortal(
         <div
           data-testid="sidebar-hover-preview"
           onMouseEnter={handleHoverEnter}
@@ -680,7 +699,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         document.body
       )}
 
-      {effMasterCollapsed && (
+      {col1Presentation.masterCollapsed && (
         <aside
           onMouseEnter={handleHoverEnter}
           onMouseLeave={handleHoverLeave}
@@ -691,8 +710,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         >
           <button
             data-testid="sidebar-collapsed-rail"
-            onClick={() => { if (!isNarrowViewport) setMasterCollapsed(false) }}
+            onClick={() => setMasterCollapsed(false)}
             title={t('nav.expand_menu')}
+            aria-label={t('nav.expand_menu')}
+            aria-expanded={false}
             className="mt-auto mb-2 p-1 rounded-lg text-sidebar-text/70 hover:bg-sidebar-active-bg hover:text-sidebar-active-text"
           >
             <PanelLeftOpen size={14} />

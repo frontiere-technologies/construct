@@ -168,41 +168,44 @@ def test_master_collapse_persists_after_reload(logged_in_page):
     assert page.locator("aside").count() == 1, "Master-collapsed state did not persist after reload"
 
 
-def test_narrow_viewport_collapses_to_rail(logged_in_page):
+def test_767_viewport_keeps_visible_columns_icon_only(logged_in_page):
     page = logged_in_page
     l1 = page.locator("aside").first
     ensure_l1_expanded(page, l1)
-    assert page.locator("aside").count() == 1, "sanity: only col1 rendered before narrowing"
+    ensure_l2_open(page)
 
-    page.set_viewport_size({"width": 600, "height": 900})
+    page.set_viewport_size({"width": 767, "height": 900})
     page.wait_for_function(
-        "() => document.querySelector('[data-testid=\"sidebar-collapsed-rail\"]') !== null",
+        "() => document.querySelectorAll('aside').length >= 2 && document.querySelectorAll('[data-testid=\"sidebar-toggle\"]').length === 0",
         timeout=5_000,
     )
-    assert page.locator("aside").count() == 1, "Sidebar should collapse to a single rail column below 768px"
-    rail_width = page.locator("aside").first.bounding_box()["width"]
-    assert rail_width <= 28, f"Rail is not narrow enough below 768px: {rail_width:.0f}px"
-
-    page.set_viewport_size({"width": 1440, "height": 900})
-    page.wait_for_function(
-        "() => document.querySelector('[data-testid=\"sidebar-collapsed-rail\"]') === null",
-        timeout=5_000,
-    )
-    assert l1.bounding_box()["width"] >= 100, "L1 did not restore saved (text) preference above 768px"
+    assert page.locator("aside").first.is_visible(), "L1 should remain visible below 768px"
+    assert page.locator("aside").nth(1).is_visible(), "Opened L2 should remain visible below 768px"
+    assert page.locator("aside").first.bounding_box()["width"] <= 70, "L1 should be icon-only below 768px"
+    assert page.locator("aside").nth(1).bounding_box()["width"] <= 70, "L2 should be icon-only below 768px"
+    assert page.locator('[data-testid="sidebar-toggle"]').count() == 0, "Column toggles should be hidden below 768px"
 
 
-def test_narrow_viewport_hover_shows_full_sidebar_preview(logged_in_page):
+def test_768_viewport_restores_persisted_columns_and_toggles(logged_in_page):
     page = logged_in_page
-    page.set_viewport_size({"width": 600, "height": 900})
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    ensure_l2_open(page)
+
+    page.set_viewport_size({"width": 767, "height": 900})
     page.wait_for_function(
-        "() => document.querySelector('[data-testid=\"sidebar-collapsed-rail\"]') !== null",
+        "() => document.querySelectorAll('[data-testid=\"sidebar-toggle\"]').length === 0",
         timeout=5_000,
     )
-    rail = page.locator("aside").first
-    rail.hover()
-    preview = page.locator('[data-testid="sidebar-hover-preview"]')
-    preview.wait_for(state="visible", timeout=2_000)
-    assert preview.locator("aside").count() >= 1, "Narrow-viewport hover did not show the sidebar preview overlay"
+
+    page.set_viewport_size({"width": 768, "height": 900})
+    page.wait_for_function(
+        "() => document.querySelectorAll('[data-testid=\"sidebar-toggle\"]').length >= 2",
+        timeout=5_000,
+    )
+    assert l1.bounding_box()["width"] >= 100, "L1 should restore its persisted text width at 768px"
+    assert page.locator("aside").nth(1).bounding_box()["width"] >= 100, "L2 should restore its persisted text width at 768px"
+    assert page.locator('[data-testid="sidebar-toggle"]').count() >= 2, "Column toggles should return at 768px"
 
 
 def test_collapsed_rail_is_narrow(logged_in_page):
