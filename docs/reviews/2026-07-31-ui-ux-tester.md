@@ -40,7 +40,7 @@ Severity counts: Critical 0, High 2, Medium 2, Low 1.
 
   Recommendation: centralize dialog behavior to avoid each new modal repeating the same accessibility defect, and add keyboard tests for focus containment, Escape, and trigger-focus restoration.
 
-- [ ] ID=MED-A11Y-03, Severity=Medium, Complexity=Medium, Priority=P2, Title=CustomSelect does not expose or implement a keyboard-accessible select pattern, Fix description=Replace CustomSelect with a native `<select>` where feasible, or implement the ARIA combobox/listbox pattern completely: trigger `aria-expanded`/`aria-controls`, listbox/options semantics and selected/active state, Arrow/Home/End navigation, Enter/Space selection, Escape close, focus movement, and outside-click parity.
+- [✅] ID=MED-A11Y-03, Severity=Medium, Complexity=Medium, Priority=P2, Title=CustomSelect does not expose or implement a keyboard-accessible select pattern, Fix description=Replace CustomSelect with a native `<select>` where feasible, or implement the ARIA combobox/listbox pattern completely: trigger `aria-expanded`/`aria-controls`, listbox/options semantics and selected/active state, Arrow/Home/End navigation, Enter/Space selection, Escape close, focus movement, and outside-click parity.
 
   Flow/state: filters and forms using `CustomSelect`, including role/status filter choices.
 

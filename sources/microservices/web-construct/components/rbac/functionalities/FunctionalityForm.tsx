@@ -101,6 +101,7 @@ export default function FunctionalityForm(
                 className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent" />
               <CustomSelect
                 data-testid="select-genitore"
+                ariaLabel={t('functionalities.form.parent_placeholder')}
                 value={genitoreValue(f.idItemParent)}
                 onChange={v => set('idItemParent', Number(v))}
                 options={buildGenitoreOptions(parents)}
@@ -129,6 +130,7 @@ export default function FunctionalityForm(
           <div className="space-y-3">
             <CustomSelect
               data-testid="select-tipologia"
+              ariaLabel={t('functionalities.form.type_heading')}
               value={selectedType?.key ?? ''}
               onChange={v => {
                 const opt = ITEM_TYPES.find(candidate => candidate.key === v)

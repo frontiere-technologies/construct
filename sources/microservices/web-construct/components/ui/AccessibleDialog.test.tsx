@@ -25,7 +25,7 @@ function renderDialog({
 
   act(() => {
     root?.render(
-      <AccessibleDialog titleId="dialog-title" onClose={onClose} busy={busy}>
+      <AccessibleDialog titleId="dialog-title" onClose={onClose} busy={busy} panelClassName="">
         {children ?? <>
           <h2 id="dialog-title">Title</h2>
           <button data-dialog-initial-focus>Cancel</button>

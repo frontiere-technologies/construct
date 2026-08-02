@@ -8,7 +8,7 @@ Resolve every actionable finding in `docs/reviews/2026-07-31-ui-ux-tester.md` wi
 
 - [✅] ID=HIGH-UIUX-01, Severity=High, Complexity=Medium, Priority=P1, Title=Restore operable narrow-viewport navigation, Fix description=Keep visible sidebar columns rendered below 768 px, force them into icon-only presentation, hide ineffective per-column collapse toggles, preserve the user's `masterCollapsed` state, and replace hover-only narrow-viewport tests with 767/768 px responsive tests.
 - [✅] ID=HIGH-A11Y-02, Severity=High, Complexity=Medium, Priority=P1, Title=Create accessible modal focus boundaries, Fix description=Introduce one shared dialog focus primitive and apply it to FilterDrawer, ConfirmModal, LanguageFormModal, CreateTranslationKeyModal, TranslationEditorDrawer, ManageRolesModal, CreateRoleModal, and RenameRoleModal.
-- [ ] ID=MED-A11Y-03, Severity=Medium, Complexity=Medium, Priority=P2, Title=Complete CustomSelect listbox accessibility, Fix description=Preserve the existing visual component while implementing a complete ARIA listbox contract, keyboard navigation, active-option state, selection, dismissal, and focus behavior.
+- [✅] ID=MED-A11Y-03, Severity=Medium, Complexity=Medium, Priority=P2, Title=Complete CustomSelect listbox accessibility, Fix description=Preserve the existing visual component while implementing a complete ARIA listbox contract, keyboard navigation, active-option state, selection, dismissal, and focus behavior.
 - [✅] ID=MED-A11Y-04, Severity=Medium, Complexity=Low, Priority=P2, Title=Name and expose sidebar control state, Fix description=Add translated accessible names and expanded/checked state to icon-only and expanded sidebar controls, including account, theme, column toggles, close controls, and master expansion.
 - [ ] ID=LOW-A11Y-05, Severity=Low, Complexity=Low, Priority=P3, Title=Announce route loading, Fix description=Render the protected-route loading fallback as a live status and keep the animated spinner decorative.
 
@@ -60,7 +60,7 @@ The protected-route loading wrapper owns `role="status"` and an accessible loadi
 
 - [ ] Add focused failing unit tests for responsive sidebar derivation at 767 px and restored state at 768 px or wider.
 - [ ] Add focused failing DOM tests for dialog semantics, initial focus, Tab wrapping, Escape behavior, busy-state blocking, and trigger-focus restoration.
-- [ ] Add focused failing DOM tests for CustomSelect ARIA attributes and keyboard selection/dismissal.
+- [✅] Add focused DOM tests for CustomSelect ARIA attributes and keyboard selection/dismissal.
 - [ ] Add focused assertions for sidebar control accessible names and switch/panel state.
 - [ ] Add a static-render test for the live loading status and decorative spinner.
 - [ ] Update the existing sidebar E2E expectations so narrow viewports assert visible icon columns instead of a hover-only rail.
