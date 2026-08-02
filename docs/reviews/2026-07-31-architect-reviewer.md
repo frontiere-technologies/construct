@@ -37,7 +37,9 @@ The critical trust boundary is therefore the Next.js process: database RLS is en
 
 ### Identity, authentication, and authorization
 
-- [ ] ID=ARCH-CRIT-1, Severity=Critical, Complexity=Medium, Priority=P0, Title=Deactivated accounts remain fully usable, Fix description=Make `users.id_user_status` an enforced authentication and session invariant: reject inactive users in every credentials/OIDC login path, re-check status at protected and sensitive server boundaries, and define a session-revocation or bounded-expiry mechanism so deactivation terminates existing access.
+- [✅] ID=ARCH-CRIT-1, Severity=Critical, Complexity=Medium, Priority=P0, Title=Deactivated accounts remain fully usable, Fix description=Make `users.id_user_status` an enforced authentication and session invariant: reject inactive users in every credentials/OIDC login path, re-check status at protected and sensitive server boundaries, and define a session-revocation or bounded-expiry mechanism so deactivation terminates existing access.
+
+Remediation verified 2026-08-02: credentials, test credentials, and existing OIDC identities reject non-active accounts; the JWT callback reloads current status and roles on every request; inactive sessions expose no user ID or authority; and `requireAdmin()` performs an independent live database lookup. Focused authentication/config/guard tests passed (11 tests across three files).
 
 `setUserStatus()` persists `id_user_status` and a timestamp, but no authentication path consumes that status (`sources/microservices/web-construct/lib/rbac/users-actions.ts:70-83`). Credentials login selects only id/email/name/password hash and accepts a valid password regardless of status (`sources/microservices/web-construct/lib/auth.ts:84-108`). OIDC sign-in checks only the email domain (`sources/microservices/web-construct/lib/auth.ts:140-149`), and the JWT callback provisions/loads roles without checking status (`sources/microservices/web-construct/lib/auth.ts:151-187`). Consequently, “Deactivated” is currently an administrative display/filter value, not an access-control state; both existing sessions and fresh logins remain usable.
 
@@ -45,7 +47,9 @@ The critical trust boundary is therefore the Next.js process: database RLS is en
 
 The authoritative schema drops `users.role` at `sources/devops/db/schema.sql:46-48`. Much later, it grants everyone only the Registered role and conditionally backfills legacy administrators only if the dropped column still exists (`sources/devops/db/schema.sql:324-348`). On an upgrade from the documented legacy model, the condition is necessarily false and administrator assignments are lost. This is a deployment/data-migration defect, not merely a stale comment.
 
-- [ ] ID=ARCH-HIGH-1, Severity=High, Complexity=Medium, Priority=P0, Title=RBAC revocation is not reflected in active JWT sessions, Fix description=Introduce fresh authorization at sensitive boundaries—either a server-side session store/authorization version checked against the database or a short bounded JWT lifetime with forced invalidation—and derive `isAdmin` from current roles rather than trusting an indefinitely reused claim.
+- [✅] ID=ARCH-HIGH-1, Severity=High, Complexity=Medium, Priority=P0, Title=RBAC revocation is not reflected in active JWT sessions, Fix description=Introduce fresh authorization at sensitive boundaries—either a server-side session store/authorization version checked against the database or a short bounded JWT lifetime with forced invalidation—and derive `isAdmin` from current roles rather than trusting an indefinitely reused claim.
+
+Remediation verified 2026-08-02: the JWT callback refreshes `roleIds`, `isAdmin`, and account status for existing tokens; the session derives authority only from those refreshed values; and privileged mutations use the database-backed `requireAdmin()` guard. Focused tests prove a stale administrator JWT is rejected after demotion or deactivation.
 
 Role IDs and `isAdmin` are populated only when `account && user` is present during sign-in (`sources/microservices/web-construct/lib/auth.ts:151-187`). Later JWT callbacks return the existing claims without querying roles, while middleware and `requireAdmin()` trust those claims (`sources/microservices/web-construct/lib/auth.config.ts:30-34`, `sources/microservices/web-construct/lib/rbac/auth-guard.ts:3-7`). `updateUserRoles()` changes the database but does not invalidate the target's session (`sources/microservices/web-construct/lib/rbac/users-actions.ts:49-67`). A removed administrator therefore retains administrative capabilities until a new sign-in, and ordinary token rotation does not refresh roles in this callback.
 
@@ -73,7 +77,9 @@ The code counts other active administrators before invoking a separate role-repl
 
 ### Network and external integration boundaries
 
-- [ ] ID=ARCH-HIGH-7, Severity=High, Complexity=Medium, Priority=P1, Title=Embedded-page preflight has an acknowledged DNS-rebinding SSRF path, Fix description=Resolve and validate every destination address against private, loopback, link-local, metadata, and reserved ranges immediately before connection, pin the validated address or enforce egress policy, continue rejecting redirects, and consider removing the server-side preflight if browser-only embedding is sufficient.
+- [✅] ID=ARCH-HIGH-7, Severity=High, Complexity=Medium, Priority=P1, Title=Embedded-page preflight has an acknowledged DNS-rebinding SSRF path, Fix description=Resolve and validate every destination address against private, loopback, link-local, metadata, and reserved ranges immediately before connection, pin the validated address or enforce egress policy, continue rejecting redirects, and consider removing the server-side preflight if browser-only embedding is sufficient.
+
+Remediation verified 2026-08-02: the checker resolves all DNS answers, rejects non-public IPv4/IPv6 ranges, pins a validated address through the request lookup callback, rejects redirects, and is backed by a pod egress policy excluding private and reserved IPv4 networks. All 31 focused embedded-check tests passed.
 
 `checkEmbeddable()` performs a server-side HEAD and sometimes GET to an admin-configured URL (`sources/microservices/web-construct/lib/rbac/embedded-check.ts:123-169`). It blocks literal private addresses but explicitly does not resolve DNS and records DNS rebinding as an accepted residual risk (`sources/microservices/web-construct/lib/rbac/embedded-check.ts:68-71`). Any authorized embedded item is fetched when opened (`sources/microservices/web-construct/app/(protected)/embedded/[itemId]/page.tsx:14-25`), so a hostname resolving to an internal service can cross the application/network boundary.
 
@@ -105,7 +111,9 @@ UI languages are dynamic database rows, but navigation content uses a fixed nine
 
 ### Scalability and maintainability
 
-- [ ] ID=ARCH-LOW-1, Severity=Low, Complexity=Low, Priority=P2, Title=Primary architecture documentation describes removed components and credentials, Fix description=Regenerate the README architecture/auth/deployment sections from the current Next.js 16, Auth.js N:N RBAC, Drizzle `DATABASE_URL`, navigation-item, i18n, and Kubernetes design; add a lightweight documentation check to release review.
+- [✅] ID=ARCH-LOW-1, Severity=Low, Complexity=Low, Priority=P2, Title=Primary architecture documentation describes removed components and credentials, Fix description=Regenerate the README architecture/auth/deployment sections from the current Next.js 16, Auth.js N:N RBAC, Drizzle `DATABASE_URL`, navigation-item, i18n, and Kubernetes design; add a lightweight documentation check to release review.
+
+Remediation verified 2026-08-02: README now consistently documents Next.js 16, Auth.js, N:N `user_role` RBAC, Drizzle/PostgreSQL `DATABASE_URL`, `navigation_item`, database-backed i18n, disposable test-database gates, and the current Kubernetes development assets. Searches found none of the obsolete Next.js 15, `users.role`, `menu_items`, or browser Supabase-client setup instructions in the active README.
 
 The README simultaneously says Next.js 15 and 16, describes the removed `users.role`, `menu_items`, and `lib/supabase-server.ts`, and instructs users to configure obsolete Supabase client variables (`README.md:1-3`, `README.md:44-88`, `README.md:191-218`, `README.md:294-302`). These are architecture-contract errors that can cause incorrect deployments and extensions.
 
