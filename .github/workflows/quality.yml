@@ -63,12 +63,12 @@ jobs:
       TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/construct_test
       TEST_DATABASE_DISPOSABLE: "1"
       AUTH_SECRET: ci-only-auth-secret-at-least-32-characters
-      AUTH_URL: http://127.0.0.1:3000
+      AUTH_URL: http://localhost:3000
       AUTH_TEST_CREDENTIALS: "true"
       NEXT_PUBLIC_AUTH_TEST_MODE: "true"
       TEST_EMAIL: admin-e2e@example.com
       TEST_EMAIL_USER: user-e2e@example.com
-      BASE_URL: http://127.0.0.1:3000
+      BASE_URL: http://localhost:3000
       HEADLESS: "true"
     steps:
       - uses: actions/checkout@v4
@@ -146,7 +146,7 @@ jobs:
       - name: Wait for the app
         run: |
           for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:3000/login >/dev/null; then exit 0; fi
+            if curl --fail --silent http://localhost:3000/login >/dev/null; then exit 0; fi
             sleep 2
           done
           sed -n '1,240p' /tmp/construct-next.log

@@ -47,6 +47,7 @@
 - [✅] **Step 1: Replace the cleanup's runtime query with `test-query`.**
 - [✅] **Step 2: Wrap pytest so `/tmp/construct-next.log` is printed before returning a failure.**
 - [✅] **Step 3: Run migration/docs contract tests and inspect the workflow diff.**
+- [✅] **Step 4: Use `localhost` consistently for the Next.js readiness probe, Auth.js, and Playwright after the diagnostic run proves that Next.js blocks client resources requested through `127.0.0.1`.**
 
 ### Task 3: Verification
 
