@@ -68,3 +68,20 @@
 - The form's two `CustomSelect` consumers pass the exact translated labels required by the brief.
 - `MED-A11Y-03` was marked `[✅]` only after the focused test suite passed.
 - No database-mutating integration or E2E test was run.
+
+## Fix round 1
+
+- Added a contract assertion that the trigger's `aria-controls` value equals the rendered listbox `id`.
+- Added a behavioral outside-dismissal test that dispatches external `mousedown` before focus, matching native pointer/focus ordering, and verifies the external control retains focus after the popup closes.
+- No production implementation change was needed.
+
+Commands and results, run from `sources/microservices/web-construct/`:
+
+```text
+npm test -- components/rbac/CustomSelect.test.tsx
+Test Files  1 passed (1)
+Tests  5 passed (5)
+
+npx tsc --noEmit
+exit 0
+```

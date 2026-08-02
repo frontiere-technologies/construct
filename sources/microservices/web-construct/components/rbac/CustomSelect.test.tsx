@@ -70,6 +70,7 @@ describe('CustomSelect', () => {
 
     const listbox = container?.querySelector('[role="listbox"]') as HTMLElement
     const renderedOptions = listbox.querySelectorAll('[role="option"]')
+    expect(trigger.getAttribute('aria-controls')).toBe(listbox.id)
     expect(listbox.getAttribute('aria-activedescendant')).toBe(renderedOptions[1].id)
     expect(renderedOptions).toHaveLength(3)
     expect(renderedOptions[0].getAttribute('aria-selected')).toBe('false')
@@ -109,6 +110,25 @@ describe('CustomSelect', () => {
     expect(onChange).not.toHaveBeenCalled()
     expect(container?.querySelector('[role="listbox"]')).toBeNull()
     expect(document.activeElement).toBe(trigger)
+  })
+
+  it('keeps focus on an external control after outside pointer dismissal', () => {
+    const { trigger } = renderSelect()
+    const externalControl = document.createElement('button')
+    document.body.append(externalControl)
+    act(() => trigger.click())
+
+    expect(container?.querySelector('[role="listbox"]')).not.toBeNull()
+
+    // Native pointer interaction dispatches mousedown before moving focus to the
+    // clicked button, so mirror that order instead of assigning focus first.
+    act(() => {
+      externalControl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+      externalControl.focus()
+    })
+
+    expect(container?.querySelector('[role="listbox"]')).toBeNull()
+    expect(document.activeElement).toBe(externalControl)
   })
 
   it('does not open a popup when there are no options', () => {
