@@ -2,13 +2,15 @@
 
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CustomSelect from './CustomSelect'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let root: Root | undefined
 let container: HTMLDivElement | undefined
+let scrollIntoView: ReturnType<typeof vi.fn>
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView')
 
 const options = [
   { value: 'first', label: 'First option' },
@@ -51,12 +53,25 @@ function pressKey(target: Element, key: string) {
   act(() => target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })))
 }
 
+beforeEach(() => {
+  scrollIntoView = vi.fn()
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoView,
+  })
+})
+
 afterEach(() => {
   act(() => root?.unmount())
   container?.remove()
   root = undefined
   container = undefined
   document.body.replaceChildren()
+  if (originalScrollIntoView) {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView)
+  } else {
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+  }
 })
 
 describe('CustomSelect', () => {
@@ -110,6 +125,44 @@ describe('CustomSelect', () => {
     expect(onChange).not.toHaveBeenCalled()
     expect(container?.querySelector('[role="listbox"]')).toBeNull()
     expect(document.activeElement).toBe(trigger)
+  })
+
+  it('scrolls a keyboard-active option into view in a long list', () => {
+    const longOptions = Array.from({ length: 30 }, (_, index) => ({
+      value: `option-${index}`,
+      label: `Option ${index}`,
+    }))
+    const { trigger } = renderSelect({ value: 'option-0', selectOptions: longOptions })
+    pressKey(trigger, 'ArrowDown')
+    const listbox = container?.querySelector('[role="listbox"]') as HTMLElement
+    scrollIntoView.mockClear()
+
+    pressKey(listbox, 'End')
+
+    const lastOption = listbox.querySelectorAll('[role="option"]')[29]
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    expect(scrollIntoView.mock.instances[0]).toBe(lastOption)
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+  })
+
+  it('dismisses on Tab focus leave without stealing focus from the destination', () => {
+    const { trigger } = renderSelect()
+    const externalControl = document.createElement('button')
+    document.body.append(externalControl)
+    trigger.focus()
+    pressKey(trigger, 'ArrowDown')
+    const listbox = container?.querySelector('[role="listbox"]') as HTMLElement
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+
+    act(() => {
+      listbox.dispatchEvent(tab)
+      externalControl.focus()
+    })
+
+    expect(tab.defaultPrevented).toBe(false)
+    expect(container?.querySelector('[role="listbox"]')).toBeNull()
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(externalControl)
   })
 
   it('keeps focus on an external control after outside pointer dismissal', () => {

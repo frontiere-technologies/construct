@@ -54,6 +54,7 @@ const ICON_SUB_W = 'w-14'
 const TEXT_SUB_W = 'w-48'
 const RAIL_W = 'w-6'
 const COLLAPSE_KEY = 'sidebarCollapseState'
+const sidebarPanelId = (containerId: string) => `sidebar-panel-${containerId}`
 /** How many sub-column collapse preferences to restore from localStorage on mount. */
 const MAX_RESTORED_SUB_COLS = 8
 
@@ -100,13 +101,15 @@ interface L1ItemProps {
   highlight: NavHighlight
   isCollapsed: boolean
   hasChildren: boolean
+  expanded: boolean
+  controlsId: string
   onShowTooltip: (e: React.MouseEvent, text: string) => void
   onHideTooltip: () => void
   onClick: () => void
 }
 
 const L1Item: React.FC<L1ItemProps> = ({
-  item, highlight, isCollapsed, hasChildren, onShowTooltip, onHideTooltip, onClick,
+  item, highlight, isCollapsed, hasChildren, expanded, controlsId, onShowTooltip, onHideTooltip, onClick,
 }) => {
   const isActive = highlight === 'active'
   const cls = clsx(
@@ -144,7 +147,15 @@ const L1Item: React.FC<L1ItemProps> = ({
     )
   }
   return (
-    <button onClick={onClick} onMouseEnter={tooltipEnter} onMouseLeave={tooltipLeave} aria-label={isCollapsed ? item.label : undefined} className={cls}>
+    <button
+      onClick={onClick}
+      onMouseEnter={tooltipEnter}
+      onMouseLeave={tooltipLeave}
+      aria-label={isCollapsed ? item.label : undefined}
+      aria-expanded={hasChildren ? expanded : undefined}
+      aria-controls={hasChildren ? controlsId : undefined}
+      className={cls}
+    >
       {content}
     </button>
   )
@@ -155,13 +166,15 @@ interface SubItemProps {
   menuItems: MenuItem[]
   isCollapsed: boolean
   highlight: NavHighlight
+  expanded: boolean
+  controlsId: string
   onShowTooltip: (e: React.MouseEvent, text: string) => void
   onHideTooltip: () => void
   onContainerClick: () => void
 }
 
 const SubItem: React.FC<SubItemProps> = ({
-  item, menuItems, isCollapsed, highlight, onShowTooltip, onHideTooltip, onContainerClick,
+  item, menuItems, isCollapsed, highlight, expanded, controlsId, onShowTooltip, onHideTooltip, onContainerClick,
 }) => {
   const hasChildren = menuItems.some(i => i.parentId === item.id && i.visible && i.active)
   const isActive = highlight === 'active'
@@ -184,7 +197,15 @@ const SubItem: React.FC<SubItemProps> = ({
 
   if (hasChildren) {
     return (
-      <button onClick={onContainerClick} onMouseEnter={tooltipEnter} onMouseLeave={tooltipLeave} aria-label={isCollapsed ? item.label : undefined} className={cls}>
+      <button
+        onClick={onContainerClick}
+        onMouseEnter={tooltipEnter}
+        onMouseLeave={tooltipLeave}
+        aria-label={isCollapsed ? item.label : undefined}
+        aria-expanded={expanded}
+        aria-controls={controlsId}
+        className={cls}
+      >
         {icon}{label}
       </button>
     )
@@ -478,6 +499,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             {topItems.map(item => (
               <L1Item key={item.id} item={item} highlight={navHighlight(item, highlightCtx)}
                 isCollapsed={effCol1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
+                expanded={openPath[0] === item.id} controlsId={sidebarPanelId(item.id)}
                 onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
                 onClick={() => handleL1Click(item)} />
             ))}
@@ -488,6 +510,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           {mainItems.map(item => (
             <L1Item key={item.id} item={item} highlight={navHighlight(item, highlightCtx)}
               isCollapsed={effCol1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
+              expanded={openPath[0] === item.id} controlsId={sidebarPanelId(item.id)}
               onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
               onClick={() => handleL1Click(item)} />
           ))}
@@ -497,6 +520,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           {bottomItems.map(item => (
             <L1Item key={item.id} item={item} highlight={navHighlight(item, highlightCtx)}
               isCollapsed={effCol1Collapsed} hasChildren={itemsWithChildren.has(item.id)}
+              expanded={openPath[0] === item.id} controlsId={sidebarPanelId(item.id)}
               onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
               onClick={() => handleL1Click(item)} />
           ))}
@@ -635,7 +659,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         const presentation = resolveSidebarPresentation(isNarrowViewport, masterCollapsed, isSubCollapsed(k + 1))
         const collapsed = presentation.columnCollapsed
         return (
-          <aside key={parent.id} data-testid={`sidebar-col-${k + 2}`} className={clsx(
+          <aside key={parent.id} id={sidebarPanelId(parent.id)} data-testid={`sidebar-col-${k + 2}`} className={clsx(
             'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
             collapsed ? ICON_SUB_W : TEXT_SUB_W
           )}>
@@ -663,6 +687,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               {items.map(item => (
                 <SubItem key={item.id} item={item} menuItems={menuItems}
                   isCollapsed={collapsed} highlight={navHighlight(item, highlightCtx)}
+                  expanded={openPath[k + 1] === item.id} controlsId={sidebarPanelId(item.id)}
                   onShowTooltip={showTooltip} onHideTooltip={hideTooltip}
                   onContainerClick={() => openAtDepth(item, k + 1)} />
               ))}

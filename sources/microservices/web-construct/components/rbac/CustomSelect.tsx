@@ -1,6 +1,10 @@
 'use client'
 
-import React, { useState, useRef, useEffect, useCallback, useId, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import React, {
+  useState, useRef, useEffect, useCallback, useId,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 
 export interface SelectOption { value: string | number; label: string }
@@ -57,6 +61,16 @@ export default function CustomSelect({
   useEffect(() => {
     if (open) listRef.current?.focus()
   }, [open])
+  useEffect(() => {
+    if (!open) return
+    const activeOption = listRef.current?.children.item(activeIndex)
+    if (activeOption instanceof HTMLElement) activeOption.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex, open])
+
+  const handleBlur = (event: ReactFocusEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget
+    if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) close()
+  }
 
   const onTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || open) return
@@ -101,7 +115,7 @@ export default function CustomSelect({
   }
 
   return (
-    <div ref={ref} className={`relative ${className}`} title={title}>
+    <div ref={ref} className={`relative ${className}`} title={title} onBlur={handleBlur}>
       {/* ── Trigger ── */}
       <button
         ref={triggerRef}

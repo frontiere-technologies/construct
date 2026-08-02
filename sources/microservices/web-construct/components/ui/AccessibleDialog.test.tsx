@@ -142,4 +142,74 @@ describe('AccessibleDialog', () => {
 
     expect(document.activeElement).toBe(trigger)
   })
+
+  it('does not try to restore focus to a trigger that became disabled', () => {
+    const trigger = document.createElement('button')
+    document.body.append(trigger)
+    trigger.focus()
+    renderDialog()
+    trigger.disabled = true
+    const focus = vi.spyOn(trigger, 'focus')
+
+    act(() => root?.unmount())
+
+    expect(focus).not.toHaveBeenCalled()
+  })
+
+  it('does not try to restore focus to a trigger that became hidden', () => {
+    const wrapper = document.createElement('div')
+    const trigger = document.createElement('button')
+    wrapper.append(trigger)
+    document.body.append(wrapper)
+    trigger.focus()
+    renderDialog()
+    wrapper.hidden = true
+    const focus = vi.spyOn(trigger, 'focus')
+
+    act(() => root?.unmount())
+
+    expect(focus).not.toHaveBeenCalled()
+  })
+
+  it('does not try to restore focus to a trigger inside an inert subtree', () => {
+    const wrapper = document.createElement('div')
+    const trigger = document.createElement('button')
+    wrapper.append(trigger)
+    document.body.append(wrapper)
+    trigger.focus()
+    renderDialog()
+    wrapper.setAttribute('inert', '')
+    const focus = vi.spyOn(trigger, 'focus')
+
+    act(() => root?.unmount())
+
+    expect(focus).not.toHaveBeenCalled()
+  })
+
+  it('does not try to restore focus when the prior target is no longer focusable', () => {
+    const trigger = document.createElement('div')
+    trigger.tabIndex = 0
+    document.body.append(trigger)
+    trigger.focus()
+    renderDialog()
+    trigger.removeAttribute('tabindex')
+    const focus = vi.spyOn(trigger, 'focus')
+
+    act(() => root?.unmount())
+
+    expect(focus).not.toHaveBeenCalled()
+  })
+
+  it('does not try to restore focus to a removed trigger', () => {
+    const trigger = document.createElement('button')
+    document.body.append(trigger)
+    trigger.focus()
+    renderDialog()
+    trigger.remove()
+    const focus = vi.spyOn(trigger, 'focus')
+
+    act(() => root?.unmount())
+
+    expect(focus).not.toHaveBeenCalled()
+  })
 })

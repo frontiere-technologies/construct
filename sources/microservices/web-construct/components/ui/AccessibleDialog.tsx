@@ -8,6 +8,19 @@ const FOCUSABLE = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
+function isRestorableFocusTarget(element: HTMLElement | null): element is HTMLElement {
+  if (!element?.isConnected || element.tabIndex < 0) return false
+  if (element.matches(':disabled, input[type="hidden"]')) return false
+  if (element.closest('[hidden], [inert], [aria-hidden="true"]')) return false
+
+  for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+    const style = window.getComputedStyle(current)
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false
+  }
+
+  return true
+}
+
 interface AccessibleDialogProps {
   titleId: string
   descriptionId?: string
@@ -43,7 +56,7 @@ export default function AccessibleDialog({
     initialFocus?.focus()
 
     return () => {
-      if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus()
+      if (isRestorableFocusTarget(previousFocusRef.current)) previousFocusRef.current.focus()
     }
   }, [])
 
