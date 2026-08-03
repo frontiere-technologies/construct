@@ -6,10 +6,10 @@ The selected-role area in the user role management dialog must remain compact wh
 
 ## Requirements
 
-- [ ] ID=ROLE-OVERFLOW-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Bound selected-role height, Fix description=Limit the selected-role area to approximately four tag rows with a maximum height of 7rem and show a vertical scrollbar only when its content exceeds that height.
-- [ ] ID=ROLE-OVERFLOW-2, Severity=Medium, Complexity=Low, Priority=P1, Title=Contain long role names, Fix description=Keep role chips from shrinking or breaking unspaced names and show a horizontal scrollbar only when selected content exceeds the available width.
-- [ ] ID=ROLE-OVERFLOW-3, Severity=Low, Complexity=Low, Priority=P2, Title=Preserve option-list scrolling, Fix description=Keep the existing role-option list scroll container independent from the selected-role scroll container.
-- [ ] ID=ROLE-OVERFLOW-4, Severity=Low, Complexity=Low, Priority=P2, Title=Add regression coverage, Fix description=Add a focused component source contract that fails unless the selected-role container declares both bounded height and two-axis automatic overflow.
+- [✅] ID=ROLE-OVERFLOW-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Bound selected-role height, Fix description=Limit the selected-role area to approximately four tag rows with a maximum height of 7rem and show a vertical scrollbar only when its content exceeds that height.
+- [✅] ID=ROLE-OVERFLOW-2, Severity=Medium, Complexity=Low, Priority=P1, Title=Contain long role names, Fix description=Keep role chips from shrinking or breaking unspaced names and show a horizontal scrollbar only when selected content exceeds the available width.
+- [✅] ID=ROLE-OVERFLOW-3, Severity=Low, Complexity=Low, Priority=P2, Title=Preserve option-list scrolling, Fix description=Keep the existing role-option list scroll container independent from the selected-role scroll container.
+- [✅] ID=ROLE-OVERFLOW-4, Severity=Low, Complexity=Low, Priority=P2, Title=Add regression coverage, Fix description=Add a focused component source contract that fails unless the selected-role container declares both bounded height and two-axis automatic overflow.
 
 ## Component design
 
