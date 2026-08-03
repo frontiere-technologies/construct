@@ -8,11 +8,11 @@ The README will become the operational source of truth for this workflow. Histor
 
 ## Scope
 
-- [ ] ID=DOC-1, Title=Compose definition, Fix description=Add a root-level `compose.yaml` with one `web` service built from the existing web application Dockerfile.
-- [ ] ID=DOC-2, Title=Runtime environment, Fix description=Load runtime settings from an untracked `sources/microservices/web-construct/.env.docker.local` file created from `.env.template`.
-- [ ] ID=DOC-3, Title=Supabase database, Fix description=Document that `DATABASE_URL` points to a limited runtime login through the Supavisor transaction pooler and that owner-level migrations continue to run from the host.
-- [ ] ID=DOC-4, Title=Local lifecycle, Fix description=Document build, start, readiness verification, log inspection, stop, and rebuild commands in the README.
-- [ ] ID=DOC-5, Title=Secret safety, Fix description=Ignore `.env.docker.local` and never commit real database, authentication, OIDC, or mail credentials.
+- [✅] ID=DOC-1, Title=Compose definition, Fix description=Add a root-level `compose.yaml` with one `web` service built from the existing web application Dockerfile.
+- [✅] ID=DOC-2, Title=Runtime environment, Fix description=Load runtime settings from an untracked `sources/microservices/web-construct/.env.docker.local` file created from `.env.template`.
+- [✅] ID=DOC-3, Title=Supabase database, Fix description=Document that `DATABASE_URL` points to a limited runtime login through the Supavisor transaction pooler and that owner-level migrations continue to run from the host.
+- [✅] ID=DOC-4, Title=Local lifecycle, Fix description=Document build, start, readiness verification, log inspection, stop, and rebuild commands in the README.
+- [✅] ID=DOC-5, Title=Secret safety, Fix description=Ignore `.env.docker.local` and never commit real database, authentication, OIDC, or mail credentials.
 
 ## Compose topology
 
@@ -48,8 +48,8 @@ Schema migrations and runtime-role provisioning remain operator actions on the h
 
 ## Verification
 
-- [ ] ID=VER-1, Title=Compose parse, Fix description=Run `docker compose config` with a temporary non-secret environment file and confirm that the model is valid.
-- [ ] ID=VER-2, Title=Documentation contract, Fix description=Run the repository documentation contract tests.
-- [ ] ID=VER-3, Title=Secret exclusion, Fix description=Confirm Git ignores the real `.env.docker.local` path while keeping `.env.template` tracked.
+- [✅] ID=VER-1, Title=Compose parse, Fix description=Run `docker compose config` with a temporary non-secret environment file and confirm that the model is valid.
+- [✅] ID=VER-2, Title=Documentation contract, Fix description=Run the repository documentation contract tests.
+- [✅] ID=VER-3, Title=Secret exclusion, Fix description=Confirm Git ignores the real `.env.docker.local` path while keeping `.env.template` tracked.
 
 Building and starting the image against a real Supabase project is an optional manual integration check because it requires user-owned external credentials and network access.

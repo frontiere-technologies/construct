@@ -32,7 +32,7 @@
 - Consumes: `sources/microservices/web-construct/Dockerfile`, `.env.template`, `/api/health/ready`, and the host-side `sources/devops/db/db.mjs` operator workflow.
 - Produces: root command `docker compose up --build -d`, service `web`, image `construct-web:local`, published URL `http://localhost:3000`, and ignored runtime file `sources/microservices/web-construct/.env.docker.local`.
 
-- [ ] **Step 1: Add failing documentation/configuration contracts**
+- [✅] **Step 1: Add failing documentation/configuration contracts**
 
 Extend `sources/devops/docs-contract.test.mjs` with a test that reads `compose.yaml`, `.gitignore`, and `README.md`, then asserts:
 
@@ -56,7 +56,7 @@ test('local Docker Compose runs only the web app against external Supabase', () 
 })
 ```
 
-- [ ] **Step 2: Run the contract and verify the expected failure**
+- [✅] **Step 2: Run the contract and verify the expected failure**
 
 Run:
 
@@ -67,7 +67,7 @@ npm run test:docs-contract
 
 Expected: FAIL because root-level `compose.yaml` does not exist.
 
-- [ ] **Step 3: Add the minimal Compose model and secret exclusion**
+- [✅] **Step 3: Add the minimal Compose model and secret exclusion**
 
 Create `compose.yaml`:
 
@@ -96,7 +96,7 @@ Add this exact entry to `.gitignore` under environment variables:
 sources/microservices/web-construct/.env.docker.local
 ```
 
-- [ ] **Step 4: Document configuration, lifecycle, and troubleshooting**
+- [✅] **Step 4: Document configuration, lifecycle, and troubleshooting**
 
 Add `## Local Docker with Supabase` after the native local setup. It must document:
 
@@ -114,7 +114,7 @@ docker compose up --build -d
 
 State that `.env.docker.local` must set the Supavisor transaction-pooler `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL=http://localhost:3000`, an OIDC provider, and optional mail settings. State that migrations and runtime-role provisioning run from the host with `MIGRATION_DATABASE_URL`, which is not supplied to Compose. Explain that readiness failures usually mean invalid Supabase credentials, unavailable pooler/network, missing schema, or invalid authentication configuration.
 
-- [ ] **Step 5: Run focused verification**
+- [✅] **Step 5: Run focused verification**
 
 Create a temporary `.env.docker.local` containing non-secret syntactically valid dummy values, then run:
 
@@ -129,11 +129,11 @@ git diff --check
 
 Expected: Compose exits `0`; documentation tests pass; `git check-ignore` identifies the new `.gitignore` rule; diff check reports no whitespace errors. Remove only the temporary dummy environment file after verification.
 
-- [ ] **Step 6: Mark the originating design checklist complete**
+- [✅] **Step 6: Mark the originating design checklist complete**
 
 In `docs/superpowers/specs/2026-08-03-local-docker-compose-design.md`, change each implemented and verified `- [ ]` item to `- [✅]`. Do not mark the optional real-Supabase integration check complete unless it was actually performed.
 
-- [ ] **Step 7: Commit the implementation**
+- [✅] **Step 7: Commit the implementation**
 
 ```bash
 git add compose.yaml .gitignore README.md sources/devops/docs-contract.test.mjs \
