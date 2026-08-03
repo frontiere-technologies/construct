@@ -135,6 +135,75 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Local Docker with Supabase
+
+Docker Compose runs only the production-style standalone Next.js container. The database remains hosted by Supabase: the container connects directly to the Supavisor transaction pooler, and no local PostgreSQL service is started.
+
+Requirements: Docker with the Compose plugin, an initialized Supabase database, and a dedicated limited database login inheriting only `construct_runtime`. Apply migrations and provision that runtime role from the host first, as described in [Local setup](#local-setup). Keep `MIGRATION_DATABASE_URL` on the host; it is intentionally not passed to the web container.
+
+From the repository root, create the ignored container environment file:
+
+```bash
+cp sources/microservices/web-construct/.env.template \
+  sources/microservices/web-construct/.env.docker.local
+openssl rand -base64 32
+```
+
+Edit `.env.docker.local` and configure at minimum:
+
+```env
+# Supabase → Project Settings → Database → Transaction pooler (port 6543).
+# Use the limited runtime login, not the owner or migration login.
+DATABASE_URL=postgresql://construct_app.project:password@pooler-host:6543/postgres
+AUTH_SECRET=<output of: openssl rand -base64 32>
+AUTH_URL=http://localhost:3000
+
+# Configure one or more OIDC providers:
+AUTH_GOOGLE_ID=
+AUTH_GOOGLE_SECRET=
+AUTH_MICROSOFT_ENTRA_ID_ID=
+AUTH_MICROSOFT_ENTRA_ID_SECRET=
+AUTH_MICROSOFT_ENTRA_ID_TENANT_ID=
+AUTH_KEYCLOAK_ID=
+AUTH_KEYCLOAK_SECRET=
+AUTH_KEYCLOAK_ISSUER=
+```
+
+Configure the selected OIDC provider to allow callbacks from the `http://localhost:3000` application origin. Add the mail settings from `.env.template` when invitation, registration, or password-reset email delivery is required. Do not put `MIGRATION_DATABASE_URL` in `.env.docker.local`.
+
+Build and start the container in the background:
+
+```bash
+docker compose up --build -d
+```
+
+Check the container and its database-aware readiness endpoint:
+
+```bash
+docker compose ps
+curl --fail http://localhost:3000/api/health/ready
+```
+
+Then open [http://localhost:3000](http://localhost:3000). If the service does not become healthy, inspect its logs:
+
+```bash
+docker compose logs -f web
+```
+
+Readiness failures normally indicate an invalid Supabase connection string, unreachable Supavisor endpoint, missing database migrations, or incomplete authentication configuration.
+
+Stop and remove the local container and network with:
+
+```bash
+docker compose down
+```
+
+The Compose workflow runs the production standalone build and does not mount the source tree. Rebuild after source changes:
+
+```bash
+docker compose up --build -d
+```
+
 ### Local test credentials
 
 The test provider is available only outside production and only when both flags are true:

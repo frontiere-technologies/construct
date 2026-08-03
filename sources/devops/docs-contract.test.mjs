@@ -29,3 +29,21 @@ test('operations documentation assigns backup, restore, and log retention respon
   assert.match(recovery, /pg_dump/)
   assert.match(recovery, /user_role/)
 })
+
+test('local Docker Compose runs only the web app against external Supabase', () => {
+  const compose = read('compose.yaml')
+  const gitignore = read('.gitignore')
+  const readme = read('README.md')
+
+  assert.match(compose, /^services:\n  web:/m)
+  assert.doesNotMatch(compose, /^  (db|postgres|supabase):/m)
+  assert.match(compose, /sources\/microservices\/web-construct\/\.env\.docker\.local/)
+  assert.match(compose, /3000:3000/)
+  assert.match(compose, /api\/health\/ready/)
+  assert.doesNotMatch(compose, /MIGRATION_DATABASE_URL/)
+  assert.match(gitignore, /sources\/microservices\/web-construct\/\.env\.docker\.local/)
+  assert.match(readme, /Local Docker with Supabase/)
+  assert.match(readme, /docker compose up --build -d/)
+  assert.match(readme, /Supavisor/)
+  assert.match(readme, /MIGRATION_DATABASE_URL/)
+})

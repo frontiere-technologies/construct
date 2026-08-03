@@ -22,6 +22,7 @@ sources/*/*/next-env.d.ts
 .env.production.local
 sources/*/*/.env
 sources/*/*/.env.local
+sources/microservices/web-construct/.env.docker.local
 
 # Logs
 logs/
