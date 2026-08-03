@@ -108,7 +108,7 @@ def _restore_i18n_content() -> None:
     poisoned by this file's own content.
     """
     subprocess.run(
-        ["node", "sources/devops/db/db.mjs", "query",
+        ["node", "sources/devops/db/db.mjs", "test-query",
          "update translation_value set value = 'Save' "
          "from translation_key, app_language "
          "where translation_value.id_translation_key = translation_key.id_translation_key "
@@ -184,7 +184,7 @@ def test_a_missing_english_translation_falls_back_to_italian(logged_in_page, bas
     try:
         _open_translations(page, base_url)
         page.get_by_role("button", name="Nuova chiave").click()
-        page.get_by_label("Chiave").fill(key)
+        page.get_by_role("dialog").get_by_label("Chiave").fill(key)
         page.get_by_label("Namespace").fill("zzz_e2e")
         page.get_by_role("button", name="Salva").click()
         page.wait_for_load_state("networkidle")

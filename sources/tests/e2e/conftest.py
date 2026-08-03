@@ -1,5 +1,6 @@
 import os
 import subprocess
+import uuid
 import pytest
 from pathlib import Path
 from playwright.sync_api import sync_playwright
@@ -15,6 +16,16 @@ if _env_file.exists():
             os.environ.setdefault(_k.strip(), _v.strip())
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+REGISTER_EMAIL = f"e2e-register-{uuid.uuid4().hex}@frontiere.io"
+
+
+def _require_disposable_test_database() -> None:
+    if not os.getenv("TEST_DATABASE_URL"):
+        pytest.exit("Set TEST_DATABASE_URL to a dedicated disposable database in tests/e2e/.env.test")
+    if os.getenv("TEST_DATABASE_DISPOSABLE") != "1":
+        pytest.exit("Set TEST_DATABASE_DISPOSABLE=1 after verifying the E2E database is disposable")
+    if os.getenv("DATABASE_URL") and os.getenv("DATABASE_URL") == os.getenv("TEST_DATABASE_URL"):
+        pytest.exit("TEST_DATABASE_URL must be different from DATABASE_URL")
 
 
 def _reset_language_preferences() -> None:
@@ -22,17 +33,29 @@ def _reset_language_preferences() -> None:
     # language. The suite asserts Italian copy, and a user left on English
     # fails assertions in unrelated test files with no hint of the real cause.
     subprocess.run(
-        ["node", "sources/devops/db/db.mjs", "query",
-         "update users set id_language = null where id_language is not null"],
+        ["node", "sources/devops/db/db.mjs", "test-reset-e2e"],
         cwd=REPO_ROOT, check=True, capture_output=True,
     )
 
 
 @pytest.fixture(scope="session", autouse=True)
 def clean_language_preferences():
+    _require_disposable_test_database()
     _reset_language_preferences()
-    yield
-    _reset_language_preferences()
+    try:
+        yield
+    finally:
+        _reset_language_preferences()
+        env = {**os.environ, "E2E_REGISTER_EMAIL": REGISTER_EMAIL}
+        subprocess.run(
+            ["node", "sources/devops/db/db.mjs", "test-delete-user"],
+            cwd=REPO_ROOT, check=True, capture_output=True, env=env,
+        )
+
+
+@pytest.fixture(scope="session")
+def registration_email():
+    return REGISTER_EMAIL
 
 
 @pytest.fixture(scope="session")

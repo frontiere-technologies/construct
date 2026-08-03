@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildAuthTree, buildAuthMap, applyToggle, computeDeltas } from './permission-tree'
-import type { NavigationItemRow, UserNavigationTreeDto } from './types'
+import type { NavigationItemRow } from './types'
 
 const row = (id: number, parent: number | null, type: number, name: string): NavigationItemRow => ({
   id_item: id, name, id_item_type: type, id_functionality_type: type === 2 ? 3 : null,

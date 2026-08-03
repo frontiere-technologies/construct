@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { users, allowedDomains, passwordSetTokens } from '@/lib/db/schema'
+import { allowedDomains } from '@/lib/db/schema'
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
+import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
+import { prepareInvitation, recordInvitationDelivery } from '@/lib/auth-invitations'
 
 const log = createLogger('auth:register')
 
@@ -16,6 +18,14 @@ export async function POST(req: NextRequest) {
   }
 
   const normalizedEmail = email.toLowerCase().trim()
+  try {
+    await enforceAuthRateLimit({ request: req, scope: 'register', account: normalizedEmail, accountLimit: 5 })
+  } catch (err) {
+    if (err instanceof AuthRateLimitExceeded) {
+      return NextResponse.json({ error: 'Troppe richieste. Riprova più tardi.' }, { status: 429 })
+    }
+    throw err
+  }
   const domain = normalizedEmail.split('@')[1] ?? ''
 
   log.info({ domain }, 'register attempt')
@@ -31,50 +41,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // Duplicate email check
-  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, normalizedEmail)).limit(1)
-  if (existing?.id) {
-    log.info('email already registered, skipping')
-    return NextResponse.json({ ok: true })
-  }
-
-  // Create user
-  let newUser: { id: string } | undefined
+  let invitation
   try {
-    ;[newUser] = await db.insert(users).values({ email: normalizedEmail, authProvider: 'credentials' }).returning({ id: users.id })
+    invitation = await prepareInvitation(normalizedEmail)
   } catch (err) {
-    log.error({ err }, 'failed to create user')
+    log.error({ err }, 'failed to prepare invitation')
     return NextResponse.json({ ok: true })
   }
-  if (!newUser?.id) {
-    log.error('failed to create user')
+  if (!invitation) {
+    log.info('existing password-bearing account, skipping')
     return NextResponse.json({ ok: true })
   }
-  log.info({ userId: newUser.id }, 'user created')
-
-  // Create set-password token (48h)
-  const token = crypto.randomUUID()
-  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
-  try {
-    await db.insert(passwordSetTokens).values({ userId: newUser.id, token, expiresAt })
-  } catch (err) {
-    log.error({ err }, 'failed to create password token')
-    try {
-      await db.delete(users).where(eq(users.id, newUser.id))
-    } catch (cleanupErr) {
-      log.warn({ err: cleanupErr, userId: newUser.id }, 'failed to clean up user after password token creation failure')
-    }
-    return NextResponse.json({ ok: true })
-  }
-  log.info({ userId: newUser.id }, 'password token created')
+  log.info({ userId: invitation.userId }, 'invitation prepared')
 
   const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL
   if (!baseUrl) {
     log.error('AUTH_URL / NEXTAUTH_URL not set')
+    await recordInvitationDelivery(invitation.tokenId, { ok: false, code: 'server_configuration' })
     return NextResponse.json({ ok: true })
   }
 
-  const setPasswordUrl = `${baseUrl.replace(/\/$/, '')}/set-password?token=${token}`
+  const setPasswordUrl = `${baseUrl.replace(/\/$/, '')}/set-password?token=${invitation.rawToken}`
   if (process.env.NODE_ENV === 'development') {
     log.info({ setPasswordUrl }, 'dev: set-password link')
   }
@@ -102,9 +89,11 @@ export async function POST(req: NextRequest) {
       `,
       text: `Benvenuto in Construct.\n\nImposta la tua password al seguente link (valido 48 ore):\n${setPasswordUrl}\n\nSe non ti aspettavi questa email, ignorala.`,
     })
+    await recordInvitationDelivery(invitation.tokenId, { ok: true })
     log.info('welcome email sent')
   } catch (emailErr) {
     log.error({ err: emailErr }, 'failed to send welcome email')
+    await recordInvitationDelivery(invitation.tokenId, { ok: false, code: 'email_delivery_failed' })
   }
 
   return NextResponse.json({ ok: true })

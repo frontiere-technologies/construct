@@ -1,4 +1,15 @@
+import { lookup } from 'node:dns/promises'
+import http from 'node:http'
+import https from 'node:https'
+import { isIP, type LookupFunction } from 'node:net'
+
 const FETCH_TIMEOUT_MS = 4000
+
+type ResolvedAddress = { address: string; family: number }
+type EmbeddedCheckDependencies = {
+  resolveHost: (hostname: string) => Promise<ResolvedAddress[]>
+  request: (url: URL, method: 'HEAD' | 'GET', address: ResolvedAddress) => Promise<Response>
+}
 
 export function isHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url)
@@ -41,8 +52,16 @@ function isBlockedIPv4(host: string): boolean {
   if (a === 10) return true
   if (a === 127) return true
   if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 100 && b >= 64 && b <= 127) return true
   if (a === 192 && b === 168) return true
   if (a === 169 && b === 254) return true
+  if (a === 192 && b === 0) return true
+  if (a === 192 && b === 0 && octets[2] === 2) return true
+  if (a === 192 && b === 88 && octets[2] === 99) return true
+  if (a === 198 && (b === 18 || b === 19)) return true
+  if (a === 198 && b === 51 && octets[2] === 100) return true
+  if (a === 203 && b === 0 && octets[2] === 113) return true
+  if (a >= 224) return true
   return false
 }
 
@@ -65,10 +84,6 @@ function decodeIPv4MappedIPv6(host: string): string | null {
   return bytes.join('.')
 }
 
-// Blocks only literal private/loopback/link-local addresses (SSRF hardening for this
-// admin-only, server-side fetch). This does NOT resolve DNS, so a public hostname that
-// resolves to a private IP at request time (DNS rebinding) is a known, accepted residual
-// risk for this pass — out of scope by design.
 function isBlockedHost(hostname: string): boolean {
   // Strip IPv6 brackets and a single trailing FQDN root-label dot (`localhost.` is
   // resolved identically to `localhost` by DNS but fails a bare string comparison).
@@ -84,6 +99,8 @@ function isBlockedHost(hostname: string): boolean {
     const firstGroup = host.split(':')[0]
     if (/^fe[89ab][0-9a-f]$/.test(firstGroup)) return true // fe80::/10 (link-local)
     if (/^f[cd][0-9a-f]{2}$/.test(firstGroup)) return true // fc00::/7 (unique local)
+    if (/^ff[0-9a-f]{2}$/.test(firstGroup)) return true // ff00::/8 (multicast)
+    if (host.startsWith('2001:db8:')) return true // documentation prefix
   }
 
   return false
@@ -120,22 +137,56 @@ function blocksEmbedding(headers: Headers): boolean {
   return false
 }
 
-async function fetchWithTimeout(url: string, method: 'HEAD' | 'GET'): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    return await fetch(url, {
-      method,
-      signal: controller.signal,
-      redirect: 'manual',
-      cache: 'no-store',
-    })
-  } finally {
-    clearTimeout(timer)
+async function resolveHost(hostname: string): Promise<ResolvedAddress[]> {
+  const host = hostname.replace(/^\[|\]$/g, '')
+  const family = isIP(host)
+  if (family) return [{ address: host, family }]
+  return lookup(host, { all: true, verbatim: true })
+}
+
+export function createPinnedLookup(pinned: ResolvedAddress): LookupFunction {
+  return (_hostname, options, callback) => {
+    // Node's Happy Eyeballs connection path requests `all: true` and requires
+    // the callback's array form. Returning the scalar overload in that case is
+    // interpreted as an invalid/undefined IP address on Node 22+.
+    if (options.all) callback(null, [pinned])
+    else callback(null, pinned.address, pinned.family)
   }
 }
 
-export async function checkEmbeddable(url: string): Promise<boolean> {
+function requestPinned(url: URL, method: 'HEAD' | 'GET', pinned: ResolvedAddress): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const transport = url.protocol === 'https:' ? https : http
+    const request = transport.request({
+      protocol: url.protocol,
+      hostname: url.hostname.replace(/^\[|\]$/g, ''),
+      port: url.port || undefined,
+      path: `${url.pathname}${url.search}`,
+      method,
+      headers: { host: url.host, 'user-agent': 'Construct-Embeddability-Check/1.0' },
+      servername: url.hostname.replace(/^\[|\]$/g, ''),
+      lookup: createPinnedLookup(pinned),
+    }, response => {
+      const headers = new Headers()
+      for (const [name, value] of Object.entries(response.headers)) {
+        if (Array.isArray(value)) value.forEach(item => headers.append(name, item))
+        else if (value != null) headers.set(name, value)
+      }
+      response.resume()
+      resolve(new Response(null, { status: response.statusCode ?? 500, headers }))
+    })
+    request.setTimeout(FETCH_TIMEOUT_MS, () => request.destroy(new Error('request timeout')))
+    request.on('error', reject)
+    request.end()
+  })
+}
+
+const defaultDependencies: EmbeddedCheckDependencies = { resolveHost, request: requestPinned }
+
+export async function checkEmbeddable(
+  url: string,
+  dependencies: EmbeddedCheckDependencies = defaultDependencies,
+): Promise<boolean> {
   if (!isHttpUrl(url)) return false
 
   let parsed: URL
@@ -147,10 +198,13 @@ export async function checkEmbeddable(url: string): Promise<boolean> {
   if (isBlockedHost(parsed.hostname)) return false
 
   try {
-    let res = await fetchWithTimeout(url, 'HEAD')
+    const addresses = await dependencies.resolveHost(parsed.hostname.replace(/^\[|\]$/g, ''))
+    if (!addresses.length || addresses.some(address => isBlockedHost(address.address))) return false
+    const pinned = addresses[0]
+    let res = await dependencies.request(parsed, 'HEAD', pinned)
     if (res.status === 405 || res.status === 501) {
       res.body?.cancel()
-      res = await fetchWithTimeout(url, 'GET')
+      res = await dependencies.request(parsed, 'GET', pinned)
     }
 
     // redirect: 'manual' surfaces redirects as an opaque response (type 'opaqueredirect',

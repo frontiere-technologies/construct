@@ -2,19 +2,21 @@ import {
   type NavigationItemRow, type UserNavigationTreeDto, type Locale, type ParentOption,
   DEFAULT_LOCALE, ITEM_TYPE_CATEGORY, FUNCTIONALITY_TYPE_BY_ID, ROOT_ID, OPERATIONS_ID,
 } from './types'
+import { resolveNavigationText } from './navigation-locales'
 
 export function mapRowToDto(
   it: NavigationItemRow,
-  opts: { tagTranslations: Record<string, string[]>; children: UserNavigationTreeDto[]; locale?: Locale },
+  opts: { tagTranslations: Record<string, string[]>; children: UserNavigationTreeDto[]; locale?: Locale; fallbackLocale?: Locale },
 ): UserNavigationTreeDto {
   const locale = opts.locale ?? DEFAULT_LOCALE
+  const fallbackLocale = opts.fallbackLocale ?? DEFAULT_LOCALE
   return {
     id: it.id_item,
-    name: it.item_translation?.[locale]?.name ?? it.item_translation?.[DEFAULT_LOCALE]?.name ?? it.name ?? '',
+    name: resolveNavigationText(it.item_translation, 'name', locale, fallbackLocale, it.name),
     type: it.id_item_type === ITEM_TYPE_CATEGORY ? 'CATEGORY' : 'FUNCTIONALITY',
     parentId: it.id_item_parent,
     authorization: false,
-    description: it.item_translation?.[locale]?.description ?? it.item_translation?.[DEFAULT_LOCALE]?.description ?? null,
+    description: resolveNavigationText(it.item_translation, 'description', locale, fallbackLocale, null) || null,
     functionalityType: it.id_functionality_type ? FUNCTIONALITY_TYPE_BY_ID[it.id_functionality_type] ?? null : null,
     link: it.functionality_link,
     icon: it.icon_path,
@@ -32,6 +34,7 @@ export function buildNavTree(
   tagsByItem: Map<number, { tag_lan: string; tag: string }[]>,
   rootId: number,
   locale: Locale = DEFAULT_LOCALE,
+  fallbackLocale: Locale = DEFAULT_LOCALE,
 ): UserNavigationTreeDto[] {
   const childrenByParent = new Map<number | null, NavigationItemRow[]>()
   for (const it of items) {
@@ -49,7 +52,7 @@ export function buildNavTree(
     (childrenByParent.get(parentId) ?? [])
       .slice()
       .sort((a, b) => a.order_position - b.order_position)
-      .map(it => mapRowToDto(it, { tagTranslations: tagsFor(it.id_item), children: build(it.id_item), locale }))
+      .map(it => mapRowToDto(it, { tagTranslations: tagsFor(it.id_item), children: build(it.id_item), locale, fallbackLocale }))
   return build(rootId)
 }
 

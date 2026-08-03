@@ -6,6 +6,7 @@ import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { passwordSchema } from '@/lib/validations'
+import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
 
 const log = createLogger('auth:change-password')
 
@@ -26,6 +27,15 @@ export async function POST(req: NextRequest) {
     !newPassword || typeof newPassword !== 'string'
   ) {
     return NextResponse.json({ error: 'Dati mancanti.' }, { status: 400 })
+  }
+
+  try {
+    await enforceAuthRateLimit({ request: req, scope: 'change-password', account: session.user.id, accountLimit: 8 })
+  } catch (err) {
+    if (err instanceof AuthRateLimitExceeded) {
+      return NextResponse.json({ error: 'Troppe richieste. Riprova più tardi.' }, { status: 429 })
+    }
+    throw err
   }
 
   const parsed = passwordSchema.safeParse(newPassword)

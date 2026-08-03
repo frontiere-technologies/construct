@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
-import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { users, passwordSetTokens } from '@/lib/db/schema'
+import { users } from '@/lib/db/schema'
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
+import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { prepareInvitation, recordInvitationDelivery } from '@/lib/auth-invitations'
 
 const log = createLogger('admin:send-invite')
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session || !session.user.isAdmin) {
+  let actor
+  try {
+    actor = await requireAdmin()
+  } catch {
     return NextResponse.json({ error: 'Non autorizzato.' }, { status: 403 })
   }
 
@@ -21,28 +24,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'userId mancante.' }, { status: 400 })
   }
 
-  const [user] = await db.select({ id: users.id, email: users.email, name: users.name }).from(users).where(eq(users.id, userId)).limit(1)
-
+  const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1)
   if (!user?.email) {
     return NextResponse.json({ error: 'Utente non trovato.' }, { status: 404 })
   }
 
-  const token = crypto.randomUUID()
-  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
-
+  let invitation
   try {
-    await db.insert(passwordSetTokens).values({ userId: user.id, token, expiresAt })
+    invitation = await prepareInvitation(user.email, actor.userId)
   } catch (err) {
-    log.error({ err }, 'failed to create invite token')
+    log.error({ err }, 'failed to prepare invite token')
     return NextResponse.json({ error: 'Errore interno.' }, { status: 500 })
   }
+  if (!invitation) return NextResponse.json({ ok: true })
 
   const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL
   if (!baseUrl) {
     log.error('AUTH_URL / NEXTAUTH_URL not set')
+    await recordInvitationDelivery(invitation.tokenId, { ok: false, code: 'server_configuration' })
     return NextResponse.json({ error: 'Errore di configurazione del server.' }, { status: 500 })
   }
-  const setPasswordUrl = `${baseUrl.replace(/\/$/, '')}/set-password?token=${token}`
+  const setPasswordUrl = `${baseUrl.replace(/\/$/, '')}/set-password?token=${invitation.rawToken}`
 
   try {
     await sendEmail({
@@ -66,8 +68,10 @@ export async function POST(req: NextRequest) {
       `,
       text: `Benvenuto in Construct.\n\nImposta la tua password al seguente link (valido 48 ore):\n${setPasswordUrl}\n\nSe non ti aspettavi questa email, ignorala.`,
     })
+    await recordInvitationDelivery(invitation.tokenId, { ok: true })
   } catch (emailErr) {
     log.error({ err: emailErr }, 'failed to send invite email')
+    await recordInvitationDelivery(invitation.tokenId, { ok: false, code: 'email_delivery_failed' })
     return NextResponse.json({ error: 'Errore invio email.' }, { status: 500 })
   }
 

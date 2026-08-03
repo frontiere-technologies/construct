@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDictionary } from '@/lib/i18n/dictionary-service'
+import { getDictionary, refreshLanguageVersions } from '@/lib/i18n/dictionary-service'
 import { getDefaultLanguage, listActiveLanguages } from '@/lib/i18n/language-service'
 import { isValidNamespace } from '@/lib/i18n/key-format'
 import { getActiveLanguage } from '@/lib/i18n/server'
@@ -27,6 +27,14 @@ export async function GET(req: NextRequest) {
     code = (await getActiveLanguage()).code
   }
 
+  // Route handlers and server actions can be emitted into separate Next.js
+  // bundles, each with its own process-local dictionary cache. Re-read the
+  // lightweight language versions here so an API request immediately after an
+  // admin edit cannot retain another bundle's stale cache entry for the TTL.
+  refreshLanguageVersions()
   const dictionary = await getDictionary(code, namespace ?? undefined)
-  return NextResponse.json({ code, namespace: namespace ?? null, dictionary })
+  return NextResponse.json(
+    { code, namespace: namespace ?? null, dictionary },
+    { headers: { 'Cache-Control': 'no-store' } },
+  )
 }

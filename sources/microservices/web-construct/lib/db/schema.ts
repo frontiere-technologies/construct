@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   pgTable, pgView, uuid, text, jsonb, timestamp, bigint, integer, smallint,
-  boolean, varchar, primaryKey, unique, index, type AnyPgColumn,
+  boolean, varchar, primaryKey, unique, index, uniqueIndex, type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
 export const userStatus = pgTable('user_status', {
@@ -35,7 +35,9 @@ export const appLanguage = pgTable('app_language', {
   dictionaryVersion: bigint('dictionary_version', { mode: 'number' }).notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
-})
+}, (t) => [
+  uniqueIndex('app_language_single_default').on(t.isDefault).where(sql`${t.isDefault}`),
+])
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -63,7 +65,7 @@ export const users = pgTable('users', {
   idUserStatus: bigint('id_user_status', { mode: 'number' }).references(() => userStatus.idUserStatus).default(2),
   lastStatusTs: timestamp('last_status_ts', { withTimezone: true, mode: 'string' }),
   idLanguage: bigint('id_language', { mode: 'number' }).references(() => appLanguage.idLanguage, { onDelete: 'set null' }),
-})
+}, (t) => [index('users_id_language_idx').on(t.idLanguage)])
 
 export const passwordSetTokens = pgTable('password_set_tokens', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -72,7 +74,18 @@ export const passwordSetTokens = pgTable('password_set_tokens', {
   expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
   usedAt: timestamp('used_at', { withTimezone: true, mode: 'string' }),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
-})
+  purpose: text('purpose', { enum: ['reset', 'invitation'] }).notNull().default('reset'),
+  deliveryStatus: text('delivery_status', { enum: ['pending', 'sent', 'failed'] }).notNull().default('sent'),
+  deliveryAttemptedAt: timestamp('delivery_attempted_at', { withTimezone: true, mode: 'string' }),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true, mode: 'string' }),
+  deliveryErrorCode: varchar('delivery_error_code', { length: 64 }),
+  supersededAt: timestamp('superseded_at', { withTimezone: true, mode: 'string' }),
+  requestedBy: uuid('requested_by').references(() => users.id, { onDelete: 'set null' }),
+}, (t) => [
+  index('password_set_tokens_invitation_state_idx')
+    .on(t.userId, t.purpose, t.deliveryStatus, t.createdAt)
+    .where(sql`${t.usedAt} is null and ${t.supersededAt} is null`),
+])
 
 export const allowedDomains = pgTable('allowed_domains', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -80,6 +93,14 @@ export const allowedDomains = pgTable('allowed_domains', {
   active: boolean('active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
 })
+
+export const authRateLimit = pgTable('auth_rate_limit', {
+  scope: text('scope').notNull(),
+  dimension: text('dimension').notNull(),
+  identifierHash: varchar('identifier_hash', { length: 64 }).notNull(),
+  windowStart: timestamp('window_start', { withTimezone: true, mode: 'string' }).notNull(),
+  attempts: integer('attempts').notNull(),
+}, (t) => [primaryKey({ columns: [t.scope, t.dimension, t.identifierHash, t.windowStart] })])
 
 export const role = pgTable('role', {
   idRole: bigint('id_role', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_role')`),
@@ -101,7 +122,10 @@ export const userRole = pgTable('user_role', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   idRole: bigint('id_role', { mode: 'number' }).notNull().references(() => role.idRole, { onDelete: 'cascade' }),
   dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
-}, (t) => [primaryKey({ columns: [t.userId, t.idRole] })])
+}, (t) => [
+  primaryKey({ columns: [t.userId, t.idRole] }),
+  index('user_role_id_role_user_id_idx').on(t.idRole, t.userId),
+])
 
 export const navigationItem = pgTable('navigation_item', {
   idItem: bigint('id_item', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_navigation_item')`),
@@ -123,7 +147,9 @@ export const navigationItem = pgTable('navigation_item', {
   clickCount: bigint('click_count', { mode: 'number' }).default(0),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
-})
+}, (t) => [
+  index('navigation_item_parent_order_idx').on(t.idItemParent, t.orderPosition),
+])
 
 export const navigationItemTag = pgTable('navigation_item_tag', {
   idItem: bigint('id_item', { mode: 'number' }).notNull().references(() => navigationItem.idItem, { onDelete: 'cascade' }),

@@ -4,6 +4,7 @@ import {
   DEFAULT_LOCALE, ROOT_ID, OPERATIONS_ID, ITEM_TYPE_CATEGORY,
   FUNCTYPE_PERMISSION, FUNCTYPE_EMBEDDED_PAGE, FUNCTYPE_EXTERNAL_LINK,
 } from './types'
+import { resolveNavigationText } from './navigation-locales'
 
 export function resolveAuthorizedItemIds(
   items: NavigationItemRow[],
@@ -21,8 +22,8 @@ export function resolveAuthorizedItemIds(
   return ids
 }
 
-function labelFor(it: NavigationItemRow, locale: Locale): string {
-  return it.item_translation?.[locale]?.name ?? it.item_translation?.[DEFAULT_LOCALE]?.name ?? it.name ?? ''
+function labelFor(it: NavigationItemRow, locale: Locale, fallbackLocale: Locale): string {
+  return resolveNavigationText(it.item_translation, 'name', locale, fallbackLocale, it.name)
 }
 
 function normalizeRoute(link: string | null): string | undefined {
@@ -78,6 +79,7 @@ export function mapNavigationToSidebar(
   items: NavigationItemRow[],
   authorizedIds: Set<number>,
   locale: Locale = DEFAULT_LOCALE,
+  fallbackLocale: Locale = DEFAULT_LOCALE,
 ): MenuItem[] {
   const byId = new Map(items.map(i => [i.id_item, i]))
   const visible = resolveVisibleIds(items, authorizedIds, byId)
@@ -90,7 +92,7 @@ export function mapNavigationToSidebar(
       it.navbar_position === 'TOP' ? 'top' : it.navbar_position === 'BOTTOM' ? 'bottom' : 'main'
     out.push({
       id: String(it.id_item),
-      label: labelFor(it, locale),
+      label: labelFor(it, locale, fallbackLocale),
       icon: it.icon_path ?? undefined,
       route: isCategory
         ? undefined

@@ -87,6 +87,18 @@ def test_save_persists_color(logged_in_page, base_url):
 def test_inputs_disabled_while_saving(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/admin/theme")
+    # Keep the browser-side server-action request pending long enough to observe
+    # the transient busy state even when the local/CI database responds within
+    # a single Playwright polling interval.
+    page.evaluate(
+        """() => {
+            const originalFetch = window.fetch.bind(window);
+            window.fetch = async (...args) => {
+                await new Promise(resolve => setTimeout(resolve, 750));
+                return originalFetch(...args);
+            };
+        }"""
+    )
     picker = page.locator('input[type="color"]').first
     page.get_by_role("button", name="Salva", exact=True).click()
     expect(picker).to_be_disabled()

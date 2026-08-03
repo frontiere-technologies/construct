@@ -6,6 +6,7 @@ declare module 'next-auth' {
       id: string
       roleIds: number[]
       isAdmin: boolean
+      accountActive: boolean
       provider: string
     } & DefaultSession['user']
   }
@@ -16,6 +17,7 @@ declare module 'next-auth/jwt' {
     userId: string
     roleIds: number[]
     isAdmin: boolean
+    accountActive: boolean
     provider: string
   }
 }

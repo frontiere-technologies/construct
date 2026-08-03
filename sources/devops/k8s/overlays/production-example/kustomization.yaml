@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - ingress.yaml
+  - pod-disruption-budget.yaml
+patches:
+  - path: configmap-patch.yaml
+replicas:
+  - name: web-construct
+    count: 2
+images:
+  - name: web-construct
+    newName: ghcr.io/example/construct
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

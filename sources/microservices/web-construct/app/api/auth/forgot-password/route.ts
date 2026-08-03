@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { users, passwordSetTokens } from '@/lib/db/schema'
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
+import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
 
 const log = createLogger('auth:forgot-password')
 
@@ -15,10 +16,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Email mancante.' }, { status: 400 })
   }
 
+  const normalizedEmail = email.toLowerCase().trim()
+  try {
+    await enforceAuthRateLimit({ request: req, scope: 'forgot-password', account: normalizedEmail, accountLimit: 5 })
+  } catch (err) {
+    if (err instanceof AuthRateLimitExceeded) {
+      return NextResponse.json({ error: 'Troppe richieste. Riprova più tardi.' }, { status: 429 })
+    }
+    throw err
+  }
+
   const [user] = await db
     .select({ id: users.id, email: users.email, passwordHash: users.passwordHash })
     .from(users)
-    .where(eq(users.email, email.toLowerCase().trim()))
+    .where(eq(users.email, normalizedEmail))
     .limit(1)
 
   // Always return 200 — do not leak whether the email exists

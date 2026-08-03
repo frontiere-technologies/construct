@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useId, useState } from 'react'
 import { useI18n } from '@/context/I18nContext'
+import AccessibleDialog from '@/components/ui/AccessibleDialog'
 
 interface ConfirmModalProps {
   title: string
@@ -14,6 +15,8 @@ interface ConfirmModalProps {
 export default function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }: ConfirmModalProps) {
   const { t } = useI18n()
   const [busy, setBusy] = useState(false)
+  const titleId = useId()
+  const descriptionId = useId()
 
   const confirm = async () => {
     setBusy(true)
@@ -22,18 +25,22 @@ export default function ConfirmModal({ title, message, confirmLabel, onConfirm, 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
-      <div className="w-full max-w-md rounded-xl bg-surface-overlay p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-bold mb-2">{title}</h2>
-        <p className="text-sm text-gray-500 mb-6">{message}</p>
+    <AccessibleDialog
+      titleId={titleId}
+      descriptionId={descriptionId}
+      onClose={onCancel}
+      busy={busy}
+      panelClassName="w-full max-w-md rounded-xl bg-surface-overlay p-6 shadow-xl"
+    >
+        <h2 id={titleId} className="text-lg font-bold mb-2">{title}</h2>
+        <p id={descriptionId} className="text-sm text-gray-500 mb-6">{message}</p>
         <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
+          <button data-dialog-initial-focus data-dialog-close onClick={onCancel} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
           <button
             onClick={confirm} disabled={busy}
             className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
           >{confirmLabel ?? t('common.actions.confirm')}</button>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

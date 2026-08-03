@@ -1,7 +1,11 @@
 def nav(page, url: str) -> None:
-    """Navigate to a URL and wait for the network to settle."""
+    """Navigate to a URL and wait until React event handlers are attached."""
     page.goto(url)
     page.wait_for_load_state("networkidle")
+    page.wait_for_function(
+        "document.documentElement.dataset.appHydrated === 'true'",
+        timeout=15_000,
+    )
 
 
 def open_column_filter(page, col_id: str):

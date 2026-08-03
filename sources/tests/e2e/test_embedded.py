@@ -8,6 +8,11 @@ from playwright.sync_api import expect
 
 from helpers import nav, l1_btn, ensure_l1_expanded, grid_rows, open_column_filter, do_test_login
 
+# IPv4-only public endpoint with no frame-blocking response headers. Keeping the
+# positive target IPv4-only avoids selecting an unreachable IPv6 DNS answer on
+# CI runners that have no IPv6 route.
+PUBLIC_EMBED_URL = "https://httpbin.org/html"
+
 
 class _ProbeHandler(BaseHTTPRequestHandler):
     def do_HEAD(self):
@@ -51,7 +56,9 @@ def probe_server():
 
 def _select_tipologia(page, label: str):
     page.locator('[data-testid="select-tipologia"]').click()
-    page.get_by_role("button", name=label, exact=True).first.click()
+    page.get_by_role("listbox", name="Tipologia").get_by_role(
+        "option", name=label, exact=True
+    ).click()
 
 
 def _create_embedded_functionality(page, base_url, name, link):
@@ -126,6 +133,15 @@ def _grant_item_to_role(page, base_url, role_id, item_name):
     row.scroll_into_view_if_needed()
     row.locator('[data-testid="perm-toggle"]').click()
     save_btn = page.get_by_role("button", name="Salva")
+    page.evaluate(
+        """() => {
+            const originalFetch = window.fetch.bind(window);
+            window.fetch = async (...args) => {
+                await new Promise(resolve => setTimeout(resolve, 750));
+                return originalFetch(...args);
+            };
+        }"""
+    )
     save_btn.click()
     expect(save_btn).to_be_disabled()
     expect(save_btn).to_be_enabled()
@@ -135,14 +151,11 @@ def _set_role_checkbox(page, base_url, test_email, role_id, checked):
     """Open 'Gestisci ruoli' for the row matching test_email and check/uncheck role_id.
 
     The Users grid uses AG Grid's infinite row model, so `test_email`'s row isn't
-    necessarily among the first block loaded (there are many seeded/leftover test
-    users) — filter first. The email column itself has no AG Grid filter, but the
-    "Utente" (firstName) column's filter maps server-side to an OR-ilike across
-    firstName/lastName/email (see `applyUserFilters` in users-service.ts), so
-    filtering it by the email still narrows to the right row.
+    necessarily among the first block loaded — filter the dedicated email column
+    first so the exact account is loaded before opening its row menu.
     """
     nav(page, f"{base_url}/user-management")
-    open_column_filter(page, "firstName")
+    open_column_filter(page, "email")
     page.locator('.ag-filter input[type="text"]').first.fill(test_email)
     page.get_by_role("button", name="Applica").click()
     page.wait_for_load_state("networkidle")
@@ -221,39 +234,42 @@ def embedded_item_page(logged_in_page, base_url, browser, test_email):
             print(f"cleanup failed for role {role_name} ({role_id}): {e}")
 
 
-def test_embedded_page_renders_iframe_when_allowed(embedded_item_page, probe_server):
-    item_name, page = embedded_item_page(f"{probe_server}/ok")
+def test_embedded_page_renders_iframe_when_allowed(embedded_item_page):
+    # The embeddability check intentionally rejects private/loopback targets to
+    # prevent SSRF, so the positive E2E case must use a public origin.
+    item_name, page = embedded_item_page(PUBLIC_EMBED_URL)
     l1 = page.locator("aside").first
     ensure_l1_expanded(page, l1)
     l1_btn(l1, item_name).click()
     page.wait_for_url("**/embedded/**", timeout=10_000)
     expect(page.locator('[data-testid="embedded-iframe"]')).to_be_visible()
-    expect(page.locator('[data-testid="embedded-iframe"]')).to_have_attribute("src", f"{probe_server}/ok")
+    expect(page.locator('[data-testid="embedded-iframe"]')).to_have_attribute("src", PUBLIC_EMBED_URL)
     expect(page.locator("aside").first).to_be_visible()
 
 
-def test_embedded_page_redirects_when_not_authorized(embedded_item_page, base_url, logged_in_page, probe_server):
-    """The shared `logged_in_page` session does NOT have the throwaway role granted to
-    the fresh session inside `embedded_item_page`, so it's already a ready-made
-    "unauthorized" session for this exact item. Navigating it straight to the item's
-    `/embedded/{id}` URL must redirect back to `/`, not render the iframe/fallback."""
-    item_name, fresh_page = embedded_item_page(f"{probe_server}/ok")
+def test_embedded_page_redirects_when_not_authorized(embedded_item_page, base_url, non_admin_page):
+    """A user without the throwaway role cannot reach the embedded item.
+
+    The shared administrator session is not suitable for this assertion because
+    the Administrator role intentionally retains access to every menu item.
+    """
+    item_name, fresh_page = embedded_item_page(PUBLIC_EMBED_URL)
     l1 = fresh_page.locator("aside").first
     ensure_l1_expanded(fresh_page, l1)
     item_href = l1_btn(l1, item_name).get_attribute("href")
     assert item_href and item_href.startswith("/embedded/")
 
-    logged_in_page.goto(f"{base_url}{item_href}")
+    non_admin_page.goto(f"{base_url}{item_href}")
     # The redirect is real (a server-side `redirect('/')`), but on a route hit for the
     # first time Next.js dev/Turbopack can still be compiling it, so `networkidle` can
     # fire before the redirect response actually lands. Poll for the final URL instead
     # of asserting immediately.
-    logged_in_page.wait_for_url(lambda url: url.rstrip("/") == base_url.rstrip("/"), timeout=15_000)
-    logged_in_page.wait_for_load_state("networkidle")
-    assert logged_in_page.url.rstrip("/") == base_url.rstrip("/")
+    non_admin_page.wait_for_url(lambda url: url.rstrip("/") == base_url.rstrip("/"), timeout=15_000)
+    non_admin_page.wait_for_load_state("networkidle")
+    assert non_admin_page.url.rstrip("/") == base_url.rstrip("/")
 
 
-def test_embedded_page_shows_fallback_when_blocked(embedded_item_page, probe_server):
+def test_embedded_page_shows_fallback_when_private_target_is_blocked(embedded_item_page, probe_server):
     url = f"{probe_server}/blocked"
     item_name, page = embedded_item_page(url)
     l1 = page.locator("aside").first

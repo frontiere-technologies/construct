@@ -1,0 +1,162 @@
+name: Quality
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sources/microservices/web-construct
+    env:
+      AUTH_SECRET: ci-only-auth-secret-at-least-32-characters
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/construct
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sources/microservices/web-construct/package-lock.json
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.33.3
+      - run: npm ci
+      - run: npm run test:migrations
+      - run: npm run test:docs-contract
+      - run: npm run schema:check
+      - run: npm run lint -- --max-warnings=0
+      - run: npm test
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=low
+      - name: Validate Kubernetes overlays
+        working-directory: .
+        run: bash sources/devops/k8s/validate.sh
+      - name: Check whitespace in the pull-request diff
+        working-directory: .
+        run: git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
+
+  database-and-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: construct_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d construct_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/application_not_for_tests
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/construct_test
+      TEST_DATABASE_DISPOSABLE: "1"
+      AUTH_SECRET: ci-only-auth-secret-at-least-32-characters
+      AUTH_URL: http://localhost:3000
+      AUTH_TEST_CREDENTIALS: "true"
+      NEXT_PUBLIC_AUTH_TEST_MODE: "true"
+      TEST_EMAIL: admin-e2e@example.com
+      TEST_EMAIL_USER: user-e2e@example.com
+      BASE_URL: http://localhost:3000
+      HEADLESS: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sources/microservices/web-construct/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: npm ci
+        working-directory: sources/microservices/web-construct
+      - name: Create the legacy role migration fixture
+        run: >-
+          node sources/devops/db/db.mjs test-query
+          "create table users (
+          id uuid primary key default gen_random_uuid(), name text, email text unique, avatar text,
+          first_name text, last_name text, username text, phone text, theme_config jsonb,
+          created_at timestamptz default now(), updated_at timestamptz default now(), role text
+          );
+          insert into users(email, role) values
+          ('legacy-admin@example.com','admin'), ('legacy-user@example.com','user');"
+      - name: Apply ordered migrations concurrently (advisory-lock contract)
+        run: |
+          node sources/devops/db/db.mjs test-apply &
+          first=$!
+          node sources/devops/db/db.mjs test-apply &
+          second=$!
+          wait "$first"
+          wait "$second"
+      - name: Verify a second apply is a no-op
+        run: node sources/devops/db/db.mjs test-apply
+      - name: Verify runtime provisioning rejects an overprivileged existing login
+        run: |
+          node sources/devops/db/db.mjs test-query "create role construct_overprivileged login; grant create on schema public to construct_overprivileged;"
+          if MIGRATION_DATABASE_URL="$TEST_DATABASE_URL" \
+            CONSTRUCT_RUNTIME_DB_USER=construct_overprivileged \
+            CONSTRUCT_RUNTIME_DB_PASSWORD=ci-runtime-password-at-least-24 \
+            node sources/devops/db/db.mjs provision-runtime-role; then
+            echo "unsafe existing runtime role was accepted"
+            exit 1
+          fi
+          node sources/devops/db/db.mjs test-query "revoke create on schema public from construct_overprivileged; drop role construct_overprivileged;"
+          node sources/devops/db/db.mjs test-query "create role construct_default_acl login; alter default privileges in schema public grant select on tables to construct_default_acl;"
+          if MIGRATION_DATABASE_URL="$TEST_DATABASE_URL" \
+            CONSTRUCT_RUNTIME_DB_USER=construct_default_acl \
+            CONSTRUCT_RUNTIME_DB_PASSWORD=ci-runtime-password-at-least-24 \
+            node sources/devops/db/db.mjs provision-runtime-role; then
+            echo "runtime role with direct default ACL was accepted"
+            exit 1
+          fi
+          node sources/devops/db/db.mjs test-query "alter default privileges in schema public revoke select on tables from construct_default_acl; drop role construct_default_acl;"
+      - name: Verify legacy administrators survived migration
+        run: >-
+          node sources/devops/db/db.mjs test-query
+          "do \$\$ begin
+          if exists(select 1 from information_schema.columns where table_schema='public' and table_name='users' and column_name='role') then raise exception 'users.role was not dropped'; end if;
+          if not exists(select 1 from users u join user_role ur on ur.user_id=u.id and ur.id_role=1 where u.email='legacy-admin@example.com') then raise exception 'legacy administrator was not migrated'; end if;
+          end \$\$;"
+      - name: Seed isolated E2E users
+        run: >-
+          node sources/devops/db/db.mjs test-query
+          "insert into users(email, auth_provider) values ('admin-e2e@example.com','test'), ('user-e2e@example.com','test') on conflict(email) do nothing;
+          insert into user_role(user_id,id_role) select id,0 from users where email in ('admin-e2e@example.com','user-e2e@example.com') on conflict do nothing;
+          insert into user_role(user_id,id_role) select id,1 from users where email='admin-e2e@example.com' on conflict do nothing;"
+      - name: Run database integration tests
+        run: npm run test:integration
+        working-directory: sources/microservices/web-construct
+      - run: uv sync --locked
+      - run: uv run playwright install --with-deps chromium
+      - name: Start the app against the disposable database
+        run: DATABASE_URL="$TEST_DATABASE_URL" npm run dev > /tmp/construct-next.log 2>&1 &
+        working-directory: sources/microservices/web-construct
+      - name: Wait for the app
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/login >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          sed -n '1,240p' /tmp/construct-next.log
+          exit 1
+      - name: Run browser E2E tests
+        run: |
+          if uv run pytest sources/tests/e2e; then
+            exit 0
+          fi
+          echo "::group::Next.js server log"
+          tail -n 400 /tmp/construct-next.log
+          echo "::endgroup::"
+          exit 1

@@ -1,4 +1,4 @@
-import NextAuth, { CredentialsSignin } from 'next-auth'
+import NextAuth from 'next-auth'
 import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id'
 import Google from 'next-auth/providers/google'
 import Keycloak from 'next-auth/providers/keycloak'
@@ -8,10 +8,18 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { users, allowedDomains } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
-import { authConfig } from '@/lib/auth.config'
-import { resolveUserRoleIds, computeIsAdmin } from '@/lib/rbac/auth-roles'
+import { authConfig, mergeAuthCallbacks } from '@/lib/auth.config'
+import { resolveUserAuthorization } from '@/lib/rbac/auth-roles'
+import {
+  assertSafeAuthConfiguration,
+  isActiveAccount,
+  isTestCredentialsEnabled,
+  verifyCredentialCandidate,
+} from '@/lib/auth-policy'
+import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
 
 const log = createLogger('auth')
+assertSafeAuthConfiguration(process.env)
 
 // In-memory cache for allowed domains (60s TTL)
 let domainCache: { domains: string[]; expiresAt: number } | null = null
@@ -73,7 +81,7 @@ function buildProviders() {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (
           !credentials?.email ||
           !credentials?.password ||
@@ -81,26 +89,35 @@ function buildProviders() {
           typeof credentials.password !== 'string'
         ) return null
 
-        const [user] = await db
-          .select({ id: users.id, email: users.email, name: users.name, passwordHash: users.passwordHash })
-          .from(users)
-          .where(eq(users.email, (credentials.email as string).toLowerCase().trim()))
-          .limit(1)
-
-        if (!user) {
-          // Prevent timing-based user enumeration
-          await bcrypt.compare('dummy', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW')
-          return null
-        }
-
-        if (!user.passwordHash) {
-          const err = new CredentialsSignin('Password not set')
-          err.code = 'PasswordNotSet'
+        const normalizedEmail = credentials.email.toLowerCase().trim()
+        try {
+          await enforceAuthRateLimit({ request, scope: 'credentials-login', account: normalizedEmail })
+        } catch (err) {
+          if (err instanceof AuthRateLimitExceeded) {
+            log.warn({ reason: 'rate-limit' }, 'credentials rejected')
+            return null
+          }
           throw err
         }
 
-        const valid = await bcrypt.compare(credentials.password, user.passwordHash)
-        if (!valid) return null
+        const [user] = await db
+          .select({
+            id: users.id,
+            email: users.email,
+            name: users.name,
+            passwordHash: users.passwordHash,
+            idUserStatus: users.idUserStatus,
+          })
+          .from(users)
+          .where(eq(users.email, normalizedEmail))
+          .limit(1)
+
+        const valid = await verifyCredentialCandidate(user, credentials.password, bcrypt.compare)
+        if (!valid) {
+          const reason = !user ? 'unknown' : !user.passwordHash ? 'passwordless' : !isActiveAccount(user.idUserStatus) ? 'inactive' : 'password'
+          log.warn({ reason }, 'credentials rejected')
+          return null
+        }
 
         await db.update(users).set({ authProvider: 'credentials' }).where(eq(users.id, user.id))
 
@@ -110,7 +127,7 @@ function buildProviders() {
   )
 
   // Test-only credentials provider — gated by env var, never enabled in production
-  if (process.env.AUTH_TEST_CREDENTIALS === 'true') {
+  if (isTestCredentialsEnabled(process.env)) {
     providers.push(
       Credentials({
         id: 'test',
@@ -120,9 +137,14 @@ function buildProviders() {
         },
         async authorize(credentials) {
           if (!credentials?.email || typeof credentials.email !== 'string') return null
-          await db.insert(users).values({ email: credentials.email, authProvider: 'test' }).onConflictDoNothing({ target: users.email })
-          const [data] = await db.select({ id: users.id, email: users.email, name: users.name }).from(users).where(eq(users.email, credentials.email)).limit(1)
-          if (!data) return null
+          const normalizedEmail = credentials.email.toLowerCase().trim()
+          await db.insert(users).values({ email: normalizedEmail, authProvider: 'test' }).onConflictDoNothing({ target: users.email })
+          const [data] = await db
+            .select({ id: users.id, email: users.email, name: users.name, idUserStatus: users.idUserStatus })
+            .from(users)
+            .where(eq(users.email, normalizedEmail))
+            .limit(1)
+          if (!data || !isActiveAccount(data.idUserStatus)) return null
           return { id: data.id, email: data.email, name: data.name ?? data.email }
         },
       })
@@ -136,15 +158,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: buildProviders(),
   session: { strategy: 'jwt' as const },
-  callbacks: {
+  callbacks: mergeAuthCallbacks({
     async signIn({ account, profile }) {
       // Domain restriction for all OIDC providers
       const oidcProviders = ['google', 'microsoft-entra-id', 'keycloak']
       if (account?.provider && oidcProviders.includes(account.provider)) {
-        const email = profile?.email ?? ''
+        const email = (profile?.email ?? '').toLowerCase().trim()
         const domain = email.split('@')[1] ?? ''
         const allowed = await getAllowedDomains()
         if (!allowed.includes(domain)) return false
+        const [existing] = await db
+          .select({ idUserStatus: users.idUserStatus })
+          .from(users)
+          .where(eq(users.email, email))
+          .limit(1)
+        if (existing && !isActiveAccount(existing.idUserStatus)) return false
       }
       return true
     },
@@ -181,18 +209,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         }
         token.userId = userId
-        const roleIds = userId ? await resolveUserRoleIds(userId) : []
-        token.roleIds = roleIds
-        token.isAdmin = computeIsAdmin(roleIds)
+        if (userId) {
+          const authorization = await resolveUserAuthorization(userId, true)
+          token.accountActive = authorization.accountActive
+          token.roleIds = authorization.roleIds
+          token.isAdmin = authorization.isAdmin
+        }
+      } else if (token.userId) {
+        const authorization = await resolveUserAuthorization(token.userId as string)
+        token.accountActive = authorization.accountActive
+        token.roleIds = authorization.roleIds
+        token.isAdmin = authorization.isAdmin
       }
       return token
     },
     async session({ session, token }) {
-      session.user.id = token.userId as string
-      session.user.roleIds = (token.roleIds as number[]) ?? []
-      session.user.isAdmin = Boolean(token.isAdmin)
+      const accountActive = Boolean(token.accountActive)
+      session.user.id = accountActive ? token.userId as string : ''
+      session.user.roleIds = accountActive ? (token.roleIds as number[]) ?? [] : []
+      session.user.isAdmin = accountActive && Boolean(token.isAdmin)
+      session.user.accountActive = accountActive
       session.user.provider = token.provider as string
       return session
     },
-  },
+  }),
 })
