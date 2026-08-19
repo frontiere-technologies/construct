@@ -21,7 +21,9 @@ uv run pytest sources/tests/e2e/test_sidebar.py    # singolo gruppo
 
 ## Stack
 
-sources/microservices/web-construct/ - React 19 + TypeScript + Next.js 16 (App Router) + Tailwind CSS v4 + NextAuth v5 (Auth.js) + Supabase (@supabase/supabase-js) + Lucide React + Zod
+sources/microservices/web-construct/ - React 19 + TypeScript + Next.js 16 (App Router) + Tailwind CSS v4 + NextAuth v5 (Auth.js) + Drizzle ORM su Postgres (`drizzle-orm` + `postgres`) + Lucide React + Zod
+
+Il database è Postgres ospitato su Supabase, ma l'SDK `@supabase/supabase-js` non è più una dipendenza: ogni accesso ai dati passa da Drizzle (rimosso nel commit `b9f3edf`). Non esistono variabili `NEXT_PUBLIC_SUPABASE_*` né `SUPABASE_SERVICE_ROLE_KEY` da configurare.
 
 Altre dipendenze rilevanti: `@dnd-kit/*` (drag & drop), `bcryptjs` (hashing), `isomorphic-dompurify` (sanitizzazione HTML), `nodemailer` + `resend` (email), `pino` (logging), Vitest (unit test) + Playwright/pytest (E2E).
 
