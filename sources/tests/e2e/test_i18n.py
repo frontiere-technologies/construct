@@ -1,6 +1,7 @@
 import subprocess
 import time
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from playwright.sync_api import expect
@@ -23,12 +24,34 @@ def _open_translations(page, base_url):
 
 def _filter_by_key(page, key):
     """Filter the translations grid by the `key` column's text filter."""
+    if parse_qs(urlparse(page.url).query).get("search") == [key]:
+        return
+
     open_column_filter(page, "key")
-    page.locator('.ag-filter input[type="text"]').first.fill(key)
-    apply_btn = page.get_by_role("button", name="Applica").or_(
-        page.get_by_role("button", name="Apply"))
-    apply_btn.click()
-    page.wait_for_load_state("networkidle")
+    filter_input = page.locator('.ag-filter input[type="text"]').first
+    filter_input.fill(key)
+
+    def is_filtered_grid_response(response):
+        if not response.url.endswith("/api/i18n/translations-grid"):
+            return False
+        if response.request.method != "POST":
+            return False
+        try:
+            return response.request.post_data_json.get("search") == key
+        except (AttributeError, ValueError):
+            return False
+
+    # AG Grid documents Enter as equivalent to its Apply button for text
+    # filters. Pressing it on the stable input avoids racing the Apply button:
+    # applying the filter updates the URL through router.replace(), which can
+    # recreate the popup and detach that button while Playwright is clicking.
+    with page.expect_response(is_filtered_grid_response, timeout=15_000) as response_info:
+        filter_input.press("Enter")
+
+    response = response_info.value
+    assert response.ok, f"translations grid filter returned {response.status}"
+    response.finished()
+    page.wait_for_url(f"**search={key}**", timeout=15_000)
 
 
 def _restore_save_translation(page, base_url) -> None:
