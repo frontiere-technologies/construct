@@ -42,9 +42,11 @@ file per file, perché è lo stesso edit sulle stesse `className`.
 
 ## Task
 
-- [ ] ID=THEME-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Le utility `dark:` non seguono il toggle tema dell'app, Fix description=Dichiarare `@custom-variant dark (&:where(.dark, .dark *))` in `app/globals.css` e verificare in browser le 46 utility `dark:` nei due stati, disaccoppiate dall'impostazione OS.
+- [✅] ID=THEME-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Le utility `dark:` non seguono il toggle tema dell'app, Fix description=Dichiarato `@custom-variant dark (&:where(.dark, .dark *))` in `app/globals.css`. Verificato: le 27 classi `dark:` distinte (46 occorrenze) sono passate da `@media (prefers-color-scheme: dark)` a `:where(.dark, .dark *)`, e il comportamento è disaccoppiato dall'OS in entrambe le direzioni. Guard di regressione in `lib/theme-dark-variant.test.ts`. Rimane THEME-3 per la revisione di contrasto pagina per pagina.
 - [ ] ID=UI-1, Severity=Medium, Complexity=High, Priority=P1, Title=Estrarre le primitive `Button` e `Input`, Fix description=Creare i componenti in `components/ui/` con `clsx` e varianti, poi migrare 71 `<button>` in 35 file e 47 campi in 20 file. Decidere prima l'API delle varianti, il destino delle regole globali in `globals.css` e l'aggiornamento del guard AST `disabledButtonHoverStyles.test.ts`, che diventa inerte se i call site smettono di essere `<button>` nativi.
 - [ ] ID=THEME-2, Severity=Low, Complexity=High, Priority=P2, Title=Completare la migrazione ai token semantici, Fix description=Sostituire le 240 occorrenze di classi colore statiche con i token `--theme-*`, contestualmente a UI-1 file per file. Estendere i token dove mancano (stati semantici: danger, success, warning).
+- [ ] ID=THEME-3, Severity=Low, Complexity=Medium, Priority=P2, Title=Revisione di contrasto delle utility `dark:` ora che si attivano, Fix description=Rivedere visivamente le pagine autenticate con più utility `dark:` nei due stati del tema. Reso necessario da THEME-1: utility scritte quando il meccanismo era rotto ora si attivano davvero e possono risultare sbagliate.
+
 - [ ] ID=DOC-1, Severity=Info, Complexity=Low, Priority=P3, Title=Registrare la decisione su shadcn/ui e Material UI, Fix description=Documentare l'esito dell'analisi e i criteri per un'eventuale adozione puntuale futura di Radix.
 
 ---
@@ -122,10 +124,13 @@ passaggio intermedio per non lasciare il codebase in uno stato incoerente durant
 
 Obbligatoria nel browser — la build che passa non dimostra nulla su questo.
 
-- [ ] Con OS in **light**, impostare l'app su dark dal pannello tema e confrontare visivamente le pagine con più utility `dark:`: `/functionalities/create` (picker icone), `/admin/theme`, `/admin/translations`, sidebar.
-- [ ] Con OS in **dark**, impostare l'app su light e ripetere. Nessun elemento scuro residuo su superficie chiara.
-- [ ] Verificare che le 46 occorrenze producano un risultato leggibile in entrambi gli stati (contrasto testo/sfondo).
-- [ ] `npm run build` e `npm run test` verdi.
+- [✅] CSS servito, prima/dopo: da 27 regole dentro `@media (prefers-color-scheme: dark)` e 0 selettori `.dark`, a 0 media query e 32 regole `:where(.dark, .dark *)`. Confermato su build di sviluppo e di produzione.
+- [✅] Esaustivo: tutte e 27 le classi `dark:` distinte del sorgente presenti nel foglio di stile, tutte legate a `.dark`, nessuna dentro una media query.
+- [✅] Disaccoppiamento dall'OS misurato sugli stili calcolati in tutte e quattro le combinazioni OS × classe (vedi la tabella in THEME-3).
+- [✅] Dashboard in tema dark con OS in light: reso corretto.
+- [✅] `npm run lint` pulito, `npm run test` 581 test verdi su 75 file, incluso il nuovo guard `lib/theme-dark-variant.test.ts`.
+- [✅] `npm run build` completa. Nota: con `.env.local` così com'è il build falla su `assertSafeAuthConfiguration` ("Test authentication must not be configured in production"), perché `next build` gira con `NODE_ENV=production` mentre l'env locale ha `AUTH_TEST_CREDENTIALS=true`. È una condizione d'ambiente preesistente e indipendente da questa modifica: azzerando i due flag di test il build passa.
+- [ ] Revisione visiva pagina per pagina delle pagine autenticate → spostata in **THEME-3**, non completabile in questo ambiente (sidebar senza voci navigabili).
 
 ### Rischi
 
@@ -347,6 +352,67 @@ Registrare quanto sopra dove il progetto tiene le decisioni architetturali, in m
 non venga ripetuta. Se non esiste un formato per le decisioni (non ho trovato una cartella
 `docs/decisions/` o ADR), questa sezione può servire da riferimento fino a quando non se ne adotta
 uno.
+
+---
+
+## THEME-3 — Revisione di contrasto delle utility `dark:`
+
+**Severity** Low · **Complexity** Medium · **Priority** P2
+**Dipende da** THEME-1 (completato)
+
+### Perché esiste questo task
+
+THEME-1 ha cambiato il comportamento di 46 utility che prima seguivano l'impostazione del sistema
+operativo. Sono state scritte e rifinite a occhio in un periodo in cui non si attivavano col toggle
+dell'applicazione: ora che si attivano, alcune possono produrre combinazioni sbagliate. Il fix è
+verificato a livello di meccanismo, non di resa visiva su ogni pagina.
+
+### Cosa è già stato verificato in THEME-1
+
+- **CSS servito**, prima e dopo: da 27 regole dentro `@media (prefers-color-scheme: dark)` e 0
+  selettori `.dark`, a 0 media query e 32 regole legate a `:where(.dark, .dark *)`. Confermato sia
+  sulla build di sviluppo sia su quella di produzione.
+- **Esaustivo sulle classi**: tutte e 27 le classi `dark:` distinte estratte dal sorgente risultano
+  presenti nel foglio di stile, tutte legate alla classe `.dark`, nessuna dentro una media query.
+- **Disaccoppiamento dall'OS in entrambe le direzioni**, misurato sugli stili calcolati:
+
+  | OS emulato | classe `.dark` | utility attive | esito |
+  |---|---|---|---|
+  | light | presente | sì | corretto (prima era il caso rotto) |
+  | light | assente | no | corretto |
+  | dark | assente | no | corretto (prima era il caso rotto) |
+  | dark | presente | sì | corretto |
+
+- **Dashboard** in tema dark con OS in light: reso corretto, contrasto adeguato.
+- `npm run lint` pulito, `npm run test` 581 test verdi su 75 file.
+
+### Cosa resta da verificare
+
+La revisione visiva delle pagine autenticate a maggiore concentrazione di utility `dark:`:
+
+| Pagina | Componenti | Occorrenze |
+|---|---|---|
+| `/functionalities/create` e `/functionalities/[id]/edit` | `IconPicker`, `TagInput`, `TranslationsAccordion` | 8 |
+| `/user-management` | `StatusBadge`, `RoleMultiSelect` | 6 |
+| `/admin/translations` | `TranslationEditorDrawer`, `TranslationValueCell`, `TranslationsTableClient` | 7 |
+| `/admin/theme` | `AdminTheme` | 4 |
+| `/profile` | `ProfileForm`, `ChangePasswordForm` | 5 |
+| `/roles-permissions/[roleId]` | `PermissionsTree`, `RoleDetailClient` | 3 |
+
+**Perché non è stato fatto ora:** nell'ambiente di sviluppo locale la sidebar non presenta voci
+navigabili con l'account `admin@construct.test` — `document.querySelectorAll('nav a, aside a')`
+restituisce zero elementi — e la navigazione diretta per URL è vincolata all'origin dallo strumento
+di preview. Non ho potuto raggiungere quelle pagine. Va verificato separatamente se la sidebar vuota
+sia una condizione del solo dev database (autorizzazioni `role_item` non seedate) o un problema a
+sé: **è un'anomalia da chiarire prima di iniziare THEME-3**, perché senza navigazione la revisione
+non è eseguibile a mano.
+
+### Criteri di accettazione
+
+- [ ] Ogni pagina della tabella controllata nei due stati del tema, con OS in light e in dark.
+- [ ] Nessun elemento scuro residuo su superficie chiara e viceversa.
+- [ ] Contrasto testo/sfondo adeguato in entrambi gli stati.
+- [ ] Le utility che risultano sbagliate corrette, preferibilmente convertendole a token semantici (confluisce in THEME-2).
 
 ---
 
