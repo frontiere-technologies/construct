@@ -24,9 +24,8 @@ una service-role key che bypassa RLS, orfana dalla rimozione di `@supabase/supab
 andato alla deriva rispetto ai file reali in entrambe le direzioni, `CLAUDE.md` che dichiarava uno
 stack non più vero, e i test che scrivono sul database non eseguibili per variabili mancanti.
 
-Otto punti su undici sono risolti. Restano ENV-4 (parzialmente: il database usa-e-getta è
-configurato e le migration applicate, mancano gli account E2E e l'esecuzione di pytest), ENV-8, e la
-parte di ENV-1 che richiede un'azione sulla dashboard Supabase.
+Nove punti su undici sono risolti. Restano ENV-4 (parzialmente: il database usa-e-getta è
+configurato e le migration applicate, mancano gli account E2E e l'esecuzione di pytest) ed ENV-8.
 
 Il lavoro ha inoltre portato alla luce tre difetti che nessuno poteva vedere prima, perché la suite
 di integrazione non era eseguibile in questo ambiente: DB-1, DB-2 e DB-3, tutti corretti. **La suite
@@ -48,7 +47,7 @@ deve esistere"**. `.env.development.local` è l'unico posto che un build di prod
 
 ## Task
 
-- [✅] ID=ENV-1, Severity=Medium, Complexity=Low, Priority=P0, Title=Rimuovere le variabili Supabase morte, Fix description=Rimosse `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` da `.env.local`: nessuna è letta da alcuna riga di codice. **Resta da fare all'utente:** revocare la service-role key dalla dashboard Supabase (vedi sotto).
+- [✅] ID=ENV-1, Severity=Medium, Complexity=Low, Priority=P0, Title=Rimuovere le variabili Supabase morte, Fix description=Rimosse `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` da `.env.local`: nessuna è letta da alcuna riga di codice. Chiavi legacy `anon` e `service_role` disattivate dalla dashboard; verificato che la legacy `anon` riporta ora `disabled: true` e che l'accesso al database continua a funzionare.
 - [✅] ID=ENV-2, Severity=High, Complexity=Low, Priority=P1, Title=Spostare le variabili solo-dev in `.env.development.local`, Fix description=`AUTH_TEST_CREDENTIALS`, `NEXT_PUBLIC_AUTH_TEST_MODE` ed `EMAIL_DEV_OVERRIDE` spostate. Verificato: `npm run build` compila senza interventi manuali, `next dev` registra ancora il provider `test` e mostra il pulsante di login di test.
 - [✅] ID=ENV-3, Severity=Low, Complexity=Low, Priority=P1, Title=Togliere `NODE_ENV` da `.env.local`, Fix description=Rimossa. Verificato con controprova che nessuno script dipendeva da quella riga.
 - [ ] ID=ENV-4, Severity=Medium, Complexity=Low, Priority=P1, Title=Database usa-e-getta per i test che scrivono, Fix description=Creare un progetto Supabase separato, popolare `TEST_DATABASE_URL` e `TEST_DATABASE_DISPOSABLE=1` in `.env.local` e in `sources/tests/e2e/.env.test`, applicare le migration e promuovere l'account admin. **Richiede una decisione umana:** vedi sotto.
@@ -98,8 +97,15 @@ la chiave va semplicemente disabilitata o eliminata.
 Lo stato del progetto è già pronto per farlo: convivono la `anon` legacy e una publishable key
 moderna (`sb_publishable_...`), quindi il nuovo sistema di API key è attivo.
 
-- [ ] Verificare che nessun altro consumatore usi la `service_role` — altri servizi, job di CI, automazioni, altre applicazioni sullo stesso progetto Supabase.
-- [ ] Disabilitare o eliminare la `service_role` legacy da Dashboard → Settings → API Keys. **L'eliminazione di una secret key è irreversibile.**
+- [✅] Verificato che nessun consumatore usasse le chiavi legacy, interrogando i log del progetto sulle ultime 24 ore: le sole richieste erano health check e chiamate della dashboard (`@supabase-infra/mgmt-api`); nessuna richiesta da un client esterno con nessuna chiave. Le 200 righe su `supavisor`/`pgbouncer` sono Construct che parla direttamente a Postgres con Drizzle, strada che non usa chiavi API.
+- [✅] Chiavi legacy disattivate da **Settings → API Keys → tab "Legacy anon, service_role API keys" → "Disable JWT-based API keys"**. Verificato dopo l'operazione: la legacy `anon` riporta `disabled: true`, la publishable `sb_publishable_…` resta attiva, e il database dell'applicazione risponde normalmente.
+
+### Note sull'interfaccia, per la prossima volta
+
+Due cose non corrispondevano a quanto la documentazione lascia intendere:
+
+- **Non esiste un indicatore di ultimo utilizzo** per singola chiave nella pagina delle chiavi legacy, nonostante la documentazione lo citi. Per stabilire se una chiave è in uso servono i log del progetto.
+- **La disattivazione è unica per entrambe.** Il pulsante è "Disable JWT-based API keys" e agisce insieme su `anon` e `service_role`: non è possibile spegnerne una sola. L'operazione è però **reversibile**, si possono riattivare.
 
 **Scadenza correlata:** le chiavi legacy `anon`/`service_role` funzionano fino alla fine del 2026.
 Construct non usa nessuna delle due, ma la `anon` legacy risulta ancora attiva sul progetto: se
