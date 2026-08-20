@@ -249,6 +249,12 @@ DATABASE_URL="$TEST_DATABASE_URL" \
   npm run dev
 ```
 
+`AUTH_TEST_CREDENTIALS` and `NEXT_PUBLIC_AUTH_TEST_MODE` are set inline above so the
+command works regardless of local files. Both also belong in
+`sources/microservices/web-construct/.env.development.local`, which only `next dev` loads —
+keeping them out of `.env.local` is what lets `npm run build` run locally, since the
+production build fails closed on them. See `.env.template`.
+
 In another terminal:
 
 ```bash
@@ -258,6 +264,39 @@ uv sync --locked
 uv run playwright install chromium
 uv run pytest sources/tests/e2e
 ```
+
+#### Bootstrapping the two E2E accounts on a fresh database
+
+`test-apply` creates every table, index, function, RLS policy and all reference data
+(translations, roles, statuses, navigation items). It does **not** create users: no migration
+inserts into `users`, and the `insert into user_role` backfill in `0001_baseline.sql` runs over
+pre-existing rows, so on an empty database it inserts nothing.
+
+Most of the gap closes itself. The test-credentials provider inserts the user row on first
+login (`lib/auth.ts`, `auth_provider = 'test'`), and `users.id_user_status` defaults to `2`
+(Active), so the login succeeds immediately; `lib/rbac/auth-roles.ts` then grants role `0`
+(Registered user). **`TEST_EMAIL_USER`, the non-admin account, therefore needs no setup at
+all** — it materialises on its first test login.
+
+Role `1` (Administrator) is never granted automatically, and on a fresh database there is no
+existing administrator to grant it from the UI. Promote `TEST_EMAIL` once, **after** signing in
+with it at least once so the user row exists:
+
+```bash
+node sources/devops/db/db.mjs test-query \
+  "insert into user_role (user_id, id_role) select id, 1 from users where email = 'YOUR_TEST_EMAIL' on conflict (user_id, id_role) do nothing"
+```
+
+This is a bootstrap-only exception. `user_role` carries no trigger; the administrator invariant
+is enforced by `replace_user_roles_guarded` and `set_user_status_guarded`, which the application
+path uses. Once one administrator exists, grant every further role through Admin → Roles &
+Permissions rather than by direct SQL.
+
+Prefer a **separate Supabase project** for the disposable database, not another database inside
+the project that serves `DATABASE_URL`. The safety check compares `TEST_DATABASE_URL` and
+`DATABASE_URL` for exact string equality, so two different connection strings reaching the same
+database — a pooler URL and a direct URL, or the same database with a different user — would pass
+it. A separate project makes that mistake impossible instead of merely unlikely.
 
 The E2E fixture resets only its named users and removes the exact registration account created by that run, including after failures.
 

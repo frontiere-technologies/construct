@@ -129,7 +129,7 @@ Obbligatoria nel browser — la build che passa non dimostra nulla su questo.
 - [✅] Disaccoppiamento dall'OS misurato sugli stili calcolati in tutte e quattro le combinazioni OS × classe (vedi la tabella in THEME-3).
 - [✅] Dashboard in tema dark con OS in light: reso corretto.
 - [✅] `npm run lint` pulito, `npm run test` 581 test verdi su 75 file, incluso il nuovo guard `lib/theme-dark-variant.test.ts`.
-- [✅] `npm run build` completa. Nota: con `.env.local` così com'è il build falla su `assertSafeAuthConfiguration` ("Test authentication must not be configured in production"), perché `next build` gira con `NODE_ENV=production` mentre l'env locale ha `AUTH_TEST_CREDENTIALS=true`. È una condizione d'ambiente preesistente e indipendente da questa modifica: azzerando i due flag di test il build passa.
+- [✅] `npm run build` completa. Nota: con `.env.local` così com'è il build falla su `assertSafeAuthConfiguration` ("Test authentication must not be configured in production"), perché `next build` gira con `NODE_ENV=production` mentre l'env locale ha `AUTH_TEST_CREDENTIALS=true`. È una condizione d'ambiente preesistente e indipendente da questa modifica: azzerando i due flag di test il build passa. Risolto in seguito da ENV-2 in [2026-08-19-env-configuration.md](2026-08-19-env-configuration.md).
 - [ ] Revisione visiva pagina per pagina delle pagine autenticate → spostata in **THEME-3**, non completabile in questo ambiente (sidebar senza voci navigabili).
 
 ### Rischi
