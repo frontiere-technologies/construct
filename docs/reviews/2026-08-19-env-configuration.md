@@ -50,6 +50,11 @@ deve esistere"**. `.env.development.local` è l'unico posto che un build di prod
 - [✅] ID=ENV-5, Severity=Low, Complexity=Low, Priority=P2, Title=Riallineare `.env.template`, Fix description=Riscritto con la tabella di caricamento per comando, l'indicazione del file di destinazione per ogni variabile, `EMAIL_DEV_OVERRIDE` documentato, la nota su `sources/tests/e2e/.env.test` e il divieto esplicito su `NODE_ENV`.
 - [✅] ID=ENV-6, Severity=Low, Complexity=Low, Priority=P3, Title=Correggere lo stack dichiarato in `CLAUDE.md`, Fix description=Rimosso `@supabase/supabase-js`, sostituito con Drizzle su Postgres e la nota che Supabase resta solo come host.
 - [✅] ID=ENV-7, Severity=Low, Complexity=Low, Priority=P3, Title=Eliminare il sourcing manuale dell'env nei test di integrazione, Fix description=`vitest.integration.config.ts` carica l'env con `loadEnv('test', ...)` di Vite (nessuna dipendenza nuova), con precedenza all'ambiente già presente. Le credenziali del database usa-e-getta vanno in `.env.test.local`, fuori da `.env.local` e quindi fuori da ogni processo Next. Comando in `CLAUDE.md` e `.env.template` aggiornati.
+- [ ] ID=DB-1, Severity=High, Complexity=Low, Priority=P0, Title=`0002_runtime_boundary.sql` non applicabile a un progetto Supabase nuovo, Fix description=Rimossa la clausola `nosuperuser`, che nessun ruolo su Supabase può impostare. Richiede la riparazione del checksum registrato sul database di sviluppo: passaggi sotto, da eseguire a mano.
+
+- [✅] ID=DB-2, Severity=Medium, Complexity=Low, Priority=P1, Title=I test di integrazione richiedono il pooler in modalità session, Fix description=`TEST_DATABASE_URL` portata dalla 6543 alla 5432 nei due file di ambiente. In modalità transaction un lock advisory di sessione resta appeso e blocca tutte le scritture successive, anche fra esecuzioni diverse.
+- [ ] ID=DB-3, Severity=Medium, Complexity=Low, Priority=P1, Title=`schema-contract` asserisce una condizione non raggiungibile su Supabase, Fix description=Il test conta i privilegi di default verso i ruoli Data API senza filtrare per schema, e include voci il cui proprietario è `supabase_admin`, che nessun ruolo cliente può modificare. Serve una decisione: vedi sotto.
+
 - [ ] ID=ENV-8, Severity=Low, Complexity=Medium, Priority=P3, Title=Guard automatico sul contratto delle variabili d'ambiente, Fix description=Test che confronta le variabili lette nel codice con quelle documentate in `.env.template`, fallendo su quelle lette e non documentate e riportando quelle documentate e non lette.
 
 ---
@@ -157,6 +162,213 @@ dall'interfaccia.
 - [ ] Primo login di test con `TEST_EMAIL`, poi promuoverlo ad Administrator come da README.
 - [ ] `npm run test:integration` verde.
 - [ ] `uv run pytest sources/tests/e2e` verde.
+
+---
+
+## DB-1 — `0002_runtime_boundary.sql` non è applicabile a un progetto nuovo
+
+**Severity** High · **Complexity** Low · **Priority** P0
+
+Trovato mentre si applicavano le migration al database usa-e-getta di ENV-4.
+
+### Il problema
+
+```
+ERROR: permission denied to alter role
+  in SQL statement "alter role construct_runtime
+    nologin nosuperuser nocreatedb nocreaterole noreplication nobypassrls"
+```
+
+Provando gli attributi uno per uno su un ruolo temporaneo, **solo `nosuperuser` viene
+rifiutato**; `nologin`, `nocreatedb`, `nocreaterole`, `nobypassrls` e `noreplication` passano
+tutti. È la regola PostgreSQL per cui solo un superuser può impostare l'attributo SUPERUSER,
+anche quando lo si imposta a NO.
+
+Su Supabase nessun ruolo accessibile è superuser. Verificato: l'unico superuser del progetto è
+`supabase_admin`, che è interno alla piattaforma e di cui i clienti non hanno le credenziali;
+`create role ... superuser` e `alter role postgres superuser` vengono entrambi rifiutati. Non è
+una configurazione modificabile: è un limite della piattaforma, documentato nella pagina
+*"Roles, superuser access and unsupported operations"*. Non cambia nulla creare un altro utente,
+né usare l'identità operatore di `MIGRATION_DATABASE_URL`: qualunque ruolo si crei, non può
+avere SUPERUSER.
+
+La clausola era anche **inutile**: un ruolo creato senza SUPERUSER non lo ha già, e niente di
+raggiungibile da lì può concederglielo.
+
+### Perché sul database di sviluppo non si era mai visto
+
+Lì `construct_runtime` esiste già, 0002 è registrata come completata, e `postgres` ha admin
+option su quel ruolo. Entrambi i progetti girano ora su PostgreSQL 17.6, quindi la spiegazione
+più probabile è che quel database sia stato migrato quando il progetto era su una versione
+precedente, prima che PostgreSQL 16 restringesse i privilegi di `createrole`. È un'inferenza,
+non una verifica.
+
+### Perché conta più del test database
+
+Se 0002 non si applica a un progetto nuovo, **nessun ambiente è provisionabile dalle
+migration**: né il database di test, né lo scenario "derived application" descritto in
+`docs/runbooks/production-deployment.md`, né una ricostruzione da zero in caso di ripristino.
+Il problema era invisibile perché l'unico database esistente era stato creato prima.
+
+### Il fix e la sua eccezione
+
+La correzione è la rimozione di `nosuperuser` dall'`alter role`, con il commento che spiega
+perché non deve tornare.
+
+Ma 0002 è **registrata come completata** sul database di sviluppo con il proprio checksum, e
+`assertAppliedMigrationChecksums` confronta i file con quei valori: modificare il file fa
+fallire ogni successivo comando di migrazione su quel database. È esattamente l'operazione che
+`docs/runbooks/production-deployment.md` vieta — *"never edit an applied migration"*.
+
+La regola del runbook resta giusta e non va cambiata: serve a proteggere database che non si
+possono ricostruire. **Questa è un'eccezione dichiarata, valida solo perché il progetto non è
+ancora in produzione e l'unico database interessato è quello di sviluppo.** L'alternativa
+pulita — ricomprimere le migration in un nuovo baseline e ricostruire tutti i database, con un
+dump dei soli dati per non perdere quelli di sviluppo — resta la strada giusta al momento dello
+squash prima del primo deploy in produzione.
+
+Checksum coinvolti, per tracciabilità:
+
+| | valore |
+|---|---|
+| registrato prima della modifica | `ea1531c2ec000b296d614bc89b965a40d248cb0348f029473215675ef4e579bb` |
+| del file dopo la modifica | `abc53efee3527d08f892b7d4df0da4862e18768146b519852378df65ea0415c8` |
+
+Le altre quattro migration sono invariate: verificato ricalcolando tutti i checksum con la
+stessa funzione di `migration-lib.mjs`.
+
+### Stato
+
+- [✅] `nosuperuser` rimossa da `0002_runtime_boundary.sql`, con commento esplicativo.
+- [✅] Fix validato a livello di istruzione: i cinque attributi rimasti sono stati provati uno per uno e passano tutti.
+- [✅] Riga incompleta di 0002 rimossa dal database usa-e-getta, così il runner la riapplica da zero.
+- [✅] `sources/devops/db/schema.sql` rigenerato; `npm run schema:check` riporta "schema.sql matches ordered migrations".
+- [✅] Checksum di 0002 riparato sul database di sviluppo: ora `abc53efe…`, la migration resta registrata come completata.
+- [✅] Migration riapplicate al database usa-e-getta: **tutte e cinque completate, 0002 compresa.** È la prova che un progetto Supabase nuovo è ora provisionabile dalle migration.
+- [✅] `npm run test:integration` eseguibile: 46 test su 47 passano. L'unico fallimento è DB-3, indipendente da questa correzione.
+
+---
+
+## DB-2 — I test di integrazione richiedono connessioni con affinità di sessione
+
+**Severity** Medium · **Complexity** Low · **Priority** P1 · **Risolto**
+
+Emerso dopo DB-1, con la suite di integrazione finalmente eseguibile.
+
+### Sintomo
+
+`serializes concurrent reorders into unique deterministic positions` andava in timeout, in modo
+sistematico: tre esecuzioni su tre. Alzare il timeout a 30 secondi non cambiava nulla, quindi non
+era latenza — era un blocco.
+
+### Causa
+
+Nello stesso file, il test `serializes subtree deletion with every other navigation write` prende
+deliberatamente un lock a livello di **sessione** su una connessione riservata, per dimostrare che
+le scritture si serializzano:
+
+```
+riga 66:  await connection`select pg_advisory_lock(49374201)`
+riga 71:  await connection`select pg_advisory_unlock(49374201)`
+```
+
+`TEST_DATABASE_URL` puntava al pooler Supavisor in **modalità transaction** (porta 6543), che non
+garantisce che due istruzioni successive finiscano sulla stessa connessione fisica. Il rilascio è
+finito su un backend diverso da quello che aveva preso il lock, e il lock è rimasto appeso.
+
+Prova diretta, interrogando `pg_locks` sul database di test:
+
+| pid | objid | granted | stato del backend | da quanto |
+|---|---|---|---|---|
+| 21251 | 49374201 | true | **idle** | 00:01:20 |
+
+Un backend inattivo che tiene il lock. `moveNavigationItem` usa
+`pg_advisory_xact_lock(49374201)` — lo stesso identificatore — quindi ogni riordino successivo si
+accodava dietro un lock che nessuno avrebbe mai rilasciato. E il blocco **sopravvive fra
+esecuzioni** finché quel backend non viene riciclato: per questo la prima esecuzione della suite
+era passata e tutte le successive no.
+
+### Correzione
+
+`TEST_DATABASE_URL` portata alla **porta 5432**, il pooler in modalità session, nei due file di
+ambiente. Verificato: tutti e quattro i test di navigazione passano, e quello di riordino impiega
+3,5 secondi — sarebbe rientrato anche nel timeout originale di 5, confermando che la latenza non
+era il problema.
+
+Il requisito è documentato in `.env.template`, con il sintomo e la query diagnostica, perché non
+è deducibile: per `DATABASE_URL` la modalità transaction è la scelta giusta, per
+`TEST_DATABASE_URL` no.
+
+Nota su una correzione sbagliata e ritirata: avevo alzato `testTimeout` a 30 secondi diagnosticando
+latenza. Con la causa vera nota, l'ho rimosso: un timeout generoso avrebbe nascosto esattamente
+questo tipo di blocco. Il commento nella configurazione ora spiega perché il default di 5 secondi
+è tenuto deliberatamente.
+
+---
+
+## DB-3 — Il test `schema-contract` asserisce una condizione non raggiungibile
+
+**Severity** Medium · **Complexity** Low · **Priority** P1 · **Serve una decisione**
+
+### Il fallimento
+
+```
+lib/schema-contract.integration.test.ts > database runtime boundary
+  > does not expose application relations through Data API roles
+AssertionError: expected [ …(64) ] to have a length of +0 but got 64
+```
+
+**Non è una conseguenza di DB-1 né di DB-2.** Ho eseguito la stessa query sul database di
+sviluppo: risultato identico, 64 privilegi. Il test fallirebbe anche lì. Non era mai emerso perché
+la suite di integrazione non era eseguibile in questo ambiente — è la prima volta che questo test
+gira davvero.
+
+### Cosa conta davvero, per schema
+
+La query del test non filtra per schema. Scomponendo i 64 privilegi:
+
+| proprietario | schema | privilegi | modificabile da noi? |
+|---|---|---|---|
+| `postgres` | `storage` | 16 | sì, ma è uno schema di Supabase, non dell'applicazione |
+| `supabase_admin` | `graphql` | 16 | no |
+| `supabase_admin` | `graphql_public` | 16 | no |
+| `supabase_admin` | **`public`** | 16 | **no** |
+
+Due conclusioni:
+
+1. **La migration 0005 funziona.** Non c'è nessuna voce con proprietario `postgres` nello schema
+   `public`: quelle le ha rimosse. Le 48 voci di `supabase_admin` non sono raggiungibili, perché
+   `alter default privileges for role supabase_admin` richiede di essere membro di quel ruolo, che
+   è superuser e inaccessibile ai clienti (vedi DB-1).
+2. **Il test misura più di quanto intende.** Il nome dice "application relations", ma la query
+   raccoglie i privilegi di default di tutti gli schemi, inclusi `storage`, `graphql` e
+   `graphql_public`, che non contengono dati dell'applicazione. Così com'è scritto, questo test non
+   può passare su Supabase gestito, su nessun progetto.
+
+### Il rischio residuo reale
+
+Resta una cosa vera e non correggibile: i privilegi di default di `supabase_admin` nello schema
+`public` concedono ad `anon` e `authenticated` l'accesso alle tabelle **create in futuro da
+`supabase_admin`**. Le tabelle dell'applicazione sono create dall'identità di migrazione, non da
+`supabase_admin`, quindi in pratica non lo ereditano; e 0002 revoca esplicitamente i privilegi
+sulle relazioni esistenti, con RLS attiva sopra. L'esposizione concreta è quindi nulla oggi, ma il
+meccanismo non è chiuso in linea di principio.
+
+### La decisione
+
+Non tocco un test di sicurezza per farlo passare senza il tuo assenso: è esattamente il tipo di
+modifica che va fatta con gli occhi aperti.
+
+**Raccomandazione:** restringere la seconda asserzione allo schema `public` **e** ai soli
+proprietari che l'applicazione controlla, così il test verifica ciò che 0005 può effettivamente
+garantire e continuerebbe a fallire se una futura modifica riaprisse quei privilegi. In parallelo,
+la parte non chiudibile — le voci di `supabase_admin` in `public` — va documentata come rischio
+residuo accettato della piattaforma, con la motivazione sopra, invece di restare un fallimento
+senza spiegazione. La prima asserzione del test, quella su `role_table_grants`, passa già e va
+lasciata intatta: è quella che verifica le relazioni realmente esistenti.
+
+**Alternativa:** lasciare il test rosso come promemoria permanente. Sconsigliata: un test sempre
+rosso smette di essere un segnale e la suite perde la capacità di dire "qualcosa è cambiato".
 
 ---
 

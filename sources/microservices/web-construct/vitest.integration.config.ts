@@ -36,6 +36,13 @@ export default defineConfig({
     include: ['**/*.integration.test.ts'],
     exclude: ['**/node_modules/**'],
     fileParallelism: false,
+    // Timeouts stay at Vitest's 5s default on purpose. These specs are slower than
+    // unit tests (measured: 780-1470ms each, and ~3.5s for the concurrent-reorder
+    // spec) but still fit, and the margin is the useful signal: this suite takes
+    // session-level advisory locks, so when a spec blocks forever behind a lock
+    // that was never released, a short timeout surfaces it in seconds instead of
+    // hiding it behind a generous limit. TEST_DATABASE_URL must therefore point at
+    // a connection with session affinity — see the note in .env.template.
   },
   resolve: {
     alias: { '@': resolve(__dirname, '.') },
