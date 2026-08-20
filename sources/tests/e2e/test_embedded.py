@@ -1,5 +1,8 @@
+import os
 import socket
 import threading
+import urllib.error
+import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -8,10 +11,62 @@ from playwright.sync_api import expect
 
 from helpers import nav, l1_btn, ensure_l1_expanded, grid_rows, open_column_filter, do_test_login
 
-# IPv4-only public endpoint with no frame-blocking response headers. Keeping the
-# positive target IPv4-only avoids selecting an unreachable IPv6 DNS answer on
-# CI runners that have no IPv6 route.
-PUBLIC_EMBED_URL = "https://httpbin.org/html"
+# Public endpoint with no frame-blocking response headers, needed because the
+# embeddability check rejects private and loopback hosts to prevent SSRF.
+#
+# Was https://httpbin.org/html, which cost a red build: measured over repeated
+# probes it alternated between HTTP 200, HTTP 503 from its load balancer, and no
+# response at all, on both HEAD and GET. example.com answered 200 on 8 of 8
+# attempts in ~90ms against httpbin's 1.6s when it answered, sends neither
+# X-Frame-Options nor a CSP, is maintained by IANA for exactly this kind of use,
+# and resolves to IPv4 answers only — which matters because the check pins the
+# first DNS answer, so an IPv6 answer would be unroutable on a CI runner without
+# an IPv6 route.
+#
+# Overridable so a target that goes bad can be swapped without editing this file.
+PUBLIC_EMBED_URL = os.getenv("PUBLIC_EMBED_URL", "https://example.com/")
+
+
+def _require_embeddable_target(url: str) -> None:
+    """Skip, rather than fail, when the third-party positive target is not serving.
+
+    The positive case needs a *public* origin: the embeddability check rejects
+    private and loopback hosts to prevent SSRF, so the local probe server used by
+    the negative cases cannot stand in for it. That leaves this one assertion
+    depending on a site nobody in this repository controls — and it has already
+    cost a red build once, with httpbin.org answering 503 from its load balancer.
+
+    The probe deliberately goes straight to the target instead of inferring the
+    state through the application, so an application regression stays visible: if
+    the target is healthy and the app still shows the blocked notice, this returns
+    and the test runs and fails, which is what should happen.
+    """
+    request = urllib.request.Request(
+        url, method="GET", headers={"User-Agent": "Construct-E2E-Precondition/1.0"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            status, headers = response.status, response.headers
+    except urllib.error.HTTPError as exc:
+        pytest.skip(
+            f"positive embed target {url} answered HTTP {exc.code}; "
+            f"set PUBLIC_EMBED_URL to a healthy public page that allows framing"
+        )
+    except (urllib.error.URLError, OSError) as exc:
+        pytest.skip(f"positive embed target {url} is unreachable ({exc})")
+
+    if status // 100 != 2:
+        pytest.skip(f"positive embed target {url} answered HTTP {status}")
+
+    # If the target starts blocking framing, the app is right to show the notice and
+    # this test's premise is gone. Skip with a message that says so, instead of
+    # failing as though the application had regressed.
+    xfo = (headers.get("X-Frame-Options") or "").upper()
+    if "DENY" in xfo or "SAMEORIGIN" in xfo:
+        pytest.skip(f"positive embed target {url} now sends X-Frame-Options: {xfo}")
+    csp = headers.get("Content-Security-Policy") or ""
+    if "frame-ancestors" in csp.lower():
+        pytest.skip(f"positive embed target {url} now restricts framing via CSP frame-ancestors")
 
 
 class _ProbeHandler(BaseHTTPRequestHandler):
@@ -236,7 +291,10 @@ def embedded_item_page(logged_in_page, base_url, browser, test_email):
 
 def test_embedded_page_renders_iframe_when_allowed(embedded_item_page):
     # The embeddability check intentionally rejects private/loopback targets to
-    # prevent SSRF, so the positive E2E case must use a public origin.
+    # prevent SSRF, so the positive E2E case must use a public origin. Confirm that
+    # origin is actually serving and framable before asserting anything about the
+    # application: otherwise a third-party outage reads as an application failure.
+    _require_embeddable_target(PUBLIC_EMBED_URL)
     item_name, page = embedded_item_page(PUBLIC_EMBED_URL)
     l1 = page.locator("aside").first
     ensure_l1_expanded(page, l1)

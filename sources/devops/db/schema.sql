@@ -1275,8 +1275,16 @@ begin
   if not exists (select 1 from pg_roles where rolname = 'construct_runtime') then
     create role construct_runtime nologin;
   end if;
+  -- NOSUPERUSER is deliberately absent. PostgreSQL lets only a superuser set the
+  -- SUPERUSER attribute, even when setting it to NO, and managed platforms such as
+  -- Supabase never grant superuser: their 'postgres' role has rolsuper = false.
+  -- Including the clause made this migration impossible to apply to a new project,
+  -- so no fresh environment could be provisioned from the migrations at all. It was
+  -- also redundant: a role created without SUPERUSER already lacks it, and nothing
+  -- reachable here can grant it. Every other restriction below is enforceable by a
+  -- CREATEROLE role.
   alter role construct_runtime
-    nologin nosuperuser nocreatedb nocreaterole noreplication nobypassrls;
+    nologin nocreatedb nocreaterole noreplication nobypassrls;
 end
 $$;
 

@@ -12,7 +12,8 @@ npm run lint         # ESLint (eslint.config.mjs — next/core-web-vitals + next
 npm run clean        # Remove .next/
 npm run test         # Vitest unit tests
 npm run test:watch   # Vitest watch mode
-set -a && . ./.env.local && set +a && npm run test:integration   # DB integration tests (gated behind I18N_INTEGRATION_DB=1, needs a real DB)
+npm run test:integration   # DB integration tests (gated behind I18N_INTEGRATION_DB=1, needs a real DB)
+                           # Credenziali del DB usa-e-getta in .env.test.local, caricato da vitest.integration.config.ts
 
 # E2E tests (Python — use uv, never python/python3 directly)
 uv run pytest                              # tutti i test
@@ -21,9 +22,24 @@ uv run pytest sources/tests/e2e/test_sidebar.py    # singolo gruppo
 
 ## Stack
 
-sources/microservices/web-construct/ - React 19 + TypeScript + Next.js 16 (App Router) + Tailwind CSS v4 + NextAuth v5 (Auth.js) + Supabase (@supabase/supabase-js) + Lucide React + Zod
+sources/microservices/web-construct/ - React 19 + TypeScript + Next.js 16 (App Router) + Tailwind CSS v4 + NextAuth v5 (Auth.js) + Drizzle ORM su Postgres (`drizzle-orm` + `postgres`) + Lucide React + Zod
+
+Il database è Postgres ospitato su Supabase, ma l'SDK `@supabase/supabase-js` non è più una dipendenza: ogni accesso ai dati passa da Drizzle (rimosso nel commit `b9f3edf`). Non esistono variabili `NEXT_PUBLIC_SUPABASE_*` né `SUPABASE_SERVICE_ROLE_KEY` da configurare.
 
 Altre dipendenze rilevanti: `@dnd-kit/*` (drag & drop), `bcryptjs` (hashing), `isomorphic-dompurify` (sanitizzazione HTML), `nodemailer` + `resend` (email), `pino` (logging), Vitest (unit test) + Playwright/pytest (E2E).
+
+### Livello UI: né shadcn/ui né Material UI
+
+**Decisione presa il 2026-08-19: non sostituire i componenti con shadcn/ui o Material UI.** I componenti condivisi sono scritti a mano in `components/ui/`, con Tailwind e `clsx`. Quattro motivi, in ordine di peso:
+
+1. Le griglie restano ag-grid: shadcn non ha una data grid, quindi si otterrebbero due linguaggi visivi da tenere allineati invece di uno.
+2. Il sistema di token del tema è già configurabile a runtime e persistito su DB; shadcn porta il proprio vocabolario (`--background`, `--primary`, `--ring`) e andrebbe rimappato per intero.
+3. Le primitive effettivamente sostituibili sono ~250 righe, già funzionanti e coperte da test.
+4. `components/ui/dialogConsumers.test.ts` e `buttonInteractionStyles.test.ts` codificano contratti di accessibilità che andrebbero ricostruiti da zero.
+
+**Cosa è invece ammesso:** adozione **puntuale** di Radix per una singola primitiva accessibile e complessa che non esiste ancora — combobox, dropdown menu, popover, tooltip, tabs, sheet, command palette — mappando i suoi token sui `--theme-*` in un unico punto. Non è un'apertura a una migrazione generale: si installa il componente che serve, non la libreria.
+
+Analisi completa, con i numeri e i test coinvolti: [docs/reviews/2026-08-19-ui-primitives-and-theming.md](docs/reviews/2026-08-19-ui-primitives-and-theming.md), voce DOC-1.
 
 ### Commit AI-tooling folders to Git
 

@@ -215,6 +215,18 @@ export async function checkEmbeddable(
       return false
     }
 
+    // A target that does not actually serve the page is not embeddable. Without this,
+    // only the framing headers were inspected, so any 4xx/5xx counted as embeddable:
+    // an error response carries no X-Frame-Options and no CSP, so `blocksEmbedding`
+    // said "not blocked". Observed against https://httpbin.org/html while it was
+    // answering 503 from its load balancer — the check returned true and the app
+    // rendered an iframe onto a dead page instead of the blocked notice. 3xx is
+    // handled above, so this catches 4xx and 5xx.
+    if (!res.ok) {
+      res.body?.cancel()
+      return false
+    }
+
     const blocked = blocksEmbedding(res.headers)
     res.body?.cancel()
     return !blocked
