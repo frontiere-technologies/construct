@@ -28,6 +28,19 @@ Il database è Postgres ospitato su Supabase, ma l'SDK `@supabase/supabase-js` n
 
 Altre dipendenze rilevanti: `@dnd-kit/*` (drag & drop), `bcryptjs` (hashing), `isomorphic-dompurify` (sanitizzazione HTML), `nodemailer` + `resend` (email), `pino` (logging), Vitest (unit test) + Playwright/pytest (E2E).
 
+### Livello UI: né shadcn/ui né Material UI
+
+**Decisione presa il 2026-08-19: non sostituire i componenti con shadcn/ui o Material UI.** I componenti condivisi sono scritti a mano in `components/ui/`, con Tailwind e `clsx`. Quattro motivi, in ordine di peso:
+
+1. Le griglie restano ag-grid: shadcn non ha una data grid, quindi si otterrebbero due linguaggi visivi da tenere allineati invece di uno.
+2. Il sistema di token del tema è già configurabile a runtime e persistito su DB; shadcn porta il proprio vocabolario (`--background`, `--primary`, `--ring`) e andrebbe rimappato per intero.
+3. Le primitive effettivamente sostituibili sono ~250 righe, già funzionanti e coperte da test.
+4. `components/ui/dialogConsumers.test.ts` e `buttonInteractionStyles.test.ts` codificano contratti di accessibilità che andrebbero ricostruiti da zero.
+
+**Cosa è invece ammesso:** adozione **puntuale** di Radix per una singola primitiva accessibile e complessa che non esiste ancora — combobox, dropdown menu, popover, tooltip, tabs, sheet, command palette — mappando i suoi token sui `--theme-*` in un unico punto. Non è un'apertura a una migrazione generale: si installa il componente che serve, non la libreria.
+
+Analisi completa, con i numeri e i test coinvolti: [docs/reviews/2026-08-19-ui-primitives-and-theming.md](docs/reviews/2026-08-19-ui-primitives-and-theming.md), voce DOC-1.
+
 ### Commit AI-tooling folders to Git
 
 Folders that the Superpowers plugin creates under `docs/` (e.g. `docs/superpowers/`, containing plans and other workflow artifacts) must be committed to Git, not left untracked or gitignored. They are part of the project's traceable history of AI-assisted work.

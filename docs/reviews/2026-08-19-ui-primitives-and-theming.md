@@ -47,7 +47,7 @@ file per file, perché è lo stesso edit sulle stesse `className`.
 - [ ] ID=THEME-2, Severity=Low, Complexity=High, Priority=P2, Title=Completare la migrazione ai token semantici, Fix description=Sostituire le 240 occorrenze di classi colore statiche con i token `--theme-*`, contestualmente a UI-1 file per file. Estendere i token dove mancano (stati semantici: danger, success, warning).
 - [ ] ID=THEME-3, Severity=Low, Complexity=Medium, Priority=P2, Title=Revisione di contrasto delle utility `dark:` ora che si attivano, Fix description=Rivedere visivamente le pagine autenticate con più utility `dark:` nei due stati del tema. Reso necessario da THEME-1: utility scritte quando il meccanismo era rotto ora si attivano davvero e possono risultare sbagliate.
 
-- [ ] ID=DOC-1, Severity=Info, Complexity=Low, Priority=P3, Title=Registrare la decisione su shadcn/ui e Material UI, Fix description=Documentare l'esito dell'analisi e i criteri per un'eventuale adozione puntuale futura di Radix.
+- [✅] ID=DOC-1, Severity=Info, Complexity=Low, Priority=P3, Title=Registrare la decisione su shadcn/ui e Material UI, Fix description=Registrata in `CLAUDE.md`, sezione Stack, come sottosezione "Livello UI: né shadcn/ui né Material UI": la decisione, i quattro motivi in forma sintetica, e il perimetro di ciò che resta ammesso (adozione puntuale di Radix per una singola primitiva complessa). L'analisi completa resta qui.
 
 ---
 
@@ -356,12 +356,28 @@ Il caso è già concreto: `components/rbac/CustomSelect.tsx` e
 esattamente dove sono emersi i difetti di accessibilità di
 [2026-08-19-icon-picker-cleanup.md](2026-08-19-icon-picker-cleanup.md).
 
-### Fix
+### Dove è stata registrata, e perché lì
 
-Registrare quanto sopra dove il progetto tiene le decisioni architetturali, in modo che la domanda
-non venga ripetuta. Se non esiste un formato per le decisioni (non ho trovato una cartella
-`docs/decisions/` o ADR), questa sezione può servire da riferimento fino a quando non se ne adotta
-uno.
+In `CLAUDE.md`, nella sezione Stack, come sottosezione "Livello UI: né shadcn/ui né Material UI".
+
+Il progetto non ha una cartella per le decisioni architetturali — nessun `docs/decisions/`, nessun
+ADR — e non ne ho creata una per un singolo documento: una cartella con un file solo tende a non
+essere mantenuta, e introdurre una convenzione è una scelta che spetta al progetto, non a questa
+review.
+
+`CLAUDE.md` è invece il posto che risponde allo scopo: viene letto per costruzione da ogni
+contributore e da ogni sessione di AI, che sono esattamente i due soggetti che potrebbero riproporre
+la domanda. Un documento di review datato non verrebbe trovato da chi fra sei mesi si chiede "non
+sarebbe meglio usare shadcn?".
+
+La ripartizione è deliberata: in `CLAUDE.md` sta ciò che serve per **agire** — la decisione, i
+quattro motivi in forma breve, e soprattutto il perimetro di ciò che resta ammesso, perché una
+decisione formulata solo come divieto invita ad aggirarla. Qui resta l'analisi con i numeri, i file
+e i test coinvolti, cioè le **prove**. Un documento di review è la fotografia di un'analisi a una
+data; una decisione deve reggere anche quando il resto di quella fotografia è invecchiato.
+
+Se in futuro il progetto adotterà una convenzione per le decisioni, questa voce è il candidato
+naturale come prima.
 
 ---
 
