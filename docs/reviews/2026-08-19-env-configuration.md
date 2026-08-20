@@ -24,8 +24,13 @@ una service-role key che bypassa RLS, orfana dalla rimozione di `@supabase/supab
 andato alla deriva rispetto ai file reali in entrambe le direzioni, `CLAUDE.md` che dichiarava uno
 stack non più vero, e i test che scrivono sul database non eseguibili per variabili mancanti.
 
-Cinque punti su otto sono stati risolti (commit `761b144`). Restano ENV-4, ENV-7 ed ENV-8, più la
+Otto punti su undici sono risolti. Restano ENV-4 (parzialmente: il database usa-e-getta è
+configurato e le migration applicate, mancano gli account E2E e l'esecuzione di pytest), ENV-8, e la
 parte di ENV-1 che richiede un'azione sulla dashboard Supabase.
+
+Il lavoro ha inoltre portato alla luce tre difetti che nessuno poteva vedere prima, perché la suite
+di integrazione non era eseguibile in questo ambiente: DB-1, DB-2 e DB-3, tutti corretti. **La suite
+di integrazione passa ora 47 test su 47.**
 
 ### La regola che risolve la classe di problemi
 
@@ -53,7 +58,7 @@ deve esistere"**. `.env.development.local` è l'unico posto che un build di prod
 - [ ] ID=DB-1, Severity=High, Complexity=Low, Priority=P0, Title=`0002_runtime_boundary.sql` non applicabile a un progetto Supabase nuovo, Fix description=Rimossa la clausola `nosuperuser`, che nessun ruolo su Supabase può impostare. Richiede la riparazione del checksum registrato sul database di sviluppo: passaggi sotto, da eseguire a mano.
 
 - [✅] ID=DB-2, Severity=Medium, Complexity=Low, Priority=P1, Title=I test di integrazione richiedono il pooler in modalità session, Fix description=`TEST_DATABASE_URL` portata dalla 6543 alla 5432 nei due file di ambiente. In modalità transaction un lock advisory di sessione resta appeso e blocca tutte le scritture successive, anche fra esecuzioni diverse.
-- [ ] ID=DB-3, Severity=Medium, Complexity=Low, Priority=P1, Title=`schema-contract` asserisce una condizione non raggiungibile su Supabase, Fix description=Il test conta i privilegi di default verso i ruoli Data API senza filtrare per schema, e include voci il cui proprietario è `supabase_admin`, che nessun ruolo cliente può modificare. Serve una decisione: vedi sotto.
+- [✅] ID=DB-3, Severity=Medium, Complexity=Low, Priority=P1, Title=`schema-contract` asserisce una condizione non raggiungibile su Supabase, Fix description=Seconda asserzione ristretta allo schema `public` e ai soli proprietari che l'applicazione controlla, espressa come verifica di sottoinsieme invece che come conteggio. Rischio residuo dei privilegi di `supabase_admin` documentato nel test. Verificato che intercetta ancora una regressione reale.
 
 - [ ] ID=ENV-8, Severity=Low, Complexity=Medium, Priority=P3, Title=Guard automatico sul contratto delle variabili d'ambiente, Fix description=Test che confronta le variabili lette nel codice con quelle documentate in `.env.template`, fallendo su quelle lette e non documentate e riportando quelle documentate e non lette.
 
@@ -354,12 +359,32 @@ Resta una cosa vera e non correggibile: i privilegi di default di `supabase_admi
 sulle relazioni esistenti, con RLS attiva sopra. L'esposizione concreta è quindi nulla oggi, ma il
 meccanismo non è chiuso in linea di principio.
 
-### La decisione
+### La correzione applicata
 
-Non tocco un test di sicurezza per farlo passare senza il tuo assenso: è esattamente il tipo di
-modifica che va fatta con gli occhi aperti.
+La seconda asserzione è ristretta allo schema `public` e ai soli proprietari che l'applicazione
+controlla, ed è espressa come **verifica di sottoinsieme** invece che come conteggio: raccoglie i
+proprietari delle voci in `public`, scarta quelli riservati alla piattaforma e pretende che non ne
+resti nessuno. Se i privilegi di default della migration tornassero, `postgres` comparirebbe
+nell'elenco e il test fallirebbe.
 
-**Raccomandazione:** restringere la seconda asserzione allo schema `public` **e** ai soli
+**Verificato che non sia un test vuoto.** Ho introdotto la regressione a mano sul database
+usa-e-getta — `alter default privileges in schema public grant select on tables to anon` — e il
+test è fallito con `expected [ 'postgres' ] to deeply equal []`, che nomina il proprietario
+colpevole; poi l'ho rimossa e il test è tornato verde. Il messaggio è anche più utile del
+precedente `expected […(64)] to have a length of +0 but got 64`.
+
+La prima asserzione, quella su `role_table_grants`, è rimasta intatta: passava già ed è quella che
+verifica le relazioni realmente esistenti.
+
+Il rischio residuo non chiudibile è documentato nel commento del test, con il rimando a questo
+documento: i privilegi di default di `supabase_admin` in `public` riguardano le tabelle create in
+futuro **da quel ruolo**, mentre le tabelle dell'applicazione sono create dall'identità di
+migrazione e non li ereditano; 0002 revoca comunque i privilegi sulle relazioni esistenti, con RLS
+sopra.
+
+### Ragionamento alla base della scelta
+
+**Raccomandazione seguita:** restringere la seconda asserzione allo schema `public` **e** ai soli
 proprietari che l'applicazione controlla, così il test verifica ciò che 0005 può effettivamente
 garantire e continuerebbe a fallire se una futura modifica riaprisse quei privilegi. In parallelo,
 la parte non chiudibile — le voci di `supabase_admin` in `public` — va documentata come rischio

@@ -181,15 +181,38 @@ describeIntegration('database runtime boundary', () => {
     `)
     expect(grants).toHaveLength(0)
 
-    const defaultGrants = await db.execute(sql`
-      select defaclrole::regrole::text as owner, grantee.rolname as grantee
+    // Default privileges are recorded per owner role and per schema, and
+    // 0005_data_api_default_privileges.sql can only revoke its own: `alter default
+    // privileges` without FOR ROLE applies to the current role, and altering another
+    // role's defaults requires membership in it. On Supabase the platform keeps its
+    // own entries under supabase_admin, a superuser no client role can join, so an
+    // assertion of "zero entries anywhere" can never hold there — it also swept up
+    // the storage, graphql and graphql_public schemas, which hold no application
+    // data. What is enforceable, and what 0005 achieves, is that no owner *we*
+    // control leaves anon/authenticated with default privileges in public.
+    //
+    // Expressed as a subset check rather than a count so a regression still fails:
+    // if the migration's own defaults come back, `postgres` appears here and the
+    // assertion breaks. Residual risk accepted deliberately: supabase_admin's
+    // entries would grant anon/authenticated on tables created in public *by
+    // supabase_admin*. Application tables are created by the migration identity, so
+    // they do not inherit them, and the revoke in 0002_runtime_boundary.sql plus RLS
+    // cover the relations that exist. See docs/reviews/2026-08-19-env-configuration.md,
+    // finding DB-3.
+    const PLATFORM_OWNED_ROLES = ['supabase_admin']
+    const defaultGrantOwners = await db.execute(sql`
+      select distinct defaclrole::regrole::text as owner
       from pg_default_acl defaults
       cross join lateral aclexplode(coalesce(defaults.defaclacl, acldefault(defaults.defaclobjtype, defaults.defaclrole))) acl
       join pg_roles grantee on grantee.oid = acl.grantee
       where grantee.rolname in ('anon', 'authenticated')
         and acl.privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'EXECUTE', 'USAGE')
+        and defaults.defaclnamespace = 'public'::regnamespace
     `)
-    expect(defaultGrants).toHaveLength(0)
+    const ownersWeControl = (defaultGrantOwners as unknown as { owner: string }[])
+      .map(row => row.owner)
+      .filter(owner => !PLATFORM_OWNED_ROLES.includes(owner))
+    expect(ownersWeControl).toEqual([])
   })
 
   it('uses an invoker-rights view and declares reverse lookup indexes', async () => {
