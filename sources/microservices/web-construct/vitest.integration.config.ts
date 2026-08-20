@@ -1,5 +1,25 @@
 import { defineConfig } from 'vitest/config'
+import { loadEnv } from 'vite'
 import { resolve } from 'node:path'
+
+// Vitest, unlike Next, reads no .env file on its own: TEST_DATABASE_URL and
+// TEST_DATABASE_DISPOSABLE previously had to be pushed in with a
+// `set -a && . ./.env.local && set +a` prefix, which is easy to forget and fails
+// with an error that does not point at the cause. Loading them here makes
+// `npm run test:integration` self-sufficient.
+//
+// Mode 'test' loads .env, .env.local, .env.test and .env.test.local — and
+// deliberately NOT .env.development.local: integration tests must not inherit
+// development-only flags such as AUTH_TEST_CREDENTIALS. Put the disposable
+// database credentials in .env.test.local (gitignored), which keeps them out of
+// .env.local and therefore out of every Next process.
+//
+// Variables already present in the environment win, matching how Next resolves
+// .env files and how the E2E conftest.py uses os.environ.setdefault: an explicit
+// `TEST_DATABASE_URL=... npm run test:integration` still overrides the files.
+for (const [key, value] of Object.entries(loadEnv('test', __dirname, ''))) {
+  if (process.env[key] === undefined) process.env[key] = value
+}
 
 // Separate from vitest.config.ts's `exclude: ['**/*.integration.test.ts']`:
 // installed vitest (3.2.6) has no `--include` CLI flag to override a config's

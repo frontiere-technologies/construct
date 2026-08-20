@@ -12,7 +12,8 @@ npm run lint         # ESLint (eslint.config.mjs — next/core-web-vitals + next
 npm run clean        # Remove .next/
 npm run test         # Vitest unit tests
 npm run test:watch   # Vitest watch mode
-set -a && . ./.env.local && set +a && npm run test:integration   # DB integration tests (gated behind I18N_INTEGRATION_DB=1, needs a real DB)
+npm run test:integration   # DB integration tests (gated behind I18N_INTEGRATION_DB=1, needs a real DB)
+                           # Credenziali del DB usa-e-getta in .env.test.local, caricato da vitest.integration.config.ts
 
 # E2E tests (Python — use uv, never python/python3 directly)
 uv run pytest                              # tutti i test
