@@ -399,20 +399,71 @@ La revisione visiva delle pagine autenticate a maggiore concentrazione di utilit
 | `/profile` | `ProfileForm`, `ChangePasswordForm` | 5 |
 | `/roles-permissions/[roleId]` | `PermissionsTree`, `RoleDetailClient` | 3 |
 
-**Perché non è stato fatto ora:** nell'ambiente di sviluppo locale la sidebar non presenta voci
-navigabili con l'account `admin@construct.test` — `document.querySelectorAll('nav a, aside a')`
-restituisce zero elementi — e la navigazione diretta per URL è vincolata all'origin dallo strumento
-di preview. Non ho potuto raggiungere quelle pagine. Va verificato separatamente se la sidebar vuota
-sia una condizione del solo dev database (autorizzazioni `role_item` non seedate) o un problema a
-sé: **è un'anomalia da chiarire prima di iniziare THEME-3**, perché senza navigazione la revisione
-non è eseguibile a mano.
+**Correzione di due affermazioni sbagliate fatte in precedenza.** Avevo scritto che la sidebar non
+presentava voci navigabili e che la navigazione diretta per URL era vincolata all'origin dallo
+strumento di preview. Entrambe erano errate, e avevano la stessa causa: **avevo fatto il login con
+l'account sbagliato.**
 
-### Criteri di accettazione
+`admin@construct.test` ha solo il ruolo 0 (Registered user), che ha **zero** voci autorizzate in
+`role_item`; il ruolo 1 (Administrator) ne ha 24. Quindi la sidebar vuota era il filtro RBAC che
+funzionava correttamente, e `/admin/theme` che rimandava a `/` era la guardia della rotta admin che
+respingeva un non-amministratore. Nessun difetto.
 
-- [ ] Ogni pagina della tabella controllata nei due stati del tema, con OS in light e in dark.
-- [ ] Nessun elemento scuro residuo su superficie chiara e viceversa.
-- [ ] Contrasto testo/sfondo adeguato in entrambi gli stati.
-- [ ] Le utility che risultano sbagliate corrette, preferibilmente convertendole a token semantici (confluisce in THEME-2).
+Il nome dell'account inganna — si chiama "admin" ma non ha il ruolo di amministratore. Gli account
+con ruolo 1 sul database di sviluppo sono `test-e2e@construct.dev` e le due utenze personali.
+
+Va corretta anche la misura che avevo usato come prova: `document.querySelectorAll('nav a, aside a')`
+restituisce zero **anche con la sidebar funzionante**, perché le voci sono `<button>` con
+`aria-label`, non `<a>` dentro `<nav>`. Quella misura non dimostrava nulla in nessuno dei due casi.
+
+### Revisione svolta
+
+Con un account amministratore, sistema operativo emulato in **light** e applicazione in **dark** —
+la combinazione che prima del fix era rotta:
+
+- [✅] `/functionalities/create`, la pagina a maggiore concentrazione di utility `dark:`: resa
+  corretta. Verificato in particolare il picker di icone, che da solo ne ha 7, aprendo entrambe le
+  sue schede: la griglia della libreria col campo di ricerca, e la scheda di caricamento SVG col
+  riquadro dei requisiti. Tutte le superfici sono scure e il testo è leggibile. Sono esattamente i
+  punti che prima del fix sarebbero rimasti chiari su sfondo scuro.
+- [✅] `/user-management`: resa corretta su 154 nodi di testo, compresi griglia dati, badge di stato
+  e filtri.
+- [✅] `/admin/theme`: si apre e rende correttamente.
+- [ ] `/admin/translations`, `/profile`, `/roles-permissions/[roleId]`: non ancora controllate.
+
+**Nessun elemento chiaro residuo su superficie scura in ciò che ho controllato.** Il fix di THEME-1
+regge alla verifica visiva.
+
+### Nota su un tentativo di automazione, e perché non ne riporto i numeri
+
+Ho provato a sostituire la valutazione a occhio con una misura automatica del contrasto WCAG
+calcolata dal browser. Lo strumento ha prodotto tre risultati contraddittori in sequenza:
+
+1. Un convertitore di colori che non gestiva il formato `lab()` usato da Tailwind v4, riportando
+   dodici falsi problemi con rapporti attorno a 1,05 — cioè "testo invisibile" su testo che si legge
+   benissimo.
+2. Dopo la correzione, attribuzioni di colore di sfondo incoerenti: sullo stesso elemento riportava
+   sfondo bianco mentre la variabile CSS risolveva correttamente al valore scuro e lo screenshot
+   mostrava una superficie scura.
+3. Uno scan del foglio di stile che trovava e non trovava la stessa regola a due chiamate di
+   distanza.
+
+Non riporto quei numeri come risultati: uno strumento che si contraddice non è una fonte. Chi
+riprenderà THEME-3 può rifarlo con una libreria di terze parti già validata invece di scriverlo a
+mano, oppure procedere a occhio, che per una revisione di contrasto è meno elegante ma affidabile.
+
+L'unica misura che sopravvive, perché verificabile a mano su due colori noti, è che
+`text-gray-400` (`#9ca3af`) su superficie bianca dà circa **2,5:1**, sotto la soglia di 4,5:1 per
+il testo normale. È un problema **preesistente e presente anche in tema chiaro**, quindi non è una
+conseguenza del fix di THEME-1: appartiene a THEME-2, cioè al fatto che le classi colore statiche
+non si adattano alla superficie su cui finiscono.
+
+### Criteri di accettazione residui
+
+- [ ] Le tre pagine non ancora controllate, nei due stati del tema.
+- [ ] Con OS in **dark** e applicazione in **light**, ripetere su almeno una pagina: il fix ha
+  disaccoppiato i due stati, quindi anche questa combinazione va guardata.
+- [ ] Le occorrenze di `text-gray-400` e `text-gray-500` convertite a token semantici (confluisce in THEME-2).
 
 ---
 
