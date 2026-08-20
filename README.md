@@ -135,6 +135,59 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Migration checksums
+
+Every applied migration is recorded in `public.construct_schema_migration` together with a
+checksum, and `assertAppliedMigrationChecksums` refuses to run **any** migration command when a
+file no longer matches what the database recorded:
+
+```
+Checksum mismatch for applied migration 0002_runtime_boundary
+```
+
+This is the guard working, not damage: it stops before executing anything. Normally it means a
+migration was edited that should not have been — the rule is to fix forward in a new migration and
+never edit an applied one, as [the production deployment runbook](docs/runbooks/production-deployment.md)
+states.
+
+The checksum is `sha256` over the migration file's contents, read as UTF-8, with no salt or prefix
+(`sources/devops/db/migration-lib.mjs`). It is therefore never lost: any value can be recomputed
+from the repository at any time, and the system `shasum` produces exactly the same result as the
+migration runner.
+
+Checksum a migration file currently has:
+
+```bash
+shasum -a 256 sources/devops/db/migrations/0002_runtime_boundary.sql
+```
+
+Checksum it had before a given commit changed it — useful when a database still records the older
+value, since that value exists in no file any more:
+
+```bash
+git show <commit>^:sources/devops/db/migrations/0002_runtime_boundary.sql | shasum -a 256
+```
+
+What a specific database currently records:
+
+```bash
+node sources/devops/db/db.mjs query "select version, checksum, completed_at from construct_schema_migration order by version"
+```
+
+If a mismatch is deliberate — an applied migration was changed on purpose, which should be rare and
+explicitly justified — the recorded value can be brought in line. Read the database first with the
+query above: guarding the update on the old value means it does nothing rather than overwriting
+blindly when the database is not in the state you assumed, which is exactly when it should not be
+touched.
+
+```bash
+node sources/devops/db/db.mjs query "update construct_schema_migration set checksum = '<new>' where version = '<version>' and checksum = '<old>'"
+```
+
+A database created from scratch never needs any of this: the migrations apply in order and record
+their own checksums. Worked example of a deliberate change and why it was justified:
+`docs/reviews/2026-08-19-env-configuration.md`, entry DB-1.
+
 ## Local Docker with Supabase
 
 Docker Compose runs only the production-style standalone Next.js container. The database remains hosted by Supabase: the container connects directly to the Supavisor transaction pooler, and no local PostgreSQL service is started.
