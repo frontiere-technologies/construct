@@ -133,6 +133,25 @@ describe('checkEmbeddable', () => {
     expect(fn).not.toHaveBeenCalled()
   })
 
+  // A target answering an error is not serving the page, so it is not embeddable.
+  // These cases used to return true: an error response carries no framing headers,
+  // so the header inspection alone concluded "not blocked". Seen in the wild with
+  // httpbin.org answering 503 from its load balancer.
+  it('returns false when the target answers 503', async () => {
+    mockFetchOnce(new Response(null, { status: 503 }))
+    expect(await check('https://example.com')).toBe(false)
+  })
+
+  it('returns false when the target answers 404', async () => {
+    mockFetchOnce(new Response(null, { status: 404 }))
+    expect(await check('https://example.com')).toBe(false)
+  })
+
+  it('returns false when the target answers 500 even with permissive framing headers', async () => {
+    mockFetchOnce(new Response(null, { status: 500, headers: { 'Content-Security-Policy': 'frame-ancestors *' } }))
+    expect(await check('https://example.com')).toBe(false)
+  })
+
   it('returns false when the response is a 3xx redirect', async () => {
     mockFetchOnce(new Response(null, { status: 302 }))
     expect(await check('https://example.com')).toBe(false)
