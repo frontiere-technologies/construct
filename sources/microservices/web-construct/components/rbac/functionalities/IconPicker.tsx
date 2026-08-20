@@ -103,15 +103,25 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
   return (
     <div ref={containerRef} className="relative shrink-0">
       {/* ── Trigger ─────────────────────────────────────────────── */}
-      <div
-        role="button"
-        tabIndex={0}
+      {/* A real <button>, not a div with role="button": an element with that role has
+          presentational children, so the remove control used to sit inside it as a
+          nested interactive element and was not reliably reachable by keyboard or
+          announced by assistive technology. The remove button is now a sibling below,
+          positioned over the trigger's corner.
+          `hover:[transform:none]!` cancels the global `button:not(:disabled):hover`
+          lift from app/globals.css: it would move the trigger 1px while the remove
+          button, being a sibling, stayed put — visibly splitting the two. The
+          important modifier is needed, not decoration: `button:not(:disabled):hover`
+          scores (0,2,1) because `:not(:disabled)` contributes its argument's
+          specificity, which outranks a plain `.class:hover` at (0,2,0). Measured
+          without it: the trigger moved to y=169 while the remove button stayed at
+          y=164. */}
+      <button
+        type="button"
         onClick={() => setOpen(o => !o)}
-        onKeyDown={e => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o) }
-        }}
         aria-label={value ? t('functionalities.icon.selected_label', { value: value.startsWith('<svg') ? t('functionalities.icon.custom_svg') : value }) : t('functionalities.icon.select_label')}
-        className={`group relative flex items-center justify-center rounded-lg border border-dashed cursor-pointer transition-colors hover:border-gray-400 dark:hover:border-gray-500
+        aria-expanded={open}
+        className={`group flex items-center justify-center rounded-lg border border-dashed transition-colors hover:border-gray-400 dark:hover:border-gray-500 hover:[transform:none]!
           ${compact
             ? 'w-[38px] h-[38px] border-gray-300 dark:border-gray-600'
             : 'flex-col gap-1 p-3 w-full border-gray-300 dark:border-gray-600'
@@ -121,17 +131,17 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
           ? <IconRenderer name={value} size={compact ? 18 : 28} />
           : <ImageOff size={compact ? 16 : 24} className="text-gray-300 dark:text-gray-600" />}
         {!compact && <span className="text-xs text-gray-500">{t('functionalities.icon.label')}</span>}
-        {value && (
-          <button
-            type="button"
-            onClick={clear}
-            aria-label={t('functionalities.icon.remove_label')}
-            className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 z-10"
-          >
-            <X size={9} />
-          </button>
-        )}
-      </div>
+      </button>
+      {value && (
+        <button
+          type="button"
+          onClick={clear}
+          aria-label={t('functionalities.icon.remove_label')}
+          className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 hover:[transform:none]! text-red-500 z-10"
+        >
+          <X size={9} />
+        </button>
+      )}
 
       {/* ── Popover ──────────────────────────────────────────────── */}
       {open && (
@@ -157,12 +167,17 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
             <>
               <div className="px-2.5 pt-2 pb-1.5">
                 <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border bg-gray-50 dark:bg-gray-800">
-                  <Search size={11} className="text-gray-400 shrink-0" />
+                  <Search size={11} className="text-gray-400 shrink-0" aria-hidden="true" />
                   <input
                     autoFocus
+                    type="search"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     placeholder={t('icon_picker.search_placeholder')}
+                    // A placeholder is not an accessible name: it disappears once the
+                    // field has content and is not reliably announced. The adjacent
+                    // magnifier is decorative and names nothing, so label it explicitly.
+                    aria-label={t('icon_picker.search_placeholder')}
                     className="flex-1 text-xs bg-transparent outline-none placeholder:text-gray-400"
                   />
                 </div>

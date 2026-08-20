@@ -7,6 +7,9 @@ modifica applicata.
 Documenti correlati: [2026-08-19-ui-primitives-and-theming.md](2026-08-19-ui-primitives-and-theming.md),
 [2026-08-19-i18n-key-inventory.md](2026-08-19-i18n-key-inventory.md).
 
+> **Stato:** DEAD-1, A11Y-1 e A11Y-2 completati. Resta aperto solo FEAT-1, che è una
+> decisione di prodotto. Dettagli di verifica in fondo al documento.
+
 ## Sommario
 
 Il progetto contiene due componenti chiamati `IconPicker`. **Non è duplicazione da consolidare: uno
@@ -31,9 +34,9 @@ sistemati prima o insieme alla cancellazione, così l'idea buona non si perde.
 
 ## Task
 
-- [ ] ID=DEAD-1, Severity=Low, Complexity=Low, Priority=P2, Title=Cancellare `components/IconPicker.tsx` (codice morto), Fix description=Rimuovere il file. Nessun import in tutto il repo. Risolve contestualmente l'import lucide deprecato.
-- [ ] ID=A11Y-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Controllo interattivo annidato nel trigger del picker RBAC, Fix description=Portare il trigger da `<div role="button">` a un `<button>` reale e spostare il bottone di rimozione fuori dal trigger, come sibling nel wrapper.
-- [ ] ID=A11Y-2, Severity=Low, Complexity=Low, Priority=P2, Title=Campo di ricerca icone senza nome accessibile, Fix description=Aggiungere `aria-label` all'input di ricerca del tab "library", che oggi ha solo un `placeholder`.
+- [✅] ID=DEAD-1, Severity=Low, Complexity=Low, Priority=P2, Title=Cancellare `components/IconPicker.tsx` (codice morto), Fix description=File rimosso. Verificato dopo la cancellazione: nessun riferimento residuo, nessuna occorrenza di `dynamicIconImports` nel codice, lint e 581 test verdi, build completata.
+- [✅] ID=A11Y-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Controllo interattivo annidato nel trigger del picker RBAC, Fix description=Trigger portato a `<button type="button">` con `aria-expanded`, gestione manuale di `onKeyDown` rimossa, pulsante di rimozione spostato fuori come elemento fratello. Verificato: l'albero di accessibilità espone i due controlli separatamente, zero `role="button"` residui, zero controlli annidati.
+- [✅] ID=A11Y-2, Severity=Low, Complexity=Low, Priority=P2, Title=Campo di ricerca icone senza nome accessibile, Fix description=Aggiunti `aria-label` e `type="search"`, e `aria-hidden` sull'icona decorativa della lente. Nessuna nuova chiave i18n.
 - [ ] ID=FEAT-1, Severity=Info, Complexity=Medium, Priority=P3, Title=Ricerca limitata alle ~200 icone curate, Fix description=Decisione di prodotto. Valutare un fallback "cerca in tutte le icone lucide" quando la lista curata non produce risultati.
 
 ---
@@ -222,3 +225,52 @@ Se si sceglie l'opzione 2, due delle tre chiavi i18n oggi orfane tornano utili
 (`icon_picker.select_placeholder`, `icon_picker.empty`) e la segnalazione di
 `2026-08-19-i18n-key-inventory.md` si riduce da tre a una. Se si sceglie l'opzione 1, le tre chiavi
 restano orfane e vanno gestite come descritto in quel documento.
+
+---
+
+## Verifica dei tre interventi
+
+Eseguita nel browser, con un account amministratore, su `/functionalities/create`.
+
+**Struttura accessibile.** L'albero di accessibilità espone ora due controlli distinti e nominati:
+
+```
+button "Icona selezionata: Home"   type="button"
+button "Rimuovi icona"             type="button"
+```
+
+Prima il secondo era annidato dentro un elemento con `role="button"`, che ha figli
+presentazionali, e quindi non veniva esposto così. Misurato dopo la modifica: zero controlli
+interattivi annidati nel trigger, zero `role="button"` residui nella pagina, entrambi i pulsanti
+nell'ordine di tabulazione, il trigger raggiungibile con Shift+Tab.
+
+**Percorso funzionale.** Selezione di un'icona → l'etichetta del trigger diventa "Icona selezionata:
+Home" e compare il pulsante di rimozione; clic sulla rimozione → icona azzerata, etichetta di nuovo
+"Seleziona icona", pulsante scomparso, e **il popover non si apre**, cioè il clic non attraversa più
+il trigger. Il campo di ricerca ha `type="search"`, nome accessibile "Cerca icone…" e riceve il
+focus all'apertura.
+
+**Un dettaglio visivo che il fix avrebbe introdotto.** Diventando un `<button>`, il trigger eredita
+la regola globale di `app/globals.css` che alza ogni bottone di 1px in hover. Il pulsante di
+rimozione, ora fratello e non più figlio, non si alzava con lui: misurato, il trigger passava a
+y=169 mentre la rimozione restava a y=164 — uno scarto visibile di 1px. Neutralizzato con
+`hover:[transform:none]!`; verificato dopo: `transform: none` in hover e nessuno spostamento.
+
+**Perché serve il modificatore `!`.** Non è decorazione: `button:not(:disabled):hover` ha
+specificità (0,2,1), perché `:not()` contribuisce la specificità del proprio argomento, e batte una
+semplice `.classe:hover` che vale (0,2,0). Senza `!` la regola globale vinceva — l'ho misurato
+prima di aggiungerlo. **Questo dato è rilevante per UI-1:** qualunque primitiva `Button` che debba
+sovrascrivere localmente quelle regole globali incontrerà lo stesso problema.
+
+### Cosa non ho potuto verificare
+
+L'attivazione da tastiera del trigger (Enter e Spazio). Lo strumento di automazione sposta il focus
+correttamente — Shift+Tab raggiunge il trigger — ma non produce l'attivazione. Ho fatto un
+esperimento di controllo: ho creato un `<button type="button">` nativo nella pagina, gli ho dato il
+focus e ho premuto Enter; **zero attivazioni.** È dunque un limite dello strumento, non del
+componente.
+
+Va detto comunque che dopo questa modifica non resta nel componente alcun codice che possa
+interferire con Enter o Spazio: la gestione manuale di `onKeyDown` è stata rimossa e l'attivazione
+è ora quella nativa del browser, garantita dalla piattaforma. Era esattamente il contrario prima,
+quando dipendeva da un handler scritto a mano.

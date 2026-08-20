@@ -181,6 +181,16 @@ globali**, almeno finché la migrazione non è completa.
 Attenzione: `components/ui/buttonInteractionStyles.test.ts` fa asserzioni PostCSS dirette su
 `app/globals.css` per queste regole. Se le regole si spostano, quel test va riscritto.
 
+**Dato misurato, da tenere presente:** sovrascrivere localmente quelle regole globali richiede il
+modificatore `!` di Tailwind. `button:not(:disabled):hover` ha specificità (0,2,1), perché
+`:not()` contribuisce la specificità del proprio argomento, e batte una `.classe:hover` che vale
+(0,2,0). L'ho verificato sul campo chiudendo A11Y-1 in
+[2026-08-19-icon-picker-cleanup.md](2026-08-19-icon-picker-cleanup.md): senza `!` la regola globale
+vinceva e spostava il trigger di 1px. Se la primitiva `Button` avrà varianti che devono annullare
+l'effetto hover globale, ognuna pagherà questo prezzo — che è un argomento a favore di spostare
+quelle regole dentro il componente, contro la raccomandazione di lasciarle globali. Da pesare in
+fase di progetto.
+
 **2. Il guard AST sui bottoni disabilitati va aggiornato, o si perde.**
 `components/ui/disabledButtonHoverStyles.test.ts` non guarda il CSS: usa la Compiler API di
 TypeScript per attraversare **ogni** file `.tsx` sotto `app/` e `components/`, e impone un
