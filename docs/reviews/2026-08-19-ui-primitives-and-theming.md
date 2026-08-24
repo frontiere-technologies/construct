@@ -44,8 +44,8 @@ file per file, perché è lo stesso edit sulle stesse `className`.
 
 - [✅] ID=THEME-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Le utility `dark:` non seguono il toggle tema dell'app, Fix description=Dichiarato `@custom-variant dark (&:where(.dark, .dark *))` in `app/globals.css`. Verificato: le 27 classi `dark:` distinte (46 occorrenze) sono passate da `@media (prefers-color-scheme: dark)` a `:where(.dark, .dark *)`, e il comportamento è disaccoppiato dall'OS in entrambe le direzioni. Guard di regressione in `lib/theme-dark-variant.test.ts`. Rimane THEME-3 per la revisione di contrasto pagina per pagina.
 - [ ] ID=UI-1, Severity=Medium, Complexity=High, Priority=P1, Title=Estrarre le primitive `Button` e `Input`, Fix description=Creare i componenti in `components/ui/` con `clsx` e varianti, poi migrare 71 `<button>` in 35 file e 47 campi in 20 file. Decidere prima l'API delle varianti, il destino delle regole globali in `globals.css` e l'aggiornamento del guard AST `disabledButtonHoverStyles.test.ts`, che diventa inerte se i call site smettono di essere `<button>` nativi.
-- [ ] ID=THEME-2, Severity=Low, Complexity=High, Priority=P2, Title=Completare la migrazione ai token semantici, Fix description=Sostituire le 240 occorrenze di classi colore statiche con i token `--theme-*`, contestualmente a UI-1 file per file. Estendere i token dove mancano (stati semantici: danger, success, warning).
-- [ ] ID=THEME-3, Severity=Low, Complexity=Medium, Priority=P2, Title=Revisione di contrasto delle utility `dark:` ora che si attivano, Fix description=Rivedere visivamente le pagine autenticate con più utility `dark:` nei due stati del tema. Reso necessario da THEME-1: utility scritte quando il meccanismo era rotto ora si attivano davvero e possono risultare sbagliate.
+- [ ] ID=THEME-2, Severity=Low, Complexity=High, Priority=P2, Title=Completare la migrazione ai token semantici, Fix description=**Fase A completata il 2026-08-21** (fondamenta, nessun call site toccato): valori della tavolozza corretti sulla superficie peggiore reale, primario predefinito portato a un colore su cui un'etichetta può stare, colore etichetta derivato invece che scritto, nove token di stato fissi in `@theme`, regole globali dei bottoni spostate in `@layer base` così una utility può sovrascriverle senza `!`, cricchetto sui colori raw a quota 231, e migration 0007 che solleva le configurazioni tema già salvate sugli utenti. **Resta la migrazione vera** delle 231 occorrenze, da fare insieme a UI-1 file per file.
+- [✅] ID=THEME-3, Severity=Low, Complexity=Medium, Priority=P2, Title=Revisione di contrasto delle utility `dark:` ora che si attivano, Fix description=Revisione completata il 2026-08-21 sulle tre pagine mancanti, nei due stati del tema e con OS scuro / applicazione chiara. Il disaccoppiamento di THEME-1 regge in tutte e nove le combinazioni. Trovati quattro punti sotto la soglia di contrasto, tutti classi `text-gray-*` statiche: passano in un tema e falliscono nell'altro. Elencati con i numeri qui sotto e consegnati a THEME-2, come previsto.
 
 - [✅] ID=DOC-1, Severity=Info, Complexity=Low, Priority=P3, Title=Registrare la decisione su shadcn/ui e Material UI, Fix description=Registrata in `CLAUDE.md`, sezione Stack, come sottosezione "Livello UI: né shadcn/ui né Material UI": la decisione, i quattro motivi in forma sintetica, e il perimetro di ciò che resta ammesso (adozione puntuale di Radix per una singola primitiva complessa). L'analisi completa resta qui.
 
@@ -130,7 +130,11 @@ Obbligatoria nel browser — la build che passa non dimostra nulla su questo.
 - [✅] Dashboard in tema dark con OS in light: reso corretto.
 - [✅] `npm run lint` pulito, `npm run test` 581 test verdi su 75 file, incluso il nuovo guard `lib/theme-dark-variant.test.ts`.
 - [✅] `npm run build` completa. Nota: con `.env.local` così com'è il build falla su `assertSafeAuthConfiguration` ("Test authentication must not be configured in production"), perché `next build` gira con `NODE_ENV=production` mentre l'env locale ha `AUTH_TEST_CREDENTIALS=true`. È una condizione d'ambiente preesistente e indipendente da questa modifica: azzerando i due flag di test il build passa. Risolto in seguito da ENV-2 in [2026-08-19-env-configuration.md](2026-08-19-env-configuration.md).
-- [ ] Revisione visiva pagina per pagina delle pagine autenticate → spostata in **THEME-3**, non completabile in questo ambiente (sidebar senza voci navigabili).
+- [✅] Revisione visiva pagina per pagina delle pagine autenticate → spostata in **THEME-3**, e lì
+  completata il 2026-08-21. La motivazione originaria del rinvio — "non completabile in questo
+  ambiente, sidebar senza voci navigabili" — era sbagliata: la sidebar funzionava, era il login a
+  essere stato fatto con un account privo del ruolo Administrator. Corretto più avanti in questo
+  stesso documento.
 
 ### Rischi
 
@@ -156,7 +160,10 @@ Misurato sul sorgente, escludendo i test e il file oggetto di DEAD-1:
 Nessuna astrazione: ogni call site ripete le proprie classi Tailwind. Concentrazioni maggiori di
 bottoni: `Sidebar.tsx` (9), `rbac/functionalities/FunctionalitiesTreeClient.tsx` (6),
 `rbac/functionalities/IconPicker.tsx` (5), `i18n/translations/TranslationEditorDrawer.tsx` (5),
-`Login.tsx` (5), `rbac/roles/RoleDetailClient.tsx` (4). Elenco completo in appendice.
+`Login.tsx` (5), `rbac/roles/RoleDetailClient.tsx` (4). Elenco dei soli file in appendice A;
+**elenco completo dei punti d'uso con le classi, raggruppato per intento, in**
+[2026-08-21-button-inventory.md](2026-08-21-button-inventory.md), costruito il 2026-08-21 come
+input della decisione sulle varianti.
 
 ### Da decidere prima di scrivere codice
 
@@ -297,8 +304,8 @@ frattempo le utility `dark:` devono funzionare.
 
 ### Criteri di accettazione
 
-- [ ] Deciso e documentato il destino degli stati semantici (token fissi vs tematizzabili).
-- [ ] Le occorrenze di colori raw sono ridotte a un residuo giustificato e documentato (es. loghi, colori di brand esterni come il pulsante Google in `Login.tsx`).
+- [✅] Deciso e documentato il destino degli stati semantici (token fissi vs tematizzabili). Deciso il 2026-08-21: **token fissi**, definiti in `@theme`, non esposti in `AdminTheme`. Motivazione e vocabolario ricavato dalle occorrenze reali in fondo al documento.
+- [ ] Le occorrenze di colori raw sono ridotte a un residuo giustificato e documentato (es. loghi, colori di brand esterni come il pulsante Google in `Login.tsx`). Baseline al 2026-08-21: **231 su 34 file**, ora sorvegliata da `npm run test:raw-colors`, che impedisce al numero di salire durante la migrazione.
 - [ ] Cambiando i colori da Admin → Tema, ogni area migrata risponde.
 - [ ] Verifica in browser nei due stati del tema.
 
@@ -455,7 +462,8 @@ la combinazione che prima del fix era rotta:
 - [✅] `/user-management`: resa corretta su 154 nodi di testo, compresi griglia dati, badge di stato
   e filtri.
 - [✅] `/admin/theme`: si apre e rende correttamente.
-- [ ] `/admin/translations`, `/profile`, `/roles-permissions/[roleId]`: non ancora controllate.
+- [✅] `/admin/translations`, `/profile`, `/roles-permissions/[roleId]`: controllate il 2026-08-21,
+  esiti in fondo al documento.
 
 **Nessun elemento chiaro residuo su superficie scura in ciò che ho controllato.** Il fix di THEME-1
 regge alla verifica visiva.
@@ -486,14 +494,21 @@ non si adattano alla superficie su cui finiscono.
 
 ### Criteri di accettazione residui
 
-- [ ] Le tre pagine non ancora controllate, nei due stati del tema.
-- [ ] Con OS in **dark** e applicazione in **light**, ripetere su almeno una pagina: il fix ha
-  disaccoppiato i due stati, quindi anche questa combinazione va guardata.
-- [ ] Le occorrenze di `text-gray-400` e `text-gray-500` convertite a token semantici (confluisce in THEME-2).
+- [✅] Le tre pagine non ancora controllate, nei due stati del tema.
+- [✅] Con OS in **dark** e applicazione in **light**, ripetuto su **tutte e tre** le pagine, non
+  solo su una.
+- [ ] Le occorrenze di `text-gray-400` e `text-gray-500` convertite a token semantici — **resta
+  aperto e appartiene a THEME-2**, come la review prevedeva. I quattro punti sono ora identificati
+  con classe, testo e rapporto misurato.
 
 ---
 
 ## Appendice A — File con `<button>` (35)
+
+Solo i file. Per l'elenco dei singoli punti d'uso con le loro classi, vedi
+[2026-08-21-button-inventory.md](2026-08-21-button-inventory.md), che conta 81 bottoni: il 71
+riportato sopra è la misura al 2026-08-19 e non include le tre occorrenze aggiunte in
+`IconPicker.tsx` dalla chiusura di A11Y-1.
 
 ```
 app/(protected)/error.tsx
@@ -567,3 +582,351 @@ npm run lint && npm run test && npm run build
 ```bash
 uv run pytest
 ```
+
+---
+
+## THEME-2 — Decisione sugli stati semantici (2026-08-21)
+
+Il lavoro preliminare che THEME-2 richiede prima di qualunque migrazione. Solo decisione: nessuna
+riga di codice cambiata.
+
+**Deciso: token fissi, definiti in `@theme`, non esposti in `AdminTheme`.**
+
+### Le misure, rifatte
+
+La review parlava di 240 occorrenze. Oggi sono **231**, ripartite così:
+
+| Famiglia | Occorrenze | Destinazione |
+|---|---:|---|
+| `gray` | 161 | token già esistenti: superfici, bordi, testo |
+| `red` | 32 | stato **danger** |
+| `green` | 21 | stato **success** |
+| `amber` | 11 | stato **warning** |
+| `blue` | 6 | quasi tutte `ring-blue-500`, cioè il focus ring → `--theme-primary` |
+
+Gli stati semantici sono **64 occorrenze su 20 file**, poco più di un quarto del totale. Le altre
+161 hanno già un token di destinazione e non richiedono nessuna decisione.
+
+### Il vocabolario, ricavato dall'uso e non inventato
+
+Guardando quali classi compaiono davvero, ogni stato non è un colore ma una **terna**: testo,
+superficie tinta, bordo. E ognuna ha già la sua controparte scura, oggi scritta a mano con `dark:`.
+
+| Stato | Testo chiaro / scuro | Superficie chiara / scura | Bordo |
+|---|---|---|---|
+| danger | `text-red-600` / `dark:text-red-400` | `bg-red-100`, `bg-red-200` (hover) | — |
+| success | `text-green-700`, `-600` / `dark:text-green-400`, `-300` | `bg-green-50`, `-100` / `dark:bg-green-900` | `border-green-200` |
+| warning | `text-amber-800` / `dark:text-amber-200` | `bg-amber-50`, `-100` / `dark:bg-amber-900` | `border-amber-400` |
+
+Ne segue un set minimo di **nove token** — `--color-danger-fg`, `--color-danger-surface`,
+`--color-danger-border`, e le due terne gemelle — ciascuno con un valore chiaro e uno scuro:
+**18 valori**.
+
+**Nota di collegamento con THEME-1:** 18 delle 46 utility `dark:` del progetto sono esattamente
+queste. Portando gli stati su token con coppia chiaro/scuro, quelle 18 spariscono. È la
+dimostrazione concreta di ciò che la review diceva in astratto — un colore espresso con token non
+ha bisogno della variante `dark:`.
+
+### Perché fissi e non personalizzabili
+
+**1. Sono significato, non marchio.** Il rosso del distruttivo e il verde della conferma sono
+convenzioni che l'utente legge prima di leggere le parole. `--theme-primary` e le superfici sono
+identità visiva, e personalizzarle è il senso del pannello. Permettere a un tenant di dipingere di
+verde lo stato "danger" non è personalizzazione: è mettere il prodotto in condizione di mentire su
+un pulsante che cancella dei dati.
+
+**2. Il pannello ha già 29 campi colore.** Quattordici token accoppiati per due stati, più
+`primaryColor`. Aggiungere gli stati semantici significherebbe **+18 campi**, cioè un pannello di
+47 voci, per una personalizzazione che nessuno ha chiesto.
+
+**3. Il costo è per coppia, non per colore.** Un colore di stato non si valuta da solo: va
+verificato contro la superficie su cui poggia *e* contro la propria superficie tinta
+(`bg-red-100` con `text-red-600`). Esporre 18 valori indipendenti significa esporre la possibilità
+di combinazioni illeggibili, e nessuna delle validazioni attuali — `safeColor` controlla solo che
+sia un esadecimale a sei cifre — misura il contrasto.
+
+**4. La decisione è reversibile in una direzione sola, e questa è quella giusta.** Con token fissi,
+i call site scrivono `text-danger-fg`: da dove venga quel valore è un dettaglio di `globals.css`.
+Promuoverli a personalizzabili più avanti significa aggiungere righe a `PAIRED_TOKENS` e al
+pannello, senza toccare nessuno dei 20 file migrati. La mossa opposta — togliere la
+personalizzazione di qualcosa che gli utenti hanno già personalizzato — rompe le righe `ThemeConfig`
+già salvate sul database. Partire fissi conserva entrambe le strade; partire configurabili ne chiude
+una.
+
+### Cosa resta aperto in THEME-2
+
+La decisione sblocca la migrazione ma non la esegue. Restano i tre criteri di accettazione
+successivi: ridurre le occorrenze di colori raw a un residuo giustificato (il pulsante Google in
+`Login.tsx` è brand esterno e resta), verificare che ogni area migrata risponda al pannello tema, e
+la verifica in browser nei due stati. La review raccomanda di farla **contestualmente a UI-1**, file
+per file, per non toccare due volte gli stessi 35 file: quella raccomandazione resta valida e questa
+decisione non la cambia.
+
+---
+
+## THEME-3 — Revisione completata (2026-08-21)
+
+Tre pagine × tre combinazioni: OS chiaro/app chiara, OS chiaro/app scura, OS scuro/app chiara.
+Nove misure, con account amministratore, contro il database usa-e-getta.
+
+### Prima: lo strumento, e perché stavolta i numeri si possono usare
+
+La revisione precedente aveva provato una misura automatica del contrasto e l'aveva scartata,
+giustamente, perché si contraddiceva. Ho riscritto lo strumento e il **primo tentativo aveva gli
+stessi difetti**, per le stesse ragioni. Vale la pena registrarli, perché sono trappole
+riproducibili.
+
+**Difetto 1 — saltava in silenzio i colori che non sapeva leggere.** Tailwind v4 emette `oklch()` e
+`lab()`, e `getComputedStyle` li restituisce tali e quali. Un'espressione regolare per `rgb()`
+restituisce `null` su quei valori, e il codice, non trovando lo sfondo, risaliva l'albero fino al
+bianco della pagina. Risultato: `1.00:1 bianco su bianco` sui pulsanti primari, cioè "testo
+invisibile" su testo perfettamente leggibile — esattamente il falso positivo dell'altra volta. Uno
+scanner che salta è peggio di uno che fallisce: riporta "nessun problema" proprio sugli elementi
+che non è riuscito a leggere.
+
+**Difetto 2 — campionava un decimo della pagina.** Guardava solo gli elementi senza figli, ma quasi
+tutto il testo dell'interfaccia vive in elementi che hanno anche figli elemento. Su
+`/admin/translations` contava 186 nodi, su `/profile` **otto**. La sproporzione è ciò che ha fatto
+sospettare il difetto.
+
+Versione buona: la conversione dei colori la fa il browser, dipingendo il colore su un canvas 1×1 e
+rileggendo il pixel — funziona per qualunque formato CSS, compresa l'alfa, senza scrivere
+conversioni a mano. E l'attraversamento è sui nodi di testo, non sugli elementi foglia.
+
+**L'autoverifica, che è la parte che rende usabili i numeri.** Prima di ogni esecuzione lo strumento
+misura quattro coppie di cui la risposta è nota indipendentemente:
+
+| Controllo | Atteso | Ottenuto |
+|---|---|---|
+| nero su bianco | 21,0 | **21,0** |
+| bianco su bianco | 1,0 | **1,0** |
+| `oklch()` leggibile | vero | **vero** |
+| `lab()` leggibile | vero | **vero** |
+| `#9ca3af` su bianco | ~2,5 (calcolato a mano nella review precedente) | **2,54** |
+
+L'ultima riga è quella che conta: lega lo strumento all'unico numero che una persona aveva
+verificato a mano. Se una di queste fallisce, lo strumento dichiara sé stesso inaffidabile e i suoi
+risultati vanno buttati.
+
+### Il disaccoppiamento di THEME-1 regge
+
+In tutte e nove le combinazioni la classe `.dark` sull'elemento radice segue **l'applicazione** e
+mai il sistema operativo: `app-dark → .dark presente`, `app-light → .dark assente`, anche con OS
+emulato in scuro. Nessuna regressione.
+
+### Esiti per pagina
+
+| Pagina | Nodi | OS chiaro / app chiara | OS chiaro / app scura | OS scuro / app chiara |
+|---|---:|---|---|---|
+| `/admin/translations` | 187 | pulita | pulita | pulita |
+| `/profile` | 10 | 1 sotto soglia | pulita | 1 sotto soglia |
+| `/roles-permissions/1` | 16 | pulita | 3 sotto soglia | pulita |
+
+I dieci nodi di `/profile` non sono un campionamento parziale: la pagina ne ha esattamente dieci
+(titolo, sottotitolo, cinque etichette, "(facoltativo)", Annulla, Salva) e la sidebar è collassata a
+icone. Verificato sulla schermata.
+
+### I quattro punti, con classe e numero
+
+| Pagina | Tema | Testo | Classe | Misurato | Serve |
+|---|---|---|---|---:|---:|
+| `/profile` | chiaro | `(facoltativo)` | `text-gray-400` | **2,60:1** | 4,5 |
+| `/roles-permissions/1` | scuro | `Ruoli & permessi` (breadcrumb) | `hover:text-gray-700` | **4,16:1** | 4,5 |
+| `/roles-permissions/1` | scuro | `/` (separatore) | `text-gray-500` | **4,16:1** | 4,5 |
+| `/roles-permissions/1` | scuro | `Operazioni` (scheda inattiva) | `text-gray-…` | **3,04:1** | 4,5 |
+
+**Il dato interessante non è quali falliscono, è che falliscono in temi opposti.** `text-gray-400`
+cade in tema chiaro e passa in scuro; `text-gray-500` fa il contrario. È la stessa causa vista da
+due lati: un colore fisso non sa su quale superficie finirà. È la tesi di THEME-2, ora con i numeri.
+
+### Una scoperta che cambia il piano di THEME-2
+
+`--theme-foreground-faint` vale `#9ca3af`, **lo stesso identico valore di `text-gray-400`**. Quindi
+convertire quelle occorrenze al token le rende tematizzabili e **non ne corregge il contrasto**:
+restano a 2,54:1. Essere un token non rende leggibile un colore; la leggibilità è una proprietà del
+valore.
+
+Conseguenza per THEME-2: la migrazione ai token, da sola, non chiude il problema di accessibilità.
+Serve un passaggio in più sui **valori** della tavolozza — almeno su `foreground-faint`, e su
+`foreground-muted` (`#6b7280`), che misura 4,83:1 su bianco ma **4,16:1** sulle superfici scure, cioè
+appena sotto soglia. Va deciso se i valori scuri dei token di testo debbano essere schiariti, il che
+è una modifica a `defaultThemeConfig` e quindi al comportamento predefinito dell'applicazione.
+
+C'è anche un limite strutturale da mettere agli atti: `--theme-primary` è **configurabile
+dall'amministratore**, e l'unica validazione è `safeColor`, che controlla soltanto che sia un
+esadecimale a sei cifre. Nessuna promessa di contrasto su testo dipinto con il colore primario può
+reggere. Il testo non dovrebbe usarlo.
+
+### Una correzione a quanto avevo scritto su FEAT-1
+
+Nel documento del picker avevo scritto che scrivere lo stato vuoto sui token invece che su
+`gray-400/500` evitava di aggiungere lavoro a THEME-2. Sulla tematizzabilità è vero. Sul contrasto
+no, ed è la stessa trappola appena descritta: misurato, il mio testo stava a **2,54:1 in chiaro** e
+**3,67:1 in scuro**, e il collegamento in `text-primary` a **4,47:1** e **3,97:1** — tutti sotto
+soglia.
+
+Corretto: entrambe le righe su `text-foreground-muted`, e il collegamento su `text-foreground`
+sottolineato invece che su `text-primary`, così l'affordance non dipende da un colore che un
+amministratore può cambiare — lo stesso schema che la scheda di caricamento già usa per "scegli il
+file". Rimisurato dopo: **tutte e tre le righe sopra soglia in entrambi i temi.** Il collegamento
+continua a portare alla scheda di caricamento, verificato.
+
+### Cosa non è stato controllato
+
+`ChangePasswordForm` non compare su `/profile` per l'account di test, che si autentica con il
+provider `test` e non ha una password: il modulo di cambio password non viene reso. Va guardato con
+un account a credenziali.
+
+---
+
+## THEME-2 — Fase A completata (2026-08-21)
+
+Le fondamenta, senza toccare nessuno dei 71 call site. Cinque interventi, e due di essi sono nati
+dal fatto che il browser ha smentito un ragionamento che sembrava solido.
+
+### 1. I valori della tavolozza, scelti sulla superficie peggiore
+
+La superficie chiara peggiore **non è il bianco**: è `#f3f4f6`, cioè `surfaceHover` e
+`activeItemBg`. Misurando lì, i token sotto soglia erano **tre**, non due:
+
+| Token | Prima | Su | Dopo | |
+|---|---:|---|---:|---|
+| `foregroundMutedLight` | 4,39:1 | `#f3f4f6` | **6,87:1** | `#6b7280` → `#4b5563` |
+| `foregroundFaintLight` | 2,31:1 | `#f3f4f6` | **4,61:1** | `#9ca3af` → `#666f7d` |
+| `foregroundFaintDark` | 3,04:1 | `#1f2937` | **4,63:1** | `#6b7280` → `#8b919c` |
+
+Scala risultante, contrasto peggiore su ogni superficie del proprio tema:
+
+```
+chiaro   16,12  /  9,37  /  6,87  /  4,61
+scuro    14,68  /  9,96  /  5,78  /  4,63
+```
+
+Gli ultimi due gradini sono vicini perché la soglia di 4,5:1 comprime il fondo di qualsiasi scala a
+quattro livelli. È la soglia che fa il suo mestiere, non una svista — e va detto invece di lasciar
+credere che la gerarchia sia più ampia di quanto possa essere.
+
+**Nessuna tonalità 500 standard di Tailwind arriva a 4,5 su `#f3f4f6`**: gray, slate, zinc, neutral
+e stone si fermano tutte fra 4,31 e 4,39. `#666f7d` e `#8b919c` sono quindi valori su misura, non
+per gusto ma perché la griglia standard non ha il gradino che serve.
+
+### 2. Il primario predefinito era irrecuperabile
+
+Con `#6366f1` **nessun colore di etichetta raggiunge 4,5:1**: il bianco si ferma a 4,47 e il testo
+scuro a 3,97. Non era un problema di quale etichetta scegliere, era il colore di sfondo a non
+ammettere soluzione. Portato a `#4f46e5`, una tonalità più scura della stessa famiglia: bianco a
+**6,29:1**, aspetto del prodotto invariato.
+
+Il colore dell'etichetta ora è **derivato**, non scritto: `primaryForeground()` sceglie fra bianco e
+il foreground scuro quello che contrasta di più. Serve perché `primaryColor` è modificabile
+dall'amministratore e l'unica validazione è `safeColor`, che controlla sei cifre esadecimali e basta:
+un bianco fisso è una promessa che il pannello non può mantenere. Non è una garanzia totale — un
+primario di mezzo tono può lasciare entrambe le scelte sotto soglia — e il seguito naturale è un
+avviso in Admin → Tema quando il colore scelto non ce la fa. Non è in questa fase.
+
+Corretta anche una divergenza: `globals.css` dichiarava `--theme-primary: #2563eb` mentre
+`defaultThemeConfig` diceva `#6366f1`, quindi il primo fotogramma prima dell'idratazione usava un
+colore che l'applicazione non mostrava mai. Ora un test lo impedisce.
+
+### 3. Nove token di stato, fissi
+
+`danger`, `success`, `warning` × testo, superficie tinta, bordo. Definiti come `--state-*` in
+`:root` e `.dark`, esposti a Tailwind via `@theme` con lo stesso schema già usato da
+`--color-primary`. Testo sopra 4,5:1 sia sulla superficie peggiore del tema sia sulla propria
+superficie tinta; bordi sopra il 3:1 che WCAG 1.4.11 chiede al confine di un componente rispetto a
+ciò che gli sta dietro.
+
+Verificati nel browser, non solo sulla carta: tutti e nove risolvono e cambiano correttamente
+passando da tema chiaro a scuro.
+
+### 4. La regola globale dei bottoni: la specificità non era il punto
+
+La review aveva individuato che `button:not(:disabled):hover` vale (0,2,1) — `:not()` propaga la
+specificità del proprio argomento — e batte una `.classe:hover` a (0,2,0). Vero, e l'ho corretto con
+`:where()`, che contribuisce zero.
+
+**Non è bastato.** Misurato nel browser: il trigger del picker continuava a salire da y=170 a y=169.
+Il meccanismo che decideva era un altro, e più forte: Tailwind mette le utility in
+`@layer utilities`, e **una regola fuori da ogni layer batte qualsiasi layer**, a prescindere dalla
+specificità. Finché quelle regole stavano fuori da un layer, nessuna utility poteva vincere, e
+l'unica leva era `!important`, che inverte l'ordine dei layer. Ecco perché serviva il `!`.
+
+Spostate dentro `@layer base`. Verificato dopo: il trigger resta a y=170 con `transform: none`,
+mentre un bottone qualunque continua ad alzarsi da y=688 a y=687. I tre `hover:[transform:none]!`
+del picker hanno perso il `!`.
+
+Questo è il vincolo che UI-1 avrebbe incontrato su ogni variante del `Button`. Ora non c'è più.
+
+### 5. Cricchetto sui colori raw
+
+`sources/devops/raw-color-ratchet.test.mjs`, `npm run test:raw-colors`, in CI. Non vieta le classi
+statiche: vieta che il numero **salga**. Baseline **231 occorrenze su 34 file**, registrata in
+`raw-color-baseline.json`; si abbassa con `UPDATE_RAW_COLOR_BASELINE=1` quando un lotto viene
+migrato. Provato in negativo: un file che ne guadagna fa fallire il test nominando il file.
+
+Non è una precauzione teorica: lo stato vuoto del picker scritto oggi ha dovuto essere corretto due
+volte nella stessa giornata, la prima per i grigi raw e la seconda perché i token che avevo scelto
+avevano essi stessi valori sotto soglia.
+
+### Le configurazioni già salvate: migration 0007
+
+Il tema è **per utente**, in `users.theme_config`, e `mergeThemeConfig` fa vincere il valore salvato
+sul default. Cambiare `defaultThemeConfig` raggiunge quindi soltanto chi non ha mai aperto Admin →
+Tema: chiunque abbia salvato una volta conserva una copia congelata, valori inaccessibili compresi.
+Verificato sul database usa-e-getta, dove l'utente amministratore aveva esattamente quella copia.
+
+`0007_accessible_theme_defaults.sql` riscrive le quattro chiavi **solo quando contengono ancora
+l'esatto valore predefinito precedente**, così un colore scelto deliberatamente resta intatto.
+L'unico caso indistinguibile è chi avesse scelto a mano un valore identico al vecchio default — e per
+questi quattro valori quella scelta era comunque inaccessibile, quindi spostarla è l'esito giusto;
+il colore si può reimpostare dal pannello.
+
+Verificato: una riga aggiornata, `surfaceLight` lasciata intatta a `#ffffff` a riprova che tocca solo
+le chiavi elencate, e alla seconda esecuzione riporta zero righe. Il pulsante primario, misurato nel
+browser dopo la migration, è passato da `#6366f1` a `#4f46e5` con etichetta bianca.
+
+### Verifica
+
+- [✅] `npm run lint`, `npm test` **596 verdi**, `npm run build` completa.
+- [✅] `test:migrations`, `test:docs-contract`, `test:i18n-keys`, `test:env-contract`,
+  `test:raw-colors`, `schema:check`: tutti verdi.
+- [✅] Nuovi test in `lib/theme-vars.test.ts` che fissano i numeri: ogni livello sopra 4,5:1 sulle
+  superfici reali, la scala resta monotona, ogni stato ha una terna leggibile nei due temi, i
+  fallback di `globals.css` concordano con `defaultThemeConfig`, e lo strumento di calcolo si
+  autoverifica su due coppie note prima di imporre qualunque soglia.
+- [✅] `buttonInteractionStyles.test.ts` ora asserisce **il layer**, non solo il selettore: è il
+  layer a portare il comportamento, ed è la parte che sembra rimovibile a chi riordina il file.
+- [✅] Nove token di stato verificati nel browser nei due temi, con una sonda temporanea poi rimossa.
+- [✅] Comportamento hover verificato nel browser prima e dopo, con le coordinate.
+- [✅] `uv run pytest sources/tests/e2e`: **112 su 112**. L'unico fallimento della prima esecuzione
+  era `test_admin_theme.py`, che aveva `PRIMARY_DEFAULT = '#6366f1'` scritto a mano — la stessa
+  duplicazione del valore predefinito che il nuovo test su `globals.css` impedisce ora dal lato
+  TypeScript. Corretto, con un commento che punta alla fonte di verità, e il file rieseguito: 5 su 5.
+- [✅] `npm run test:integration` **47 su 47** dopo la 0007.
+
+### Fuori tema, trovato strada facendo: sei errori TypeScript invisibili
+
+`npx tsc --noEmit` riportava sei errori in `lib/schema-contract.integration.test.ts`, presenti da
+prima di questo lavoro. Erano invisibili perché **`npm run build` non li vede** — Next type-checka
+solo ciò che il proprio grafo dei moduli raggiunge, e un file di integration test non ci finisce — e
+perché in CI non girava `tsc`.
+
+Quattro cause distinte: `'name' in column` sembrava un narrowing ma lasciava il ramo `SQL` dentro
+`Partial<SQL | IndexedColumn>` (e con l'ordine dei rami invertito rispetto a quello corretto);
+`index.config.name` è opzionale e finiva in `localeCompare`, cioè un crash a runtime in attesa;
+`selectedFields` è un sacco senza tipi; e con una sola vista nello schema `config.name` si inferiva
+come literal `"role_list_view"`, che le righe lette da `pg_class` non potevano mai soddisfare.
+
+Corretti tutti e sei, e aggiunto `npm run typecheck` alla pipeline dopo il lint. Il file è stato poi
+**eseguito**, non solo compilato: `test:integration` 47 su 47, compreso il confronto del catalogo che
+attraversa tutti e quattro i punti corretti.
+
+### Cosa sblocca, e cosa resta
+
+UI-1 può ora scrivere le varianti del `Button` su token esistenti, senza `!` e con un colore di
+etichetta garantito per il primario. Restano la Fase B (primitive e file pilota) e la Fase C (la
+migrazione delle 231 occorrenze, insieme al rollout).
+
+Una cosa emersa e **non** affrontata: un avviso in Admin → Tema quando il primario scelto non
+consente a nessuna etichetta di raggiungere 4,5:1. Oggi il pannello accetta in silenzio qualunque
+esadecimale.

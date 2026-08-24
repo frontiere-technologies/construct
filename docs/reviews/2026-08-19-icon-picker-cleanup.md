@@ -7,8 +7,9 @@ modifica applicata.
 Documenti correlati: [2026-08-19-ui-primitives-and-theming.md](2026-08-19-ui-primitives-and-theming.md),
 [2026-08-19-i18n-key-inventory.md](2026-08-19-i18n-key-inventory.md).
 
-> **Stato:** DEAD-1, A11Y-1 e A11Y-2 completati. Resta aperto solo FEAT-1, che è una
-> decisione di prodotto. Dettagli di verifica in fondo al documento.
+> **Stato:** tutti e quattro i task completati. FEAT-1 chiuso il 2026-08-21 con la
+> decisione di tenere la lista curata e correggere lo stato vuoto. Dettagli di
+> verifica in fondo al documento.
 
 ## Sommario
 
@@ -37,7 +38,7 @@ sistemati prima o insieme alla cancellazione, così l'idea buona non si perde.
 - [✅] ID=DEAD-1, Severity=Low, Complexity=Low, Priority=P2, Title=Cancellare `components/IconPicker.tsx` (codice morto), Fix description=File rimosso. Verificato dopo la cancellazione: nessun riferimento residuo, nessuna occorrenza di `dynamicIconImports` nel codice, lint e 581 test verdi, build completata.
 - [✅] ID=A11Y-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Controllo interattivo annidato nel trigger del picker RBAC, Fix description=Trigger portato a `<button type="button">` con `aria-expanded`, gestione manuale di `onKeyDown` rimossa, pulsante di rimozione spostato fuori come elemento fratello. Verificato: l'albero di accessibilità espone i due controlli separatamente, zero `role="button"` residui, zero controlli annidati.
 - [✅] ID=A11Y-2, Severity=Low, Complexity=Low, Priority=P2, Title=Campo di ricerca icone senza nome accessibile, Fix description=Aggiunti `aria-label` e `type="search"`, e `aria-hidden` sull'icona decorativa della lente. Nessuna nuova chiave i18n.
-- [ ] ID=FEAT-1, Severity=Info, Complexity=Medium, Priority=P3, Title=Ricerca limitata alle ~200 icone curate, Fix description=Decisione di prodotto. Valutare un fallback "cerca in tutte le icone lucide" quando la lista curata non produce risultati.
+- [✅] ID=FEAT-1, Severity=Info, Complexity=Medium, Priority=P3, Title=Ricerca limitata alle ~200 icone curate, Fix description=Deciso: **si tiene la lista curata, si corregge lo stato vuoto**. Una ricerca senza risultati ora dice che la libreria è una selezione e offre un collegamento diretto alla scheda "Carica SVG", che era già presente e nessuno menzionava. Due chiavi nuove seedate da `0006_icon_picker_empty_state.sql`; il catalogo completo di lucide non viene caricato.
 
 ---
 
@@ -101,12 +102,17 @@ svolto: **non** vanno aggiornati.
 
 ### Criteri di accettazione
 
-- [ ] Il file non esiste più.
-- [ ] `npm run lint` pulito.
-- [ ] `npm run build` completa (il type-check copre tutti i file in `tsconfig`, non solo quelli importati).
-- [ ] `npm run test` verde.
-- [ ] `grep -rn "dynamicIconImports" app components lib` non restituisce nulla.
-- [ ] E2E: la pagina di creazione/modifica funzionalità continua a mostrare e salvare l'icona.
+- [✅] Il file non esiste più.
+- [✅] `npm run lint` pulito.
+- [✅] `npm run build` completa. Nota emersa il 2026-08-21: quella parentesi era ottimista — Next
+  type-checka solo ciò che il proprio grafo dei moduli raggiunge, **non** tutti i file di
+  `tsconfig`. Sei errori in `lib/schema-contract.integration.test.ts` sono sopravvissuti proprio per
+  questo. Ora c'è `npm run typecheck` in pipeline, che invece copre tutto.
+- [✅] `npm run test` verde: 597 test.
+- [✅] `grep -rn "dynamicIconImports" app components lib` non restituisce nulla. Riverificato il
+  2026-08-21.
+- [✅] E2E: la pagina di creazione/modifica funzionalità continua a mostrare e salvare l'icona
+  (`test_functionalities.py`, 21 test verdi).
 
 ### Rischi
 
@@ -170,11 +176,18 @@ bottoni.
 
 ### Criteri di accettazione
 
-- [ ] Il trigger è un `<button type="button">`; nessun `role="button"` nel file.
-- [ ] Nessun controllo interattivo annidato dentro un altro controllo interattivo.
-- [ ] Con Tab si raggiungono trigger e X di rimozione come due stop distinti; `Enter` e `Space` attivano quello che ha il focus.
-- [ ] La X compare solo quando `value` è valorizzato (comportamento attuale invariato).
-- [ ] Verifica E2E nel browser su `/functionalities/create`: selezione icona, rimozione icona, apertura/chiusura popover con click esterno.
+- [✅] Il trigger è un `<button type="button">`; nessun `role="button"` nel file. L'unica
+  occorrenza rimasta di quella stringa è dentro un commento che spiega perché non si usa.
+- [✅] Nessun controllo interattivo annidato dentro un altro controllo interattivo.
+- [✅] Con Tab si raggiungono trigger e X di rimozione come due stop distinti; `Enter` e `Space`
+  attivano quello che ha il focus. **Verificato il 2026-08-21**, ed è il criterio che la revisione
+  originale aveva dichiarato di non essere riuscita a controllare. Misurato: `Space` sul trigger
+  apre il popover, `Enter` idem, Tab porta il focus da "Icona selezionata: Home" a "Rimuovi icona"
+  come due stop distinti, e `Space` sulla X rimuove l'icona **senza** aprire il popover — cioè
+  l'attivazione da tastiera non attraversa il trigger, come già non fa il click.
+- [✅] La X compare solo quando `value` è valorizzato (comportamento attuale invariato).
+- [✅] Verifica E2E nel browser su `/functionalities/create`: selezione icona, rimozione icona,
+  apertura/chiusura popover con click esterno.
 
 ---
 
@@ -274,3 +287,85 @@ Va detto comunque che dopo questa modifica non resta nel componente alcun codice
 interferire con Enter o Spazio: la gestione manuale di `onKeyDown` è stata rimossa e l'attivazione
 è ora quella nativa del browser, garantita dalla piattaforma. Era esattamente il contrario prima,
 quando dipendeva da un handler scritto a mano.
+
+---
+
+## FEAT-1 — Decisione e implementazione (2026-08-21)
+
+**Deciso: si tiene la lista curata, si corregge lo stato vuoto.**
+
+### Perché non il catalogo completo
+
+Tre fatti verificati sul codice, non sulla review, spostano la scelta.
+
+**1. La via d'uscita esiste già, ma è invisibile.** Il picker ha una seconda scheda, "Carica SVG",
+con sanificazione (`lib/rbac/svg-sanitize.ts`) e i requisiti di formato scritti. Chi ha bisogno di
+un'icona fuori dalle 157 curate può già averla. Il problema non è che manchi la funzione: è che
+nulla la nomina nel momento in cui servirebbe.
+
+**2. Il momento in cui servirebbe diceva la cosa sbagliata.** Una ricerca senza risultati mostrava
+soltanto `common.states.no_results`, cioè "Nessun risultato" — la stringa generica delle griglie
+vuote, la cui descrizione nel seed è letteralmente "Empty grid/list". Vera e inutile: non dice che
+la lista è una selezione, quindi il nome cercato sembra non esistere in lucide; e non dice che si
+può caricare un SVG. Questo è il difetto reale che la review aveva individuato — *"non ha modo di
+capire che esiste"* — e non richiede 1986 nomi per essere risolto.
+
+**3. Il conto del catalogo completo è più alto di quanto sembri.** I nomi arrivano da
+`lucide-react/dynamic`, che li ricava con `Object.keys(dynamicIconImports)`: prendere `iconNames`
+significa tirarsi dentro `dynamicIconImports.mjs`, **117 KB** di thunk di import. Sono in
+kebab-case (`a-arrow-down`), mentre `ICONS` e `IconRenderer` lavorano in PascalCase, quindi
+servirebbe una conversione con i suoi casi limite. E la griglia perderebbe la coerenza visiva che è
+la ragione per cui la lista curata esiste.
+
+Misurate: la lista curata ha **157** nomi (la review diceva ~200), il catalogo ne ha **1986**.
+
+### Cosa è cambiato
+
+`components/rbac/functionalities/IconPicker.tsx`, solo il ramo `filtered.length === 0`: titolo
+`icon_picker.no_results` ("Nessuna icona trovata", più preciso del generico che c'era), una riga
+che spiega che la libreria è una selezione per menu e amministrazione, e un pulsante che porta
+alla scheda di caricamento.
+
+Due chiavi nuove, seedate da `sources/devops/db/migrations/0006_icon_picker_empty_state.sql`:
+`icon_picker.curated_hint` e `icon_picker.upload_instead`. Migration nuova, non modifica di una
+esistente: `0001_baseline.sql` resta intatto e `apply_translation_seed` è additiva.
+
+**Colori su token, non su `gray-400/500`.** Il codice intorno usa classi statiche, ma
+`text-foreground-muted` e `text-foreground-faint` esistono già e seguono il tema configurabile.
+Markup nuovo non deve aggiungere lavoro a THEME-2.
+
+> **Correzione (2026-08-21, durante THEME-3).** Qui avevo lasciato intendere che passare ai token
+> risolvesse anche il contrasto. Non è così, e l'ho scoperto misurando: `--theme-foreground-faint`
+> vale `#9ca3af`, **lo stesso valore di `text-gray-400`**, quindi il mio testo stava a 2,54:1 in
+> chiaro e 3,67:1 in scuro, e il collegamento in `text-primary` a 4,47:1 e 3,97:1 — tutti sotto la
+> soglia di 4,5:1. Essere un token rende un colore tematizzabile, non leggibile. Corretto: entrambe
+> le righe su `text-foreground-muted`, e il collegamento su `text-foreground` sottolineato, così non
+> dipende da `--theme-primary`, che è configurabile dall'amministratore e non può portare nessuna
+> garanzia di contrasto. Rimisurato: tutte e tre le righe sopra soglia nei due temi. Dettagli e
+> conseguenze per THEME-2 in
+> [2026-08-19-ui-primitives-and-theming.md](2026-08-19-ui-primitives-and-theming.md).
+
+### Effetto collaterale, colto dal guard di I18N-1
+
+Togliendo `common.states.no_results` dal picker, quella chiave è **rimasta senza consumatori** e
+compare ora fra le orfane. Non è una regressione introdotta adesso: è la scoperta che una chiave
+generica descritta come "Empty grid/list" aveva un solo utilizzatore in tutto il progetto, e non
+era una griglia. Prima era nascosta dietro quell'unico uso improprio. Il conto delle orfane resta
+22 perché `icon_picker.no_results` è entrata in uso mentre `common.states.no_results` ne è uscita.
+
+### Verifica
+
+Eseguita nel browser su `/functionalities/create`, con account amministratore, contro il database
+usa-e-getta a cui la 0006 è stata applicata.
+
+- [✅] Cercando `stethoscope` — un'icona che esiste in lucide ma non nelle 157 — compaiono
+  "Nessuna icona trovata", la spiegazione e il collegamento.
+- [✅] Il collegamento porta davvero alla scheda "Carica SVG", con l'area di trascinamento e i
+  requisiti visibili.
+- [✅] `npm run lint` pulito, `npm test` 584 test verdi su 75 file.
+- [✅] `npm run test:i18n-keys` verde: le due chiavi nuove risultano seedate e referenziate.
+- [✅] `db.mjs schema-write` rigenerato, `schema-check` riporta "schema.sql matches ordered
+  migrations".
+- [ ] La 0006 **non** è ancora applicata al database di sviluppo: serve `MIGRATION_DATABASE_URL`,
+  che è una credenziale da operatore e non è in mio possesso. Da eseguire con
+  `node sources/devops/db/db.mjs apply`.

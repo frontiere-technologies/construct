@@ -50,7 +50,7 @@ deve esistere"**. `.env.development.local` è l'unico posto che un build di prod
 - [✅] ID=ENV-1, Severity=Medium, Complexity=Low, Priority=P0, Title=Rimuovere le variabili Supabase morte, Fix description=Rimosse `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` da `.env.local`: nessuna è letta da alcuna riga di codice. Chiavi legacy `anon` e `service_role` disattivate dalla dashboard; verificato che la legacy `anon` riporta ora `disabled: true` e che l'accesso al database continua a funzionare.
 - [✅] ID=ENV-2, Severity=High, Complexity=Low, Priority=P1, Title=Spostare le variabili solo-dev in `.env.development.local`, Fix description=`AUTH_TEST_CREDENTIALS`, `NEXT_PUBLIC_AUTH_TEST_MODE` ed `EMAIL_DEV_OVERRIDE` spostate. Verificato: `npm run build` compila senza interventi manuali, `next dev` registra ancora il provider `test` e mostra il pulsante di login di test.
 - [✅] ID=ENV-3, Severity=Low, Complexity=Low, Priority=P1, Title=Togliere `NODE_ENV` da `.env.local`, Fix description=Rimossa. Verificato con controprova che nessuno script dipendeva da quella riga.
-- [ ] ID=ENV-4, Severity=Medium, Complexity=Low, Priority=P1, Title=Database usa-e-getta per i test che scrivono, Fix description=Creare un progetto Supabase separato, popolare `TEST_DATABASE_URL` e `TEST_DATABASE_DISPOSABLE=1` in `.env.local` e in `sources/tests/e2e/.env.test`, applicare le migration e promuovere l'account admin. **Richiede una decisione umana:** vedi sotto.
+- [✅] ID=ENV-4, Severity=Medium, Complexity=Low, Priority=P1, Title=Database usa-e-getta per i test che scrivono, Fix description=Database usa-e-getta provisionato dalle migration, i due account E2E creati e l'amministratore promosso. `npm run test:integration` 47/47 e `uv run pytest sources/tests/e2e` 112/112. Sono emersi due difetti reali che lo impedivano: l'applicazione veniva avviata sul pooler in modalità session (corretto con `TEST_DATABASE_POOLED_URL`) e `switch_language` negli helper E2E aspettava il segnale sbagliato, lasciando l'intera suite in inglese.
 - [✅] ID=ENV-5, Severity=Low, Complexity=Low, Priority=P2, Title=Riallineare `.env.template`, Fix description=Riscritto con la tabella di caricamento per comando, l'indicazione del file di destinazione per ogni variabile, `EMAIL_DEV_OVERRIDE` documentato, la nota su `sources/tests/e2e/.env.test` e il divieto esplicito su `NODE_ENV`.
 - [✅] ID=ENV-6, Severity=Low, Complexity=Low, Priority=P3, Title=Correggere lo stack dichiarato in `CLAUDE.md`, Fix description=Rimosso `@supabase/supabase-js`, sostituito con Drizzle su Postgres e la nota che Supabase resta solo come host.
 - [✅] ID=ENV-7, Severity=Low, Complexity=Low, Priority=P3, Title=Eliminare il sourcing manuale dell'env nei test di integrazione, Fix description=`vitest.integration.config.ts` carica l'env con `loadEnv('test', ...)` di Vite (nessuna dipendenza nuova), con precedenza all'ambiente già presente. Le credenziali del database usa-e-getta vanno in `.env.test.local`, fuori da `.env.local` e quindi fuori da ogni processo Next. Comando in `CLAUDE.md` e `.env.template` aggiornati.
@@ -59,7 +59,7 @@ deve esistere"**. `.env.development.local` è l'unico posto che un build di prod
 - [✅] ID=DB-2, Severity=Medium, Complexity=Low, Priority=P1, Title=I test di integrazione richiedono il pooler in modalità session, Fix description=`TEST_DATABASE_URL` portata dalla 6543 alla 5432 nei due file di ambiente. In modalità transaction un lock advisory di sessione resta appeso e blocca tutte le scritture successive, anche fra esecuzioni diverse.
 - [✅] ID=DB-3, Severity=Medium, Complexity=Low, Priority=P1, Title=`schema-contract` asserisce una condizione non raggiungibile su Supabase, Fix description=Seconda asserzione ristretta allo schema `public` e ai soli proprietari che l'applicazione controlla, espressa come verifica di sottoinsieme invece che come conteggio. Rischio residuo dei privilegi di `supabase_admin` documentato nel test. Verificato che intercetta ancora una regressione reale.
 
-- [ ] ID=ENV-8, Severity=Low, Complexity=Medium, Priority=P3, Title=Guard automatico sul contratto delle variabili d'ambiente, Fix description=Test che confronta le variabili lette nel codice con quelle documentate in `.env.template`, fallendo su quelle lette e non documentate e riportando quelle documentate e non lette.
+- [✅] ID=ENV-8, Severity=Low, Complexity=Medium, Priority=P3, Title=Guard automatico sul contratto delle variabili d'ambiente, Fix description=Aggiunto `sources/devops/env-contract.test.mjs`, eseguito da `npm run test:env-contract` e inserito in `.github/workflows/quality.yml`. Confronta le variabili lette da TypeScript e Python con i **tre** template tracciati. Alla prima esecuzione ha trovato `PUBLIC_EMBED_URL`, letta da `test_embedded.py` e documentata da nessuna parte: aggiunta a `.env.test.example`.
 
 ---
 
@@ -167,12 +167,12 @@ dall'interfaccia.
 
 ### Passi
 
-- [ ] Creare un progetto Supabase separato e sacrificabile.
-- [ ] Popolare `TEST_DATABASE_URL` e `TEST_DATABASE_DISPOSABLE=1` in `sources/microservices/web-construct/.env.local` e in `sources/tests/e2e/.env.test`.
-- [ ] `node sources/devops/db/db.mjs test-apply`.
-- [ ] Primo login di test con `TEST_EMAIL`, poi promuoverlo ad Administrator come da README.
-- [ ] `npm run test:integration` verde.
-- [ ] `uv run pytest sources/tests/e2e` verde.
+- [✅] Creare un progetto Supabase separato e sacrificabile.
+- [✅] Popolare `TEST_DATABASE_URL` e `TEST_DATABASE_DISPOSABLE=1`. **Correzione al passo come era scritto:** non in `.env.local`, ma in `.env.test.local` — ENV-7 ha spostato il caricamento dell'ambiente di integrazione su `loadEnv('test', …)`, e tenere quelle credenziali fuori da `.env.local` è ciò che impedisce a ogni processo Next di portarsele dietro. In `sources/tests/e2e/.env.test` invece sì, come scritto.
+- [✅] `node sources/devops/db/db.mjs test-apply`: tutte le migration applicate, schema allineato.
+- [✅] Primo login di test con `TEST_EMAIL` e promozione ad Administrator. L'account non-admin si è materializzato da solo al primo login, come previsto dal README.
+- [✅] `npm run test:integration` verde: **47 test su 47**.
+- [✅] `uv run pytest sources/tests/e2e` verde: **112 test su 112**.
 
 ---
 
@@ -427,9 +427,12 @@ perché i test di integrazione non devono dipendere da flag di sviluppo.
 
 ### Criteri di accettazione
 
-- [ ] `npm run test:integration` funziona senza prefisso di sourcing.
-- [ ] Il comando in `CLAUDE.md` è aggiornato di conseguenza.
-- [ ] Le variabili già presenti nell'ambiente continuano a prevalere sui file, come fa Next.
+- [✅] `npm run test:integration` funziona senza prefisso di sourcing. Riverificato il 2026-08-21:
+  47 test su 47.
+- [✅] Il comando in `CLAUDE.md` è aggiornato di conseguenza, con la nota che le credenziali del
+  database usa-e-getta stanno in `.env.test.local`.
+- [✅] Le variabili già presenti nell'ambiente continuano a prevalere sui file: `loadEnv` assegna
+  solo dove `process.env[key] === undefined`.
 
 ---
 
@@ -476,7 +479,183 @@ fra **codice e template**, entrambi versionati.
 
 ### Criteri di accettazione
 
-- [ ] Il test gira senza database e senza file `.env` presenti.
-- [ ] Falla se una variabile letta dal codice non è nel template, salvo esclusioni commentate.
-- [ ] Riporta le variabili del template non lette dal codice.
-- [ ] Sul repo allo stato attuale: verde.
+- [✅] Il test gira senza database e senza file `.env` presenti.
+- [✅] Falla se una variabile letta dal codice non è nel template, salvo esclusioni commentate.
+- [✅] Riporta le variabili del template non lette dal codice.
+- [✅] Sul repo allo stato attuale: verde (dopo aver documentato `PUBLIC_EMBED_URL`).
+
+---
+
+## ENV-8 — Come è stato implementato (2026-08-20)
+
+File: [`sources/devops/env-contract.test.mjs`](../../sources/devops/env-contract.test.mjs).
+Comando: `npm run test:env-contract`, in CI subito dopo `test:i18n-keys`, ed elencato fra i controlli
+statici nel README.
+
+### Il template non è uno, sono tre
+
+La review parlava di "il template" al singolare. Non è così, e la differenza cambia il progetto del
+guard: le variabili sono documentate in **tre** file tracciati, uno per consumatore, e sono separati
+apposta.
+
+| File | Consumatore | Perché separato |
+|---|---|---|
+| `sources/microservices/web-construct/.env.template` | il processo Next | ciò che l'applicazione può vedere |
+| `sources/devops/db/operator.env.example` | la shell dell'operatore | credenziali privilegiate che non devono entrare in Next |
+| `sources/tests/e2e/.env.test.example` | pytest | runtime diverso, database usa-e-getta |
+
+Un guard che avesse letto solo il primo avrebbe segnalato `MIGRATION_DATABASE_URL`,
+`CONSTRUCT_RUNTIME_DB_*`, `TEST_EMAIL` e `TEST_EMAIL_USER` come non documentate — quattro falsi
+positivi da mettere in lista di esclusione, cioè quattro buchi permanenti nella copertura, per una
+separazione che invece è corretta e intenzionale.
+
+**Ne è nato un test in più**, non previsto dalla review: `operator credentials stay out of the Next
+template`. Il template Next dedica un paragrafo a dire che `MIGRATION_DATABASE_URL` e
+`CONSTRUCT_RUNTIME_DB_*` non devono stare lì; ora quella frase è verificabile invece che soltanto
+scritta. È la stessa classe di problema di ENV-1, presa dal lato pericoloso: una stringa di
+connessione privilegiata dentro un file che `next dev` e `next build` caricano.
+
+### Scansiona anche Python
+
+La suite E2E legge l'ambiente quanto l'applicazione, e `.env.test.example` è uno dei tre template:
+escludere Python avrebbe lasciato scoperto un terzo del contratto. Il guard riconosce
+`os.getenv`, `os.environ.get` e `os.environ.setdefault` oltre a `process.env.X` ed `env['X']`.
+
+### Ha trovato qualcosa alla prima esecuzione
+
+`PUBLIC_EMBED_URL`, letta da `sources/tests/e2e/test_embedded.py:27` come override facoltativo
+dell'origine pubblica usata nel caso positivo del test di embedding, **non era in nessun template**.
+È esattamente la deriva di `EMAIL_DEV_OVERRIDE`: una variabile vera, con un default sensato, che
+nessuno che non legga il sorgente può sapere di poter impostare — e che serve proprio quando il
+default smette di funzionare, cioè nel momento peggiore per doverla scoprire. Documentata in
+`.env.test.example` come riga commentata, con la ragione per cui il bersaglio deve essere un'origine
+pubblica (il controllo di embeddability rifiuta loopback e indirizzi privati per prevenire SSRF).
+
+### Esclusioni: quattro, una ragione diversa ciascuna
+
+Non sono una categoria, sono quattro casi singoli, ognuno con il proprio commento nel codice:
+
+| Variabile | Perché non va documentata |
+|---|---|
+| `NODE_ENV` | la imposta il CLI di Next prima di leggere i file; ENV-3 ha tolto quella che c'era |
+| `I18N_INTEGRATION_DB` | la imposta lo script `test:integration` in `package.json` |
+| `E2E_REGISTER_EMAIL` | la genera `conftest.py` a ogni esecuzione; un valore fisso ne annullerebbe lo scopo |
+| `NEXTAUTH_URL` | grafia Auth.js v4, letta solo come fallback di `AUTH_URL`; documentarla inviterebbe a usare il nome deprecato |
+
+### Un punto cieco, dichiarato invece che nascosto
+
+`lib/auth-policy.ts` e `lib/test-database.ts` ricevono l'ambiente come parametro tipizzato
+(`AuthEnvironment`, `DatabaseEnvironment`) invece di leggere `process.env`. La scansione testuale le
+vede al **punto di chiamata**, che sta comunque dentro `sources/`, quindi la copertura tiene. Ciò che
+resterebbe invisibile è un modulo che ricevesse solo quell'oggetto e non venisse mai chiamato — che è
+codice morto, e un problema diverso. Il limite è scritto nel commento della funzione, non lasciato da
+scoprire.
+
+### Verifica
+
+- [✅] Verde, 4 test su 4, in ~90 ms. Nessun database, nessun file `.env` letto.
+- [✅] Controprova sulla direzione che deve fallire: un file con
+  `process.env.ZZZ_UNDOCUMENTED_PROOF` fa fallire il test nominando la variabile e il file.
+- [✅] Controprova sul test delle credenziali operatore: aggiungendo `MIGRATION_DATABASE_URL` al
+  template Next il test fallisce; template ripristinato pulito subito dopo.
+- [✅] Direzione informativa: **zero** variabili documentate e non lette. Il residuo di ENV-1 è
+  effettivamente sparito.
+
+---
+
+## ENV-4 — Chiusura (2026-08-21)
+
+Integrazione **47 su 47**, E2E **112 su 112**. Ma il database usa-e-getta, da solo, non bastava:
+provisionarlo ha fatto emergere due difetti veri, entrambi invisibili sul database di sviluppo.
+Vale la pena raccontarli, perché ENV-4 sembrava "meccanicamente banale" e non lo era.
+
+### Difetto 1 — L'applicazione veniva avviata sul pooler sbagliato
+
+Il README diceva di avviare il server E2E con `DATABASE_URL="$TEST_DATABASE_URL"`. Dopo DB-2 quella
+variabile punta alla **porta 5432**, cioè al pooler in modalità session, che si ferma a 15 client;
+`lib/db.ts` ne apre fino a 20 da solo (`max: 20`). Il server saturava il pool e ogni altro client
+moriva — in particolare i comandi `db.mjs` che la suite lancia fra un test e l'altro:
+
+```
+ERROR: (EMAXCONNSESSION) max clients reached in session mode - max clients are limited to pool_size: 15
+```
+
+Prova diretta: con il server fermo, lo stesso comando funziona all'istante. `test_roles.py` passava
+9 su 9 da solo e ne falliva 7 nella suite completa.
+
+**Il template si contraddiceva da solo** e nessuno se n'era accorto: il commento diceva "usa la
+porta 5432", il valore di esempio sotto mostrava `:6543/`.
+
+Correzione: `TEST_DATABASE_POOLED_URL`, stesso database attraverso il pooler in modalità
+transaction, che è ciò che l'applicazione usa anche in produzione. `TEST_DATABASE_URL` resta sulla
+5432 perché la suite di integrazione ha bisogno dell'affinità di sessione per i lock advisory;
+l'applicazione no. README, template e la configurazione `web-construct-e2e` in
+`.claude/launch.json` aggiornati di conseguenza.
+
+### Difetto 2 — La suite girava in inglese e non lo sapeva
+
+Sistemato il pooler, restavano **26 fallimenti su 112**. Non erano la stessa causa, e non erano
+nemmeno quello che sembravano: quasi tutti si presentavano come timeout Playwright.
+
+Il percorso fino alla causa:
+
+1. Un'asserzione lo diceva in chiaro: `assert 'Active' in ('Attivo', 'Disattivato')`. L'interfaccia
+   era in **inglese**. I timeout erano lo stesso problema travestito — `waiting for button
+   "Colonne"` non trova nulla quando il pulsante si chiama "Columns".
+2. `test_i18n.py` falliva identico anche da solo (`..F.FF`), ma il terzo test **da solo passava**:
+   la perdita era interna al file, nei due test che lo precedono.
+3. Il log del server, catturato su file, conteneva quattro `setPreferredLanguage("en")` e **zero**
+   `setPreferredLanguage("it")`. Il ripristino non arrivava nemmeno al server.
+4. Campionando `users.id_language` sul database durante il test: `null → 2` e mai indietro.
+
+**La causa**, in `sources/tests/e2e/helpers.py`: `switch_language` aspettava
+`wait_for_load_state("networkidle")`. È il segnale sbagliato. Scegliere una lingua chiama
+`setLanguage()`, che esegue `setPreferredLanguage()` dentro una `startTransition` di React: la
+richiesta parte **dopo** che il gestore del click è tornato. `networkidle` valuta lo stato nel
+momento in cui viene chiamato — pagina già carica, rete già ferma — e tornava all'istante, prima che
+la richiesta esistesse. Quando il chiamante era la pulizia in fondo a un test, la fixture chiudeva
+il contesto del browser e uccideva la richiesta.
+
+Due dettagli spiegano perché è rimasta nascosta tanto a lungo:
+
+- La pulizia usa `_safe_switch_language`, che ingoia le eccezioni. Ma qui non c'era eccezione da
+  ingoiare: il click riusciva davvero, era la richiesta a non partire mai.
+- `admin_storage_state` è **di sessione**, catturato prima di qualunque cambio lingua. Ogni test
+  parte quindi senza cookie di lingua e ricade sulla preferenza salvata sull'utente — quella
+  sbagliata. Una fixture per test avrebbe mascherato il problema; una di sessione lo propaga
+  all'intera esecuzione.
+
+**Il fix** aspetta il segnale vero: il nome nativo della lingua sul trigger — letto dall'opzione
+stessa invece che mappato dal codice, così resta corretto per qualunque lingua la suite aggiunga — e
+il ritorno del trigger allo stato abilitato, che è `disabled` finché `switching` è true.
+
+Verifica del fix, prima e dopo, sulla stessa traccia:
+
+| | `users.id_language` durante il test | Nel log del server |
+|---|---|---|
+| prima | `null → 2` e mai indietro | solo `setPreferredLanguage("en")` |
+| dopo | `null → 2 → 1 → null` | compare `setPreferredLanguage("it")` |
+
+È la stessa famiglia di problema già incontrata su dnd-kit: un helper E2E che aspetta un segnale
+comodo invece di quello che dice davvero "è finito".
+
+### Esito
+
+| Esecuzione | Risultato | Durata |
+|---|---|---|
+| prima (app sulla 5432) | 26 falliti, 86 passati, 1 errore | 21m 26s |
+| dopo il pooler | 26 falliti, 86 passati | 21m 23s |
+| dopo il fix di `switch_language` | **111 passati, 1 errore** | 11m 54s |
+
+L'unico errore residuo è `net::ERR_NETWORK_IO_SUSPENDED`, cioè la rete della macchina sospesa a
+metà esecuzione: non è l'applicazione. Quel test rieseguito da solo passa. Totale effettivo
+**112 su 112**.
+
+Il dimezzamento del tempo non è un dettaglio: metà della durata precedente erano i timeout da 30
+secondi dei test che cercavano etichette italiane in una pagina inglese.
+
+### Nota per chi riprende
+
+Il database usa-e-getta è provisionabile da zero con `test-apply` più la promozione una tantum
+dell'amministratore documentata nel README. La configurazione `web-construct-e2e` in
+`.claude/launch.json` avvia il server già puntato al database giusto, con i flag di test attivi.
