@@ -1,3 +1,6 @@
+from playwright.sync_api import expect
+
+
 def nav(page, url: str) -> None:
     """Navigate to a URL and wait until React event handlers are attached."""
     page.goto(url)
@@ -140,10 +143,33 @@ def switch_language(page, code: str) -> None:
 
     The switcher lives in the account panel, which is only rendered once the
     panel is open, and the sidebar's first column may be collapsed to icons.
+
+    Waits for the switch to actually land, not for the network to go quiet.
+    `wait_for_load_state("networkidle")` was the previous signal and it is the
+    wrong one here: choosing a language calls `setLanguage()`, which runs
+    `setPreferredLanguage()` inside a React `startTransition`, so the request is
+    issued *after* the click handler returns. networkidle is evaluated against
+    the state at the moment it is called — the page is already loaded and quiet
+    — so it resolved instantly, before the server action had been issued. When
+    the caller was a cleanup step at the end of a test, the fixture then closed
+    the browser context and killed the request: the language stayed on the
+    previous choice, the server never logged a `setPreferredLanguage` call, and
+    every later test in the run rendered in the wrong language.
+
+    The trigger renders the current language's native name, so that text is the
+    signal that the round trip finished and the RSC tree re-rendered. It is read
+    from the option itself instead of being mapped from the code, so this stays
+    correct for any language the suite adds.
     """
     l1 = page.locator("aside").first
     ensure_l1_expanded(page, l1)
     page.locator('[data-testid="sidebar-account-button"]').click()
-    page.locator('[data-testid="language-switcher"]').click()
-    page.locator(f'[data-testid="language-option-{code}"]').click()
-    page.wait_for_load_state("networkidle")
+    switcher = page.locator('[data-testid="language-switcher"]')
+    switcher.click()
+    option = page.locator(f'[data-testid="language-option-{code}"]')
+    native_name = option.inner_text().strip()
+    option.click()
+    expect(switcher).to_contain_text(native_name, timeout=15_000)
+    # The trigger is `disabled` for as long as `switching` is true; waiting for it
+    # to come back confirms the transition committed rather than merely started.
+    expect(switcher).to_be_enabled(timeout=15_000)
