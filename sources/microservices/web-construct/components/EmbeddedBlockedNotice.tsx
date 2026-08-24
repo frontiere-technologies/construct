@@ -7,7 +7,7 @@ export async function EmbeddedBlockedNotice({ url }: { url: string }) {
 
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4">
-      <p className="text-sm text-foreground-muted">
+      <p className="text-sm text-muted-foreground">
         {t('embedded.blocked_title')}
       </p>
       {isSafeUrl ? (
@@ -21,7 +21,7 @@ export async function EmbeddedBlockedNotice({ url }: { url: string }) {
           {t('embedded.blocked_body')}
         </a>
       ) : (
-        <p className="text-sm text-foreground-muted break-all">{url}</p>
+        <p className="text-sm text-muted-foreground break-all">{url}</p>
       )}
     </div>
   )

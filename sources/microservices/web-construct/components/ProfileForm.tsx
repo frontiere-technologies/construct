@@ -81,7 +81,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
                 type="text"
                 value={profile.first_name ?? ''}
                 onChange={handleChange('first_name')}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
 
@@ -94,7 +94,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
                 type="text"
                 value={profile.last_name ?? ''}
                 onChange={handleChange('last_name')}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
 
@@ -107,7 +107,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
                 type="text"
                 value={profile.username ?? ''}
                 onChange={handleChange('username')}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
 
@@ -122,7 +122,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
                 value={profile.phone ?? ''}
                 onChange={handleChange('phone')}
                 placeholder="+391234567890"
-                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm placeholder:text-foreground-faint focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text-sm placeholder:text-foreground-faint focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
           </div>

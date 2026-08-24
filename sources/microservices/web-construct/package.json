@@ -18,6 +18,7 @@
     "test:i18n-keys": "node --test ../../devops/i18n-key-inventory.test.mjs",
     "test:env-contract": "node --test ../../devops/env-contract.test.mjs",
     "test:raw-colors": "node --test ../../devops/raw-color-ratchet.test.mjs",
+    "test:tokens": "node --test ../../devops/token-vocabulary.test.mjs",
     "schema:check": "node ../../devops/db/db.mjs schema-check"
   },
   "dependencies": {

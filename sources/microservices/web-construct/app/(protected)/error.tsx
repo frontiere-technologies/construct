@@ -15,7 +15,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
 
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[200px] gap-4">
-      <p className="text-sm text-foreground-muted">{t('errors.page_title', 'Something went wrong.')}</p>
+      <p className="text-sm text-muted-foreground">{t('errors.page_title', 'Something went wrong.')}</p>
       {error.digest && (
         <p className="text-xs text-foreground-faint font-mono">
           {t('errors.error_id', 'Error ID')}: {error.digest}

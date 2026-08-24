@@ -35,10 +35,10 @@ export const Home: React.FC = () => {
 
       <div className="rounded-xl border border-border-subtle p-8 min-h-[400px]">
         <h2 className="text-xl font-semibold mb-4">{t('home.content_area')}</h2>
-        <p className="text-foreground-muted">
+        <p className="text-muted-foreground">
           {t('home.placeholder_body', { path: pathname })}
         </p>
-        <p className="text-foreground-muted mt-4">
+        <p className="text-muted-foreground mt-4">
           {t('home.placeholder_admin_hint')}
         </p>
       </div>

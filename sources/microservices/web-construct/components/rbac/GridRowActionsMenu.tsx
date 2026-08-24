@@ -77,18 +77,18 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
           setPos({ top: rect.bottom + 4, left: rect.left })
           setOpen(true)
         }}
-        className="p-1 rounded hover:bg-surface-hover"
+        className="p-1 rounded hover:bg-accent"
       >
         <MoreHorizontal size={16} />
       </button>
       {open && pos && createPortal(
-        <div ref={menuRef} style={{ top: pos.top, left: pos.left }} className="fixed z-50 w-40 p-1 rounded-lg border border-border bg-surface-overlay shadow-lg">
+        <div ref={menuRef} style={{ top: pos.top, left: pos.left }} className="fixed z-50 w-40 p-1 rounded-lg border border-border bg-popover shadow-lg">
           {items.map(item => (
             <button
               key={item.label}
               disabled={item.disabled}
               onClick={() => { close(); item.onClick() }}
-              className="block w-full text-left px-3 py-1.5 text-sm rounded enabled:hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
+              className="block w-full text-left px-3 py-1.5 text-sm rounded enabled:hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {item.label}
             </button>

@@ -13,11 +13,11 @@ export function PageContainer({ title, subtitle, actions, children }: PageContai
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{title}</h1>
-          {subtitle && <p className="text-foreground-muted">{subtitle}</p>}
+          {subtitle && <p className="text-muted-foreground">{subtitle}</p>}
         </div>
         {actions}
       </div>
-      <div className="bg-surface p-6 rounded-xl border border-border shadow-sm space-y-8">
+      <div className="bg-card p-6 rounded-xl border border-border shadow-sm space-y-8">
         {children}
       </div>
     </div>

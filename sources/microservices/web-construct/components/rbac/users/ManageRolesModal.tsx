@@ -43,13 +43,13 @@ export default function ManageRolesModal(
       titleId={titleId}
       onClose={onClose}
       busy={busy}
-      panelClassName="bg-surface-overlay rounded-xl p-5 w-full max-w-md"
+      panelClassName="bg-popover rounded-xl p-5 w-full max-w-md"
     >
         <div className="flex items-center justify-between mb-4">
           <h2 id={titleId} className="text-lg font-semibold">{t('users.actions.manage_roles')} — {user.firstName ?? user.email}</h2>
           <button data-dialog-initial-focus data-dialog-close onClick={onClose} aria-label={t('common.actions.close')} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
-        <label className="block text-xs font-medium text-foreground-muted mb-1">{t('users.list.roles')}</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">{t('users.list.roles')}</label>
         <RoleMultiSelect
           options={allRoles}
           selected={selected}

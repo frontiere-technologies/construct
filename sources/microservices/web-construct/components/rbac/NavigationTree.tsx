@@ -237,7 +237,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
       {tree}
       <DragOverlay dropAnimation={null}>
         {activeNode ? (
-          <div className="flex items-center gap-2 rounded-lg border border-primary bg-surface-overlay px-3 py-2 text-sm shadow-lg">
+          <div className="flex items-center gap-2 rounded-lg border border-primary bg-popover px-3 py-2 text-sm shadow-lg">
             <GripVertical size={14} className="text-gray-400" />
             {React.createElement(typeIcon(activeNode), { size: 14, className: 'shrink-0 text-gray-400' })}
             <span className={activeNode.type === 'CATEGORY' ? 'font-medium' : ''}>{activeNode.name}</span>

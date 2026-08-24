@@ -11,7 +11,7 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children, menuItems }) => {
   return (
-    <div className="flex h-screen bg-page text-foreground overflow-hidden font-sans">
+    <div className="flex h-screen bg-background text-foreground overflow-hidden font-sans">
       <Sidebar menuItems={menuItems} />
       <main className="flex-1 overflow-y-auto p-8">
         {children}

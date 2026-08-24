@@ -60,7 +60,7 @@ export default function RoleMultiSelect({ options, selected, onToggle, lockedId,
           return (
             <label
               key={r.id}
-              className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-surface-hover ${locked ? 'opacity-60' : 'cursor-pointer'}`}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-accent ${locked ? 'opacity-60' : 'cursor-pointer'}`}
             >
               <input
                 type="checkbox"

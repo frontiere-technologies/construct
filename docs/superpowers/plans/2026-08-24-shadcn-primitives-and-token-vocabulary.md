@@ -617,7 +617,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: la tabella di mappatura in testa a questo piano.
 - Produces: un codebase in cui nessun nome del vocabolario vecchio sopravvive, garantito da `npm run test:tokens`.
 
-- [ ] **Step 1: Scrivere il guard che fallisce**
+- [✅] **Step 1: Scrivere il guard che fallisce**
 
 Questo test è la vera rete di sicurezza del task: un rinomino sbagliato scolora un punto dell'interfaccia senza rompere niente, e nessun test esistente lo vedrebbe. Crea `sources/devops/token-vocabulary.test.mjs`:
 
@@ -678,7 +678,7 @@ Aggiungi lo script a `package.json`, accanto agli altri `test:*`:
     "test:tokens": "node --test ../../devops/token-vocabulary.test.mjs",
 ```
 
-- [ ] **Step 2: Eseguire il guard e verificare che fallisca**
+- [✅] **Step 2: Eseguire il guard e verificare che fallisca**
 
 ```bash
 npm run test:tokens
@@ -686,7 +686,7 @@ npm run test:tokens
 
 Atteso: FAIL, con circa 250 righe di violazioni. Leggile: sono l'elenco di lavoro di questo task.
 
-- [ ] **Step 3: Applicare i rinomini, uno alla volta**
+- [✅] **Step 3: Applicare i rinomini, uno alla volta**
 
 Nove sostituzioni, in **quest'ordine**. L'ordine conta: `surface-overlay` e `surface-hover` vanno prima di `surface`, altrimenti la sostituzione corta le mangia.
 
@@ -711,7 +711,7 @@ done
 
 Dopo ogni sostituzione, `git diff --stat` per vedere quali file sono cambiati. Se una sostituzione tocca zero file, è un errore: significa che il nome era già sparito e le precedenti hanno mangiato troppo.
 
-- [ ] **Step 4: Eseguire il guard e verificare che passi**
+- [✅] **Step 4: Eseguire il guard e verificare che passi**
 
 ```bash
 npm run test:tokens
@@ -719,7 +719,7 @@ npm run test:tokens
 
 Atteso: PASS. Se restano violazioni sui `--theme-*`, appartengono al task 5 e vanno risolte lì: in tal caso salta al task 5 e torna qui per il commit.
 
-- [ ] **Step 5: Rileggere il diff a mano cercando i falsi positivi**
+- [✅] **Step 5: Rileggere il diff a mano cercando i falsi positivi**
 
 ```bash
 git diff -U0 | grep -E '^\+' | grep -oE '(bg|text|border|ring)-[a-z-]+' | sort | uniq -c | sort -rn

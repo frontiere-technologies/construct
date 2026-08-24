@@ -34,14 +34,14 @@ export default function CreateTranslationKeyModal({ onClose }: { onClose: (saved
     else onClose(true)
   }
 
-  const field = 'w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
+  const field = 'w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
 
   return (
     <AccessibleDialog
       titleId={titleId}
       onClose={() => onClose(false)}
       busy={saving}
-      panelClassName="w-full max-w-md rounded-xl bg-surface-overlay p-6 shadow-xl"
+      panelClassName="w-full max-w-md rounded-xl bg-popover p-6 shadow-xl"
     >
         <h2 id={titleId} className="text-lg font-bold mb-4">{t('translation.actions.create')}</h2>
         <div className="space-y-3">

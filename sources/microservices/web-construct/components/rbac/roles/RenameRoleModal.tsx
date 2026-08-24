@@ -25,12 +25,12 @@ export default function RenameRoleModal({ roleId, currentName, onClose }: { role
       titleId={titleId}
       onClose={onClose}
       busy={busy}
-      panelClassName="w-full max-w-md rounded-xl bg-surface-overlay p-6 shadow-xl"
+      panelClassName="w-full max-w-md rounded-xl bg-popover p-6 shadow-xl"
     >
         <h2 id={titleId} className="text-lg font-bold mb-4">{t('roles.rename.title')}</h2>
         <input
           data-dialog-initial-focus value={name} onChange={e => setName(e.target.value)} placeholder={t('roles.form.name')}
-          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface-overlay mb-6"
+          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-popover mb-6"
         />
         <div className="flex justify-end gap-2">
           <button data-dialog-close onClick={onClose} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>

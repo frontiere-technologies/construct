@@ -20,9 +20,9 @@ import { resolveSidebarPresentation } from './sidebarPresentation'
 // the ring, while a section that is merely expanded gets a softer fill so it can't be mistaken
 // for the page you're on.
 const HIGHLIGHT_CLS: Record<NavHighlight, string> = {
-  active: 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70',
-  open: 'bg-sidebar-active-bg/50 text-sidebar-active-text',
-  none: 'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text',
+  active: 'bg-sidebar-accent text-sidebar-accent-foreground font-medium ring-1 ring-inset ring-primary/70',
+  open: 'bg-sidebar-accent/50 text-sidebar-accent-foreground',
+  none: 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
 }
 
 interface TruncatedSpanProps {
@@ -76,9 +76,9 @@ const ColToggleStack: React.FC<{
       onClick={onClose}
       title={closeTitle}
       aria-label={closeTitle}
-      className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
+      className="flex items-center justify-center bg-sidebar border border-sidebar-foreground/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-accent"
     >
-      <X size={12} className="text-sidebar-text/60" />
+      <X size={12} className="text-sidebar-foreground/60" />
     </button>
     {showToggle && (
       <button
@@ -86,11 +86,11 @@ const ColToggleStack: React.FC<{
         onClick={onToggleCollapse}
         aria-label={toggleTitle}
         aria-expanded={!collapsed}
-        className="flex items-center justify-center bg-sidebar-bg border border-sidebar-text/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-active-bg"
+        className="flex items-center justify-center bg-sidebar border border-sidebar-foreground/10 rounded-full p-0.5 shadow-sm hover:bg-sidebar-accent"
       >
         {collapsed
-          ? <ChevronRight size={12} className="text-sidebar-text/60" />
-          : <ChevronLeft size={12} className="text-sidebar-text/60" />}
+          ? <ChevronRight size={12} className="text-sidebar-foreground/60" />
+          : <ChevronLeft size={12} className="text-sidebar-foreground/60" />}
       </button>
     )}
   </div>
@@ -479,13 +479,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   const userPanelItemCls = clsx(
     'w-full flex items-center rounded-lg py-2 px-3 transition-colors duration-200 text-sm',
     userPanelPresentation.columnCollapsed ? 'justify-center' : 'gap-3',
-    'text-sidebar-text hover:bg-sidebar-active-bg/50 hover:text-sidebar-active-text'
+    'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground'
   )
 
   const renderSidebarColumns = () => (
       <>
       <aside className={clsx(
-        'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
+        'h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-foreground/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
         effCol1Collapsed ? ICON_COL_W : TEXT_COL_W
       )}>
         <ColToggleStack
@@ -544,8 +544,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                 'flex items-center gap-2 rounded-lg transition-colors duration-200 w-full',
                 effCol1Collapsed ? 'justify-center py-1' : 'py-1 px-1',
                 userPanelOpen
-                  ? 'text-sidebar-active-text'
-                  : 'text-sidebar-text hover:text-sidebar-active-text'
+                  ? 'text-sidebar-accent-foreground'
+                  : 'text-sidebar-foreground hover:text-sidebar-accent-foreground'
               )}
             >
               {authUser?.image
@@ -565,7 +565,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
 
       {userPanelOpen && (
         <aside id="sidebar-user-panel" className={clsx(
-          'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
+          'h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-foreground/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
           userPanelPresentation.columnCollapsed ? ICON_SUB_W : TEXT_SUB_W
         )}>
           <ColToggleStack
@@ -579,7 +579,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             anchorClassName="-right-[9px] bottom-[9px]"
           />
           {!userPanelPresentation.columnCollapsed && (
-            <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
+            <div className="px-4 py-3 border-b border-sidebar-foreground/10 overflow-hidden">
               <TruncatedSpan
                 text={authUser?.email?.split('@')[0] ?? t('nav.account')}
                 className="block truncate text-xs font-semibold uppercase tracking-wider opacity-50"
@@ -598,7 +598,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               aria-label={userPanelPresentation.columnCollapsed ? t('nav.profile') : undefined}
               className={clsx(
                 userPanelItemCls,
-                pathname === '/profile' ? 'bg-sidebar-active-bg text-sidebar-active-text font-medium ring-1 ring-inset ring-primary/70' : ''
+                pathname === '/profile' ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium ring-1 ring-inset ring-primary/70' : ''
               )}
             >
               <User size={16} className={pathname === '/profile' ? 'text-primary' : ''} />
@@ -619,7 +619,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                 {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
               </button>
             ) : (
-              <div className="flex items-center rounded-lg py-2 px-3 gap-3 text-sm text-sidebar-text">
+              <div className="flex items-center rounded-lg py-2 px-3 gap-3 text-sm text-sidebar-foreground">
                 {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
                 <span className="flex-1">{t('nav.theme_mode')}</span>
                 <button
@@ -644,7 +644,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           </div>
 
           {/* Logout — pinned to bottom, aligned with the user row in col1 */}
-          <div className="p-2 border-t border-sidebar-text/10">
+          <div className="p-2 border-t border-sidebar-foreground/10">
             <button
               onClick={signOut}
               onMouseEnter={userPanelPresentation.columnCollapsed ? e => showTooltip(e, t('nav.logout')) : undefined}
@@ -665,7 +665,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
         const collapsed = presentation.columnCollapsed
         return (
           <aside key={parent.id} id={sidebarPanelId(parent.id)} data-testid={`sidebar-col-${k + 2}`} className={clsx(
-            'h-screen bg-sidebar-bg text-sidebar-text border-r border-sidebar-text/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
+            'h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-foreground/10 flex flex-col flex-shrink-0 relative transition-all duration-300',
             collapsed ? ICON_SUB_W : TEXT_SUB_W
           )}>
             <ColToggleStack
@@ -679,7 +679,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               anchorClassName="-right-[9px] bottom-[9px]"
             />
             {!collapsed && (
-              <div className="px-4 py-3 border-b border-sidebar-text/10 overflow-hidden">
+              <div className="px-4 py-3 border-b border-sidebar-foreground/10 overflow-hidden">
                 <TruncatedSpan
                   text={parent.label}
                   className="block truncate text-xs font-semibold uppercase tracking-wider opacity-50"
@@ -707,7 +707,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     <div className="flex h-screen flex-shrink-0">
       {tooltip && createPortal(
         <div
-          className="fixed z-[9999] px-2 py-1 bg-sidebar-active-bg text-sidebar-active-text border border-sidebar-text/10 shadow-sm text-xs rounded pointer-events-none whitespace-nowrap"
+          className="fixed z-[9999] px-2 py-1 bg-sidebar-accent text-sidebar-accent-foreground border border-sidebar-foreground/10 shadow-sm text-xs rounded pointer-events-none whitespace-nowrap"
           style={{ top: tooltip.top, left: tooltip.left, transform: 'translateY(-50%)' }}
         >
           {tooltip.text}
@@ -734,7 +734,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           onMouseEnter={handleHoverEnter}
           onMouseLeave={handleHoverLeave}
           className={clsx(
-            'h-screen bg-sidebar-bg border-r border-sidebar-text/10 flex flex-col items-center flex-shrink-0',
+            'h-screen bg-sidebar border-r border-sidebar-foreground/10 flex flex-col items-center flex-shrink-0',
             RAIL_W
           )}
         >
@@ -744,7 +744,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             title={t('nav.expand_menu')}
             aria-label={t('nav.expand_menu')}
             aria-expanded={false}
-            className="mt-auto mb-2 p-1 rounded-lg text-sidebar-text/70 hover:bg-sidebar-active-bg hover:text-sidebar-active-text"
+            className="mt-auto mb-2 p-1 rounded-lg text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
             <PanelLeftOpen size={14} />
           </button>

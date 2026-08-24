@@ -55,7 +55,7 @@ export function ChangePasswordForm() {
     }
   }
 
-  const inputCls = 'w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
+  const inputCls = 'w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
   const labelCls = 'block text-sm font-medium text-foreground-secondary mb-1'
 
   return (

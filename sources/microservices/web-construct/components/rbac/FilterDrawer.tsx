@@ -23,7 +23,7 @@ export default function FilterDrawer({ open, onClose, onApply, onReset, children
       titleId={titleId}
       onClose={onClose}
       align="right"
-      panelClassName="h-full w-full max-w-sm bg-surface-overlay shadow-xl flex flex-col"
+      panelClassName="h-full w-full max-w-sm bg-popover shadow-xl flex flex-col"
     >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 id={titleId} className="text-lg font-semibold">{t('common.labels.filters')}</h2>

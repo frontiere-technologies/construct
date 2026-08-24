@@ -95,7 +95,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
               value={searchDraft}
               onChange={e => setSearchDraft(e.target.value)}
               placeholder={t('common.actions.search')}
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-surface-overlay"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-popover"
             />
           </div>
         </div>

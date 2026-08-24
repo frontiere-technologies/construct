@@ -30,7 +30,7 @@ export default function ConfirmModal({ title, message, confirmLabel, onConfirm, 
       descriptionId={descriptionId}
       onClose={onCancel}
       busy={busy}
-      panelClassName="w-full max-w-md rounded-xl bg-surface-overlay p-6 shadow-xl"
+      panelClassName="w-full max-w-md rounded-xl bg-popover p-6 shadow-xl"
     >
         <h2 id={titleId} className="text-lg font-bold mb-2">{title}</h2>
         <p id={descriptionId} className="text-sm text-gray-500 mb-6">{message}</p>

@@ -147,7 +147,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
 
       {/* ── Popover ──────────────────────────────────────────────── */}
       {open && (
-        <div className="absolute left-0 top-full mt-1.5 z-50 w-72 rounded-xl border border-border bg-surface-overlay shadow-2xl overflow-hidden">
+        <div className="absolute left-0 top-full mt-1.5 z-50 w-72 rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
             <div className="flex gap-4">
@@ -191,7 +191,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                     type="button"
                     title={t('icon_picker.no_icon')}
                     onClick={() => pick('')}
-                    className={`flex items-center justify-center p-2 rounded-lg hover:bg-surface-hover transition-colors ${noIconSelected ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
+                    className={`flex items-center justify-center p-2 rounded-lg hover:bg-accent transition-colors ${noIconSelected ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
                   >
                     <ImageOff size={15} className="text-gray-400" />
                   </button>
@@ -200,7 +200,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                   <button
                     key={name} type="button" title={name}
                     onClick={() => pick(name)}
-                    className={`flex items-center justify-center p-2 rounded-lg hover:bg-surface-hover transition-colors ${value === name ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
+                    className={`flex items-center justify-center p-2 rounded-lg hover:bg-accent transition-colors ${value === name ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
                   >
                     <IconRenderer name={name} size={15} />
                   </button>
@@ -217,19 +217,19 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                         around here still uses: they follow the configurable
                         theme, so this markup adds nothing for THEME-2 to undo.
                         Both lines are -muted, not -faint: measured during the
-                        THEME-3 review, --theme-foreground-faint is #9ca3af, the
+                        THEME-3 review, --foreground-faint is #9ca3af, the
                         same value as text-gray-400, and reads 2.54:1 on a light
                         surface — under the 4.5:1 floor. Being a token does not
                         make a colour legible; that is a property of the value.
                         The call to action is deliberately NOT text-primary: it
-                        measured 4.47:1 light and 3.97:1 dark, and --theme-primary
+                        measured 4.47:1 light and 3.97:1 dark, and --primary
                         is user-configurable, so no contrast promise about it can
                         hold. Underlined body text carries the affordance without
                         depending on a colour an administrator can change — the
                         same pattern the upload tab already uses for "scegli il
                         file". */}
-                    <p className="text-xs text-foreground-muted">{t('icon_picker.no_results')}</p>
-                    <p className="text-[10px] text-foreground-muted leading-relaxed">{t('icon_picker.curated_hint')}</p>
+                    <p className="text-xs text-muted-foreground">{t('icon_picker.no_results')}</p>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">{t('icon_picker.curated_hint')}</p>
                     <button
                       type="button"
                       onClick={() => setTab('upload')}
@@ -263,7 +263,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
               </div>
               {/* SVG requirements hint */}
               <div className="rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2 text-[10px] text-gray-500 leading-relaxed space-y-0.5">
-                <p className="font-medium text-foreground-muted">{t('functionalities.icon.requirements_heading')}</p>
+                <p className="font-medium text-muted-foreground">{t('functionalities.icon.requirements_heading')}</p>
                 <p>• {t('functionalities.icon.req_dimensions_prefix')}<code className="font-mono">viewBox=&quot;0 0 24 24&quot;</code>{t('functionalities.icon.req_dimensions_suffix')}</p>
                 <p>• {t('functionalities.icon.req_colors_prefix')}<code className="font-mono">currentColor</code>{t('functionalities.icon.req_colors_suffix')}</p>
                 <p>• {t('functionalities.icon.req_stroke_prefix')}<code className="font-mono">stroke-width=&quot;2&quot;</code>{t('functionalities.icon.req_stroke_suffix')}</p>

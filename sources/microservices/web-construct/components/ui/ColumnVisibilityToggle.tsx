@@ -29,7 +29,7 @@ export default function ColumnVisibilityToggle<T>(
         <Columns3 size={16} /> {t('common.labels.columns')}
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 z-20 w-48 p-2 rounded-lg border border-border bg-surface-overlay shadow">
+        <div className="absolute right-0 mt-1 z-20 w-48 p-2 rounded-lg border border-border bg-popover shadow">
           {columns.map(c => (
             <label key={c.colId} className="flex items-center gap-2 py-1 text-sm cursor-pointer">
               <input type="checkbox" checked={!hidden.has(c.colId)} onChange={() => toggle(c.colId)} />
