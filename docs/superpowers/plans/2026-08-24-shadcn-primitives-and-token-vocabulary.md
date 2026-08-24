@@ -733,7 +733,7 @@ grep -rc "border-border-subtle\|text-foreground-secondary\|text-foreground-faint
 
 Atteso: le stesse 13, 26 e 8 occorrenze misurate prima del task.
 
-- [ ] **Step 6: Verifica completa e commit**
+- [✅] **Step 6: Verifica completa e commit**
 
 ```bash
 npm run lint && npm run test && npm run typecheck && npm run test:tokens && npm run build
