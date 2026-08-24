@@ -55,89 +55,134 @@
    #6366f1, so the pre-hydration paint used a colour the app never otherwise
    showed. `lib/theme-vars.test.ts` now asserts the two agree. */
 :root {
-  --theme-primary: #4f46e5;
-  --theme-primary-foreground: #ffffff;
-  --theme-sidebar-bg: #ffffff;
-  --theme-sidebar-text: #4b5563;
-  --theme-active-bg: #f3f4f6;
-  --theme-active-text: #111827;
-  --theme-page: #f9fafb;
-  --theme-surface: #ffffff;
-  --theme-surface-overlay: #ffffff;
-  --theme-surface-hover: #f3f4f6;
-  --theme-border: #e5e7eb;
-  --theme-border-subtle: #f3f4f6;
-  --theme-foreground: #111827;
-  --theme-foreground-secondary: #374151;
-  --theme-foreground-muted: #4b5563;
-  --theme-foreground-faint: #666f7d;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #4b5563;
+  --sidebar-accent: #f3f4f6;
+  --sidebar-accent-foreground: #111827;
+  --background: #f9fafb;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --accent: #f3f4f6;
+  --border: #e5e7eb;
+  --border-subtle: #f3f4f6;
+  --foreground: #111827;
+  --foreground-secondary: #374151;
+  --muted-foreground: #4b5563;
+  --foreground-faint: #666f7d;
+
+  /* Derivati, non configurabili: non hanno un campo in ThemeConfig e non
+     compaiono in Admin -> Tema. Esistono perche' i componenti importati con
+     `npx shadcn add` li citano, e senza di loro arriverebbero senza colore. */
+  --ring: var(--primary);
+  --input: var(--border);
+  --secondary: var(--accent);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--accent);
+  --radius: 0.5rem;
 }
 
-/* Semantic state colours: destructive, success, warning.
-   Deliberately NOT part of ThemeConfig and NOT exposed in Admin -> Theme. They
-   carry meaning rather than brand — a tenant repainting "danger" green would
-   make a delete button lie — and each state is a triple (text, tinted surface,
-   border), so exposing them would add 18 fields to a panel that already has 29.
-   Fixed here they can still be promoted to configurable later without touching
-   a single call site; the reverse would break ThemeConfig rows already saved.
+/* Colori di stato: distruttivo, successo, avviso.
+   Deliberatamente NOT in ThemeConfig e NOT esposti in Admin -> Tema. Portano
+   significato, non marchio — un cliente che ridipinge "pericolo" di verde
+   renderebbe bugiardo un bottone di eliminazione.
 
-   Every value is measured against the worst surface of its own theme and
-   against its own tinted surface. Text clears 4.5:1, borders clear the 3:1 that
-   WCAG 1.4.11 asks of a component boundary against what sits behind it.
-   Numbers in docs/reviews/2026-08-19-ui-primitives-and-theming.md. */
+   Ogni stato ha quattro valori: il pieno (con la sua etichetta) per il bottone
+   distruttivo, e la terna tenue (testo, superficie, bordo) per gli avvisi. Il
+   testo supera 4.5:1 sulla propria superficie, i bordi superano il 3:1 che
+   WCAG 1.4.11 chiede a un confine di componente.
+
+   L'etichetta sul pieno e' opposta fra i due temi, e non e' una svista: bianco
+   su #dc2626 legge 4.83:1 e va bene, bianco su #ef4444 legge 3.76:1 e non
+   basta, mentre #111827 sullo stesso rosso legge 4.71:1. Il valore che shadcn
+   spedisce di serie e' bianco in entrambi. */
 :root {
-  --state-danger-fg: #b91c1c;
-  --state-danger-surface: #fee2e2;
-  --state-danger-border: #dc2626;
-  --state-success-fg: #15803d;
-  --state-success-surface: #dcfce7;
-  --state-success-border: #15803d;
-  --state-warning-fg: #92400e;
-  --state-warning-surface: #fef3c7;
-  --state-warning-border: #b45309;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --destructive-muted: #fee2e2;
+  --destructive-muted-foreground: #b91c1c;
+  --destructive-border: #dc2626;
+  --success: #15803d;
+  --success-foreground: #ffffff;
+  --success-muted: #dcfce7;
+  --success-muted-foreground: #15803d;
+  --success-border: #15803d;
+  --warning: #b45309;
+  --warning-foreground: #ffffff;
+  --warning-muted: #fef3c7;
+  --warning-muted-foreground: #92400e;
+  --warning-border: #b45309;
 }
 
 .dark {
-  --state-danger-fg: #fca5a5;
-  --state-danger-surface: #7f1d1d;
-  --state-danger-border: #ef4444;
-  --state-success-fg: #86efac;
-  --state-success-surface: #14532d;
-  --state-success-border: #22c55e;
-  --state-warning-fg: #fcd34d;
-  --state-warning-surface: #78350f;
-  --state-warning-border: #f59e0b;
+  --destructive: #ef4444;
+  --destructive-foreground: #111827;
+  --destructive-muted: #7f1d1d;
+  --destructive-muted-foreground: #fca5a5;
+  --destructive-border: #ef4444;
+  --success: #22c55e;
+  --success-foreground: #111827;
+  --success-muted: #14532d;
+  --success-muted-foreground: #86efac;
+  --success-border: #22c55e;
+  --warning: #f59e0b;
+  --warning-foreground: #111827;
+  --warning-muted: #78350f;
+  --warning-muted-foreground: #fcd34d;
+  --warning-border: #f59e0b;
 }
 
-@theme {
-  --color-primary: var(--theme-primary);
-  /* Derived from the chosen primary, never authored: --theme-primary is
-     administrator-configurable and `safeColor` only checks that it is six hex
-     digits, so no fixed label colour can promise contrast against it. */
-  --color-primary-foreground: var(--theme-primary-foreground);
-  --color-sidebar-bg: var(--theme-sidebar-bg);
-  --color-sidebar-text: var(--theme-sidebar-text);
-  --color-sidebar-active-bg: var(--theme-active-bg);
-  --color-sidebar-active-text: var(--theme-active-text);
+/* `inline` e non `@theme` semplice: con `@theme` Tailwind emette
+   `--color-primary: var(--primary)` dentro :root e le utility puntano a
+   `--color-primary`, aggiungendo un rimbalzo. Con `inline` la utility punta
+   direttamente a `var(--primary)`, che e' anche cio' che serve se un giorno un
+   sottoalbero ridefinira' un token: con il rimbalzo l'override non lo
+   raggiungerebbe. E' anche la forma che shadcn usa, quindi i componenti
+   importati non richiedono adattamenti. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-foreground-secondary: var(--foreground-secondary);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-foreground-faint: var(--foreground-faint);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-muted: var(--destructive-muted);
+  --color-destructive-muted-foreground: var(--destructive-muted-foreground);
+  --color-destructive-border: var(--destructive-border);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-muted: var(--success-muted);
+  --color-success-muted-foreground: var(--success-muted-foreground);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-muted: var(--warning-muted);
+  --color-warning-muted-foreground: var(--warning-muted-foreground);
+  --color-warning-border: var(--warning-border);
   --color-brand-blue: #0f5a8a;
-  --color-page: var(--theme-page);
-  --color-surface: var(--theme-surface);
-  --color-surface-overlay: var(--theme-surface-overlay);
-  --color-surface-hover: var(--theme-surface-hover);
-  --color-border: var(--theme-border);
-  --color-border-subtle: var(--theme-border-subtle);
-  --color-foreground: var(--theme-foreground);
-  --color-foreground-secondary: var(--theme-foreground-secondary);
-  --color-foreground-muted: var(--theme-foreground-muted);
-  --color-foreground-faint: var(--theme-foreground-faint);
-  --color-danger-fg: var(--state-danger-fg);
-  --color-danger-surface: var(--state-danger-surface);
-  --color-danger-border: var(--state-danger-border);
-  --color-success-fg: var(--state-success-fg);
-  --color-success-surface: var(--state-success-surface);
-  --color-success-border: var(--state-success-border);
-  --color-warning-fg: var(--state-warning-fg);
-  --color-warning-surface: var(--state-warning-surface);
-  --color-warning-border: var(--state-warning-border);
+  --radius-lg: var(--radius);
   --container-8xl: 88rem;
 }

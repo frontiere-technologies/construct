@@ -7,29 +7,29 @@ import { defaultThemeConfig } from '@/types/menu'
 describe('resolveThemeVars', () => {
   it('resolves light values when isDark is false', () => {
     const vars = resolveThemeVars(defaultThemeConfig, false)
-    expect(vars['--theme-primary']).toBe(defaultThemeConfig.primaryColor)
-    expect(vars['--theme-sidebar-bg']).toBe(defaultThemeConfig.sidebarBgLight)
-    expect(vars['--theme-surface']).toBe(defaultThemeConfig.surfaceLight)
-    expect(vars['--theme-foreground-muted']).toBe(defaultThemeConfig.foregroundMutedLight)
+    expect(vars['--primary']).toBe(defaultThemeConfig.primaryColor)
+    expect(vars['--sidebar']).toBe(defaultThemeConfig.sidebarBgLight)
+    expect(vars['--card']).toBe(defaultThemeConfig.surfaceLight)
+    expect(vars['--muted-foreground']).toBe(defaultThemeConfig.foregroundMutedLight)
   })
 
   it('resolves dark values when isDark is true', () => {
     const vars = resolveThemeVars(defaultThemeConfig, true)
-    expect(vars['--theme-sidebar-bg']).toBe(defaultThemeConfig.sidebarBgDark)
-    expect(vars['--theme-surface']).toBe(defaultThemeConfig.surfaceDark)
-    expect(vars['--theme-foreground-muted']).toBe(defaultThemeConfig.foregroundMutedDark)
+    expect(vars['--sidebar']).toBe(defaultThemeConfig.sidebarBgDark)
+    expect(vars['--card']).toBe(defaultThemeConfig.surfaceDark)
+    expect(vars['--muted-foreground']).toBe(defaultThemeConfig.foregroundMutedDark)
   })
 
   it('falls back to the default color when a saved value is not a valid hex', () => {
     const broken = { ...defaultThemeConfig, surfaceLight: 'not-a-color' }
     const vars = resolveThemeVars(broken, false)
-    expect(vars['--theme-surface']).toBe(defaultThemeConfig.surfaceLight)
+    expect(vars['--card']).toBe(defaultThemeConfig.surfaceLight)
   })
 
   it('falls back to the default primary color when invalid', () => {
     const broken = { ...defaultThemeConfig, primaryColor: 'nope' }
     const vars = resolveThemeVars(broken, false)
-    expect(vars['--theme-primary']).toBe(defaultThemeConfig.primaryColor)
+    expect(vars['--primary']).toBe(defaultThemeConfig.primaryColor)
   })
 
   it('derives the primary label colour instead of assuming white', () => {
@@ -37,28 +37,28 @@ describe('resolveThemeVars', () => {
     // digits, so a fixed white label is a promise the theme panel cannot keep.
     expect(primaryForeground('#4f46e5')).toBe('#ffffff')   // dark primary -> white label
     expect(primaryForeground('#fbbf24')).toBe('#111827')   // pale primary -> dark label
-    expect(resolveThemeVars(defaultThemeConfig, false)['--theme-primary-foreground']).toBe('#ffffff')
+    expect(resolveThemeVars(defaultThemeConfig, false)['--primary-foreground']).toBe('#ffffff')
   })
 
   it('resolves all 16 CSS variables', () => {
     const vars = resolveThemeVars(defaultThemeConfig, false)
     expect(Object.keys(vars).sort()).toEqual([
-      '--theme-active-bg',
-      '--theme-active-text',
-      '--theme-border',
-      '--theme-border-subtle',
-      '--theme-foreground',
-      '--theme-foreground-faint',
-      '--theme-foreground-muted',
-      '--theme-foreground-secondary',
-      '--theme-page',
-      '--theme-primary',
-      '--theme-primary-foreground',
-      '--theme-sidebar-bg',
-      '--theme-sidebar-text',
-      '--theme-surface',
-      '--theme-surface-hover',
-      '--theme-surface-overlay',
+      '--accent',
+      '--background',
+      '--border',
+      '--border-subtle',
+      '--card',
+      '--foreground',
+      '--foreground-faint',
+      '--foreground-secondary',
+      '--muted-foreground',
+      '--popover',
+      '--primary',
+      '--primary-foreground',
+      '--sidebar',
+      '--sidebar-accent',
+      '--sidebar-accent-foreground',
+      '--sidebar-foreground',
     ])
   })
 })
@@ -137,35 +137,46 @@ describe('default palette contrast', () => {
   it('keeps the globals.css fallbacks in step with defaultThemeConfig', () => {
     // The :root block paints the first frame, before resolveThemeVars runs. When
     // the two disagree the app flashes a colour it never otherwise shows — which
-    // is what --theme-primary did, at #2563eb against a #6366f1 default.
+    // is what the primary fallback did, at #2563eb against a #6366f1 default.
     const css = readFileSync(resolve(__dirname, '../app/globals.css'), 'utf8')
-    const fallback = (name: string) => css.match(new RegExp(`--theme-${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1]
+    const fallback = (name: string) => css.match(new RegExp(`\\n  --${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1]
     expect(fallback('primary')).toBe(c.primaryColor)
-    expect(fallback('foreground-muted')).toBe(c.foregroundMutedLight)
+    expect(fallback('muted-foreground')).toBe(c.foregroundMutedLight)
     expect(fallback('foreground-faint')).toBe(c.foregroundFaintLight)
   })
 
-  it('gives every semantic state a legible triple in both themes', () => {
+  it('gives every semantic state a legible triple and a legible solid fill', () => {
     const css = readFileSync(resolve(__dirname, '../app/globals.css'), 'utf8')
-    const block = (selector: string) =>
-      css.slice(css.indexOf(`${selector} {`, css.indexOf('--state-danger-fg')) - selector.length)
+    const light = css.slice(css.indexOf(':root {', css.indexOf('Colori di stato')))
+    const dark = css.slice(css.indexOf('.dark {', css.indexOf('Colori di stato')))
     const read = (source: string, name: string) =>
-      source.match(new RegExp(`--state-${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1] as string
+      source.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1] as string
 
-    const light = css.slice(css.indexOf(':root {', css.indexOf('Semantic state colours')))
-    const dark = css.slice(css.indexOf('.dark {'))
-    void block
+    for (const state of ['destructive', 'success', 'warning']) {
+      const solidL = read(light, state), labelL = read(light, `${state}-foreground`)
+      const fgL = read(light, `${state}-muted-foreground`), surfL = read(light, `${state}-muted`)
+      const bordL = read(light, `${state}-border`)
+      const solidD = read(dark, state), labelD = read(dark, `${state}-foreground`)
+      const fgD = read(dark, `${state}-muted-foreground`), surfD = read(dark, `${state}-muted`)
+      const bordD = read(dark, `${state}-border`)
 
-    for (const state of ['danger', 'success', 'warning']) {
-      const fgL = read(light, `${state}-fg`), surfL = read(light, `${state}-surface`), bordL = read(light, `${state}-border`)
-      const fgD = read(dark, `${state}-fg`), surfD = read(dark, `${state}-surface`), bordD = read(dark, `${state}-border`)
-      for (const v of [fgL, surfL, bordL, fgD, surfD, bordD]) expect(v).toMatch(/^#[0-9a-f]{6}$/)
-      // Text: on the theme's worst surface and on its own tinted surface.
+      for (const v of [solidL, labelL, fgL, surfL, bordL, solidD, labelD, fgD, surfD, bordD]) {
+        expect(v).toMatch(/^#[0-9a-f]{6}$/)
+      }
+
+      // Il pieno e la sua etichetta. E' il caso che shadcn sbaglia di serie:
+      // bianco su #ef4444 legge 3.76:1, sotto la soglia, e nel tema scuro
+      // l'etichetta deve essere scura.
+      expect(contrast(labelL, solidL)).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(labelD, solidD)).toBeGreaterThanOrEqual(4.5)
+
+      // Il testo tenue: sulla superficie peggiore del tema e sulla propria.
       expect(worst(fgL, lightSurfaces)).toBeGreaterThanOrEqual(4.5)
       expect(contrast(fgL, surfL)).toBeGreaterThanOrEqual(4.5)
       expect(worst(fgD, darkSurfaces)).toBeGreaterThanOrEqual(4.5)
       expect(contrast(fgD, surfD)).toBeGreaterThanOrEqual(4.5)
-      // Border: WCAG 1.4.11 asks 3:1 of a boundary against what sits behind it.
+
+      // Il bordo: WCAG 1.4.11 chiede 3:1 contro cio' che gli sta dietro.
       expect(worst(bordL, lightSurfaces)).toBeGreaterThanOrEqual(3)
       expect(worst(bordD, darkSurfaces)).toBeGreaterThanOrEqual(3)
     }
