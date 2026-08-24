@@ -869,7 +869,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Files:**
 - Create: `sources/microservices/web-construct/components/ui/button.tsx`
 - Test: `sources/microservices/web-construct/components/ui/button.test.tsx`
-- Test: `sources/microservices/web-construct/components/ui/button.types.test.ts`
+- Create: `sources/microservices/web-construct/components/ui/button.types.tsx` (vincolo di tipo, non un file vitest)
 
 **Interfaces:**
 - Consumes: `cn` da `@/lib/utils` (task 1), le utility del task 2.
@@ -983,16 +983,21 @@ describe('Button', () => {
 })
 ```
 
-- [ ] **Step 2: Scrivere il test di tipo che fallisce**
+- [ ] **Step 2: Scrivere il vincolo di tipo che fallisce**
 
-Crea `components/ui/button.types.test.ts`. Non asserisce a runtime: il suo valore è che `npm run typecheck` fallisca se il vincolo sull'etichetta si perde.
+Crea `components/ui/button.types.ts`. **Non è un file vitest** e non deve chiamarsi `.test.ts`: non c'è niente da eseguire a runtime, e un `expect(x).toBeTruthy()` messo lì solo per far accettare il file a vitest sarebbe un test che finge di asserire. Il controllo lo fa `npm run typecheck`, già presente nella pipeline dal commit `fc72693`.
 
-```ts
-import { describe, expect, it } from 'vitest'
+```tsx
 import { Button } from './button'
 
 /**
  * L'etichetta accessibile di un bottone con sola icona, imposta dai tipi.
+ *
+ * Questo file non viene eseguito: esiste perche' `npm run typecheck` lo
+ * compili. Ogni `@ts-expect-error` qui sotto e' un'asserzione — se il vincolo
+ * che descrive sparisse, la direttiva diventerebbe inutilizzata e TypeScript
+ * fallirebbe con "Unused '@ts-expect-error' directive". Il test e' che il
+ * codice NON compili.
  *
  * L'inventario del 2026-08-21 ha trovato sei bottoni con sola icona senza nome
  * accessibile. Il caso che decide la questione e' TagInput.tsx:20 contro
@@ -1000,26 +1005,19 @@ import { Button } from './button'
  * autori — uno ha messo l'aria-label e l'altro no. Nessuna quantita' di
  * attenzione risolve quel problema; un tipo lo risolve.
  */
-describe('Button props', () => {
-  it('accepts an icon button that carries a label', () => {
-    const ok = <Button size="icon" aria-label="Chiudi" />
-    expect(ok).toBeTruthy()
-  })
 
-  it('rejects an icon button without a label', () => {
-    // @ts-expect-error size="icon" richiede aria-label
-    const bad = <Button size="icon" />
-    expect(bad).toBeTruthy()
-  })
+// Ammesso: bottone con sola icona che porta la sua etichetta.
+export const iconWithLabel = <Button size="icon" aria-label="Chiudi" />
 
-  it('does not demand a label from a button that has visible text', () => {
-    const ok = <Button>Salva</Button>
-    expect(ok).toBeTruthy()
-  })
-})
+// Rifiutato: bottone con sola icona senza etichetta.
+// @ts-expect-error size="icon" richiede aria-label
+export const iconWithoutLabel = <Button size="icon" />
+
+// Ammesso: un bottone con testo visibile non deve dichiarare un'etichetta.
+export const textButton = <Button>Salva</Button>
 ```
 
-Rinomina il file in `.tsx` (`components/ui/button.types.test.tsx`), perché contiene JSX.
+Rinomina il file in `components/ui/button.types.tsx`, perché contiene JSX. Verifica che **non** finisca fra i file raccolti da `vitest.config.ts`: il pattern è `components/**/*.test.tsx`, e questo nome non lo soddisfa.
 
 - [ ] **Step 3: Eseguire i test e verificare che falliscano**
 
@@ -1112,12 +1110,12 @@ export function Button({ className, variant, size, asChild = false, ...props }: 
 npm run test -- components/ui/button && npm run typecheck
 ```
 
-Atteso: PASS, 9 test di comportamento e 3 di tipo. `typecheck` verde: significa che il `@ts-expect-error` ha trovato l'errore che si aspettava. Se `typecheck` fallisce con `Unused '@ts-expect-error' directive`, il vincolo sull'etichetta **non** funziona e l'unione va corretta.
+Atteso: PASS, 9 test di comportamento. `typecheck` verde: significa che il `@ts-expect-error` ha trovato l'errore che si aspettava. Se `typecheck` fallisce con `Unused '@ts-expect-error' directive`, il vincolo sull'etichetta **non** funziona e l'unione va corretta — è quello il modo in cui questo file segnala un problema.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add components/ui/button.tsx components/ui/button.test.tsx components/ui/button.types.test.tsx
+git add components/ui/button.tsx components/ui/button.test.tsx components/ui/button.types.tsx
 git commit -m "feat(ui): add the Button primitive UI-1 asked for
 
 Variants read off the measured intent groups rather than invented: 19
