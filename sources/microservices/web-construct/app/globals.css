@@ -3,8 +3,9 @@
 
 /* Bind `dark:` to the class UIContext puts on <html>, not to the OS preference.
    Tailwind v4 defaults the dark variant to @media (prefers-color-scheme: dark);
-   left at the default, `dark:` utilities ignore the in-app theme toggle while the
-   --theme-* tokens follow it, so the two halves of the theme can disagree. */
+   left at the default, `dark:` utilities would follow the OS setting while the
+   runtime-injected tokens follow the in-app toggle instead, so the two halves
+   of the theme could disagree. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* These are defaults, so they belong in a layer.
