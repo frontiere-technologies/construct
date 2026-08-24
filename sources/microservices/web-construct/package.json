@@ -8,12 +8,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "clean": "rm -rf .next",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "I18N_INTEGRATION_DB=1 vitest run -c vitest.integration.config.ts",
     "test:migrations": "node --test ../../devops/db/migration-lib.test.mjs",
     "test:docs-contract": "node --test ../../devops/docs-contract.test.mjs",
+    "test:i18n-keys": "node --test ../../devops/i18n-key-inventory.test.mjs",
+    "test:env-contract": "node --test ../../devops/env-contract.test.mjs",
+    "test:raw-colors": "node --test ../../devops/raw-color-ratchet.test.mjs",
     "schema:check": "node ../../devops/db/db.mjs schema-check"
   },
   "dependencies": {

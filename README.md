@@ -277,8 +277,12 @@ cd sources/microservices/web-construct
 npm test
 npm run test:migrations
 npm run test:docs-contract
+npm run test:i18n-keys
+npm run test:env-contract
+npm run test:raw-colors
 npm run schema:check
 npm run lint -- --max-warnings=0
+npm run typecheck
 npm run build
 npm audit --omit=dev
 ```
@@ -288,19 +292,31 @@ npm audit --omit=dev
 Mutating tests require a separate disposable database. Commands refuse to run unless `TEST_DATABASE_URL` exists, differs from `DATABASE_URL`, and `TEST_DATABASE_DISPOSABLE=1` explicitly confirms the target can be destroyed or changed. Never use a shared development, staging, or production database.
 
 ```bash
-export TEST_DATABASE_URL='postgresql://...dedicated-test-database...'
+export TEST_DATABASE_URL='postgresql://...dedicated-test-database...:5432/postgres'
 export TEST_DATABASE_DISPOSABLE=1
 node sources/devops/db/db.mjs test-apply
 
 cd sources/microservices/web-construct
 npm run test:integration
 
-# Start the app against the same disposable database for E2E:
-DATABASE_URL="$TEST_DATABASE_URL" \
+# Start the app against the same disposable database for E2E. Note the port:
+# the app connects through the TRANSACTION pooler (6543), not the session
+# pooler (5432) that TEST_DATABASE_URL uses.
+DATABASE_URL="$TEST_DATABASE_POOLED_URL" \
   AUTH_TEST_CREDENTIALS=true \
   NEXT_PUBLIC_AUTH_TEST_MODE=true \
   npm run dev
 ```
+
+**Do not point the app at `TEST_DATABASE_URL`.** The two ports are two different
+pools with different limits. Supavisor's session mode caps at 15 clients, and
+`lib/db.ts` opens up to 20 on its own, so an app server on 5432 saturates that
+pool and every other client fails with `(EMAXCONNSESSION) max clients reached in
+session mode` — including the `db.mjs` fixture commands the E2E suite runs
+between tests. Measured on a real run: 26 of 112 E2E tests failed that way, and
+all 26 passed once the app moved to 6543. `TEST_DATABASE_URL` stays on 5432
+because the Vitest integration suite needs session affinity for its advisory
+locks; the application never does.
 
 `AUTH_TEST_CREDENTIALS` and `NEXT_PUBLIC_AUTH_TEST_MODE` are set inline above so the
 command works regardless of local files. Both also belong in

@@ -33,8 +33,15 @@ jobs:
       - run: npm ci
       - run: npm run test:migrations
       - run: npm run test:docs-contract
+      - run: npm run test:i18n-keys
+      - run: npm run test:env-contract
+      - run: npm run test:raw-colors
       - run: npm run schema:check
       - run: npm run lint -- --max-warnings=0
+      # Separate from `npm run build`: Next only type-checks what its own
+      # module graph reaches, so integration-test files sat with six type
+      # errors while the build stayed green. This checks everything in tsconfig.
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=low
