@@ -1,7 +1,13 @@
 from playwright.sync_api import expect
 from helpers import nav
 
-PRIMARY_DEFAULT = '#6366f1'
+# Must match defaultThemeConfig.primaryColor in
+# sources/microservices/web-construct/types/menu.ts. Duplicated because pytest
+# cannot import the TypeScript default; the "Valori di Default" button is what
+# ties the two together, so this literal is what fails when they drift.
+# Changed from #6366f1 on 2026-08-21: on that colour no label reached 4.5:1
+# (white topped out at 4.47), so no primary button could be made accessible.
+PRIMARY_DEFAULT = '#4f46e5'
 
 
 def _set_color(locator, value):

@@ -7,19 +7,38 @@
    --theme-* tokens follow it, so the two halves of the theme can disagree. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-button:not(:disabled) {
-  cursor: pointer;
-  transition: transform 150ms ease, filter 150ms ease;
-}
+/* These are defaults, so they belong in a layer.
+   `@import "tailwindcss"` declares the layer order `theme, base, components,
+   utilities`. Unlayered rules beat *every* layer no matter their specificity, so
+   while these lived outside a layer no utility class could override them —
+   `hover:[transform:none]` lands in `utilities` and lost to an unlayered rule
+   even at higher specificity. That is why the icon-picker trigger needed
+   `hover:[transform:none]!`: an important declaration reverses the layer order,
+   which was the only lever available.
 
-button:not(:disabled):hover {
-  transform: translateY(-1px);
-  filter: brightness(0.98);
-}
+   Verified in the browser, not reasoned about: with the rules unlayered the
+   trigger still moved from y=170 to y=169 on hover even after the selector was
+   narrowed to `:where()`; inside `@layer base` it stays put while an ordinary
+   button still lifts.
 
-button:disabled {
-  cursor: not-allowed;
-  filter: opacity(0.6);
+   `:where()` is kept as well, so the specificity stays at (0,1,1) and an
+   override inside the same layer also works. Both matter for the Button
+   primitive of UI-1: without this every variant would carry an `!`. */
+@layer base {
+  button:where(:not(:disabled)) {
+    cursor: pointer;
+    transition: transform 150ms ease, filter 150ms ease;
+  }
+
+  button:where(:not(:disabled)):hover {
+    transform: translateY(-1px);
+    filter: brightness(0.98);
+  }
+
+  button:where(:disabled) {
+    cursor: not-allowed;
+    filter: opacity(0.6);
+  }
 }
 
 /* Header separators are provided by the AG Grid theme. The pinned, icon-only
@@ -29,8 +48,15 @@ button:disabled {
   display: none;
 }
 
+/* Fallbacks only. The real values arrive as inline custom properties from
+   resolveThemeVars() on every render, driven by the theme stored on the
+   database. They still have to agree with defaultThemeConfig in types/menu.ts —
+   before 2026-08-21 they did not: this said #2563eb while the default was
+   #6366f1, so the pre-hydration paint used a colour the app never otherwise
+   showed. `lib/theme-vars.test.ts` now asserts the two agree. */
 :root {
-  --theme-primary: #2563eb;
+  --theme-primary: #4f46e5;
+  --theme-primary-foreground: #ffffff;
   --theme-sidebar-bg: #ffffff;
   --theme-sidebar-text: #4b5563;
   --theme-active-bg: #f3f4f6;
@@ -43,12 +69,52 @@ button:disabled {
   --theme-border-subtle: #f3f4f6;
   --theme-foreground: #111827;
   --theme-foreground-secondary: #374151;
-  --theme-foreground-muted: #6b7280;
-  --theme-foreground-faint: #9ca3af;
+  --theme-foreground-muted: #4b5563;
+  --theme-foreground-faint: #666f7d;
+}
+
+/* Semantic state colours: destructive, success, warning.
+   Deliberately NOT part of ThemeConfig and NOT exposed in Admin -> Theme. They
+   carry meaning rather than brand — a tenant repainting "danger" green would
+   make a delete button lie — and each state is a triple (text, tinted surface,
+   border), so exposing them would add 18 fields to a panel that already has 29.
+   Fixed here they can still be promoted to configurable later without touching
+   a single call site; the reverse would break ThemeConfig rows already saved.
+
+   Every value is measured against the worst surface of its own theme and
+   against its own tinted surface. Text clears 4.5:1, borders clear the 3:1 that
+   WCAG 1.4.11 asks of a component boundary against what sits behind it.
+   Numbers in docs/reviews/2026-08-19-ui-primitives-and-theming.md. */
+:root {
+  --state-danger-fg: #b91c1c;
+  --state-danger-surface: #fee2e2;
+  --state-danger-border: #dc2626;
+  --state-success-fg: #15803d;
+  --state-success-surface: #dcfce7;
+  --state-success-border: #15803d;
+  --state-warning-fg: #92400e;
+  --state-warning-surface: #fef3c7;
+  --state-warning-border: #b45309;
+}
+
+.dark {
+  --state-danger-fg: #fca5a5;
+  --state-danger-surface: #7f1d1d;
+  --state-danger-border: #ef4444;
+  --state-success-fg: #86efac;
+  --state-success-surface: #14532d;
+  --state-success-border: #22c55e;
+  --state-warning-fg: #fcd34d;
+  --state-warning-surface: #78350f;
+  --state-warning-border: #f59e0b;
 }
 
 @theme {
   --color-primary: var(--theme-primary);
+  /* Derived from the chosen primary, never authored: --theme-primary is
+     administrator-configurable and `safeColor` only checks that it is six hex
+     digits, so no fixed label colour can promise contrast against it. */
+  --color-primary-foreground: var(--theme-primary-foreground);
   --color-sidebar-bg: var(--theme-sidebar-bg);
   --color-sidebar-text: var(--theme-sidebar-text);
   --color-sidebar-active-bg: var(--theme-active-bg);
@@ -64,5 +130,14 @@ button:disabled {
   --color-foreground-secondary: var(--theme-foreground-secondary);
   --color-foreground-muted: var(--theme-foreground-muted);
   --color-foreground-faint: var(--theme-foreground-faint);
+  --color-danger-fg: var(--state-danger-fg);
+  --color-danger-surface: var(--state-danger-surface);
+  --color-danger-border: var(--state-danger-border);
+  --color-success-fg: var(--state-success-fg);
+  --color-success-surface: var(--state-success-surface);
+  --color-success-border: var(--state-success-border);
+  --color-warning-fg: var(--state-warning-fg);
+  --color-warning-surface: var(--state-warning-surface);
+  --color-warning-border: var(--state-warning-border);
   --container-8xl: 88rem;
 }

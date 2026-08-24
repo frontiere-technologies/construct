@@ -108,20 +108,22 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
           nested interactive element and was not reliably reachable by keyboard or
           announced by assistive technology. The remove button is now a sibling below,
           positioned over the trigger's corner.
-          `hover:[transform:none]!` cancels the global `button:not(:disabled):hover`
-          lift from app/globals.css: it would move the trigger 1px while the remove
-          button, being a sibling, stayed put — visibly splitting the two. The
-          important modifier is needed, not decoration: `button:not(:disabled):hover`
-          scores (0,2,1) because `:not(:disabled)` contributes its argument's
-          specificity, which outranks a plain `.class:hover` at (0,2,0). Measured
-          without it: the trigger moved to y=169 while the remove button stayed at
-          y=164. */}
+          `hover:[transform:none]` cancels the global button hover lift from
+          app/globals.css: it would move the trigger 1px while the remove button,
+          being a sibling, stayed put — visibly splitting the two. Measured
+          without the override: the trigger moved to y=169 while the remove
+          button stayed at y=164.
+          It used to need an important modifier, because
+          `button:not(:disabled):hover` scored (0,2,1) — `:not()` passes its
+          argument's specificity through — and outranked a plain `.class:hover`
+          at (0,2,0). The global rule now uses `:where()`, which contributes
+          zero, so an ordinary class wins and the `!` is gone. */}
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-label={value ? t('functionalities.icon.selected_label', { value: value.startsWith('<svg') ? t('functionalities.icon.custom_svg') : value }) : t('functionalities.icon.select_label')}
         aria-expanded={open}
-        className={`group flex items-center justify-center rounded-lg border border-dashed transition-colors hover:border-gray-400 dark:hover:border-gray-500 hover:[transform:none]!
+        className={`group flex items-center justify-center rounded-lg border border-dashed transition-colors hover:border-gray-400 dark:hover:border-gray-500 hover:[transform:none]
           ${compact
             ? 'w-[38px] h-[38px] border-gray-300 dark:border-gray-600'
             : 'flex-col gap-1 p-3 w-full border-gray-300 dark:border-gray-600'
@@ -137,7 +139,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
           type="button"
           onClick={clear}
           aria-label={t('functionalities.icon.remove_label')}
-          className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 hover:[transform:none]! text-red-500 z-10"
+          className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 hover:[transform:none] text-red-500 z-10"
         >
           <X size={9} />
         </button>
@@ -204,7 +206,38 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                   </button>
                 ))}
                 {filtered.length === 0 && (
-                  <span className="col-span-7 py-6 text-center text-xs text-gray-400">{t('common.states.no_results')}</span>
+                  // FEAT-1. The old empty state was a bare "Nessun risultato",
+                  // which is true and useless: the library is a curated subset,
+                  // so a name that is missing here may exist in Lucide, and an
+                  // arbitrary SVG can be uploaded from the other tab. Neither
+                  // was discoverable — the search simply looked broken. Says
+                  // what happened, why, and what to do instead.
+                  <div className="col-span-7 py-5 px-3 text-center space-y-1.5">
+                    {/* Semantic tokens rather than the gray-400/500 the code
+                        around here still uses: they follow the configurable
+                        theme, so this markup adds nothing for THEME-2 to undo.
+                        Both lines are -muted, not -faint: measured during the
+                        THEME-3 review, --theme-foreground-faint is #9ca3af, the
+                        same value as text-gray-400, and reads 2.54:1 on a light
+                        surface — under the 4.5:1 floor. Being a token does not
+                        make a colour legible; that is a property of the value.
+                        The call to action is deliberately NOT text-primary: it
+                        measured 4.47:1 light and 3.97:1 dark, and --theme-primary
+                        is user-configurable, so no contrast promise about it can
+                        hold. Underlined body text carries the affordance without
+                        depending on a colour an administrator can change — the
+                        same pattern the upload tab already uses for "scegli il
+                        file". */}
+                    <p className="text-xs text-foreground-muted">{t('icon_picker.no_results')}</p>
+                    <p className="text-[10px] text-foreground-muted leading-relaxed">{t('icon_picker.curated_hint')}</p>
+                    <button
+                      type="button"
+                      onClick={() => setTab('upload')}
+                      className="text-[11px] font-medium text-foreground underline hover:[transform:none]"
+                    >
+                      {t('icon_picker.upload_instead')}
+                    </button>
+                  </div>
                 )}
               </div>
             </>
