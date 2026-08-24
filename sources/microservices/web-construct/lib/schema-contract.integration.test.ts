@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest'
-import { is, sql } from 'drizzle-orm'
+import { is, SQL, sql } from 'drizzle-orm'
 import { getTableConfig, getViewConfig, PgDialect, PgTable, PgView } from 'drizzle-orm/pg-core'
+import type { IndexedColumn } from 'drizzle-orm/pg-core'
 import { db } from '@/lib/db'
 import * as drizzleSchema from '@/lib/db/schema'
 import { assertExactCatalogSection } from './schema-contract'
@@ -56,12 +57,31 @@ describeIntegration('database runtime boundary', () => {
       .replaceAll(/\b[a-z_][a-z0-9_]*\./g, '')
       .replaceAll(/[()\s]/g, '')
       .toLowerCase()
-    const expectedIndexes = tableConfigs.flatMap(config => config.indexes.map(index => ({
-      indexName: index.config.name,
-      unique: index.config.unique,
-      columns: index.config.columns.map(column => 'name' in column ? String(column.name) : dialect.sqlToQuery(column).sql),
-      predicate: normalizeExpression(index.config.where ? dialect.sqlToQuery(index.config.where).sql : null),
-    }))).sort((left, right) => left.indexName.localeCompare(right.indexName))
+    const expectedIndexes = tableConfigs.flatMap(config => config.indexes.map(index => {
+      // Drizzle types `name` as optional because an index may be declared
+      // anonymous. This schema names every one, and an anonymous index could not
+      // be matched against pg_class.relname anyway — so fail loudly rather than
+      // substituting a placeholder that would silently collide with the next one.
+      const indexName = index.config.name
+      if (!indexName) throw new Error(`index on ${config.name} has no name; the catalog comparison needs one`)
+      return {
+        indexName,
+        unique: index.config.unique,
+        // An index column is either a real column or a raw SQL expression.
+        // `'name' in column` reads like a narrowing but leaves the SQL branch in
+        // the union, so `sqlToQuery` received a type it could not accept; `is()`
+        // is Drizzle's own type guard and narrows both branches properly.
+        columns: index.config.columns.map(column => {
+          if (is(column, SQL)) return dialect.sqlToQuery(column).sql
+          // A failed `is()` cannot narrow `Partial<SQL | IndexedColumn>` — the
+          // negative branch of a type predicate does not distribute over a
+          // Partial of a union — so the remaining branch is asserted. The
+          // assertion is safe precisely because the SQL case returned above.
+          return String((column as Partial<IndexedColumn>).name)
+        }),
+        predicate: normalizeExpression(index.config.where ? dialect.sqlToQuery(index.config.where).sql : null),
+      }
+    })).sort((left, right) => left.indexName.localeCompare(right.indexName))
     const deployedIndexes = await db.execute<{ indexName: string; unique: boolean; columns: string[]; predicate: string | null }>(sql`
       select index_class.relname as "indexName", idx.indisunique as unique,
         array_agg(attribute.attname order by key_position.ordinality) as columns,
@@ -117,16 +137,27 @@ describeIntegration('database runtime boundary', () => {
       deployedForeignKeys.map(key => `${key.tableName}:${key.columns.join(',')}->${key.foreignTable}:${key.foreignColumns.join(',')}:${key.onDelete}:${key.onUpdate}`).sort(),
     )
 
-    const expectedViews = Object.values(drizzleSchema)
+    // Annotated, not inferred. With a single view in the schema, `config.name`
+    // infers as the literal "role_list_view", and since the helper takes both
+    // sides as the same T the deployed rows — plain strings read from pg_class —
+    // could never satisfy it. Widening here keeps the helper's guarantee that the
+    // two sides have the same shape.
+    type ViewShape = { viewName: string; columns: { name: string; type: string }[] }
+    const expectedViews: ViewShape[] = Object.values(drizzleSchema)
       .filter(value => is(value, PgView))
       .map(view => {
         const config = getViewConfig(view)
         return {
           viewName: config.name,
-          columns: Object.values(config.selectedFields).map(field => ({
-            name: 'name' in field ? String(field.name) : '',
-            type: 'getSQLType' in field && typeof field.getSQLType === 'function' ? field.getSQLType() : '',
-          })),
+          // `selectedFields` is an untyped bag of column-ish values, so each
+          // access is probed rather than assumed.
+          columns: Object.values(config.selectedFields as Record<string, unknown>).map(value => {
+            const field = value as { name?: unknown; getSQLType?: () => string }
+            return {
+              name: typeof field.name === 'string' ? field.name : '',
+              type: typeof field.getSQLType === 'function' ? field.getSQLType() : '',
+            }
+          }),
         }
       })
       .sort((left, right) => left.viewName.localeCompare(right.viewName))

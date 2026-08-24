@@ -1574,3 +1574,79 @@ begin
   end loop;
 end
 $$;
+
+-- Migration: 0006_icon_picker_empty_state.sql
+-- FEAT-1: the icon library is a curated subset of ~157 Lucide names, and a
+-- search that matches nothing used to say only "Nessun risultato". The user had
+-- no way to learn either that the list is curated or that an SVG can be
+-- uploaded instead, so an icon that exists in Lucide but not in the subset read
+-- as an icon that does not exist at all.
+--
+-- Two keys for the new empty state. Additive, like every other seed:
+-- apply_translation_seed inserts on conflict do nothing, so re-running it
+-- changes nothing.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"icon_picker.curated_hint",  "namespace":"icon_picker","module":"core","description":"Explains that the icon library is a curated subset","it":"La libreria contiene una selezione di icone per menu e amministrazione.","en":"The library holds a curated set of icons for navigation and admin."},
+    {"key":"icon_picker.upload_instead","namespace":"icon_picker","module":"core","description":"Link from the empty search result to the SVG upload tab","it":"Carica un SVG","en":"Upload an SVG"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0007_accessible_theme_defaults.sql
+-- Lift saved per-user themes off the colour values that cannot meet the 4.5:1
+-- contrast floor.
+--
+-- The theme is stored per user in users.theme_config, and mergeThemeConfig()
+-- lets a saved value win over the default. Changing defaultThemeConfig therefore
+-- reaches only users who never opened Admin -> Theme: everyone who ever saved
+-- keeps a frozen copy, including the values measured below the floor.
+--
+--   foregroundMutedLight  #6b7280  4.39:1 on #f3f4f6 (surfaceHover, activeItemBg)
+--   foregroundFaintLight  #9ca3af  2.31:1 on the same surface
+--   foregroundFaintDark   #6b7280  3.04:1 on #1f2937
+--   primaryColor          #6366f1  4.47:1 with white, its best possible label
+--
+-- Each key is rewritten only when it still holds the exact previous default, so
+-- a colour somebody deliberately picked is left alone. The one case this cannot
+-- distinguish is a user who chose a value identical to the old default — and for
+-- these four values that choice was inaccessible either way, so moving it is the
+-- right outcome. Any of them can be set again from Admin -> Theme.
+--
+-- Re-runnable: after the first pass no row still matches the old values.
+do $$
+declare
+  v_rows bigint;
+begin
+  with replacements(key, old_value, new_value) as (
+    values
+      ('primaryColor',         '#6366f1', '#4f46e5'),
+      ('foregroundMutedLight', '#6b7280', '#4b5563'),
+      ('foregroundFaintLight', '#9ca3af', '#666f7d'),
+      ('foregroundFaintDark',  '#6b7280', '#8b919c')
+  ),
+  updated as (
+    update users u
+    set theme_config = (
+      select jsonb_object_agg(
+        entry.key,
+        coalesce(
+          (select to_jsonb(r.new_value) from replacements r
+            where r.key = entry.key and to_jsonb(r.old_value) = entry.value),
+          entry.value
+        )
+      )
+      from jsonb_each(u.theme_config) entry
+    )
+    where u.theme_config is not null
+      and exists (
+        select 1 from replacements r
+        where u.theme_config -> r.key = to_jsonb(r.old_value)
+      )
+    returning 1
+  )
+  select count(*) into v_rows from updated;
+  raise notice 'theme_config rows lifted to the accessible palette: %', v_rows;
+end $$;

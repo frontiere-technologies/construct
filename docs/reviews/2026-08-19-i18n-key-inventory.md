@@ -36,8 +36,8 @@ Task 15 e ormai fermo. Un guard automatico lo sostituisce e non invecchia.
 
 ## Task
 
-- [ ] ID=I18N-1, Severity=Low, Complexity=Medium, Priority=P2, Title=Guard automatico sull'inventario delle chiavi i18n, Fix description=Aggiungere un test che confronta le chiavi seedate nelle migration con le stringhe a forma di chiave presenti nel sorgente, fallendo sulle chiavi usate e non seedate e riportando quelle seedate e non usate. Nessun dato cancellato.
-- [ ] ID=I18N-2, Severity=Medium, Complexity=Low, Priority=P2, Title=`auth.login.error_password_not_set` è un messaggio mai raggiungibile, Fix description=Decidere se cablare il codice di errore `PasswordNotSet` nel flusso di login o se la chiave è un residuo di progettazione. Oggi l'utente senza password impostata vede il messaggio di errore generico.
+- [✅] ID=I18N-1, Severity=Low, Complexity=Medium, Priority=P2, Title=Guard automatico sull'inventario delle chiavi i18n, Fix description=Aggiunto `sources/devops/i18n-key-inventory.test.mjs`, eseguito da `npm run test:i18n-keys` e inserito in `.github/workflows/quality.yml` accanto a `test:docs-contract`. Fallimento duro sulle chiavi referenziate e non seedate, report informativo sulle 22 orfane. Nessun dato cancellato, nessuna migration nuova.
+- [✅] ID=I18N-2, Severity=Medium, Complexity=Low, Priority=P2, Title=`auth.login.error_password_not_set` è un messaggio mai raggiungibile, Fix description=Deciso di **non cablare**. Il codice contiene tre misure anti-enumerazione convergenti (hash fittizio in `auth-policy.ts`, ragione del rifiuto solo nel log in `auth.ts`, risposta indistinguibile in `forgot-password/route.ts`): mostrare quel messaggio direbbe a un attaccante che l'indirizzo esiste ed è un invito in attesa. La chiave resta seedata e non referenziata per scelta, annotata come tale nell'inventario di I18N-1.
 
 ---
 
@@ -236,13 +236,13 @@ for (const m of src.matchAll(/['"]([a-z0-9_]+(?:\.[a-z0-9_]+)+)['"]/g))
 
 ### Criteri di accettazione
 
-- [ ] Il test gira senza database attivo e senza variabili d'ambiente.
-- [ ] Fallisce se una chiave referenziata nel sorgente non è seedata, salvo esclusioni dichiarate ed esplicitamente commentate.
-- [ ] Riporta l'elenco delle chiavi seedate e non referenziate, con il conteggio.
-- [ ] Legge solo `migrations/`, mai `schema.sql`; aggiungere una migration con seed non richiede modifiche al test.
-- [ ] Riusa la regex di `lib/i18n/key-format.ts` invece di duplicarla.
-- [ ] Sul repo allo stato attuale: verde, con 19 orfane riportate (22 dopo DEAD-1).
-- [ ] Nessuna riga cancellata dal database, nessuna migration nuova.
+- [✅] Il test gira senza database attivo e senza variabili d'ambiente.
+- [✅] Fallisce se una chiave referenziata nel sorgente non è seedata, salvo esclusioni dichiarate ed esplicitamente commentate.
+- [✅] Riporta l'elenco delle chiavi seedate e non referenziate, con il conteggio.
+- [✅] Legge solo `migrations/`, mai `schema.sql`; aggiungere una migration con seed non richiede modifiche al test.
+- [✅] Riusa la regex di `lib/i18n/key-format.ts` invece di duplicarla.
+- [✅] Sul repo allo stato attuale: verde, con 22 orfane riportate (DEAD-1 è già stato fatto).
+- [✅] Nessuna riga cancellata dal database, nessuna migration nuova.
 
 ### Rischi
 
@@ -306,3 +306,104 @@ l'aggiunta di una riga in `ERROR_KEYS`. Le due possibilità:
 l'intenzione originale del flusso di invito prima di scrivere codice. Se l'esito è "non cablare",
 la chiave entra nelle esclusioni documentate di I18N-1 con la motivazione, e il caso è chiuso
 correttamente invece di restare un'anomalia senza spiegazione.
+
+### Decisione (2026-08-20): non cablare
+
+Verificata l'ipotesi 2, ed è quella giusta. Il codice non si limita a *non* distinguere il caso:
+contiene tre misure separate, tutte con lo stesso scopo, che tenerlo indistinguibile è deliberato.
+
+1. **`lib/auth-policy.ts:26-29` confronta contro un hash fittizio.** `verifyCredentialCandidate`
+   passa a bcrypt `candidate?.passwordHash ?? DUMMY_PASSWORD_HASH`, cioè esegue il confronto anche
+   quando l'utente non ha password e anche quando non esiste affatto. Un hash finto costa lavoro
+   inutile: l'unica ragione per pagarlo è pareggiare i tempi di risposta fra "account inesistente",
+   "account senza password" e "password sbagliata". È una difesa contro l'enumerazione per timing,
+   e presuppone che quella distinzione non debba essere osservabile.
+2. **`lib/auth.ts:117-119` calcola la ragione e la manda solo nel log.** La variabile `reason` vale
+   `unknown | passwordless | inactive | password`, finisce in `log.warn` e poi `authorize` ritorna
+   `null` in tutti e quattro i casi. La distinzione esiste già, lato server, e si è scelto
+   consapevolmente di non farla uscire: è il server a doverla sapere, non il client.
+3. **`app/api/auth/forgot-password/route.ts:38-40` fa la stessa scelta nel flusso gemello**, con il
+   commento esplicito *"Always return 200 — do not leak whether the email exists"*, e salta proprio
+   gli utenti senza `passwordHash`.
+
+Cablare `PasswordNotSet` fino alla pagina di login contraddirebbe tutte e tre nello stesso flusso.
+Il messaggio *"Imposta prima la tua password tramite il link ricevuto via email"* è, letto da un
+attaccante, la conferma che quell'indirizzo esiste **ed è un invito in attesa** — un bersaglio più
+interessante di un account qualsiasi, perché ha un token di attivazione in circolazione. Sarebbe un
+oracolo di enumerazione più informativo di quello che le tre misure sopra sono lì a impedire.
+
+C'è anche un secondo motivo, indipendente dalla sicurezza: **il messaggio direbbe una cosa non
+azionabile.** Manda l'utente al link ricevuto via email, ma se quel link è scaduto la rotta
+forgot-password si rifiuta di mandargliene un altro, perché salta chi non ha `passwordHash`. Chi
+legge il messaggio non ha comunque un percorso self-service: serve un amministratore che rimandi
+l'invito. Un messaggio preciso che porta a un vicolo cieco non è meglio di un messaggio generico.
+
+**Esito:** la chiave `auth.login.error_password_not_set` resta seedata e resta non referenziata, per
+scelta. Non si cancella (contratto sulle migration: `apply_translation_seed` è additiva e
+`0001_baseline.sql` è immutabile) e non si cabla. Entra nell'inventario di I18N-1 come orfana
+**annotata**, con questa motivazione riportata dallo strumento stesso, così chi rilegge il report fra
+sei mesi trova la spiegazione accanto alla riga invece di dover rifare questa indagine.
+
+**Se un giorno si volesse davvero aiutare quell'utente**, la strada compatibile con la postura
+attuale non passa dalla pagina di login: è un rinvio dell'invito richiesto dall'amministratore, o un
+messaggio generico identico per tutti del tipo "se l'indirizzo è registrato riceverai istruzioni",
+che è esattamente ciò che forgot-password già fa. In nessuno dei due casi serve questa chiave.
+
+---
+
+## I18N-1 — Come è stato implementato (2026-08-20)
+
+File: [`sources/devops/i18n-key-inventory.test.mjs`](../../sources/devops/i18n-key-inventory.test.mjs).
+Comando: `npm run test:i18n-keys`. Gira in `.github/workflows/quality.yml` subito dopo
+`test:docs-contract`, ed è elencato fra i controlli statici nella sezione "Verification" del README.
+
+Quattro test, e uno di questi non è quello previsto dalla review:
+
+1. **Il formato della chiave è quello dichiarato.** La regex non è copiata: viene estratta
+   testualmente da `lib/i18n/key-format.ts` con `/^const KEY_RE = \/(.+)\/$/m`, e il test fallisce
+   con un messaggio esplicito se l'estrazione non trova più nulla. Importare il modulo non era
+   praticabile — è TypeScript con un import relativo senza estensione, che Node senza loader non
+   risolve — e copiare la regex avrebbe creato la quarta copia della stessa definizione dopo il
+   CHECK constraint, `key-format.ts` e `schema.sql`.
+2. **Entrambi i lati del confronto sono visibili.** Questo test non era nei criteri di accettazione
+   e l'ho aggiunto perché senza di esso il guard ha un modo silenzioso di non funzionare: se la
+   scansione del sorgente smettesse di trovare qualcosa — un rename di cartella, un cambio di
+   estensione — il test principale confronterebbe l'insieme vuoto contro i seed e resterebbe
+   **verde**. Asserisce quindi soglie minime: 16 blocchi seed, 300 chiavi seedate, 250 referenziate.
+   Il lato opposto si protegge da sé: se fosse la lettura dei seed a rompersi, ogni chiave usata
+   risulterebbe non seedata e il test fallirebbe rumorosamente.
+3. **Ogni chiave referenziata è seedata.** Fallimento duro, con l'elenco delle chiavi e il file che
+   le usa.
+4. **Inventario delle orfane.** Solo report, con conteggio.
+
+### Due scelte non previste dalla review
+
+**I file di test sono scansionati a parte e non fanno mai fallire il guard.** La review non lo
+prevedeva, ma i dati lo impongono: i file `*.test.ts(x)` contengono 21 letterali a forma di chiave
+che chiavi non sono. Alcuni sono chiavi inventate apposta (`a.b`, `nope.nothing`, `welcome.message`
+in `lib/i18n/translator.test.ts`), altri non c'entrano nulla — gli indirizzi IP di
+`lib/auth-rate-limit.test.ts` e `lib/rbac/embedded-check.test.ts` (`10.0.0.8`, `93.184.216.34`),
+o `example.com` e `frontiere.it`. Includerli avrebbe significato 21 esclusioni al primo giorno, cioè
+esattamente la lista che si gonfia fino a non guardare più niente. I riferimenti dei test vengono
+comunque raccolti, e servono a qualcosa: l'inventario segnala quando una chiave è tenuta in vita
+**solo** da un test, come `functionalities.locale.en` e le due `translation.filter.*`.
+
+**Le esclusioni sono legate al file, non solo al prefisso.** La review suggeriva prefisso *oppure*
+file; sono richiesti entrambi insieme. `language.` è escluso solo dentro
+`lib/i18n/language-actions.ts`: la stessa stringa in un componente fa fallire il guard. Verificato
+con controprova — un file che referenzia `language.create` fuori dal suo modulo fa fallire il test.
+Le esclusioni restano tre.
+
+### Verifica
+
+- [✅] Sul repo attuale: **verde**, 4 test su 4, e riporta **22 chiavi orfane** — il numero che la
+  review prevedeva dopo DEAD-1, che nel frattempo è stato completato.
+- [✅] Controprova sulla direzione che deve fallire: un file con `t('zzz_guard_proof.never_seeded')`
+  fa fallire il test con il messaggio *"these keys are used but never seeded, so t() renders the key
+  itself"* e il percorso del file colpevole.
+- [✅] Controprova sulle esclusioni: `language.create` fuori da `lib/i18n/language-actions.ts` fa
+  fallire il test. L'esclusione non tracima.
+- [✅] Nessun database, nessuna variabile d'ambiente: il test gira a repo pulito in ~80 ms.
+- [✅] `auth.login.error_password_not_set` compare nel report **con la motivazione di I18N-2
+  accanto**, e il test fallisce se un giorno quella chiave venisse cablata senza rimuovere
+  l'annotazione — cioè senza riaprire la decisione che l'annotazione registra.

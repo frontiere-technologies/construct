@@ -135,6 +135,59 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Migration checksums
+
+Every applied migration is recorded in `public.construct_schema_migration` together with a
+checksum, and `assertAppliedMigrationChecksums` refuses to run **any** migration command when a
+file no longer matches what the database recorded:
+
+```
+Checksum mismatch for applied migration 0002_runtime_boundary
+```
+
+This is the guard working, not damage: it stops before executing anything. Normally it means a
+migration was edited that should not have been — the rule is to fix forward in a new migration and
+never edit an applied one, as [the production deployment runbook](docs/runbooks/production-deployment.md)
+states.
+
+The checksum is `sha256` over the migration file's contents, read as UTF-8, with no salt or prefix
+(`sources/devops/db/migration-lib.mjs`). It is therefore never lost: any value can be recomputed
+from the repository at any time, and the system `shasum` produces exactly the same result as the
+migration runner.
+
+Checksum a migration file currently has:
+
+```bash
+shasum -a 256 sources/devops/db/migrations/0002_runtime_boundary.sql
+```
+
+Checksum it had before a given commit changed it — useful when a database still records the older
+value, since that value exists in no file any more:
+
+```bash
+git show <commit>^:sources/devops/db/migrations/0002_runtime_boundary.sql | shasum -a 256
+```
+
+What a specific database currently records:
+
+```bash
+node sources/devops/db/db.mjs query "select version, checksum, completed_at from construct_schema_migration order by version"
+```
+
+If a mismatch is deliberate — an applied migration was changed on purpose, which should be rare and
+explicitly justified — the recorded value can be brought in line. Read the database first with the
+query above: guarding the update on the old value means it does nothing rather than overwriting
+blindly when the database is not in the state you assumed, which is exactly when it should not be
+touched.
+
+```bash
+node sources/devops/db/db.mjs query "update construct_schema_migration set checksum = '<new>' where version = '<version>' and checksum = '<old>'"
+```
+
+A database created from scratch never needs any of this: the migrations apply in order and record
+their own checksums. Worked example of a deliberate change and why it was justified:
+`docs/reviews/2026-08-19-env-configuration.md`, entry DB-1.
+
 ## Local Docker with Supabase
 
 Docker Compose runs only the production-style standalone Next.js container. The database remains hosted by Supabase: the container connects directly to the Supavisor transaction pooler, and no local PostgreSQL service is started.
@@ -224,8 +277,12 @@ cd sources/microservices/web-construct
 npm test
 npm run test:migrations
 npm run test:docs-contract
+npm run test:i18n-keys
+npm run test:env-contract
+npm run test:raw-colors
 npm run schema:check
 npm run lint -- --max-warnings=0
+npm run typecheck
 npm run build
 npm audit --omit=dev
 ```
@@ -235,19 +292,31 @@ npm audit --omit=dev
 Mutating tests require a separate disposable database. Commands refuse to run unless `TEST_DATABASE_URL` exists, differs from `DATABASE_URL`, and `TEST_DATABASE_DISPOSABLE=1` explicitly confirms the target can be destroyed or changed. Never use a shared development, staging, or production database.
 
 ```bash
-export TEST_DATABASE_URL='postgresql://...dedicated-test-database...'
+export TEST_DATABASE_URL='postgresql://...dedicated-test-database...:5432/postgres'
 export TEST_DATABASE_DISPOSABLE=1
 node sources/devops/db/db.mjs test-apply
 
 cd sources/microservices/web-construct
 npm run test:integration
 
-# Start the app against the same disposable database for E2E:
-DATABASE_URL="$TEST_DATABASE_URL" \
+# Start the app against the same disposable database for E2E. Note the port:
+# the app connects through the TRANSACTION pooler (6543), not the session
+# pooler (5432) that TEST_DATABASE_URL uses.
+DATABASE_URL="$TEST_DATABASE_POOLED_URL" \
   AUTH_TEST_CREDENTIALS=true \
   NEXT_PUBLIC_AUTH_TEST_MODE=true \
   npm run dev
 ```
+
+**Do not point the app at `TEST_DATABASE_URL`.** The two ports are two different
+pools with different limits. Supavisor's session mode caps at 15 clients, and
+`lib/db.ts` opens up to 20 on its own, so an app server on 5432 saturates that
+pool and every other client fails with `(EMAXCONNSESSION) max clients reached in
+session mode` — including the `db.mjs` fixture commands the E2E suite runs
+between tests. Measured on a real run: 26 of 112 E2E tests failed that way, and
+all 26 passed once the app moved to 6543. `TEST_DATABASE_URL` stays on 5432
+because the Vitest integration suite needs session affinity for its advisory
+locks; the application never does.
 
 `AUTH_TEST_CREDENTIALS` and `NEXT_PUBLIC_AUTH_TEST_MODE` are set inline above so the
 command works regardless of local files. Both also belong in
