@@ -16,7 +16,7 @@ export async function EmbeddedBlockedNotice({ url }: { url: string }) {
           target="_blank"
           rel="noopener noreferrer"
           data-testid="embedded-blocked-open-new-tab"
-          className="px-4 py-2 text-sm rounded-md bg-[var(--theme-primary)] text-white hover:opacity-90 transition-opacity"
+          className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
         >
           {t('embedded.blocked_body')}
         </a>

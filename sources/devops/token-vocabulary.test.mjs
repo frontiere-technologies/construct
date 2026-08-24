@@ -3,7 +3,9 @@ import { join, relative } from 'node:path'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-const ROOT = new URL('../microservices/web-construct/', import.meta.url).pathname
+const REPO_ROOT = new URL('../../', import.meta.url).pathname
+const ROOT = join(REPO_ROOT, 'sources/microservices/web-construct/')
+const E2E_ROOT = join(REPO_ROOT, 'sources/tests/e2e/')
 
 /**
  * Il progetto ha un vocabolario di token solo, quello di shadcn.
@@ -28,18 +30,26 @@ function sourceFiles(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : sourceFiles(path)
-    return /\.(tsx?|css)$/.test(path) ? [path] : []
+    return /\.(tsx?|css|py)$/.test(path) ? [path] : []
   })
 }
 
 test('no name from the retired token vocabulary survives anywhere', () => {
   const offenders = []
-  for (const dir of ['app', 'components', 'lib', 'context', 'types']) {
-    for (const path of sourceFiles(join(ROOT, dir))) {
+  const dirsToScan = [
+    ...['app', 'components', 'lib', 'context', 'types'].map(dir => join(ROOT, dir)),
+    // Task 5: the E2E suite asserts on class names and CSS custom properties
+    // too, and the rename guard above never looked there. Two Python tests
+    // survived a completed rename by asserting on retired vocabulary — this
+    // is the fix, so the next migration can't repeat that blind spot.
+    E2E_ROOT,
+  ]
+  for (const dir of dirsToScan) {
+    for (const path of sourceFiles(dir)) {
       const source = readFileSync(path, 'utf8')
       for (const { pattern, hint } of FORBIDDEN) {
         for (const match of source.match(pattern) ?? []) {
-          offenders.push(`${relative(ROOT, path)}: ${match} — ${hint}`)
+          offenders.push(`${relative(REPO_ROOT, path)}: ${match} — ${hint}`)
         }
       }
     }

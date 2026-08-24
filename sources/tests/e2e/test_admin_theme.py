@@ -23,7 +23,7 @@ def _set_color(locator, value):
 
 def _theme_primary_var(page):
     return page.evaluate(
-        "getComputedStyle(document.documentElement).getPropertyValue('--theme-primary').trim()"
+        "getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()"
     )
 
 

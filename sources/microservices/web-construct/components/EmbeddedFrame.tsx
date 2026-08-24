@@ -11,7 +11,7 @@ export function EmbeddedFrame({ url }: { url: string }) {
     <div className="relative h-full w-full min-h-[600px]">
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[var(--theme-primary)] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
         </div>
       )}
       <iframe
