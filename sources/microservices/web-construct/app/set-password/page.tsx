@@ -28,14 +28,14 @@ export default async function SetPasswordPage({ searchParams }: Props) {
 
     if (!isValid) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="min-h-screen flex items-center justify-center bg-background">
           <div className="w-full max-w-md rounded-xl shadow-lg overflow-hidden">
             <div className="px-8 py-8 text-center" style={{ backgroundColor: '#0f2336' }}>
               <h1 className="text-3xl font-bold text-white tracking-tight">Construct</h1>
             </div>
             <div className="bg-white px-8 py-8 text-center">
-              <p className="text-red-600 font-medium">{t('auth.set_password.invalid_expired')}</p>
-              <p className="text-gray-500 text-sm mt-2">{t('auth.set_password.invalid_expired_help')}</p>
+              <p className="text-destructive-muted-foreground font-medium">{t('auth.set_password.invalid_expired')}</p>
+              <p className="text-muted-foreground text-sm mt-2">{t('auth.set_password.invalid_expired_help')}</p>
             </div>
           </div>
         </div>
@@ -45,14 +45,14 @@ export default async function SetPasswordPage({ searchParams }: Props) {
 
   if (invalid) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-full max-w-md rounded-xl shadow-lg overflow-hidden">
           <div className="px-8 py-8 text-center" style={{ backgroundColor: '#0f2336' }}>
             <h1 className="text-3xl font-bold text-white tracking-tight">Construct</h1>
           </div>
           <div className="bg-white px-8 py-8 text-center">
-            <p className="text-red-600 font-medium">{t('auth.set_password.invalid')}</p>
-            <p className="text-gray-500 text-sm mt-2">{t('auth.set_password.invalid_help')}</p>
+            <p className="text-destructive-muted-foreground font-medium">{t('auth.set_password.invalid')}</p>
+            <p className="text-muted-foreground text-sm mt-2">{t('auth.set_password.invalid_help')}</p>
           </div>
         </div>
       </div>
@@ -60,7 +60,7 @@ export default async function SetPasswordPage({ searchParams }: Props) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-md rounded-xl shadow-lg overflow-hidden">
         <div className="px-8 py-8 text-center" style={{ backgroundColor: '#0f2336' }}>
           <h1 className="text-3xl font-bold text-white tracking-tight">Construct</h1>

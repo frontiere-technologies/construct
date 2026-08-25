@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useI18n } from '@/context/I18nContext'
+import { Input } from '@/components/ui/input'
 
 export function RegisterForm() {
   const { t } = useI18n()
@@ -28,10 +29,10 @@ export function RegisterForm() {
   if (status === 'sent') {
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+        <p className="text-sm text-success-muted-foreground bg-success-muted border border-success-border rounded-lg px-4 py-3">
           {t('auth.register.confirm')}
         </p>
-        <Link href="/login" className="text-sm text-center hover:underline" style={{ color: '#0f5a8a' }}>
+        <Link href="/login" className="text-sm text-center hover:underline text-brand-blue">
           {t('auth.register.back_to_login')}
         </Link>
       </div>
@@ -40,34 +41,34 @@ export function RegisterForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-muted-foreground">
         {t('auth.register.intro')}
       </p>
       <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700" htmlFor="email">
+        <label className="text-sm font-medium text-foreground-secondary" htmlFor="email">
           {t('auth.register.email')}
         </label>
-        <input
+        <Input
           id="email"
           type="email"
           value={email}
           onChange={e => setEmail(e.target.value)}
           required
           placeholder={t('auth.register.email_placeholder')}
-          className="rounded-lg border border-gray-300 px-4 py-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-3 bg-accent"
         />
       </div>
       {status === 'error' && (
-        <p className="text-red-600 text-sm">{t('auth.register.error')}</p>
+        <p className="text-destructive-muted-foreground text-sm">{t('auth.register.error')}</p>
       )}
       <button
         type="submit"
         disabled={status === 'sending'}
-        className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue enabled:hover:bg-brand-blue enabled:hover:text-white"
+        className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition border-brand-blue text-brand-blue enabled:hover:bg-brand-blue enabled:hover:text-white"
       >
         {status === 'sending' ? t('auth.register.submitting') : t('auth.register.submit')}
       </button>
-      <Link href="/login" className="text-sm text-center hover:underline" style={{ color: '#0f5a8a' }}>
+      <Link href="/login" className="text-sm text-center hover:underline text-brand-blue">
         {t('auth.register.back_to_login')}
       </Link>
     </form>

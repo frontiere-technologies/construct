@@ -1332,7 +1332,7 @@ Il `<button>` delle schede `sezioni`/`operazioni` è gruppo F, fuori dal perimet
 
 `sources/devops/raw-color-baseline.json`: la voce `components/rbac/roles/RoleDetailClient.tsx` scende da 7 a 0, e `total` da 231 a 224. Il cricchetto impedisce al numero di salire, quindi va abbassato a mano quando scende davvero.
 
-- [ ] **Step 5: Verifica automatica**
+- [✅] **Step 5: Verifica automatica**
 
 ```bash
 npm run lint && npm run test && npm run typecheck && npm run test:tokens && npm run test:raw-colors && npm run test:i18n-keys && npm run build
@@ -1353,7 +1353,7 @@ Sulla pagina di dettaglio di un ruolo, in tema chiaro e poi scuro:
 5. Annulla e Salva hanno la stessa imbottitura orizzontale e appaiono proporzionati.
 6. Le schede `sezioni`/`operazioni` sono invariate rispetto a prima.
 
-- [ ] **Step 7: E2E e commit**
+- [ ] **Step 7: E2E e commit** (E2E deferito al chiamante; il commit e stato fatto da questa sessione)
 
 ```bash
 cd /Users/mario.stefanutti/mario/programming/github-frontiere/construct && uv run pytest sources/tests/e2e
@@ -1732,29 +1732,29 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:** consuma le primitive. Non produce interfacce nuove.
 
-- [ ] **Step 1: Trattare il gruppo G con attenzione particolare**
+- [✅] **Step 1: Trattare il gruppo G con attenzione particolare**
 
 Quattro dei cinque bottoni di autenticazione sono **identici carattere per carattere** in quattro file diversi. L'inventario li chiama la nota positiva: dove il modello era chiaro, la copia a mano ha tenuto. Sono anche l'unico gruppo che una migrazione sbadata può solo peggiorare.
 
 La regola per questo lotto: dopo la migrazione i quattro devono essere ancora identici fra loro, e visivamente indistinguibili da prima. Il bordo `border-brand-blue` e la larghezza piena restano al call site, perché sono di quest'area e non del vocabolario generale.
 
-- [ ] **Step 2: Il bottone Google di `Login.tsx` è residuo giustificato**
+- [✅] **Step 2: Il bottone Google di `Login.tsx` è residuo giustificato**
 
 `Login.tsx` ha 31 colori raw, il secondo numero del progetto. Una parte è il bottone di accesso con Google, che porta i colori di marca di Google: **non si migrano**. Restano nel cricchetto e la ragione va scritta nel commit, perché la fase 4 li elencherà come residuo previsto.
 
 `Login.tsx:197` è anche l'unico primario `bg-gray-500` del progetto — un grigio diverso da tutti gli altri, quindi nessuno l'ha scelto. Diventa `<Button>` come gli altri diciotto.
 
-- [ ] **Step 3: Migrare i campi**
+- [✅] **Step 3: Migrare i campi**
 
 Quattro dei cinque moduli hanno campi password con il bottone «mostra/nascondi» accanto (`SetPasswordForm.tsx:72`, `Login.tsx:117`). Sono gruppo C: `<Button variant="ghost" size="icon">` con `aria-label`, e le classi di posizionamento (`absolute right-3 top-1/2 -translate-y-1/2`) restano al call site.
 
-- [ ] **Step 4: Abbassare il cricchetto da 100 al valore che risulta**
+- [✅] **Step 4: Abbassare il cricchetto da 100 al valore che risulta**
 
 74 occorrenze nel lotto (`ForgotPasswordForm` 9, `forgot-password/page` 1, `RegisterForm` 9, `register/page` 1, `SetPasswordForm` 11, `set-password/page` 7, `Login` 31, `ChangePasswordForm` 5), **meno** quelle di marca che restano. Il valore finale si misura, non si prevede: esegui `npm run test:raw-colors`, leggi il numero che il test riporta, e scrivi quello.
 
 - [ ] **Step 5: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 6: Verifica in browser** — punto 9, sulle pagine: accesso, registrazione, password dimenticata, impostazione password, cambio password. Verifica in più che i quattro bottoni di autenticazione siano ancora identici fra loro.
+- [ ] **Step 6: Verifica in browser** — punto 9, sulle pagine: accesso, registrazione, password dimenticata, impostazione password, cambio password. Verifica in più che i quattro bottoni di autenticazione siano ancora identici fra loro. (deferito: eseguito dal chiamante, non da questa sessione)
 
 - [ ] **Step 7: E2E e commit**
 

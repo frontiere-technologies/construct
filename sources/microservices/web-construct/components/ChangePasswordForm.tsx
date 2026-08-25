@@ -3,6 +3,8 @@
 import React, { useState } from 'react'
 import { signOut } from 'next-auth/react'
 import { useI18n } from '@/context/I18nContext'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 export function ChangePasswordForm() {
   const { t } = useI18n()
@@ -55,7 +57,6 @@ export function ChangePasswordForm() {
     }
   }
 
-  const inputCls = 'w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
   const labelCls = 'block text-sm font-medium text-foreground-secondary mb-1'
 
   return (
@@ -66,50 +67,43 @@ export function ChangePasswordForm() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className={labelCls}>{t('auth.change_password.current_password')}</label>
-          <input
+          <Input
             type="password"
             value={currentPassword}
             onChange={e => setCurrentPassword(e.target.value)}
             required
-            className={inputCls}
           />
         </div>
         <div>
           <label className={labelCls}>{t('auth.change_password.new_password')}</label>
-          <input
+          <Input
             type="password"
             value={newPassword}
             onChange={e => setNewPassword(e.target.value)}
             required
             minLength={8}
-            className={inputCls}
           />
-          <p className="text-xs text-gray-400 mt-1">{t('auth.change_password.hint')}</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('auth.change_password.hint')}</p>
         </div>
         <div>
           <label className={labelCls}>{t('auth.change_password.confirm_password')}</label>
-          <input
+          <Input
             type="password"
             value={confirmPassword}
             onChange={e => setConfirmPassword(e.target.value)}
             required
-            className={inputCls}
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full py-2 px-4 bg-primary text-white rounded-lg text-sm font-medium enabled:hover:opacity-90 disabled:opacity-50 transition-opacity"
-        >
+        <Button type="submit" disabled={saving} className="w-full">
           {saving ? t('auth.change_password.submitting') : t('auth.change_password.submit')}
-        </button>
+        </Button>
 
         {status && (
           <p className={`text-sm text-center ${
             status.type === 'success'
-              ? 'text-green-600 dark:text-green-400'
-              : 'text-red-600 dark:text-red-400'
+              ? 'text-success-muted-foreground'
+              : 'text-destructive-muted-foreground'
           }`}>
             {status.type === 'success' ? '✓' : '✗'} {status.message}
           </p>

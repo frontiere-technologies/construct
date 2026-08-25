@@ -61,11 +61,14 @@ test('the scan still sees the files it is supposed to guard', () => {
   // The floor was 20 before the shadcn batch migrations (task 10 of the
   // 2026-08-24 plan) started zeroing whole files out on purpose: rbac/ alone
   // dropped 14 files to 0, which is the intended outcome, not a broken regex.
-  // Lowered to 8 so it still catches a regex that stops matching (which would
-  // crater the count towards 0) without false-alarming on legitimate
-  // per-batch progress. Tasks 11-13 will shrink this further; task 14
-  // (raw-colour residual) is the place to retire this canary for good.
-  assert.ok(Object.keys(counts).length >= 8,
+  // Lowered to 8 after task 10, then to 6 after task 12 zeroed the sign-in
+  // area's 8 files (Login.tsx keeps 3, for the Google button residue; the
+  // other 7 files dropped to 0). Still high enough to catch a regex that
+  // stops matching (which would crater the count towards 0), without
+  // false-alarming on legitimate per-batch progress. Task 13 will shrink
+  // this further; task 14 (raw-colour residual) is the place to retire this
+  // canary for good.
+  assert.ok(Object.keys(counts).length >= 6,
     `expected the scan to find the files carrying raw colours, got ${Object.keys(counts).length}`)
 })
 
