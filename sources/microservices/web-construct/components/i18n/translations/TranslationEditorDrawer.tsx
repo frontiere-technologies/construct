@@ -6,6 +6,9 @@ import { useI18n } from '@/context/I18nContext'
 import { saveTranslations } from '@/lib/i18n/translation-actions'
 import { MAX_VALUE_LENGTH, type TranslationConflict, type TranslationRowDto } from '@/lib/i18n/types'
 import AccessibleDialog from '@/components/ui/AccessibleDialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 
 interface Props {
   row: TranslationRowDto
@@ -78,8 +81,6 @@ export default function TranslationEditorDrawer({ row, onClose }: Props) {
     setConflicts(null)
   }
 
-  const field = 'w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
-
   return (
     <AccessibleDialog
       titleId={titleId}
@@ -97,24 +98,27 @@ export default function TranslationEditorDrawer({ row, onClose }: Props) {
             <h2 id={titleId} className="truncate text-lg font-bold">{row.key}</h2>
             <p id={descriptionId} className="text-sm text-muted-foreground">{t('translation.editor.title')}</p>
           </div>
-          <button data-dialog-initial-focus data-dialog-close onClick={() => onClose(false)} aria-label={t('common.actions.close')} className="rounded p-1 hover:bg-accent">
+          <Button
+            data-dialog-initial-focus data-dialog-close onClick={() => onClose(false)}
+            variant="ghost" size="icon" aria-label={t('common.actions.close')}
+          >
             <X size={18} />
-          </button>
+          </Button>
         </div>
 
         <div className="space-y-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="ed-desc">{t('translation.description')}</label>
-            <textarea id="ed-desc" value={description} onChange={e => setDescription(e.target.value)} rows={2} className={`${field} min-h-[76px]`} />
+            <Textarea id="ed-desc" value={description} onChange={e => setDescription(e.target.value)} rows={2} className="min-h-[76px]" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="ed-ns">{t('translation.namespace')}</label>
-              <input id="ed-ns" value={namespace} onChange={e => setNamespace(e.target.value)} className={field} />
+              <Input id="ed-ns" value={namespace} onChange={e => setNamespace(e.target.value)} />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="ed-mod">{t('translation.module')}</label>
-              <input id="ed-mod" value={moduleName} onChange={e => setModuleName(e.target.value)} className={field} />
+              <Input id="ed-mod" value={moduleName} onChange={e => setModuleName(e.target.value)} />
             </div>
           </div>
         </div>
@@ -130,19 +134,19 @@ export default function TranslationEditorDrawer({ row, onClose }: Props) {
                 <label className="mb-1 flex items-center gap-2 text-sm font-medium text-foreground-secondary" htmlFor={`ed-v-${language.code}`}>
                   {language.nativeName}
                   {missing && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                    <span className="rounded-full bg-warning-muted px-2 py-0.5 text-xs text-warning-muted-foreground">
                       {t('translation.missing')}
                     </span>
                   )}
                 </label>
-                <textarea
+                <Textarea
                   id={`ed-v-${language.code}`}
                   data-testid={`translation-value-${language.code}`}
                   value={values[language.code] ?? ''}
                   onChange={e => setValues(v => ({ ...v, [language.code]: e.target.value }))}
                   rows={2}
                   maxLength={MAX_VALUE_LENGTH}
-                  className={`${field} min-h-[64px]`}
+                  className="min-h-[64px]"
                 />
               </div>
             )
@@ -150,7 +154,7 @@ export default function TranslationEditorDrawer({ row, onClose }: Props) {
         </div>
 
         {conflicts && (
-          <div role="alert" data-testid="translation-conflict" className="mt-4 rounded-lg border border-amber-400 bg-amber-50 p-4 text-sm dark:bg-amber-900/20">
+          <div role="alert" data-testid="translation-conflict" className="mt-4 rounded-lg border border-warning-border bg-warning-muted p-4 text-sm">
             <p className="mb-2 font-semibold">{t('translation.conflict.title')}</p>
             <p className="mb-3 text-foreground-secondary">{t('translation.conflict.explanation')}</p>
             <ul className="space-y-2">
@@ -162,28 +166,29 @@ export default function TranslationEditorDrawer({ row, onClose }: Props) {
                 </li>
               ))}
             </ul>
-            <button
+            <Button
+              variant="outline"
               data-dialog-close
               onClick={() => onClose(true)}
-              className="mt-3 rounded-lg border border-border px-3 py-2 text-sm"
+              className="mt-3"
             >
               {t('translation.conflict.reload')}
-            </button>
+            </Button>
           </div>
         )}
 
-        {error && <p role="alert" className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p role="alert" className="mt-4 text-sm text-destructive-muted-foreground">{error}</p>}
 
         <div className="mt-6 flex justify-end gap-2">
-          <button onClick={discard} disabled={!dirty || saving} className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-40">
+          <Button variant="outline" onClick={discard} disabled={!dirty || saving}>
             {t('translation.actions.discard')}
-          </button>
-          <button data-dialog-close onClick={() => onClose(false)} className="rounded-lg border border-border px-3 py-2 text-sm">
+          </Button>
+          <Button variant="outline" data-dialog-close onClick={() => onClose(false)}>
             {t('common.actions.cancel')}
-          </button>
-          <button onClick={save} disabled={saving || !dirty} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40">
+          </Button>
+          <Button onClick={save} disabled={saving || !dirty}>
             {saving ? t('common.states.saving') : t('common.actions.save')}
-          </button>
+          </Button>
         </div>
       </aside>
     </AccessibleDialog>

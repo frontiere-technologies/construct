@@ -5,6 +5,8 @@ import { useI18n } from '@/context/I18nContext'
 import { createLanguage, updateLanguage } from '@/lib/i18n/language-actions'
 import type { LanguagePageItemDto } from '@/lib/i18n/types'
 import AccessibleDialog from '@/components/ui/AccessibleDialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 interface Props {
   language: LanguagePageItemDto | null
@@ -32,8 +34,6 @@ export default function LanguageFormModal({ language, onClose }: Props) {
     else onClose(true)
   }
 
-  const field = 'w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
-
   return (
     <AccessibleDialog
       titleId={titleId}
@@ -48,19 +48,19 @@ export default function LanguageFormModal({ language, onClose }: Props) {
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-code">{t('language.form.code')}</label>
-            <input data-dialog-initial-focus id="lang-code" value={code} onChange={e => setCode(e.target.value)} placeholder="it" className={field} />
+            <Input data-dialog-initial-focus id="lang-code" value={code} onChange={e => setCode(e.target.value)} placeholder="it" />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-locale">{t('language.form.locale')}</label>
-            <input id="lang-locale" value={locale} onChange={e => setLocale(e.target.value)} placeholder="it-IT" className={field} />
+            <Input id="lang-locale" value={locale} onChange={e => setLocale(e.target.value)} placeholder="it-IT" />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-name">{t('language.form.name')}</label>
-            <input id="lang-name" value={name} onChange={e => setName(e.target.value)} placeholder="Italiano" className={field} />
+            <Input id="lang-name" value={name} onChange={e => setName(e.target.value)} placeholder="Italiano" />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-native">{t('language.form.native_name')}</label>
-            <input id="lang-native" value={nativeName} onChange={e => setNativeName(e.target.value)} placeholder="Italiano" className={field} />
+            <Input id="lang-native" value={nativeName} onChange={e => setNativeName(e.target.value)} placeholder="Italiano" />
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} />
@@ -68,18 +68,15 @@ export default function LanguageFormModal({ language, onClose }: Props) {
           </label>
         </div>
 
-        {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="mt-3 text-sm text-destructive-muted-foreground">{error}</p>}
 
         <div className="flex justify-end gap-2 mt-6">
-          <button data-dialog-close onClick={() => onClose(false)} className="px-3 py-2 text-sm rounded-lg border border-border">
+          <Button variant="outline" data-dialog-close onClick={() => onClose(false)}>
             {t('common.actions.cancel')}
-          </button>
-          <button
-            onClick={save} disabled={saving}
-            className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
-          >
+          </Button>
+          <Button onClick={save} disabled={saving}>
             {saving ? t('common.states.saving') : t('common.actions.save')}
-          </button>
+          </Button>
         </div>
     </AccessibleDialog>
   )

@@ -1,5 +1,5 @@
 {
-  "total": 126,
+  "total": 100,
   "perFile": {
     "app/forgot-password/ForgotPasswordForm.tsx": 9,
     "app/forgot-password/page.tsx": 1,
@@ -13,12 +13,6 @@
     "components/Login.tsx": 31,
     "components/ProfileForm.tsx": 8,
     "components/Sidebar.tsx": 2,
-    "components/i18n/languages/LanguageFormModal.tsx": 3,
-    "components/i18n/languages/LanguagesTableClient.tsx": 3,
-    "components/i18n/translations/CreateTranslationKeyModal.tsx": 3,
-    "components/i18n/translations/TranslationEditorDrawer.tsx": 10,
-    "components/i18n/translations/TranslationValueCell.tsx": 4,
-    "components/i18n/translations/TranslationsTableClient.tsx": 3,
     "components/ui/ConfirmModal.tsx": 2
   }
 }
