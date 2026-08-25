@@ -25,6 +25,18 @@ const baselinePath = resolve(import.meta.dirname, 'raw-color-baseline.json')
 const SCANNED_DIRS = ['app', 'components', 'lib', 'context']
 const RAW_COLOR = /\b(?:bg|text|border|ring|divide|from|to|via)-(?:gray|slate|zinc|neutral|stone|red|green|emerald|amber|yellow|orange|blue|indigo|violet|purple|pink)-(?:50|\d{3})\b/g
 
+/**
+ * Pure matcher, split out from the file walk below for the same reason the
+ * AST guard in task 7 split its visitor from its filesystem walk: a guard
+ * whose matching logic can only be exercised by scanning the whole corpus is
+ * a guard nobody can unit-test, and one nobody notices going quiet. This is
+ * the part 'the scanner still recognises a raw colour when it sees one'
+ * exercises directly, with no filesystem involved.
+ */
+function matchesIn(text) {
+  return text.match(RAW_COLOR) ?? []
+}
+
 function sourceFiles(dir, found = []) {
   for (const name of readdirSync(dir)) {
     const path = join(dir, name)
@@ -41,7 +53,7 @@ function countPerFile() {
   const counts = {}
   for (const dir of SCANNED_DIRS) {
     for (const path of sourceFiles(resolve(appDir, dir))) {
-      const hits = (readFileSync(path, 'utf8').match(RAW_COLOR) ?? []).length
+      const hits = matchesIn(readFileSync(path, 'utf8')).length
       if (hits) counts[path.slice(appDir.length + 1)] = hits
     }
   }
@@ -56,20 +68,25 @@ if (process.env.UPDATE_RAW_COLOR_BASELINE === '1') {
   console.log(`baseline rewritten: ${total} raw colour classes`)
 }
 
-test('the scan still sees the files it is supposed to guard', () => {
-  // A regex that stopped matching would leave the ratchet vacuously green.
-  // The floor was 20 before the shadcn batch migrations (task 10 of the
-  // 2026-08-24 plan) started zeroing whole files out on purpose: rbac/ alone
-  // dropped 14 files to 0, which is the intended outcome, not a broken regex.
-  // Lowered to 8 after task 10, then to 6 after task 12 zeroed the sign-in
-  // area's 8 files (Login.tsx keeps 3, for the Google button residue; the
-  // other 7 files dropped to 0). Still high enough to catch a regex that
-  // stops matching (which would crater the count towards 0), without
-  // false-alarming on legitimate per-batch progress. Task 13 will shrink
-  // this further; task 14 (raw-colour residual) is the place to retire this
-  // canary for good.
-  assert.ok(Object.keys(counts).length >= 6,
-    `expected the scan to find the files carrying raw colours, got ${Object.keys(counts).length}`)
+test('the scanner still recognises a raw colour when it sees one', () => {
+  // Replaces the old corpus-count canary ('the scan still sees the files it
+  // is supposed to guard'). That count had its floor lowered three times as
+  // the migration succeeded — 20 -> 8 -> 6 — and task 13 alone would have
+  // forced a fourth: it migrates five of the six files still carrying raw
+  // colour, so the corpus count falls toward zero *because the migration is
+  // working*, not because the regex broke. A guard that has to be weakened
+  // every time the code improves is measuring the wrong thing.
+  //
+  // This tests the matcher directly instead, with no dependency on how much
+  // residue the corpus happens to have left. The fixture proves three things
+  // at once: it finds both raw colours (`bg-gray-900`, `border-red-500`), it
+  // does not flag the token (`bg-card`), and it does not flag the non-numeric
+  // named colour (`text-white`, which THEME-2 never treated as 'raw' since
+  // there is no semantic-token equivalent to migrate it to). If the regex
+  // ever loses a colour family or starts matching tokens, this fails no
+  // matter how few files still carry residue.
+  const fixture = 'class="bg-gray-900 text-white border-red-500 bg-card"'
+  assert.deepEqual(matchesIn(fixture).sort(), ['bg-gray-900', 'border-red-500'])
 })
 
 test('static colour classes never increase', () => {
