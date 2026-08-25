@@ -74,7 +74,17 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
         variant="ghost" size="icon"
         data-testid={`row-menu-${rowId}`}
         aria-label={t('common.actions.row_actions')}
-        aria-haspopup="menu"
+        // Not `aria-haspopup="menu"`: that token promises the ARIA menu widget
+        // pattern — role="menu"/"menuitem" plus arrow-key roving focus, Home/End,
+        // typeahead — none of which the popup below implements (it is a plain
+        // list of buttons, closed by an outside click, with no keyboard traversal
+        // of its own). Claiming "menu" and then not being one is worse than not
+        // claiming it: assistive tech users get told to expect menu keys that do
+        // nothing. `"true"` is the generic, backward-compatible form of this
+        // attribute — it tells AT a popup exists without promising a specific
+        // interaction contract. Real menu semantics (roles + keyboard nav) are a
+        // separate piece of work, deliberately not bundled into this task.
+        aria-haspopup="true"
         onClick={e => {
           if (open) { close(); return }
           const rect = e.currentTarget.getBoundingClientRect()
