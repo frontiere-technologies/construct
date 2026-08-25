@@ -232,7 +232,24 @@ function LoginForm() {
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             {t('auth.login.no_account')}{' '}
-            <Link href="/register" className="font-semibold text-brand-blue">
+            {/* Not text-brand-blue like its neighbours (line 174, the button
+                above, and the equivalent links in RegisterForm/
+                ForgotPasswordForm/SetPasswordForm): those all sit on the
+                fixed white card (see its `bg-` above), where a fixed brand
+                colour is fine. This link sits on the *themed* bg-accent
+                footer, so a fixed foreground can't promise contrast once
+                the surface moves —
+                measured 1.99:1 against the dark accent (#1f2937), well under
+                4.5:1. text-primary was the obvious themed replacement and was
+                rejected on measurement too: primaryColor is a single
+                administrator-configured value, not a light/dark pair like
+                --accent, so it reads 2.33:1 on the same dark accent — a
+                smaller failure, still a failure. text-foreground is paired
+                (#111827 light / #ffffff dark) and moves with --accent by
+                construction: 16.12:1 light, 14.68:1 dark. hover:underline
+                restores the link affordance that the colour swap costs it,
+                matching the sibling links above. */}
+            <Link href="/register" className="font-semibold text-foreground hover:underline">
               {t('auth.login.register')}
             </Link>
           </p>
