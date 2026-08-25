@@ -1,11 +1,6 @@
 {
-  "total": 29,
+  "total": 3,
   "perFile": {
-    "components/AdminTheme.tsx": 11,
-    "components/Home.tsx": 3,
-    "components/Login.tsx": 3,
-    "components/ProfileForm.tsx": 8,
-    "components/Sidebar.tsx": 2,
-    "components/ui/ConfirmModal.tsx": 2
+    "components/Login.tsx": 3
   }
 }

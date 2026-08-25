@@ -629,7 +629,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                   aria-label={t('nav.theme_mode')}
                   className={clsx(
                     'relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 flex-shrink-0',
-                    settings.theme === 'dark' ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
+                    settings.theme === 'dark' ? 'bg-primary' : 'bg-input'
                   )}
                 >
                   <span className={clsx(

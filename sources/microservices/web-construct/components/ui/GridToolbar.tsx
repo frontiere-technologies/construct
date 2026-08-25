@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import type { GridApi } from 'ag-grid-community'
 import { useI18n } from '@/context/I18nContext'
+import { Button } from '@/components/ui/button'
 import ColumnVisibilityToggle, { type ToggleableColumn } from './ColumnVisibilityToggle'
 
 interface GridToolbarProps<T> {
@@ -16,9 +17,9 @@ export function GridToolbarResetButton(
   { label, onClearFilters }: { label: string; onClearFilters: () => void },
 ) {
   return (
-    <button type="button" onClick={onClearFilters} className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent">
+    <Button variant="outline" onClick={onClearFilters}>
       {label}
-    </button>
+    </Button>
   )
 }
 

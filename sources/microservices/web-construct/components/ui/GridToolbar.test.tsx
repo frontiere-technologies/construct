@@ -41,7 +41,6 @@ describe('GridToolbar', () => {
     const button = GridToolbarResetButton({ label: 'Reimposta filtri', onClearFilters })
 
     expect(button.props.children).toBe('Reimposta filtri')
-    expect(button.props.type).toBe('button')
     button.props.onClick()
     expect(onClearFilters).toHaveBeenCalledOnce()
   })

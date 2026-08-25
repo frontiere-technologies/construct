@@ -1,5 +1,6 @@
 import { isHttpUrl } from '@/lib/rbac/embedded-check'
 import { getI18n } from '@/lib/i18n/server'
+import { Button } from '@/components/ui/button'
 
 export async function EmbeddedBlockedNotice({ url }: { url: string }) {
   const isSafeUrl = isHttpUrl(url)
@@ -11,15 +12,16 @@ export async function EmbeddedBlockedNotice({ url }: { url: string }) {
         {t('embedded.blocked_title')}
       </p>
       {isSafeUrl ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid="embedded-blocked-open-new-tab"
-          className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
-        >
-          {t('embedded.blocked_body')}
-        </a>
+        <Button asChild>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="embedded-blocked-open-new-tab"
+          >
+            {t('embedded.blocked_body')}
+          </a>
+        </Button>
       ) : (
         <p className="text-sm text-muted-foreground break-all">{url}</p>
       )}

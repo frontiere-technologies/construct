@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Columns3 } from 'lucide-react'
 import type { GridApi } from 'ag-grid-community'
 import { useI18n } from '@/context/I18nContext'
+import { Button } from '@/components/ui/button'
 
 export interface ToggleableColumn { colId: string; label: string }
 
@@ -25,9 +26,9 @@ export default function ColumnVisibilityToggle<T>(
 
   return (
     <div className="relative">
-      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-border">
+      <Button variant="outline" onClick={() => setOpen(o => !o)}>
         <Columns3 size={16} /> {t('common.labels.columns')}
-      </button>
+      </Button>
       {open && (
         <div className="absolute right-0 mt-1 z-20 w-48 p-2 rounded-lg border border-border bg-popover shadow">
           {columns.map(c => (

@@ -20,15 +20,15 @@ export const Home: React.FC = () => {
     <PageContainer title={toTitle(pathname, t('home.dashboard'))}>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="rounded-xl border border-border-subtle p-6">
-          <h3 className="text-gray-500 text-sm font-medium mb-2">{t('home.total_users')}</h3>
+          <h3 className="text-muted-foreground text-sm font-medium mb-2">{t('home.total_users')}</h3>
           <p className="text-3xl font-bold">12,450</p>
         </div>
         <div className="rounded-xl border border-border-subtle p-6">
-          <h3 className="text-gray-500 text-sm font-medium mb-2">{t('home.active_sessions')}</h3>
+          <h3 className="text-muted-foreground text-sm font-medium mb-2">{t('home.active_sessions')}</h3>
           <p className="text-3xl font-bold">1,234</p>
         </div>
         <div className="rounded-xl border border-border-subtle p-6">
-          <h3 className="text-gray-500 text-sm font-medium mb-2">{t('home.revenue')}</h3>
+          <h3 className="text-muted-foreground text-sm font-medium mb-2">{t('home.revenue')}</h3>
           <p className="text-3xl font-bold">$45,678</p>
         </div>
       </div>

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useOptionalI18n } from '@/context/I18nContext'
+import { Button } from '@/components/ui/button'
 
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   // Tolerant read: this boundary must render even when the i18n provider is
@@ -21,12 +22,9 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
           {t('errors.error_id', 'Error ID')}: {error.digest}
         </p>
       )}
-      <button
-        onClick={reset}
-        className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
-      >
+      <Button onClick={reset}>
         {t('errors.retry', 'Try again')}
-      </button>
+      </Button>
     </div>
   )
 }
