@@ -5,6 +5,9 @@ import { useI18n } from '@/context/I18nContext'
 import { createTranslationKey } from '@/lib/i18n/translation-actions'
 import { namespaceOf } from '@/lib/i18n/key-format'
 import AccessibleDialog from '@/components/ui/AccessibleDialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 
 export default function CreateTranslationKeyModal({ onClose }: { onClose: (saved: boolean) => void }) {
   const { t } = useI18n()
@@ -34,44 +37,42 @@ export default function CreateTranslationKeyModal({ onClose }: { onClose: (saved
     else onClose(true)
   }
 
-  const field = 'w-full px-3 py-2 rounded-lg border border-border bg-surface-overlay text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50'
-
   return (
     <AccessibleDialog
       titleId={titleId}
       onClose={() => onClose(false)}
       busy={saving}
-      panelClassName="w-full max-w-md rounded-xl bg-surface-overlay p-6 shadow-xl"
+      panelClassName="w-full max-w-md rounded-xl bg-popover p-6 shadow-xl"
     >
         <h2 id={titleId} className="text-lg font-bold mb-4">{t('translation.actions.create')}</h2>
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="tk-key">{t('translation.key')}</label>
-            <input data-dialog-initial-focus id="tk-key" value={key} onChange={e => onKeyChange(e.target.value)} placeholder="common.actions.save" className={field} />
+            <Input data-dialog-initial-focus id="tk-key" value={key} onChange={e => onKeyChange(e.target.value)} placeholder="common.actions.save" />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="tk-ns">{t('translation.namespace')}</label>
-            <input id="tk-ns" value={namespace} onChange={e => { setNamespaceTouched(true); setNamespace(e.target.value) }} placeholder="common" className={field} />
+            <Input id="tk-ns" value={namespace} onChange={e => { setNamespaceTouched(true); setNamespace(e.target.value) }} placeholder="common" />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="tk-mod">
               {t('translation.module')} <span className="font-normal text-foreground-faint">{t('common.labels.optional')}</span>
             </label>
-            <input id="tk-mod" value={moduleName} onChange={e => setModuleName(e.target.value)} placeholder="core" className={field} />
+            <Input id="tk-mod" value={moduleName} onChange={e => setModuleName(e.target.value)} placeholder="core" />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="tk-desc">{t('translation.description')}</label>
-            <textarea id="tk-desc" value={description} onChange={e => setDescription(e.target.value)} rows={2} className={`${field} min-h-[76px]`} />
+            <Textarea id="tk-desc" value={description} onChange={e => setDescription(e.target.value)} rows={2} className="min-h-[76px]" />
           </div>
         </div>
 
-        {error && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p role="alert" className="mt-3 text-sm text-destructive-muted-foreground">{error}</p>}
 
         <div className="flex justify-end gap-2 mt-6">
-          <button data-dialog-close onClick={() => onClose(false)} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
-          <button onClick={save} disabled={saving} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed">
+          <Button variant="outline" data-dialog-close onClick={() => onClose(false)}>{t('common.actions.cancel')}</Button>
+          <Button onClick={save} disabled={saving}>
             {saving ? t('common.states.saving') : t('common.actions.save')}
-          </button>
+          </Button>
         </div>
     </AccessibleDialog>
   )

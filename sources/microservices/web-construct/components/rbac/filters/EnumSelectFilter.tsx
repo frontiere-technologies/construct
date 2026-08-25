@@ -38,7 +38,7 @@ export default function EnumSelectFilter({ model, onModelChange, options, api }:
       <button
         type="button"
         onClick={() => select(null)}
-        className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded hover:bg-surface-hover ${model == null ? 'font-medium' : 'text-foreground-secondary'}`}
+        className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded hover:bg-accent ${model == null ? 'font-medium' : 'text-foreground-secondary'}`}
       >
         <span className="flex-1">{t('common.labels.all')}</span>
         {model == null && <Check size={13} className="text-primary shrink-0" />}
@@ -51,7 +51,7 @@ export default function EnumSelectFilter({ model, onModelChange, options, api }:
             type="button"
             data-testid={`filter-option-${opt.value}`}
             onClick={() => select(selected ? null : { value: opt.value })}
-            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded hover:bg-surface-hover ${selected ? 'font-medium' : 'text-foreground-secondary'}`}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded hover:bg-accent ${selected ? 'font-medium' : 'text-foreground-secondary'}`}
           >
             <span className="flex-1">{opt.label}</span>
             {selected && <Check size={13} className="text-primary shrink-0" />}

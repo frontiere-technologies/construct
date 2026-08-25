@@ -3,6 +3,7 @@
 import React, { useId, useState } from 'react'
 import { useI18n } from '@/context/I18nContext'
 import AccessibleDialog from '@/components/ui/AccessibleDialog'
+import { Button } from '@/components/ui/button'
 
 interface ConfirmModalProps {
   title: string
@@ -30,16 +31,13 @@ export default function ConfirmModal({ title, message, confirmLabel, onConfirm, 
       descriptionId={descriptionId}
       onClose={onCancel}
       busy={busy}
-      panelClassName="w-full max-w-md rounded-xl bg-surface-overlay p-6 shadow-xl"
+      panelClassName="w-full max-w-md rounded-xl bg-popover p-6 shadow-xl"
     >
         <h2 id={titleId} className="text-lg font-bold mb-2">{title}</h2>
-        <p id={descriptionId} className="text-sm text-gray-500 mb-6">{message}</p>
+        <p id={descriptionId} className="text-sm text-muted-foreground mb-6">{message}</p>
         <div className="flex justify-end gap-2">
-          <button data-dialog-initial-focus data-dialog-close onClick={onCancel} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
-          <button
-            onClick={confirm} disabled={busy}
-            className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
-          >{confirmLabel ?? t('common.actions.confirm')}</button>
+          <Button variant="outline" data-dialog-initial-focus data-dialog-close onClick={onCancel}>{t('common.actions.cancel')}</Button>
+          <Button onClick={confirm} disabled={busy}>{confirmLabel ?? t('common.actions.confirm')}</Button>
         </div>
     </AccessibleDialog>
   )

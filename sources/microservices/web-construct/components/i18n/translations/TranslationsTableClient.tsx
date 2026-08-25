@@ -13,6 +13,7 @@ import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
 import { useI18n } from '@/context/I18nContext'
 import { deleteTranslationKey } from '@/lib/i18n/translation-actions'
+import { Button } from '@/components/ui/button'
 import {
   translationsFilterModelToSearchParams, translationsUrlParamsToFilterModel,
   translationsUrlParamsToSortModel, type TranslationsGridFilterModel, type TranslationsUrlParams,
@@ -137,12 +138,12 @@ export default function TranslationsTableClient(props: Props) {
           () => setParam(translationsFilterModelToSearchParams({}, languages.map(language => language.code))),
         )}
       >
-        <button onClick={() => setCreating(true)} className="rounded-lg bg-gray-900 px-3 py-2 text-sm text-white">
+        <Button size="sm" onClick={() => setCreating(true)}>
           {t('translation.actions.create')}
-        </button>
+        </Button>
       </GridToolbar>
 
-      {error && <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p role="alert" className="mb-3 text-sm text-destructive-muted-foreground">{error}</p>}
 
       <DataGrid<TranslationRowDto>
         columnDefs={columnDefs}

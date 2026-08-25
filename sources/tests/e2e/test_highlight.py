@@ -42,5 +42,5 @@ def test_open_section_is_not_highlighted_as_active(logged_in_page, base_url):
 
     ring_items = [el.inner_text().strip() for el in page.locator("aside [class*='ring-primary']").all()]
     assert ring_items == [], f"An expanded section must not be ringed, got {ring_items}"
-    assert "bg-sidebar-active-bg/50" in (admin.get_attribute("class") or ""), \
+    assert "bg-sidebar-accent/50" in (admin.get_attribute("class") or ""), \
         "The expanded section should get the softer open fill"

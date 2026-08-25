@@ -11,7 +11,7 @@ export default function StatusBadge({ status }: { status: UserDTO['status'] }) {
   return (
     <span
       data-testid="status-badge"
-      className={`px-2 py-0.5 rounded-full text-xs font-medium ${active ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}
+      className={`px-2 py-0.5 rounded-full text-xs font-medium ${active ? 'bg-success-muted text-success-muted-foreground' : 'bg-accent text-foreground-secondary'}`}
     >
       {active ? t('users.status.active') : t('users.status.deactivated')}
     </span>

@@ -20,21 +20,21 @@ export function columnPinningState<T>(columnDefs: ColDef<T>[]): { leftColIds: st
 }
 
 export const appGridThemeParams = {
-  backgroundColor: 'var(--theme-surface)',
-  foregroundColor: 'var(--theme-foreground)',
-  borderColor: 'var(--theme-border)',
-  accentColor: 'var(--theme-primary)',
-  rowHoverColor: 'var(--theme-surface-hover)',
-  headerBackgroundColor: 'var(--theme-surface-hover)',
-  headerTextColor: 'var(--theme-foreground)',
+  backgroundColor: 'var(--card)',
+  foregroundColor: 'var(--foreground)',
+  borderColor: 'var(--border)',
+  accentColor: 'var(--primary)',
+  rowHoverColor: 'var(--accent)',
+  headerBackgroundColor: 'var(--accent)',
+  headerTextColor: 'var(--foreground)',
   // A single static divider (not the resize-drag handle) between every header
   // cell, including non-resizable ones like the actions column -- otherwise
   // resizable columns show their resize handle as a short tick and
   // non-resizable columns show nothing at all.
   headerColumnResizeHandleColor: 'transparent',
-  headerColumnBorder: { style: 'solid', width: 2, color: 'var(--theme-border)' },
+  headerColumnBorder: { style: 'solid', width: 2, color: 'var(--border)' },
   headerColumnBorderHeight: '50%',
-  oddRowBackgroundColor: 'var(--theme-surface)',
+  oddRowBackgroundColor: 'var(--card)',
   // No vertical rule between the pinned actions column and the scrolling columns:
   // the actions column reads as part of the row, not as a separate pane.
   pinnedColumnBorder: false,

@@ -6,6 +6,9 @@ import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, pointerWithin,
   useDraggable, useDroppable, type DragStartEvent, type DragMoveEvent, type DragEndEvent,
 } from '@dnd-kit/core'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { useI18n } from '@/context/I18nContext'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 
 type DropPos = 'before' | 'after' | 'into'
@@ -44,6 +47,7 @@ export function typeIcon(node: Pick<UserNavigationTreeDto, 'type' | 'functionali
 }
 
 const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDefault, dnd, activeId, indicator }) => {
+  const { t } = useI18n()
   const isCategory = node.type === 'CATEGORY'
   const hasChildren = node.children.length > 0
   const [open, setOpen] = useState(expandedByDefault)
@@ -91,6 +95,16 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
           </span>
         )}
         {dnd && (
+          // Kept as a native <button>, not the Button primitive — but not
+          // for the reason this comment used to give. Commit 3e1eda9 moved
+          // ButtonBase onto ComponentPropsWithRef<'button'>, so `Button` does
+          // accept and forward a ref now, on both the host and the asChild
+          // branch (see button.types.tsx's withRef/withRefAsChild). The real
+          // reason to keep this native: dnd-kit's setActivatorNodeRef,
+          // dragListeners and dragAttributes are wired to a plain DOM button
+          // today, and swapping the drag handle onto the primitive is a
+          // drag & drop behaviour change that wants its own E2E coverage,
+          // not a drive-by edit here.
           <button
             // eslint-disable-next-line react-hooks/refs
             ref={dragActivatorRef}
@@ -100,19 +114,33 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
             {...dragAttributes}
             data-testid="drag-handle"
             disabled={!canDrag}
-            className={`p-0.5 text-gray-400 touch-none ${canDrag ? 'cursor-grab active:cursor-grabbing enabled:hover:text-gray-600' : 'opacity-30 cursor-not-allowed'}`}
+            aria-label={t('functionalities.tree.drag_handle')}
+            // Colour classes come from the `ghost` variant's own recipe
+            // (buttonVariants) instead of being hand-copied, so this native
+            // button and every `<Button variant="ghost">` in the app stay in
+            // sync by construction. `p-0.5` overrides the variant's default
+            // `icon` padding (twMerge — see lib/utils.ts — makes the later
+            // class win); `touch-none` and the grab cursor are specific to
+            // being a drag handle and aren't part of any variant.
+            className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'p-0.5 touch-none', canDrag && 'cursor-grab active:cursor-grabbing')}
           >
             <GripVertical size={14} />
           </button>
         )}
         {isCategory && hasChildren ? (
-          <button data-testid="tree-toggle" onClick={() => setOpen(o => !o)} className="p-0.5 text-gray-500">
+          <Button
+            variant="ghost" size="icon"
+            data-testid="tree-toggle"
+            aria-label={t('common.tree.toggle_row')}
+            aria-expanded={open}
+            onClick={() => setOpen(o => !o)}
+          >
             {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          </button>
+          </Button>
         ) : (
           <span className="w-5" />
         )}
-        {React.createElement(typeIcon(node), { size: 14, className: 'shrink-0 text-gray-400' })}
+        {React.createElement(typeIcon(node), { size: 14, className: 'shrink-0 text-muted-foreground' })}
         <span className={`flex-1 text-sm ${isCategory ? 'font-medium' : ''}`}>
           {node.name}
         </span>
@@ -237,9 +265,9 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
       {tree}
       <DragOverlay dropAnimation={null}>
         {activeNode ? (
-          <div className="flex items-center gap-2 rounded-lg border border-primary bg-surface-overlay px-3 py-2 text-sm shadow-lg">
-            <GripVertical size={14} className="text-gray-400" />
-            {React.createElement(typeIcon(activeNode), { size: 14, className: 'shrink-0 text-gray-400' })}
+          <div className="flex items-center gap-2 rounded-lg border border-primary bg-popover px-3 py-2 text-sm shadow-lg">
+            <GripVertical size={14} className="text-muted-foreground" />
+            {React.createElement(typeIcon(activeNode), { size: 14, className: 'shrink-0 text-muted-foreground' })}
             <span className={activeNode.type === 'CATEGORY' ? 'font-medium' : ''}>{activeNode.name}</span>
           </div>
         ) : null}

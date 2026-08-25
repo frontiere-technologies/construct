@@ -133,18 +133,18 @@ export default function CustomSelect({
         onKeyDown={onTriggerKeyDown}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg border bg-transparent text-left transition-colors
           ${open
-            ? 'border-gray-400 dark:border-gray-500 ring-2 ring-gray-100 dark:ring-gray-800'
+            ? 'border-primary ring-2 ring-primary/50'
             : 'border-border'}
           ${disabled
             ? 'opacity-50 cursor-not-allowed'
-            : 'enabled:hover:border-gray-300 dark:enabled:hover:border-gray-600 cursor-pointer'}`}
+            : 'enabled:hover:border-border cursor-pointer'}`}
       >
-        <span className={showPlaceholder ? 'text-gray-400' : 'text-foreground'}>
+        <span className={showPlaceholder ? 'text-muted-foreground' : 'text-foreground'}>
           {selectedLabel ?? placeholder ?? '—'}
         </span>
         <ChevronDown
           size={14}
-          className={`shrink-0 text-gray-400 transition-transform duration-150 ${open ? '-rotate-180' : ''}`}
+          className={`shrink-0 text-muted-foreground transition-transform duration-150 ${open ? '-rotate-180' : ''}`}
         />
       </button>
 
@@ -158,7 +158,7 @@ export default function CustomSelect({
           aria-label={ariaLabel}
           aria-activedescendant={options[activeIndex] ? `${listboxId}-option-${String(options[activeIndex].value)}` : undefined}
           onKeyDown={onListKeyDown}
-          className="absolute left-0 right-0 top-full mt-1 z-40 max-h-56 overflow-y-auto rounded-lg border border-border bg-surface-overlay py-1 shadow-lg outline-none"
+          className="absolute left-0 right-0 top-full mt-1 z-40 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover py-1 shadow-lg outline-none"
         >
           {options.map((opt, index) => {
               const selected = String(opt.value) === String(value)
@@ -173,8 +173,8 @@ export default function CustomSelect({
                   data-testid={testId ? `${testId}-option-${opt.value}` : undefined}
                   onClick={() => choose(opt.value)}
                   onMouseEnter={() => setActiveIndex(index)}
-                  className={`w-full flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-surface-hover
-                    ${active ? 'bg-surface-hover' : ''}
+                  className={`w-full flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-accent
+                    ${active ? 'bg-accent' : ''}
                     ${selected
                       ? 'font-medium text-foreground'
                       : 'text-foreground-secondary'}`}

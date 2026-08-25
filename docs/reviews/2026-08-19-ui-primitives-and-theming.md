@@ -43,11 +43,11 @@ file per file, perché è lo stesso edit sulle stesse `className`.
 ## Task
 
 - [✅] ID=THEME-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Le utility `dark:` non seguono il toggle tema dell'app, Fix description=Dichiarato `@custom-variant dark (&:where(.dark, .dark *))` in `app/globals.css`. Verificato: le 27 classi `dark:` distinte (46 occorrenze) sono passate da `@media (prefers-color-scheme: dark)` a `:where(.dark, .dark *)`, e il comportamento è disaccoppiato dall'OS in entrambe le direzioni. Guard di regressione in `lib/theme-dark-variant.test.ts`. Rimane THEME-3 per la revisione di contrasto pagina per pagina.
-- [ ] ID=UI-1, Severity=Medium, Complexity=High, Priority=P1, Title=Estrarre le primitive `Button` e `Input`, Fix description=Creare i componenti in `components/ui/` con `clsx` e varianti, poi migrare 71 `<button>` in 35 file e 47 campi in 20 file. Decidere prima l'API delle varianti, il destino delle regole globali in `globals.css` e l'aggiornamento del guard AST `disabledButtonHoverStyles.test.ts`, che diventa inerte se i call site smettono di essere `<button>` nativi.
-- [ ] ID=THEME-2, Severity=Low, Complexity=High, Priority=P2, Title=Completare la migrazione ai token semantici, Fix description=**Fase A completata il 2026-08-21** (fondamenta, nessun call site toccato): valori della tavolozza corretti sulla superficie peggiore reale, primario predefinito portato a un colore su cui un'etichetta può stare, colore etichetta derivato invece che scritto, nove token di stato fissi in `@theme`, regole globali dei bottoni spostate in `@layer base` così una utility può sovrascriverle senza `!`, cricchetto sui colori raw a quota 231, e migration 0007 che solleva le configurazioni tema già salvate sugli utenti. **Resta la migrazione vera** delle 231 occorrenze, da fare insieme a UI-1 file per file.
+- [✅] ID=UI-1, Severity=Medium, Complexity=High, Priority=P1, Title=Estrarre le primitive `Button` e `Input`, Fix description=Creare i componenti in `components/ui/` con `clsx` e varianti, poi migrare 71 `<button>` in 35 file e 47 campi in 20 file. Decidere prima l'API delle varianti, il destino delle regole globali in `globals.css` e l'aggiornamento del guard AST `disabledButtonHoverStyles.test.ts`, che diventa inerte se i call site smettono di essere `<button>` nativi. **Chiuso il 2026-08-24/25** dalla specifica shadcn (ribalta DOC-1, vedi sotto): `Button` e `Input` esistono in `components/ui/` su primitive shadcn, i 64 bottoni nel perimetro sono migrati sulle varianti stock (i gruppi E, F, H, I, K sono rimasti nativi come l'inventario prescriveva; il gruppo G — autenticazione — è rimasto nativo anche lui, per decisione presa durante il lavoro: era byte-identico su quattro file e la migrazione a `variant="outline"` gli avrebbe iniettato `px-4`, `font-medium` e `transition-colors` che non aveva mai avuto, vedi il commento in `components/Login.tsx`), e `disabledButtonHoverStyles.test.ts` riconosce ora sia `<button>` nativi sia `<Button>`. Non chiuso del tutto: la navigazione da tastiera reale del menu ARIA di `GridRowActionsMenu` resta da verificare. Il criterio di verifica in browser che era rimasto aperto è stato chiuso il 2026-08-25 da uno sweep di contrasto WCAG su 376 nodi di testo in nove pagine e due temi, zero sotto 4,5:1 — vedi i criteri di accettazione qui sotto.
+- [✅] ID=THEME-2, Severity=Low, Complexity=High, Priority=P2, Title=Completare la migrazione ai token semantici, Fix description=**Fase A completata il 2026-08-21** (fondamenta, nessun call site toccato): valori della tavolozza corretti sulla superficie peggiore reale, primario predefinito portato a un colore su cui un'etichetta può stare, colore etichetta derivato invece che scritto, nove token di stato fissi in `@theme`, regole globali dei bottoni spostate in `@layer base` così una utility può sovrascriverle senza `!`, cricchetto sui colori raw a quota 231, e migration 0007 che solleva le configurazioni tema già salvate sugli utenti. **Migrazione vera chiusa dalla specifica shadcn del 2026-08-24**: le occorrenze di colori raw sono passate da 231 a **3**, tutte su `components/Login.tsx` (il bottone "Accedi con Google", chrome di terzi prescritto da Google, con la motivazione ora scritta nel campo `justified` di `raw-color-baseline.json`); il vocabolario dei token è diventato quello di shadcn e i `--theme-*` sono spariti dal sorgente. I due criteri di verifica in browser rimasti aperti (contrasto nei due temi, e risposta ad Admin → Tema) sono stati chiusi il 2026-08-25 dallo stesso sweep — vedi i criteri di accettazione qui sotto.
 - [✅] ID=THEME-3, Severity=Low, Complexity=Medium, Priority=P2, Title=Revisione di contrasto delle utility `dark:` ora che si attivano, Fix description=Revisione completata il 2026-08-21 sulle tre pagine mancanti, nei due stati del tema e con OS scuro / applicazione chiara. Il disaccoppiamento di THEME-1 regge in tutte e nove le combinazioni. Trovati quattro punti sotto la soglia di contrasto, tutti classi `text-gray-*` statiche: passano in un tema e falliscono nell'altro. Elencati con i numeri qui sotto e consegnati a THEME-2, come previsto.
 
-- [✅] ID=DOC-1, Severity=Info, Complexity=Low, Priority=P3, Title=Registrare la decisione su shadcn/ui e Material UI, Fix description=Registrata in `CLAUDE.md`, sezione Stack, come sottosezione "Livello UI: né shadcn/ui né Material UI": la decisione, i quattro motivi in forma sintetica, e il perimetro di ciò che resta ammesso (adozione puntuale di Radix per una singola primitiva complessa). L'analisi completa resta qui.
+- [✅] ID=DOC-1, Severity=Info, Complexity=Low, Priority=P3, Title=Registrare la decisione su shadcn/ui e Material UI, Fix description=Registrata in `CLAUDE.md`, sezione Stack, come sottosezione "Livello UI: né shadcn/ui né Material UI": la decisione, i quattro motivi in forma sintetica, e il perimetro di ciò che resta ammesso (adozione puntuale di Radix per una singola primitiva complessa). L'analisi completa resta qui. **Ribaltata il 2026-08-24**: il progetto adotta shadcn/ui, vedi la nota in fondo alla voce DOC-1 qui sotto e [docs/superpowers/specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md](../superpowers/specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md).
 
 ---
 
@@ -251,14 +251,14 @@ verificabile.
 
 ### Criteri di accettazione
 
-- [ ] `Button` e `Input` esistono in `components/ui/` con test unitari propri.
-- [ ] Le varianti coprono tutti i 71 call site senza `className` di override arbitrari.
-- [ ] Nessuna dipendenza nuova in `package.json`.
-- [ ] Ogni bottone icon-only migrato conserva un nome accessibile.
-- [ ] `disabledButtonHoverStyles.test.ts` verifica ancora un invariante reale dopo la migrazione (aggiornato nello stesso commit della primitiva).
-- [ ] `npm run lint`, `npm run test`, `npm run build` verdi.
-- [ ] Verifica in browser per ciascun lotto migrato, nei due stati del tema (dipende da THEME-1).
-- [ ] E2E pytest verdi: `uv run pytest`.
+- [✅] `Button` e `Input` esistono in `components/ui/` con test unitari propri. Chiuso dalla specifica shadcn del 2026-08-24.
+- [✅] Le varianti coprono tutti i call site nel perimetro senza `className` di override arbitrari. Il perimetro è stato ridefinito da 71 a 64 durante il lavoro (vedi l'inventario): i 59 di `Button` più i 5 del gruppo G, rimasti nativi per decisione — non è la stessa lista di 71 che questo criterio immaginava, ma nessuno dei call site migrati porta un `className` d'emergenza.
+- [ ] **Superato dal design, non soddisfatto.** «Nessuna dipendenza nuova in `package.json`» presupponeva componenti scritti a mano, che è esattamente la premessa che il 2026-08-24 ha ribaltato. Tre dipendenze sono state aggiunte deliberatamente (`class-variance-authority`, `tailwind-merge`, `@radix-ui/react-slot`): è il costo dichiarato dell'adozione di shadcn, non un'omissione. Il criterio resta scritto per la cronaca ma non si applica più.
+- [✅] Ogni bottone icon-only migrato conserva o acquisisce un nome accessibile. Sei non ne avevano uno (BTN-2): `size="icon"` lo pretende ora a livello di tipi, e le migration `0008`/`0009` hanno aggiunto le chiavi i18n mancanti.
+- [✅] `disabledButtonHoverStyles.test.ts` verifica ancora un invariante reale dopo la migrazione. Aggiornato nello stesso commit della primitiva perché riconosce sia `<button>` nativi sia `<Button>`, come deciso nella specifica (punto 6).
+- [✅] `npm run lint`, `npm run test`, `npm run build` verdi. `lint` e `test` riverificati su questo commit (task 15, solo documentazione): lint pulito, 78 file / 625 test verdi. `build` non è stato rieseguito in questo giro perché non si toccava altro che `docs/`; l'ultima esecuzione registrata, sull'ultimo commit di codice (task 14), è verde — 29 route generate.
+- [✅] Verifica in browser nei due stati del tema, completata il 2026-08-25: misurato il contrasto WCAG di ogni nodo di testo visibile rispetto allo sfondo su cui si trova realmente, in entrambi i temi, su nove pagine (`/login`, `/register`, `/forgot-password`, `/roles-permissions`, `/functionalities`, `/admin/translations`, `/profile`, `/user-management`, `/admin/theme`) — 376 elementi misurati, zero sotto la soglia di 4,5:1 in nessun tema, celle e header ag-grid incluse. Lo sweep stesso ha trovato l'ultimo difetto prima di questa chiusura — `text-brand-blue` a 1,99:1 sul link di registrazione nel footer tematizzato — corretto nel commit `55cf2e6`.
+- [✅] E2E pytest verdi: `uv run pytest`. Ogni task ha rimandato l'esecuzione al chiamante invece di eseguirla in proprio, e il chiamante l'ha eseguita dopo ogni lotto: task 8 (pilota) 112/112, task 10 (`rbac/`) 112/112, task 11 (`i18n/`) 112/112, task 12 (accesso) 111/112 alla prima corsa poi 112/112 — il fallimento isolato era `test_create_edit_delete_functionality` per instabilità di Playwright, non una regressione (passato da solo in 16s, 21/21 sul file intero, e task 12 toccava solo file di autenticazione che quel test non esercita), task 13 (telaio) un primo giro con 15 falliti/97 errori per il dev server morto prima di pytest, non una regressione, 112/112 dopo il riavvio. **Verde sull'ultimo commit che tocca codice runtime, `d0f204a` (task 14), 112/112 eseguito due volte.** Nota per chi vede un giro rosso in futuro: la suite ha un flake noto su `test_create_edit_delete_functionality` sotto il carico della suite intera, sospettato essere la regola globale `button:hover { transform: translateY(-1px) }` di `globals.css` che sposta elementi sotto il controllo di stabilità del click di Playwright — la regola precede questo lavoro, ma la migrazione le ha dato più elementi su cui agire.
 
 ---
 
@@ -305,9 +305,9 @@ frattempo le utility `dark:` devono funzionare.
 ### Criteri di accettazione
 
 - [✅] Deciso e documentato il destino degli stati semantici (token fissi vs tematizzabili). Deciso il 2026-08-21: **token fissi**, definiti in `@theme`, non esposti in `AdminTheme`. Motivazione e vocabolario ricavato dalle occorrenze reali in fondo al documento.
-- [ ] Le occorrenze di colori raw sono ridotte a un residuo giustificato e documentato (es. loghi, colori di brand esterni come il pulsante Google in `Login.tsx`). Baseline al 2026-08-21: **231 su 34 file**, ora sorvegliata da `npm run test:raw-colors`, che impedisce al numero di salire durante la migrazione.
-- [ ] Cambiando i colori da Admin → Tema, ogni area migrata risponde.
-- [ ] Verifica in browser nei due stati del tema.
+- [✅] Le occorrenze di colori raw sono ridotte a un residuo giustificato e documentato (es. loghi, colori di brand esterni come il pulsante Google in `Login.tsx`). Chiuso il 2026-08-25 (task 14): il residuo era già sceso a **3 occorrenze su 1 file** (`components/Login.tsx`, il bottone "Accedi con Google") per merito dei lotti precedenti; questo task ha aggiunto il campo `justified` a `raw-color-baseline.json` con la motivazione per voce, così il numero non deve più essere reinterpretato a mente. `npm run test:raw-colors` verde.
+- [✅] Cambiando i colori da Admin → Tema, ogni area migrata risponde. Verificato il 2026-08-25: impostati `primary=#c2410c` e una superficie `#fef3c7` da `/admin/theme` senza salvare, poi navigazione client-side a `/roles-permissions`. Il bottone primario "Nuovo ruolo" ha calcolato `rgb(194, 65, 12)`, seguendo `--primary`; la **griglia ag-grid** — che legge le variabili CSS direttamente, non tramite utility Tailwind, quindi il consumatore più esposto a una rottura diversa dal resto — ha calcolato `rgb(254, 243, 199)`, seguendo `--card`; `--ring`, derivato, ha seguito automaticamente.
+- [✅] Verifica in browser nei due stati del tema. Chiusa dallo stesso sweep di contrasto del 2026-08-25 descritto sotto UI-1: 376 nodi di testo misurati su nove pagine, zero sotto 4,5:1 in nessuno dei due temi.
 
 ---
 
@@ -385,6 +385,23 @@ data; una decisione deve reggere anche quando il resto di quella fotografia è i
 
 Se in futuro il progetto adotterà una convenzione per le decisioni, questa voce è il candidato
 naturale come prima.
+
+### Nota di ribaltamento (2026-08-24)
+
+Questa decisione è stata **ribaltata il 2026-08-24**, con l'analisi qui sopra sotto gli occhi: il
+proprietario del progetto ha deciso di adottare shadcn/ui. Il ragionamento sopra non viene
+cancellato perché è quello effettivamente fatto in quella data, e due dei quattro motivi si sono
+rivelati veri lo stesso anche dopo il ribaltamento — le griglie sono rimaste ag-grid (motivo 1) e il
+conflitto sul theming era reale (motivo 2), solo che è stato risolto rinominando il vocabolario dei
+token invece di conviverci, un'opzione che questa analisi non aveva considerato. Gli altri due motivi
+(poche primitive da sostituire, guard da riscrivere) sono stati superati dal lavoro stesso: i guard
+di accessibilità sono stati portati avanti insieme alla migrazione, non ricostruiti da zero.
+
+La decisione nuova, con la sua analisi, è nella specifica
+[2026-08-24-shadcn-primitives-and-token-vocabulary-design.md](../superpowers/specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md),
+e registrata per l'azione in `CLAUDE.md`, sezione «Livello UI». Un lettore che arriva qui deve
+intendere questa voce come la fotografia di un'analisi datata 2026-08-19, non come la decisione in
+vigore.
 
 ---
 
@@ -497,9 +514,16 @@ non si adattano alla superficie su cui finiscono.
 - [✅] Le tre pagine non ancora controllate, nei due stati del tema.
 - [✅] Con OS in **dark** e applicazione in **light**, ripetuto su **tutte e tre** le pagine, non
   solo su una.
-- [ ] Le occorrenze di `text-gray-400` e `text-gray-500` convertite a token semantici — **resta
-  aperto e appartiene a THEME-2**, come la review prevedeva. I quattro punti sono ora identificati
-  con classe, testo e rapporto misurato.
+- [✅] Le occorrenze di `text-gray-400` e `text-gray-500` convertite a token semantici. Chiuso il
+  2026-08-25 (task 14): i quattro call site erano già stati migrati ai token dai lotti precedenti —
+  ma, come questa stessa sezione ammoniva, il nome del token non garantiva il rapporto, quindi sono
+  stati **rimisurati**, non assunti corretti. Tutti e quattro superano 4.5:1 sulla superficie reale
+  su cui poggiano: `(facoltativo)` su `/profile` (`text-muted-foreground`) **7.56:1** su `bg-card`
+  chiaro; il link del breadcrumb su `/roles-permissions/1` in hover (`hover:text-foreground`)
+  **20.13:1** su `--background` scuro; il separatore `/` (`text-muted-foreground`, colore di
+  default non-hover dello stesso contenitore) **7.93:1** sullo stesso sfondo; la scheda inattiva
+  (`text-muted-foreground`) **5.78:1** su `bg-card` scuro. Misurato via `getComputedStyle` nel
+  browser, non solo calcolato.
 
 ---
 

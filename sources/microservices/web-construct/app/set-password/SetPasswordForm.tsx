@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 export function SetPasswordForm({ token }: { token: string }) {
   const { t } = useI18n()
@@ -53,13 +55,18 @@ export function SetPasswordForm({ token }: { token: string }) {
   }
 
   return (
+    // This form renders inside app/set-password/page.tsx's fixed bg-white
+    // card. The card's interior is deliberately theme-independent — see the
+    // canonical comment on the equivalent body in components/Login.tsx for
+    // why, and for the measured contrast ratios behind the fixed colours
+    // below (text-[#374151], text-[#b91c1c]).
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700" htmlFor="new-password">
+        <label className="text-sm font-medium text-[#374151]" htmlFor="new-password">
           {t('auth.set_password.new_password')}
         </label>
         <div className="relative">
-          <input
+          <Input
             id="new-password"
             type={showPassword ? 'text' : 'password'}
             value={password}
@@ -67,42 +74,47 @@ export function SetPasswordForm({ token }: { token: string }) {
             required
             minLength={8}
             placeholder={t('auth.set_password.new_password_placeholder')}
-            className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-12 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-3 pr-12 bg-accent"
           />
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => setShowPassword(v => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            className="absolute right-3 top-1/2 -translate-y-1/2"
             aria-label={showPassword ? t('auth.set_password.hide_password') : t('auth.set_password.show_password')}
           >
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700" htmlFor="confirm-password">
+        <label className="text-sm font-medium text-[#374151]" htmlFor="confirm-password">
           {t('auth.set_password.confirm_password')}
         </label>
-        <input
+        <Input
           id="confirm-password"
           type={showPassword ? 'text' : 'password'}
           value={confirm}
           onChange={e => setConfirm(e.target.value)}
           required
           placeholder={t('auth.set_password.confirm_password_placeholder')}
-          className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-3 bg-accent"
         />
       </div>
 
       {error && (
-        <p className="text-red-600 text-sm">{error}</p>
+        <p className="text-[#b91c1c] text-sm">{error}</p>
       )}
 
+      {/* Deliberately a native <button>, not <Button> — group G, kept
+          identical across four files. See the canonical comment on the
+          equivalent button in components/Login.tsx. */}
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition disabled:opacity-50 border-brand-blue text-brand-blue enabled:hover:bg-brand-blue enabled:hover:text-white"
+        className="w-full rounded-lg border-2 py-3 font-semibold text-sm transition border-brand-blue text-brand-blue enabled:hover:bg-brand-blue enabled:hover:text-white"
       >
         {loading ? t('auth.set_password.submitting') : t('auth.set_password.submit')}
       </button>

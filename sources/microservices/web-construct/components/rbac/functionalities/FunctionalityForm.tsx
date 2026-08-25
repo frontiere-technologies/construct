@@ -3,6 +3,9 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PageContainer } from '@/components/PageContainer'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import IconPicker from './IconPicker'
 import CustomSelect from '../CustomSelect'
 import TagInput from './TagInput'
@@ -94,13 +97,13 @@ export default function FunctionalityForm(
     <PageContainer title={`${t('functionalities.list.title')} / ${mode === 'create' ? t('functionalities.form.create_label') : t('common.actions.edit')}`}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4 rounded-xl border border-border-subtle p-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{t('functionalities.form.general_info')}</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('functionalities.form.general_info')}</h2>
           <div className="flex items-start gap-3">
             <IconPicker compact value={f.iconPath} onChange={v => set('iconPath', v)} />
             <div className="flex-1 space-y-3">
-              <input value={primaryName} onChange={e => set('translations', { ...f.translations, [defaultLocale]: { ...f.translations[defaultLocale], name: e.target.value } })}
+              <Input value={primaryName} onChange={e => set('translations', { ...f.translations, [defaultLocale]: { ...f.translations[defaultLocale], name: e.target.value } })}
                 placeholder={t('functionalities.form.name_placeholder')} maxLength={100}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent" />
+                className="bg-transparent" />
               <CustomSelect
                 data-testid="select-genitore"
                 ariaLabel={t('functionalities.form.parent_placeholder')}
@@ -120,15 +123,15 @@ export default function FunctionalityForm(
             </div>
           </div>
           <div>
-            <textarea value={primaryDescription} onChange={e => set('translations', { ...f.translations, [defaultLocale]: { ...f.translations[defaultLocale], description: e.target.value } })}
+            <Textarea value={primaryDescription} onChange={e => set('translations', { ...f.translations, [defaultLocale]: { ...f.translations[defaultLocale], description: e.target.value } })}
               placeholder={t('functionalities.form.description_placeholder')} maxLength={500} rows={3}
               // At least twice a single-line input's height (px-3 py-2 text-sm ≈ 38px)
-              className="w-full min-h-[76px] px-3 py-2 text-sm rounded-lg border border-border bg-transparent" />
-            <div className="text-right text-[10px] text-gray-400">{primaryDescription.length}/500</div>
+              className="min-h-[76px] bg-transparent" />
+            <div className="text-right text-[10px] text-muted-foreground">{primaryDescription.length}/500</div>
           </div>
           <TagInput value={primaryTags} onChange={newTags => set('tagTranslations', { ...f.tagTranslations, [defaultLocale]: newTags })} />
 
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 pt-2">{t('functionalities.form.type_heading')}</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pt-2">{t('functionalities.form.type_heading')}</h2>
           <div className="space-y-3">
             <CustomSelect
               data-testid="select-tipologia"
@@ -142,8 +145,8 @@ export default function FunctionalityForm(
               placeholder={t('functionalities.form.type_placeholder')}
             />
             {isFunc && (
-              <input value={f.functionalityLink} onChange={e => set('functionalityLink', e.target.value)} placeholder={t('functionalities.form.link_placeholder')}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-transparent" />
+              <Input value={f.functionalityLink} onChange={e => set('functionalityLink', e.target.value)} placeholder={t('functionalities.form.link_placeholder')}
+                className="bg-transparent" />
             )}
             {selectedType?.key === 'external' && (
               <label className="flex items-center gap-2 text-sm text-foreground-secondary cursor-pointer">
@@ -161,7 +164,7 @@ export default function FunctionalityForm(
         </div>
 
         <div className="rounded-xl border border-border-subtle p-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">{t('functionalities.form.translations_heading')}</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">{t('functionalities.form.translations_heading')}</h2>
           <TranslationsAccordion
             locales={locales}
             translations={f.translations} tags={f.tagTranslations}
@@ -170,14 +173,14 @@ export default function FunctionalityForm(
       </div>
 
       <div className="pt-4 border-t border-border flex items-center justify-between">
-        <div>{error && <p className="text-sm text-red-600">{error}</p>}</div>
+        <div>{error && <p className="text-sm text-destructive-muted-foreground">{error}</p>}</div>
         <div className="flex gap-3">
-          <button onClick={() => router.push('/functionalities')} className="px-4 py-2 text-sm rounded-lg border border-border">
+          <Button variant="outline" onClick={() => router.push('/functionalities')}>
             {t('common.actions.cancel')}
-          </button>
-          <button onClick={submit} disabled={!valid || busy} className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed">
+          </Button>
+          <Button onClick={submit} disabled={!valid || busy}>
             {t('common.actions.save')}
-          </button>
+          </Button>
         </div>
       </div>
     </PageContainer>

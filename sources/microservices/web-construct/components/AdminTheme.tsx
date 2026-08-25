@@ -8,6 +8,7 @@ import type { ThemeConfig } from '@/types/menu'
 import { PageContainer } from '@/components/PageContainer'
 import { useI18n } from '@/context/I18nContext'
 import type { TranslateFn } from '@/lib/i18n/types'
+import { Button } from '@/components/ui/button'
 
 interface ColorPickerProps {
   label: string
@@ -20,7 +21,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, disab
   <div className="flex items-center justify-between">
     <label className="text-sm text-foreground-secondary">{label}</label>
     <div className="flex items-center space-x-2">
-      <span className="text-xs text-gray-500 font-mono uppercase w-16 text-right">{value}</span>
+      <span className="text-xs text-muted-foreground font-mono uppercase w-16 text-right">{value}</span>
       <input
         type="color"
         value={value}
@@ -178,27 +179,19 @@ export const AdminTheme: React.FC = () => {
               </span>
             )}
             {saveStatus === 'success' && (
-              <span className="text-sm text-green-600 dark:text-green-400">{t('theme.status.saved')}</span>
+              <span className="text-sm text-success-muted-foreground">{t('theme.status.saved')}</span>
             )}
             {saveStatus === 'error' && (
-              <span className="text-sm text-red-600 dark:text-red-400">{t('theme.status.save_failed')}</span>
+              <span className="text-sm text-destructive-muted-foreground">{t('theme.status.save_failed')}</span>
             )}
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={handleReset}
-              disabled={saving}
-              className="px-4 py-2 text-sm text-gray-600 enabled:hover:text-gray-900 dark:text-gray-400 dark:enabled:hover:text-white transition-colors border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <Button variant="outline" onClick={handleReset} disabled={saving}>
               {t('theme.actions.reset_defaults')}
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed"
-            >
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
               {saving ? t('theme.status.saving') : t('common.actions.save')}
-            </button>
+            </Button>
           </div>
         </div>
     </PageContainer>

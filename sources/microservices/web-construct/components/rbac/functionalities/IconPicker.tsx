@@ -5,6 +5,7 @@ import { Search, Upload, X, ImageOff } from 'lucide-react'
 import { IconRenderer } from '@/components/IconRenderer'
 import { sanitizeSvg } from '@/lib/rbac/svg-sanitize'
 import { useI18n } from '@/context/I18nContext'
+import { Button } from '@/components/ui/button'
 
 // Curated subset of Lucide icons suited for navigation/admin items.
 // Names are PascalCase — fed directly to IconRenderer which does the lazy import.
@@ -123,23 +124,23 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
         onClick={() => setOpen(o => !o)}
         aria-label={value ? t('functionalities.icon.selected_label', { value: value.startsWith('<svg') ? t('functionalities.icon.custom_svg') : value }) : t('functionalities.icon.select_label')}
         aria-expanded={open}
-        className={`group flex items-center justify-center rounded-lg border border-dashed transition-colors hover:border-gray-400 dark:hover:border-gray-500 hover:[transform:none]
+        className={`group flex items-center justify-center rounded-lg border border-dashed transition-colors enabled:hover:border-foreground/30 hover:[transform:none]
           ${compact
-            ? 'w-[38px] h-[38px] border-gray-300 dark:border-gray-600'
-            : 'flex-col gap-1 p-3 w-full border-gray-300 dark:border-gray-600'
+            ? 'w-[38px] h-[38px] border-border'
+            : 'flex-col gap-1 p-3 w-full border-border'
           }`}
       >
         {value
           ? <IconRenderer name={value} size={compact ? 18 : 28} />
-          : <ImageOff size={compact ? 16 : 24} className="text-gray-300 dark:text-gray-600" />}
-        {!compact && <span className="text-xs text-gray-500">{t('functionalities.icon.label')}</span>}
+          : <ImageOff size={compact ? 16 : 24} className="text-muted-foreground" />}
+        {!compact && <span className="text-xs text-muted-foreground">{t('functionalities.icon.label')}</span>}
       </button>
       {value && (
         <button
           type="button"
           onClick={clear}
           aria-label={t('functionalities.icon.remove_label')}
-          className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 hover:[transform:none] text-red-500 z-10"
+          className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-destructive-muted enabled:hover:bg-destructive enabled:hover:text-destructive-foreground hover:[transform:none] text-destructive-muted-foreground z-10"
         >
           <X size={9} />
         </button>
@@ -147,29 +148,28 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
 
       {/* ── Popover ──────────────────────────────────────────────── */}
       {open && (
-        <div className="absolute left-0 top-full mt-1.5 z-50 w-72 rounded-xl border border-border bg-surface-overlay shadow-2xl overflow-hidden">
+        <div className="absolute left-0 top-full mt-1.5 z-50 w-72 rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
             <div className="flex gap-4">
               {(['library', 'upload'] as const).map(tabKey => (
                 <button key={tabKey} type="button" onClick={() => setTab(tabKey)}
-                  className={`text-xs font-medium pb-1 border-b-2 transition-colors ${tab === tabKey ? 'border-gray-900 dark:border-white text-foreground' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                  className={`text-xs font-medium pb-1 border-b-2 transition-colors ${tab === tabKey ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground'}`}>
                   {tabKey === 'library' ? t('functionalities.icon.tab_library') : t('functionalities.icon.tab_upload')}
                 </button>
               ))}
             </div>
-            <button type="button" onClick={close}
-              className="p-0.5 text-gray-400 hover:text-gray-600 rounded transition-colors">
+            <Button variant="ghost" size="icon" onClick={close} aria-label={t('common.actions.close')}>
               <X size={13} />
-            </button>
+            </Button>
           </div>
 
           {/* ── Library tab ─────────────────────────────────────── */}
           {tab === 'library' && (
             <>
               <div className="px-2.5 pt-2 pb-1.5">
-                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border bg-gray-50 dark:bg-gray-800">
-                  <Search size={11} className="text-gray-400 shrink-0" aria-hidden="true" />
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border bg-accent">
+                  <Search size={11} className="text-muted-foreground shrink-0" aria-hidden="true" />
                   <input
                     autoFocus
                     type="search"
@@ -180,30 +180,38 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                     // field has content and is not reliably announced. The adjacent
                     // magnifier is decorative and names nothing, so label it explicitly.
                     aria-label={t('icon_picker.search_placeholder')}
-                    className="flex-1 text-xs bg-transparent outline-none placeholder:text-gray-400"
+                    className="flex-1 text-xs bg-transparent outline-none placeholder:text-muted-foreground"
                   />
                 </div>
               </div>
               <div className="grid grid-cols-7 gap-0.5 px-2 pb-2 max-h-52 overflow-y-auto">
                 {/* "Nessuna icona" is always first — not affected by search */}
                 {!search && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
                     title={t('icon_picker.no_icon')}
+                    aria-label={t('icon_picker.no_icon')}
                     onClick={() => pick('')}
-                    className={`flex items-center justify-center p-2 rounded-lg hover:bg-surface-hover transition-colors ${noIconSelected ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
+                    className={`p-2 ${noIconSelected ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
                   >
-                    <ImageOff size={15} className="text-gray-400" />
-                  </button>
+                    <ImageOff size={15} className="text-muted-foreground" />
+                  </Button>
                 )}
                 {filtered.map(name => (
-                  <button
-                    key={name} type="button" title={name}
+                  <Button
+                    key={name} title={name}
+                    variant="ghost"
+                    // `title={name}` above is a raw, untranslated Lucide icon
+                    // name — never the accessible name by itself, since a
+                    // title attribute is only a hover tooltip. aria-label
+                    // wins the accessible-name computation over title, so
+                    // this is what a screen reader actually announces.
+                    aria-label={t('icon_picker.select_icon', { name })}
                     onClick={() => pick(name)}
-                    className={`flex items-center justify-center p-2 rounded-lg hover:bg-surface-hover transition-colors ${value === name ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
+                    className={`p-2 ${value === name ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
                   >
                     <IconRenderer name={name} size={15} />
-                  </button>
+                  </Button>
                 ))}
                 {filtered.length === 0 && (
                   // FEAT-1. The old empty state was a bare "Nessun risultato",
@@ -217,26 +225,26 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                         around here still uses: they follow the configurable
                         theme, so this markup adds nothing for THEME-2 to undo.
                         Both lines are -muted, not -faint: measured during the
-                        THEME-3 review, --theme-foreground-faint is #9ca3af, the
-                        same value as text-gray-400, and reads 2.54:1 on a light
+                        THEME-3 review, --foreground-faint is #9ca3af, the
+                        same value as Tailwind's gray-400, and reads 2.54:1 on a light
                         surface — under the 4.5:1 floor. Being a token does not
                         make a colour legible; that is a property of the value.
                         The call to action is deliberately NOT text-primary: it
-                        measured 4.47:1 light and 3.97:1 dark, and --theme-primary
+                        measured 4.47:1 light and 3.97:1 dark, and --primary
                         is user-configurable, so no contrast promise about it can
                         hold. Underlined body text carries the affordance without
                         depending on a colour an administrator can change — the
                         same pattern the upload tab already uses for "scegli il
                         file". */}
-                    <p className="text-xs text-foreground-muted">{t('icon_picker.no_results')}</p>
-                    <p className="text-[10px] text-foreground-muted leading-relaxed">{t('icon_picker.curated_hint')}</p>
-                    <button
-                      type="button"
+                    <p className="text-xs text-muted-foreground">{t('icon_picker.no_results')}</p>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">{t('icon_picker.curated_hint')}</p>
+                    <Button
+                      variant="link"
                       onClick={() => setTab('upload')}
-                      className="text-[11px] font-medium text-foreground underline hover:[transform:none]"
+                      className="p-0 text-[11px] text-foreground underline hover:[transform:none]"
                     >
                       {t('icon_picker.upload_instead')}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -250,20 +258,20 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                 onClick={() => fileRef.current?.click()}
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => { e.preventDefault(); readFile(e.dataTransfer.files?.[0]) }}
-                className="flex flex-col items-center justify-center gap-2 p-5 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 cursor-pointer hover:border-gray-400 transition-colors"
+                className="flex flex-col items-center justify-center gap-2 p-5 rounded-lg border border-dashed border-border cursor-pointer hover:border-foreground/30 transition-colors"
               >
                 <input ref={fileRef} type="file" accept=".svg,image/svg+xml" className="hidden"
                   onChange={e => readFile(e.target.files?.[0])} />
-                <Upload size={18} className="text-gray-400" />
-                <span className="text-xs text-gray-500 text-center">
+                <Upload size={18} className="text-muted-foreground" />
+                <span className="text-xs text-muted-foreground text-center">
                   {t('functionalities.icon.drop_prefix')} <span className="underline">{t('functionalities.icon.choose_file')}</span>
                 </span>
-                <span className="text-[10px] text-gray-400">{t('functionalities.icon.format_hint')}</span>
-                {err && <span className="text-[10px] text-red-500">{err}</span>}
+                <span className="text-[10px] text-muted-foreground">{t('functionalities.icon.format_hint')}</span>
+                {err && <span className="text-[10px] text-destructive-muted-foreground">{err}</span>}
               </div>
               {/* SVG requirements hint */}
-              <div className="rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2 text-[10px] text-gray-500 leading-relaxed space-y-0.5">
-                <p className="font-medium text-foreground-muted">{t('functionalities.icon.requirements_heading')}</p>
+              <div className="rounded-lg bg-accent px-3 py-2 text-[10px] text-muted-foreground leading-relaxed space-y-0.5">
+                <p className="font-medium text-muted-foreground">{t('functionalities.icon.requirements_heading')}</p>
                 <p>• {t('functionalities.icon.req_dimensions_prefix')}<code className="font-mono">viewBox=&quot;0 0 24 24&quot;</code>{t('functionalities.icon.req_dimensions_suffix')}</p>
                 <p>• {t('functionalities.icon.req_colors_prefix')}<code className="font-mono">currentColor</code>{t('functionalities.icon.req_colors_suffix')}</p>
                 <p>• {t('functionalities.icon.req_stroke_prefix')}<code className="font-mono">stroke-width=&quot;2&quot;</code>{t('functionalities.icon.req_stroke_suffix')}</p>

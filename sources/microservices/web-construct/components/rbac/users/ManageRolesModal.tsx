@@ -7,6 +7,7 @@ import { ROLE_REGISTERED, type UserDTO } from '@/lib/rbac/types'
 import RoleMultiSelect from './RoleMultiSelect'
 import { useI18n } from '@/context/I18nContext'
 import AccessibleDialog from '@/components/ui/AccessibleDialog'
+import { Button } from '@/components/ui/button'
 
 export default function ManageRolesModal(
   { user, allRoles, onClose, onSaved }:
@@ -43,13 +44,16 @@ export default function ManageRolesModal(
       titleId={titleId}
       onClose={onClose}
       busy={busy}
-      panelClassName="bg-surface-overlay rounded-xl p-5 w-full max-w-md"
+      panelClassName="bg-popover rounded-xl p-5 w-full max-w-md"
     >
         <div className="flex items-center justify-between mb-4">
           <h2 id={titleId} className="text-lg font-semibold">{t('users.actions.manage_roles')} — {user.firstName ?? user.email}</h2>
-          <button data-dialog-initial-focus data-dialog-close onClick={onClose} aria-label={t('common.actions.close')} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+          <Button
+            variant="ghost" size="icon"
+            data-dialog-initial-focus data-dialog-close onClick={onClose} aria-label={t('common.actions.close')}
+          ><X size={18} /></Button>
         </div>
-        <label className="block text-xs font-medium text-foreground-muted mb-1">{t('users.list.roles')}</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1">{t('users.list.roles')}</label>
         <RoleMultiSelect
           options={allRoles}
           selected={selected}
@@ -57,10 +61,10 @@ export default function ManageRolesModal(
           lockedId={ROLE_REGISTERED}
           lockedLabel={t('users.roles.always_assigned')}
         />
-        {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
+        {error && <p className="text-sm text-destructive-muted-foreground mt-3">{error}</p>}
         <div className="flex justify-end gap-2 mt-5">
-          <button data-dialog-close onClick={onClose} className="px-3 py-2 text-sm rounded-lg border border-border">{t('common.actions.cancel')}</button>
-          <button onClick={save} disabled={busy} data-testid="save-roles" className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white disabled:opacity-40">{t('common.actions.save')}</button>
+          <Button variant="outline" data-dialog-close onClick={onClose}>{t('common.actions.cancel')}</Button>
+          <Button onClick={save} disabled={busy} data-testid="save-roles">{t('common.actions.save')}</Button>
         </div>
     </AccessibleDialog>
   )

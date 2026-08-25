@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { FolderTree, Code, Globe, Link as LinkIcon, Circle } from 'lucide-react'
 import { typeIcon } from './NavigationTree'
+
+// NavigationTree now reads useI18n for its drag-handle/toggle aria-labels
+// (BTN-2). The real module chains into '@/lib/i18n/user-language-actions'
+// ('use server') -> '@/lib/auth' -> next-auth, which vitest's plain node
+// environment cannot resolve. Stub it, same as TranslationsAccordion.test.tsx.
+vi.mock('@/context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 
 describe('typeIcon', () => {
   it('returns FolderTree for categories regardless of functionalityType', () => {

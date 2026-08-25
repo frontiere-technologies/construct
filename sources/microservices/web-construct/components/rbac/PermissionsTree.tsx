@@ -19,7 +19,14 @@ const Toggle: React.FC<{ on: boolean; disabled: boolean; onToggle: () => void }>
     aria-checked={on}
     disabled={disabled}
     onClick={onToggle}
-    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${on ? 'bg-gray-900 dark:bg-primary' : 'bg-gray-300 dark:bg-gray-600'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    // BTN-7: the on-state collapses to plain bg-primary, matching Sidebar.tsx's
+    // theme toggle — the dark: pairing is unnecessary once the token itself
+    // changes with the theme. The off-state track uses bg-switch-off (task 14),
+    // not bg-input: --input just aliases --border, and the border colour is too
+    // pale against a white knob in light theme (1.24:1) to convey the off state
+    // — see the --switch-off comment in globals.css. Must stay identical to the
+    // Sidebar.tsx theme toggle.
+    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${on ? 'bg-primary' : 'bg-switch-off'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
   >
     <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${on ? 'translate-x-5' : 'translate-x-1'}`} />
   </button>

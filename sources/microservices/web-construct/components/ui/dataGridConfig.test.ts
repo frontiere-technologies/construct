@@ -27,8 +27,8 @@ describe('columnPinningState', () => {
 
 describe('appGridThemeParams', () => {
   it('uses theme tokens for the neutral light header', () => {
-    expect(appGridThemeParams.headerBackgroundColor).toBe('var(--theme-surface-hover)')
-    expect(appGridThemeParams.headerTextColor).toBe('var(--theme-foreground)')
+    expect(appGridThemeParams.headerBackgroundColor).toBe('var(--accent)')
+    expect(appGridThemeParams.headerTextColor).toBe('var(--foreground)')
     expect(appGridThemeParams.pinnedColumnBorder).toBe(false)
   })
 })

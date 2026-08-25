@@ -13,6 +13,7 @@ import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
 import { useI18n } from '@/context/I18nContext'
 import { deleteLanguage, setDefaultLanguage, setLanguageActive } from '@/lib/i18n/language-actions'
+import { Button } from '@/components/ui/button'
 import {
   languagesFilterModelToSearchParams, languagesUrlParamsToFilterModel, languagesUrlParamsToSortModel,
   type LanguagesGridFilterModel, type LanguagesUrlParams,
@@ -119,12 +120,12 @@ export default function LanguagesTableClient(props: Props) {
           () => setParam(languagesFilterModelToSearchParams({})),
         )}
       >
-        <button onClick={() => setCreating(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-900 text-white">
+        <Button size="sm" onClick={() => setCreating(true)}>
           {t('language.actions.create')}
-        </button>
+        </Button>
       </GridToolbar>
 
-      {error && <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p role="alert" className="mb-3 text-sm text-destructive-muted-foreground">{error}</p>}
 
       <DataGrid<LanguagePageItemDto>
         columnDefs={columnDefs}

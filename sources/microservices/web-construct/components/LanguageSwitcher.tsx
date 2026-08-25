@@ -167,7 +167,7 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
           }
           onKeyDown={onListKeyDown}
           data-testid="language-switcher-options"
-          className="absolute bottom-full left-0 z-50 mb-1 w-44 rounded-lg border border-sidebar-text/10 bg-sidebar-bg p-1 shadow-lg outline-none"
+          className="absolute bottom-full left-0 z-50 mb-1 w-44 rounded-lg border border-sidebar-foreground/10 bg-sidebar p-1 shadow-lg outline-none"
         >
           {languages.map((language, index) => {
             const selected = language.code === code
@@ -184,8 +184,8 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
                 onMouseEnter={() => setActiveIndex(index)}
                 className={clsx(
                   'flex w-full cursor-pointer items-center gap-2 rounded px-3 py-2 text-left text-sm',
-                  active && 'bg-sidebar-active-bg',
-                  selected ? 'font-medium text-sidebar-active-text' : 'text-sidebar-text',
+                  active && 'bg-sidebar-accent',
+                  selected ? 'font-medium text-sidebar-accent-foreground' : 'text-sidebar-foreground',
                 )}
               >
                 <span className="flex-1">{language.nativeName}</span>

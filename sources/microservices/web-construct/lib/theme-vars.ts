@@ -9,21 +9,30 @@ interface PairedToken {
   darkKey: keyof ThemeConfig
 }
 
+/**
+ * Il confine fra i due vocabolari del progetto.
+ *
+ * A sinistra i nomi shadcn, che sono gli unici che un componente scrive mai. A
+ * destra i campi di ThemeConfig, che sono uno schema di dati: vivono sul
+ * database, li modifica Admin -> Tema e nessuno li scrive in una className.
+ * Rinominarli per farli somigliare ai token costerebbe una migration
+ * distruttiva sulle configurazioni gia' salvate in cambio di niente.
+ */
 const PAIRED_TOKENS: PairedToken[] = [
-  { cssVar: '--theme-sidebar-bg', lightKey: 'sidebarBgLight', darkKey: 'sidebarBgDark' },
-  { cssVar: '--theme-sidebar-text', lightKey: 'sidebarTextLight', darkKey: 'sidebarTextDark' },
-  { cssVar: '--theme-active-bg', lightKey: 'activeItemBgLight', darkKey: 'activeItemBgDark' },
-  { cssVar: '--theme-active-text', lightKey: 'activeItemTextLight', darkKey: 'activeItemTextDark' },
-  { cssVar: '--theme-page', lightKey: 'pageLight', darkKey: 'pageDark' },
-  { cssVar: '--theme-surface', lightKey: 'surfaceLight', darkKey: 'surfaceDark' },
-  { cssVar: '--theme-surface-overlay', lightKey: 'surfaceOverlayLight', darkKey: 'surfaceOverlayDark' },
-  { cssVar: '--theme-surface-hover', lightKey: 'surfaceHoverLight', darkKey: 'surfaceHoverDark' },
-  { cssVar: '--theme-border', lightKey: 'borderLight', darkKey: 'borderDark' },
-  { cssVar: '--theme-border-subtle', lightKey: 'borderSubtleLight', darkKey: 'borderSubtleDark' },
-  { cssVar: '--theme-foreground', lightKey: 'foregroundLight', darkKey: 'foregroundDark' },
-  { cssVar: '--theme-foreground-secondary', lightKey: 'foregroundSecondaryLight', darkKey: 'foregroundSecondaryDark' },
-  { cssVar: '--theme-foreground-muted', lightKey: 'foregroundMutedLight', darkKey: 'foregroundMutedDark' },
-  { cssVar: '--theme-foreground-faint', lightKey: 'foregroundFaintLight', darkKey: 'foregroundFaintDark' },
+  { cssVar: '--sidebar', lightKey: 'sidebarBgLight', darkKey: 'sidebarBgDark' },
+  { cssVar: '--sidebar-foreground', lightKey: 'sidebarTextLight', darkKey: 'sidebarTextDark' },
+  { cssVar: '--sidebar-accent', lightKey: 'activeItemBgLight', darkKey: 'activeItemBgDark' },
+  { cssVar: '--sidebar-accent-foreground', lightKey: 'activeItemTextLight', darkKey: 'activeItemTextDark' },
+  { cssVar: '--background', lightKey: 'pageLight', darkKey: 'pageDark' },
+  { cssVar: '--card', lightKey: 'surfaceLight', darkKey: 'surfaceDark' },
+  { cssVar: '--popover', lightKey: 'surfaceOverlayLight', darkKey: 'surfaceOverlayDark' },
+  { cssVar: '--accent', lightKey: 'surfaceHoverLight', darkKey: 'surfaceHoverDark' },
+  { cssVar: '--border', lightKey: 'borderLight', darkKey: 'borderDark' },
+  { cssVar: '--border-subtle', lightKey: 'borderSubtleLight', darkKey: 'borderSubtleDark' },
+  { cssVar: '--foreground', lightKey: 'foregroundLight', darkKey: 'foregroundDark' },
+  { cssVar: '--foreground-secondary', lightKey: 'foregroundSecondaryLight', darkKey: 'foregroundSecondaryDark' },
+  { cssVar: '--muted-foreground', lightKey: 'foregroundMutedLight', darkKey: 'foregroundMutedDark' },
+  { cssVar: '--foreground-faint', lightKey: 'foregroundFaintLight', darkKey: 'foregroundFaintDark' },
 ]
 
 /** WCAG 2.1 relative luminance. */
@@ -68,8 +77,8 @@ export function primaryForeground(primary: string): string {
 export function resolveThemeVars(config: ThemeConfig, isDark: boolean): Record<string, string> {
   const primary = safeColor(config.primaryColor, defaultThemeConfig.primaryColor)
   const vars: Record<string, string> = {
-    '--theme-primary': primary,
-    '--theme-primary-foreground': primaryForeground(primary),
+    '--primary': primary,
+    '--primary-foreground': primaryForeground(primary),
   }
   for (const token of PAIRED_TOKENS) {
     const key = isDark ? token.darkKey : token.lightKey
