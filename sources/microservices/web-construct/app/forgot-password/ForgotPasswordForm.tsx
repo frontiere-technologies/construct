@@ -61,6 +61,9 @@ export function ForgotPasswordForm() {
       {status === 'error' && (
         <p className="text-destructive-muted-foreground text-sm">{t('auth.forgot.error')}</p>
       )}
+      {/* Deliberately a native <button>, not <Button> — group G, kept
+          identical across four files. See the canonical comment on the
+          equivalent button in components/Login.tsx. */}
       <button
         type="submit"
         disabled={status === 'sending'}

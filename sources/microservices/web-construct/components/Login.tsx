@@ -139,6 +139,18 @@ function LoginForm() {
               <p className="text-destructive-muted-foreground text-sm">{errorMessage}</p>
             )}
 
+            {/* Deliberately a native <button>, not <Button>: this is group G
+                (authentication) in docs/reviews/2026-08-21-button-inventory.md,
+                the one group a migration can only degrade — it's byte-identical
+                across four files precisely because nobody has touched it since.
+                variant="outline" + size="default" would inject px-4,
+                font-medium and transition-colors this class string never had;
+                making that pixel-identical again means overriding almost the
+                whole string back, for no gain. The four travel together — see
+                app/forgot-password/ForgotPasswordForm.tsx,
+                app/register/RegisterForm.tsx and
+                app/set-password/SetPasswordForm.tsx — and must stay identical
+                to this one if any of them changes. */}
             <button
               type="submit"
               disabled={loading}

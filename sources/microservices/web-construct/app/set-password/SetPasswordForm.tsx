@@ -103,6 +103,9 @@ export function SetPasswordForm({ token }: { token: string }) {
         <p className="text-destructive-muted-foreground text-sm">{error}</p>
       )}
 
+      {/* Deliberately a native <button>, not <Button> — group G, kept
+          identical across four files. See the canonical comment on the
+          equivalent button in components/Login.tsx. */}
       <button
         type="submit"
         disabled={loading}
