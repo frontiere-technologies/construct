@@ -43,11 +43,11 @@ file per file, perché è lo stesso edit sulle stesse `className`.
 ## Task
 
 - [✅] ID=THEME-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Le utility `dark:` non seguono il toggle tema dell'app, Fix description=Dichiarato `@custom-variant dark (&:where(.dark, .dark *))` in `app/globals.css`. Verificato: le 27 classi `dark:` distinte (46 occorrenze) sono passate da `@media (prefers-color-scheme: dark)` a `:where(.dark, .dark *)`, e il comportamento è disaccoppiato dall'OS in entrambe le direzioni. Guard di regressione in `lib/theme-dark-variant.test.ts`. Rimane THEME-3 per la revisione di contrasto pagina per pagina.
-- [ ] ID=UI-1, Severity=Medium, Complexity=High, Priority=P1, Title=Estrarre le primitive `Button` e `Input`, Fix description=Creare i componenti in `components/ui/` con `clsx` e varianti, poi migrare 71 `<button>` in 35 file e 47 campi in 20 file. Decidere prima l'API delle varianti, il destino delle regole globali in `globals.css` e l'aggiornamento del guard AST `disabledButtonHoverStyles.test.ts`, che diventa inerte se i call site smettono di essere `<button>` nativi.
-- [ ] ID=THEME-2, Severity=Low, Complexity=High, Priority=P2, Title=Completare la migrazione ai token semantici, Fix description=**Fase A completata il 2026-08-21** (fondamenta, nessun call site toccato): valori della tavolozza corretti sulla superficie peggiore reale, primario predefinito portato a un colore su cui un'etichetta può stare, colore etichetta derivato invece che scritto, nove token di stato fissi in `@theme`, regole globali dei bottoni spostate in `@layer base` così una utility può sovrascriverle senza `!`, cricchetto sui colori raw a quota 231, e migration 0007 che solleva le configurazioni tema già salvate sugli utenti. **Resta la migrazione vera** delle 231 occorrenze, da fare insieme a UI-1 file per file.
+- [✅] ID=UI-1, Severity=Medium, Complexity=High, Priority=P1, Title=Estrarre le primitive `Button` e `Input`, Fix description=Creare i componenti in `components/ui/` con `clsx` e varianti, poi migrare 71 `<button>` in 35 file e 47 campi in 20 file. Decidere prima l'API delle varianti, il destino delle regole globali in `globals.css` e l'aggiornamento del guard AST `disabledButtonHoverStyles.test.ts`, che diventa inerte se i call site smettono di essere `<button>` nativi. **Chiuso il 2026-08-24/25** dalla specifica shadcn (ribalta DOC-1, vedi sotto): `Button` e `Input` esistono in `components/ui/` su primitive shadcn, i 64 bottoni nel perimetro sono migrati sulle varianti stock (i gruppi E, F, H, I, K sono rimasti nativi come l'inventario prescriveva; il gruppo G — autenticazione — è rimasto nativo anche lui, per decisione presa durante il lavoro: era byte-identico su quattro file e la migrazione a `variant="outline"` gli avrebbe iniettato `px-4`, `font-medium` e `transition-colors` che non aveva mai avuto, vedi il commento in `components/Login.tsx`), e `disabledButtonHoverStyles.test.ts` riconosce ora sia `<button>` nativi sia `<Button>`. Non chiuso del tutto: la verifica in browser nei due temi ha coperto il pilota, il lotto `rbac/`, il lotto `i18n/` e controlli a campione sul chrome, non tutti e 35 i file in modo esaustivo; la navigazione da tastiera reale del menu ARIA di `GridRowActionsMenu` resta da verificare.
+- [✅] ID=THEME-2, Severity=Low, Complexity=High, Priority=P2, Title=Completare la migrazione ai token semantici, Fix description=**Fase A completata il 2026-08-21** (fondamenta, nessun call site toccato): valori della tavolozza corretti sulla superficie peggiore reale, primario predefinito portato a un colore su cui un'etichetta può stare, colore etichetta derivato invece che scritto, nove token di stato fissi in `@theme`, regole globali dei bottoni spostate in `@layer base` così una utility può sovrascriverle senza `!`, cricchetto sui colori raw a quota 231, e migration 0007 che solleva le configurazioni tema già salvate sugli utenti. **Migrazione vera chiusa dalla specifica shadcn del 2026-08-24**: le occorrenze di colori raw sono passate da 231 a **3**, tutte su `components/Login.tsx` (il bottone "Accedi con Google", chrome di terzi prescritto da Google, con la motivazione ora scritta nel campo `justified` di `raw-color-baseline.json`); il vocabolario dei token è diventato quello di shadcn e i `--theme-*` sono spariti dal sorgente. Verifica in browser nei due temi fatta sul pilota, `rbac/`, `i18n/` e a campione sul chrome — non su tutti e 35 i file in modo esaustivo.
 - [✅] ID=THEME-3, Severity=Low, Complexity=Medium, Priority=P2, Title=Revisione di contrasto delle utility `dark:` ora che si attivano, Fix description=Revisione completata il 2026-08-21 sulle tre pagine mancanti, nei due stati del tema e con OS scuro / applicazione chiara. Il disaccoppiamento di THEME-1 regge in tutte e nove le combinazioni. Trovati quattro punti sotto la soglia di contrasto, tutti classi `text-gray-*` statiche: passano in un tema e falliscono nell'altro. Elencati con i numeri qui sotto e consegnati a THEME-2, come previsto.
 
-- [✅] ID=DOC-1, Severity=Info, Complexity=Low, Priority=P3, Title=Registrare la decisione su shadcn/ui e Material UI, Fix description=Registrata in `CLAUDE.md`, sezione Stack, come sottosezione "Livello UI: né shadcn/ui né Material UI": la decisione, i quattro motivi in forma sintetica, e il perimetro di ciò che resta ammesso (adozione puntuale di Radix per una singola primitiva complessa). L'analisi completa resta qui.
+- [✅] ID=DOC-1, Severity=Info, Complexity=Low, Priority=P3, Title=Registrare la decisione su shadcn/ui e Material UI, Fix description=Registrata in `CLAUDE.md`, sezione Stack, come sottosezione "Livello UI: né shadcn/ui né Material UI": la decisione, i quattro motivi in forma sintetica, e il perimetro di ciò che resta ammesso (adozione puntuale di Radix per una singola primitiva complessa). L'analisi completa resta qui. **Ribaltata il 2026-08-24**: il progetto adotta shadcn/ui, vedi la nota in fondo alla voce DOC-1 qui sotto e [docs/superpowers/specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md](../superpowers/specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md).
 
 ---
 
@@ -385,6 +385,23 @@ data; una decisione deve reggere anche quando il resto di quella fotografia è i
 
 Se in futuro il progetto adotterà una convenzione per le decisioni, questa voce è il candidato
 naturale come prima.
+
+### Nota di ribaltamento (2026-08-24)
+
+Questa decisione è stata **ribaltata il 2026-08-24**, con l'analisi qui sopra sotto gli occhi: il
+proprietario del progetto ha deciso di adottare shadcn/ui. Il ragionamento sopra non viene
+cancellato perché è quello effettivamente fatto in quella data, e due dei quattro motivi si sono
+rivelati veri lo stesso anche dopo il ribaltamento — le griglie sono rimaste ag-grid (motivo 1) e il
+conflitto sul theming era reale (motivo 2), solo che è stato risolto rinominando il vocabolario dei
+token invece di conviverci, un'opzione che questa analisi non aveva considerato. Gli altri due motivi
+(poche primitive da sostituire, guard da riscrivere) sono stati superati dal lavoro stesso: i guard
+di accessibilità sono stati portati avanti insieme alla migrazione, non ricostruiti da zero.
+
+La decisione nuova, con la sua analisi, è nella specifica
+[2026-08-24-shadcn-primitives-and-token-vocabulary-design.md](../superpowers/specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md),
+e registrata per l'azione in `CLAUDE.md`, sezione «Livello UI». Un lettore che arriva qui deve
+intendere questa voce come la fotografia di un'analisi datata 2026-08-19, non come la decisione in
+vigore.
 
 ---
 

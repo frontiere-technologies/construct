@@ -28,18 +28,13 @@ Il database è Postgres ospitato su Supabase, ma l'SDK `@supabase/supabase-js` n
 
 Altre dipendenze rilevanti: `@dnd-kit/*` (drag & drop), `bcryptjs` (hashing), `isomorphic-dompurify` (sanitizzazione HTML), `nodemailer` + `resend` (email), `pino` (logging), Vitest (unit test) + Playwright/pytest (E2E).
 
-### Livello UI: né shadcn/ui né Material UI
+### Livello UI: shadcn/ui
 
-**Decisione presa il 2026-08-19: non sostituire i componenti con shadcn/ui o Material UI.** I componenti condivisi sono scritti a mano in `components/ui/`, con Tailwind e `clsx`. Quattro motivi, in ordine di peso:
+**Decisione presa il 2026-08-24: adottare shadcn/ui, ribaltando la decisione del 2026-08-19.** Il progetto usa le primitive shadcn (`components/ui/`, `class-variance-authority`, `@radix-ui/react-slot`) e il suo vocabolario di token come unico vocabolario di stile: i `--theme-*` non esistono più, né in `globals.css` né in una `className`. Il confine è `lib/theme-vars.ts`: da lì in giù restano i nomi di dominio di `ThemeConfig` (`primaryColor`, `surfaceHoverLight`, …), invariati sul database e nel pannello Admin → Tema; da lì in su solo nomi shadcn (`--primary`, `--card`, `--sidebar`, …). Le griglie restano ag-grid — shadcn non ha una data grid, motivo che DOC-1 aveva dato e che è rimasto vero anche dopo il ribaltamento; il conflitto sul vocabolario dei token era vero anch'esso, e si è risolto rinominando `resolveThemeVars()` invece che convivendo con due vocabolari.
 
-1. Le griglie restano ag-grid: shadcn non ha una data grid, quindi si otterrebbero due linguaggi visivi da tenere allineati invece di uno.
-2. Il sistema di token del tema è già configurabile a runtime e persistito su DB; shadcn porta il proprio vocabolario (`--background`, `--primary`, `--ring`) e andrebbe rimappato per intero.
-3. Le primitive effettivamente sostituibili sono ~250 righe, già funzionanti e coperte da test.
-4. `components/ui/dialogConsumers.test.ts` e `buttonInteractionStyles.test.ts` codificano contratti di accessibilità che andrebbero ricostruiti da zero.
+**Ogni componente importato con `npx shadcn add` va riletto prima di essere accettato**, non incollato: è codice copiato, senza percorso di upgrade da vendor. Due esempi reali trovati in questo lavoro: lo stock `disabled:pointer-events-none` del `Button` contraddice una decisione già testata qui (`buttonInteractionStyles.test.ts` impone che un bottone disabilitato resti sensibile al mouse); e lo stock `--destructive-foreground: #ffffff` legge 3,76:1 sul rosso del tema scuro — illeggibile.
 
-**Cosa è invece ammesso:** adozione **puntuale** di Radix per una singola primitiva accessibile e complessa che non esiste ancora — combobox, dropdown menu, popover, tooltip, tabs, sheet, command palette — mappando i suoi token sui `--theme-*` in un unico punto. Non è un'apertura a una migrazione generale: si installa il componente che serve, non la libreria.
-
-Analisi completa, con i numeri e i test coinvolti: [docs/reviews/2026-08-19-ui-primitives-and-theming.md](docs/reviews/2026-08-19-ui-primitives-and-theming.md), voce DOC-1.
+Analisi del ribaltamento: [docs/superpowers/specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md](docs/superpowers/specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md). La decisione precedente e i suoi quattro motivi restano registrati, con la nota di ribaltamento, in [docs/reviews/2026-08-19-ui-primitives-and-theming.md](docs/reviews/2026-08-19-ui-primitives-and-theming.md), voce DOC-1.
 
 ### Commit AI-tooling folders to Git
 

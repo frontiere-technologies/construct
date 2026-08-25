@@ -112,12 +112,17 @@ schede hanno la stessa struttura (`border-b-2`) ma dimensioni di testo diverse, 
 Il criterio di accettazione di UI-1 dice: «le varianti coprono tutti i punti d'uso senza `className`
 di override arbitrari». Su questo inventario si traduce in tre risposte.
 
-**1. Sono varianti di `Button`: i gruppi A, B, C, D, G, J — 64 punti d'uso su 81.** Il vocabolario
-minimo che li copre è `primary`, `secondary`, `ghost`, `item`, `link`, più una dimensione e una
-modalità sola-icona. Il gruppo G (autenticazione, bordo `brand-blue` a piena larghezza) è il caso
-dubbio: o diventa una variante `outline` con `fullWidth`, o resta fuori come componente della sola
-area di accesso. Da decidere, perché è l'unico gruppo già coerente e sarebbe il primo a peggiorare
-se forzato in una variante generica.
+**1. Sono varianti di `Button`: i gruppi A, B, C, D, J — 59 punti d'uso su 81.** Il vocabolario
+minimo che li copre è `default`, `outline`, `ghost`, `link`, più una dimensione e una modalità
+sola-icona. Il gruppo G (autenticazione, bordo `brand-blue` a piena larghezza) **non è più un caso
+dubbio: deciso il 2026-08-24, resta fuori, nativo.** È stato l'unico gruppo già coerente —
+byte-identico su quattro file — e forzarlo in `variant="outline"` è stato provato e scartato: la
+variante avrebbe iniettato `px-4`, `font-medium` e `transition-colors` che quella stringa di classi
+non aveva mai avuto, e ricostruirla pixel-identica sarebbe costato quanto lasciarla nativa. Il
+commento in `components/Login.tsx` porta la motivazione al call site; i quattro file del gruppo
+(`app/forgot-password/ForgotPasswordForm.tsx`, `app/register/RegisterForm.tsx`,
+`app/set-password/SetPasswordForm.tsx`, `components/Login.tsx`) restano `<button>` nativi e devono
+restare identici fra loro se uno cambia.
 
 **2. Non sono bottoni: i gruppi E, F, H, I — 8 punti d'uso.** Un interruttore, una scheda, l'apertura
 di un elenco a discesa e un badge di rimozione sono componenti propri, che possono usare `Button`
@@ -129,21 +134,23 @@ Figma rappresenterà comunque a parte. **Fuori dal perimetro di UI-1.**
 l'unico posto del progetto dove il problema è già stato risolto, in piccolo. **Da lasciare come
 sono**, finché non si decide se la voce di navigazione diventa un componente a sé.
 
-Sommando: UI-1 deve coprire **64 bottoni**, non 81.
+Sommando: UI-1 deve coprire **59 bottoni** con le varianti di `Button` (A, B, C, D, J), più il gruppo
+G — 5 bottoni veri, ma rimasti nativi per decisione — che porta la migrazione effettiva a toccare
+64 punti d'uso su 81, contando anche chi resta fuori per scelta esplicita invece che per omissione.
 
 ## Anomalie da normalizzare durante la migrazione
 
 Ognuna è una decisione, non un dettaglio: se il valore giusto non viene scelto adesso, la primitiva
 lo eredita a caso dal primo punto d'uso migrato.
 
-- [ ] ID=BTN-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Il bottone di conferma ha quattro colori, Fix description=Sedici occorrenze `bg-gray-900`, una `bg-primary`, una `bg-[var(--theme-primary)]`, una `bg-gray-500`. Decidere il colore dell'azione primaria e definirlo sul token, non sul grigio. Le due occorrenze che puntano al tema indicano che `bg-primary` è l'intento originale.
-- [ ] ID=BTN-2, Severity=Medium, Complexity=Low, Priority=P1, Title=Sei bottoni con sola icona senza nome accessibile, Fix description=`RoleDetailClient.tsx:57`, `IconPicker.tsx:161`, `NavigationTree.tsx:94` e `:109`, `GridRowActionsMenu.tsx:70`, `TagInput.tsx:20`. Aggiungere l'`aria-label`, e rendere l'omissione impossibile nella primitiva con una firma che in modalità sola-icona richieda l'etichetta a livello di tipi. Due dei sei hanno anche un attributo di stato mancante (`aria-expanded`, `aria-haspopup`), che non è coperto dalla primitiva e va aggiunto al punto d'uso.
-- [ ] ID=BTN-3, Severity=Low, Complexity=Low, Priority=P2, Title=Imbottitura del bottone secondario, Fix description=`px-3` in tredici punti d'uso, `px-4` in tre. Scegliere un valore unico per la variante, così che primario e secondario nella stessa finestra siano proporzionati.
-- [ ] ID=BTN-4, Severity=Low, Complexity=Low, Priority=P2, Title=Lo stato disabilitato è scritto in tre modi, Fix description=`disabled:opacity-40`, `disabled:opacity-50`, e presenza incoerente di `disabled:cursor-not-allowed`. Va dentro la primitiva una volta sola. Nota: `globals.css` applica già `opacity(0.6)` a ogni `button:disabled`, quindi oggi questi valori si sommano al filtro globale e il risultato reale non è nessuno dei tre.
-- [ ] ID=BTN-5, Severity=Low, Complexity=Low, Priority=P2, Title=`AdminTheme.tsx:188` non usa i token di bordo, Fix description=Usa `border-gray-300 dark:border-gray-600` dove tutti gli altri secondari usano `border-border`. Con il tema configurabile è l'unico bottone secondario che non segue il bordo scelto.
-- [ ] ID=BTN-6, Severity=Low, Complexity=Low, Priority=P3, Title=Convergere da `title` a `aria-label` sui bottoni con sola icona, Fix description=Tre bottoni in `FunctionalitiesTreeClient.tsx:44-46` prendono il nome accessibile da `title`. Funziona come ripiego ma non è equivalente ad `aria-label`, e disallinea questi tre dagli altri sei del gruppo.
-- [ ] ID=BTN-7, Severity=Low, Complexity=Low, Priority=P3, Title=I due interruttori hanno stato acceso diverso, Fix description=`bg-gray-900 dark:bg-primary` in `PermissionsTree.tsx:16` contro `bg-primary` in `Sidebar.tsx:625`. Fuori dal perimetro di UI-1 (gruppo E), ma da allineare quando si tocca uno dei due.
-- [ ] ID=BTN-8, Severity=Info, Complexity=Low, Priority=P3, Title=`error.tsx:24` scrive il token a mano, Fix description=`bg-[var(--theme-primary)]` fa la stessa cosa di `bg-primary` aggirando il tema di Tailwind. Da convertire, e da verificare se questa forma è già intercettata dal cricchetto sui colori raw.
+- [✅] ID=BTN-1, Severity=Medium, Complexity=Low, Priority=P1, Title=Il bottone di conferma ha quattro colori, Fix description=Sedici occorrenze `bg-gray-900`, una `bg-primary`, una `bg-[var(--theme-primary)]`, una `bg-gray-500`. Decidere il colore dell'azione primaria e definirlo sul token, non sul grigio. Le due occorrenze che puntano al tema indicano che `bg-primary` è l'intento originale. **Deciso e chiuso**: la variante `default` di `Button` è `bg-primary text-primary-foreground`, ed è quella che ogni bottone di conferma migrato usa ora — un solo colore, che segue il pannello Admin → Tema.
+- [✅] ID=BTN-2, Severity=Medium, Complexity=Low, Priority=P1, Title=Sei bottoni con sola icona senza nome accessibile, Fix description=`RoleDetailClient.tsx:57`, `IconPicker.tsx:161`, `NavigationTree.tsx:94` e `:109`, `GridRowActionsMenu.tsx:70`, `TagInput.tsx:20`. Aggiungere l'`aria-label`, e rendere l'omissione impossibile nella primitiva con una firma che in modalità sola-icona richieda l'etichetta a livello di tipi. Due dei sei hanno anche un attributo di stato mancante (`aria-expanded`, `aria-haspopup`), che non è coperto dalla primitiva e va aggiunto al punto d'uso. **Chiuso**: tutti e sei hanno un `aria-label` (`size="icon"` lo pretende a livello di tipi); nessuno dei sei aveva ancora una chiave i18n per quell'etichetta, e le migration `0008` e `0009` l'hanno aggiunta. `NavigationTree.tsx:109` ha ora `aria-expanded`. `GridRowActionsMenu.tsx:70` ha `aria-expanded` ma **non** `aria-haspopup`: rimosso deliberatamente, non solo lasciato assente — vedi il commento nel file, perché un tentativo intermedio di cambiare `"menu"` in `"true"` credendo di dichiarare meno si è rivelato un sinonimo in WAI-ARIA, non una riduzione.
+- [✅] ID=BTN-3, Severity=Low, Complexity=Low, Priority=P2, Title=Imbottitura del bottone secondario, Fix description=`px-3` in tredici punti d'uso, `px-4` in tre. Scegliere un valore unico per la variante, così che primario e secondario nella stessa finestra siano proporzionati. **Deciso e chiuso**: la dimensione `default` di `Button` è `px-4 py-2`, condivisa da `default` e `outline`, così primario e secondario nella stessa finestra sono sempre proporzionati.
+- [✅] ID=BTN-4, Severity=Low, Complexity=Low, Priority=P2, Title=Lo stato disabilitato è scritto in tre modi, Fix description=`disabled:opacity-40`, `disabled:opacity-50`, e presenza incoerente di `disabled:cursor-not-allowed`. Va dentro la primitiva una volta sola. Nota: `globals.css` applica già `opacity(0.6)` a ogni `button:disabled`, quindi oggi questi valori si sommano al filtro globale e il risultato reale non è nessuno dei tre. **Chiuso**: `Button` non scrive più nessuna `disabled:opacity-*` locale, lascia il solo filtro globale, ed ogni `hover:` è scritto `enabled:hover:` per costruzione — garantito dalla primitiva, non dal singolo punto d'uso.
+- [✅] ID=BTN-5, Severity=Low, Complexity=Low, Priority=P2, Title=`AdminTheme.tsx:188` non usa i token di bordo, Fix description=Usa `border-gray-300 dark:border-gray-600` dove tutti gli altri secondari usano `border-border`. Con il tema configurabile è l'unico bottone secondario che non segue il bordo scelto. **Chiuso**: migrato a `<Button variant="outline">`, che usa `border-border`; le classi di bordo scritte a mano sono sparite.
+- [✅] ID=BTN-6, Severity=Low, Complexity=Low, Priority=P3, Title=Convergere da `title` a `aria-label` sui bottoni con sola icona, Fix description=Tre bottoni in `FunctionalitiesTreeClient.tsx:44-46` prendono il nome accessibile da `title`. Funziona come ripiego ma non è equivalente ad `aria-label`, e disallinea questi tre dagli altri sei del gruppo. **Chiuso**: i tre hanno ora anche `aria-label` (il `title` è rimasto come suggerimento visivo al passaggio del mouse, ma il nome accessibile viene da `aria-label`, che vince sempre su `title` nel calcolo del nome accessibile).
+- [✅] ID=BTN-7, Severity=Low, Complexity=Low, Priority=P3, Title=I due interruttori hanno stato acceso diverso, Fix description=`bg-gray-900 dark:bg-primary` in `PermissionsTree.tsx:16` contro `bg-primary` in `Sidebar.tsx:625`. Fuori dal perimetro di UI-1 (gruppo E), ma da allineare quando si tocca uno dei due. **Chiuso durante il lotto rbac**: lo stato acceso di entrambi gli interruttori è ora lo stesso `bg-primary`, semplice, che segue il tema. In un passaggio successivo (task 14) anche lo stato spento di entrambi è stato allineato, su `bg-switch-off` — un nuovo token fisso (`#8b919c` chiaro, `#374151` scuro) introdotto perché il knob bianco dell'interruttore spento leggeva 1,24:1 su una superficie chiara, illeggibile; il valore è bloccato da un test che calcola il contrasto.
+- [✅] ID=BTN-8, Severity=Info, Complexity=Low, Priority=P3, Title=`error.tsx:24` scrive il token a mano, Fix description=`bg-[var(--theme-primary)]` fa la stessa cosa di `bg-primary` aggirando il tema di Tailwind. Da convertire, e da verificare se questa forma è già intercettata dal cricchetto sui colori raw. **Chiuso**: `error.tsx` usa ora `<Button onClick={reset}>` (variante `default`), nessun `var(--theme-*)` scritto a mano; lo stesso vale per il gemello in `EmbeddedBlockedNotice.tsx`, migrato a `<Button asChild>`.
 
 ## Elenco completo, per gruppo
 
