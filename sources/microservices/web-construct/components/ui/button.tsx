@@ -50,7 +50,20 @@ export const buttonVariants = cva(
   },
 )
 
-type ButtonBase = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> & {
+/**
+ * `ComponentPropsWithRef`, not `ButtonHTMLAttributes`: this project is on
+ * React 19, where a function component receives `ref` as an ordinary prop and
+ * `forwardRef` is no longer required — the JSX runtime extracts `ref` from the
+ * final props object even when it arrives through a spread, so `{...props}`
+ * below already carries it to the host `<button>` (and, on the `asChild`
+ * branch, to `Slot`, which is `forwardRef`-based and merges it onto the
+ * child). `ButtonHTMLAttributes` never declared a `ref` field, so nothing
+ * blocked that at runtime — only at the type level, which rejected
+ * `<Button ref={...}>` outright. This is the fix for that: it costs nothing
+ * else, since `ComponentPropsWithRef<'button'>` is a superset of
+ * `ButtonHTMLAttributes<HTMLButtonElement>` plus the one field.
+ */
+type ButtonBase = Omit<React.ComponentPropsWithRef<'button'>, 'aria-label'> & {
   variant?: ButtonVariant
   asChild?: boolean
 }
