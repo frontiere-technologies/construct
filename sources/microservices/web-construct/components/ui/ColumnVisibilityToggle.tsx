@@ -26,7 +26,11 @@ export default function ColumnVisibilityToggle<T>(
 
   return (
     <div className="relative">
-      <Button variant="outline" onClick={() => setOpen(o => !o)}>
+      {/* size="sm" to match GridToolbarResetButton beside it and the sm
+          primary action further along the same toolbar row — see the
+          comment there and docs/reviews/2026-08-21-button-inventory.md,
+          BTN-3. */}
+      <Button variant="outline" size="sm" onClick={() => setOpen(o => !o)}>
         <Columns3 size={16} /> {t('common.labels.columns')}
       </Button>
       {open && (

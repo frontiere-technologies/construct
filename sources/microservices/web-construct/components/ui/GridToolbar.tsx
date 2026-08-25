@@ -16,8 +16,15 @@ interface GridToolbarProps<T> {
 export function GridToolbarResetButton(
   { label, onClearFilters }: { label: string; onClearFilters: () => void },
 ) {
+  // size="sm": the primary action this toolbar sits next to
+  // (RolesTableClient.tsx, LanguagesTableClient.tsx, TranslationsTableClient.tsx
+  // all pass size="sm" to their "create" Button) is px-3. Left at the
+  // unspecified default (px-4) this secondary was wider than the primary
+  // beside it — exactly the imbalance BTN-3 closed, reopened at the call
+  // site. FunctionalitiesTreeClient.tsx already pairs sm/sm and is the
+  // model. See docs/reviews/2026-08-21-button-inventory.md, BTN-3.
   return (
-    <Button variant="outline" onClick={onClearFilters}>
+    <Button variant="outline" size="sm" onClick={onClearFilters}>
       {label}
     </Button>
   )
