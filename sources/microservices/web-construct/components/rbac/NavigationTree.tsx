@@ -6,7 +6,8 @@ import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, pointerWithin,
   useDraggable, useDroppable, type DragStartEvent, type DragMoveEvent, type DragEndEvent,
 } from '@dnd-kit/core'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { useI18n } from '@/context/I18nContext'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 
@@ -94,10 +95,16 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
           </span>
         )}
         {dnd && (
-          // Kept as a native <button>, not the Button primitive: dnd-kit's
-          // setActivatorNodeRef must attach to the real DOM node, and Button is a
-          // plain function component (no forwardRef) so a ref passed to it would
-          // not reach the underlying element — silently breaking drag activation.
+          // Kept as a native <button>, not the Button primitive — but not
+          // for the reason this comment used to give. Commit 3e1eda9 moved
+          // ButtonBase onto ComponentPropsWithRef<'button'>, so `Button` does
+          // accept and forward a ref now, on both the host and the asChild
+          // branch (see button.types.tsx's withRef/withRefAsChild). The real
+          // reason to keep this native: dnd-kit's setActivatorNodeRef,
+          // dragListeners and dragAttributes are wired to a plain DOM button
+          // today, and swapping the drag handle onto the primitive is a
+          // drag & drop behaviour change that wants its own E2E coverage,
+          // not a drive-by edit here.
           <button
             // eslint-disable-next-line react-hooks/refs
             ref={dragActivatorRef}
@@ -108,7 +115,14 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
             data-testid="drag-handle"
             disabled={!canDrag}
             aria-label={t('functionalities.tree.drag_handle')}
-            className={`p-0.5 touch-none text-muted-foreground ${canDrag ? 'cursor-grab active:cursor-grabbing enabled:hover:text-foreground' : ''}`}
+            // Colour classes come from the `ghost` variant's own recipe
+            // (buttonVariants) instead of being hand-copied, so this native
+            // button and every `<Button variant="ghost">` in the app stay in
+            // sync by construction. `p-0.5` overrides the variant's default
+            // `icon` padding (twMerge — see lib/utils.ts — makes the later
+            // class win); `touch-none` and the grab cursor are specific to
+            // being a drag handle and aren't part of any variant.
+            className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'p-0.5 touch-none', canDrag && 'cursor-grab active:cursor-grabbing')}
           >
             <GripVertical size={14} />
           </button>
