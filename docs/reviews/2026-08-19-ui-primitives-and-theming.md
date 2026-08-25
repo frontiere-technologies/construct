@@ -251,14 +251,14 @@ verificabile.
 
 ### Criteri di accettazione
 
-- [ ] `Button` e `Input` esistono in `components/ui/` con test unitari propri.
-- [ ] Le varianti coprono tutti i 71 call site senza `className` di override arbitrari.
-- [ ] Nessuna dipendenza nuova in `package.json`.
-- [ ] Ogni bottone icon-only migrato conserva un nome accessibile.
-- [ ] `disabledButtonHoverStyles.test.ts` verifica ancora un invariante reale dopo la migrazione (aggiornato nello stesso commit della primitiva).
-- [ ] `npm run lint`, `npm run test`, `npm run build` verdi.
-- [ ] Verifica in browser per ciascun lotto migrato, nei due stati del tema (dipende da THEME-1).
-- [ ] E2E pytest verdi: `uv run pytest`.
+- [✅] `Button` e `Input` esistono in `components/ui/` con test unitari propri. Chiuso dalla specifica shadcn del 2026-08-24.
+- [✅] Le varianti coprono tutti i call site nel perimetro senza `className` di override arbitrari. Il perimetro è stato ridefinito da 71 a 64 durante il lavoro (vedi l'inventario): i 59 di `Button` più i 5 del gruppo G, rimasti nativi per decisione — non è la stessa lista di 71 che questo criterio immaginava, ma nessuno dei call site migrati porta un `className` d'emergenza.
+- [ ] **Superato dal design, non soddisfatto.** «Nessuna dipendenza nuova in `package.json`» presupponeva componenti scritti a mano, che è esattamente la premessa che il 2026-08-24 ha ribaltato. Tre dipendenze sono state aggiunte deliberatamente (`class-variance-authority`, `tailwind-merge`, `@radix-ui/react-slot`): è il costo dichiarato dell'adozione di shadcn, non un'omissione. Il criterio resta scritto per la cronaca ma non si applica più.
+- [✅] Ogni bottone icon-only migrato conserva o acquisisce un nome accessibile. Sei non ne avevano uno (BTN-2): `size="icon"` lo pretende ora a livello di tipi, e le migration `0008`/`0009` hanno aggiunto le chiavi i18n mancanti.
+- [✅] `disabledButtonHoverStyles.test.ts` verifica ancora un invariante reale dopo la migrazione. Aggiornato nello stesso commit della primitiva perché riconosce sia `<button>` nativi sia `<Button>`, come deciso nella specifica (punto 6).
+- [✅] `npm run lint`, `npm run test`, `npm run build` verdi. `lint` e `test` riverificati su questo commit (task 15, solo documentazione): lint pulito, 78 file / 625 test verdi. `build` non è stato rieseguito in questo giro perché non si toccava altro che `docs/`; l'ultima esecuzione registrata, sull'ultimo commit di codice (task 14), è verde — 29 route generate.
+- [ ] **Non fatto esaustivamente.** La verifica in browser nei due stati del tema ha coperto il pilota, il lotto `rbac/`, il lotto `i18n/` e controlli a campione sul chrome — non tutti i 35 file migrati, uno per uno, nei due temi.
+- [ ] **Non verificato in questo lavoro.** `uv run pytest` non è stato eseguito nei task 12, 13, 14 né 15: ognuno lo ha deliberatamente rimandato al chiamante per non collidere con una suite E2E in corso altrove. I 112/112 citati altrove in questo documento vengono dalla Fase A del 2026-08-21, precedente alla migrazione vera, e non dimostrano nulla su questo lavoro. Resta da eseguire.
 
 ---
 

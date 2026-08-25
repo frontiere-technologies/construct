@@ -197,6 +197,15 @@ Il gruppo G resta `outline` con larghezza piena e bordo `brand-blue`. È l'unico
 coerente — quattro bottoni identici carattere per carattere in quattro file — quindi la migrazione
 deve lasciarlo identico a com'è, non «quasi».
 
+> **Divergenza dal piano (2026-08-25).** Il gruppo G **non** è diventato `variant="outline"`: è
+> rimasto nativo. Provato in pratica, migrarlo a `outline` + `default` avrebbe iniettato `px-4`,
+> `font-medium` e `transition-colors` che quei quattro bottoni non avevano mai avuto — e i quattro
+> erano identici carattere per carattere proprio perché nessuno li aveva mai toccati. Ricostruirli
+> pixel-identici sarebbe costato quanto lasciarli così. La riga della tabella sopra e il paragrafo
+> che la precede restano come intento scritto in questa data; l'esito reale, con la motivazione, è
+> nel commento in `components/Login.tsx` e nella voce di gruppo G in
+> [2026-08-21-button-inventory.md](../../reviews/2026-08-21-button-inventory.md).
+
 ### Le anomalie dell'inventario, risolte
 
 | ID | Decisione |
