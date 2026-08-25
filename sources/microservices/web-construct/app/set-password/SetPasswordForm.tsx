@@ -55,9 +55,14 @@ export function SetPasswordForm({ token }: { token: string }) {
   }
 
   return (
+    // This form renders inside app/set-password/page.tsx's fixed bg-white
+    // card. The card's interior is deliberately theme-independent — see the
+    // canonical comment on the equivalent body in components/Login.tsx for
+    // why, and for the measured contrast ratios behind the fixed colours
+    // below (text-[#374151], text-[#b91c1c]).
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-foreground-secondary" htmlFor="new-password">
+        <label className="text-sm font-medium text-[#374151]" htmlFor="new-password">
           {t('auth.set_password.new_password')}
         </label>
         <div className="relative">
@@ -85,7 +90,7 @@ export function SetPasswordForm({ token }: { token: string }) {
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-foreground-secondary" htmlFor="confirm-password">
+        <label className="text-sm font-medium text-[#374151]" htmlFor="confirm-password">
           {t('auth.set_password.confirm_password')}
         </label>
         <Input
@@ -100,7 +105,7 @@ export function SetPasswordForm({ token }: { token: string }) {
       </div>
 
       {error && (
-        <p className="text-destructive-muted-foreground text-sm">{error}</p>
+        <p className="text-[#b91c1c] text-sm">{error}</p>
       )}
 
       {/* Deliberately a native <button>, not <Button> — group G, kept

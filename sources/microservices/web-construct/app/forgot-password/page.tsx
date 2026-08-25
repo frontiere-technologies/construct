@@ -11,6 +11,9 @@ export default async function ForgotPasswordPage() {
           <h1 className="text-3xl font-bold text-white tracking-tight">Construct</h1>
           <p className="mt-1 text-sm" style={{ color: '#7fa8c4' }}>{t('auth.forgot.subtitle')}</p>
         </div>
+        {/* Fixed bg-white card, fixed foregrounds — deliberately
+            theme-independent. See the canonical comment on the equivalent
+            body in components/Login.tsx. */}
         <div className="bg-white px-8 py-8">
           <ForgotPasswordForm />
         </div>

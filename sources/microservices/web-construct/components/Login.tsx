@@ -77,7 +77,48 @@ function LoginForm() {
           </p>
         </div>
 
-        {/* Body */}
+        {/* Body: bg-white here is deliberate and fixed, not an unmigrated
+            leftover — this card's interior is theme-independent by design.
+            Two reasons settle it:
+
+            1. The Google button a few lines down must keep Google's own
+               prescribed colours (see its comment) — a dark card behind a
+               button whose colours assume a white one would look broken,
+               not themed.
+            2. UIProvider lives in the root layout, so `.dark` reaches
+               /login for anyone whose localStorage still carries
+               `theme: 'dark'` from a previous session — that is not a
+               preference this unauthenticated visitor expressed here, so
+               there is nothing to honour by repainting the page from it.
+
+            The bug this decision fixes: the surface (this bg-white) was
+            already fixed, but the foregrounds sitting bare on top of it had
+            been tokenised, so a dark localStorage leftover made them
+            unreadable — --foreground-secondary's dark value (#d1d5db) reads
+            1.47:1 here, --muted-foreground's (#9ca3af) 2.54:1,
+            --destructive-muted-foreground's (#fca5a5) 1.90:1 — all under
+            the 4.5:1 floor. Below, those three are fixed to the *light*
+            theme's own values instead, so the look does not change, only
+            its dependence on the toggle does:
+              text-foreground-secondary        -> #374151, 10.31:1 on white
+              text-muted-foreground            -> #4b5563,  7.56:1 on white
+              text-destructive-muted-foreground -> #b91c1c,  6.47:1 on white
+
+            Left on tokens, deliberately: the success-message box a few lines
+            down (bg-success-muted + border-success-border +
+            text-success-muted-foreground) pairs a themed surface with its
+            own themed foreground — the two always move together, so it was
+            never bare-foreground-on-fixed-surface and never broken. Same
+            reasoning exempts the accent-toned footer near the bottom of this
+            card (bg-accent + its foregrounds) even though it lives inside
+            the same rounded card as this body.
+
+            The other three files with the identical card, the identical bug
+            and the identical fix — they must travel together if this
+            decision is ever revisited: app/register/RegisterForm.tsx +
+            app/register/page.tsx, app/forgot-password/ForgotPasswordForm.tsx
+            + app/forgot-password/page.tsx, app/set-password/SetPasswordForm.tsx
+            + app/set-password/page.tsx. */}
         <div className="bg-white px-8 py-8 flex flex-col gap-4">
 
           {successMessage && (
@@ -88,7 +129,7 @@ function LoginForm() {
 
           <form onSubmit={handleCredentialsLogin} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-foreground-secondary" htmlFor="email">
+              <label className="text-sm font-medium text-[#374151]" htmlFor="email">
                 {t('auth.login.email')}
               </label>
               <Input
@@ -103,7 +144,7 @@ function LoginForm() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-foreground-secondary" htmlFor="password">
+              <label className="text-sm font-medium text-[#374151]" htmlFor="password">
                 {t('auth.login.password')}
               </label>
               <div className="relative">
@@ -136,7 +177,7 @@ function LoginForm() {
             </div>
 
             {errorMessage && (
-              <p className="text-destructive-muted-foreground text-sm">{errorMessage}</p>
+              <p className="text-[#b91c1c] text-sm">{errorMessage}</p>
             )}
 
             {/* Deliberately a native <button>, not <Button>: this is group G
@@ -163,7 +204,7 @@ function LoginForm() {
           {/* Divider */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted-foreground">{t('auth.login.divider')}</span>
+            <span className="text-xs text-[#4b5563]">{t('auth.login.divider')}</span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
