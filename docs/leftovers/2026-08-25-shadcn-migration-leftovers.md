@@ -1,0 +1,77 @@
+# Cose lasciate da fare dopo l'adozione di shadcn/ui (2026-08-25)
+
+Raccolta dei punti rimasti aperti alla fine del lavoro chiuso dalla
+[PR #68](https://github.com/frontiere-technologies/construct/pull/68), che ha adottato shadcn/ui,
+unificato il vocabolario dei token e chiuso UI-1, THEME-2 e BTN-1…BTN-8.
+
+Nessuno di questi bloccava la fusione. Sono elencati qui perché fossero **dichiarati invece che
+dimenticati**: alcuni sono difetti preesistenti che il lavoro ha reso visibili, altri sono
+conseguenze dichiarate di scelte prese durante il percorso, altri ancora sono codice che è nato
+senza consumatori.
+
+Documenti correlati: [2026-08-19-ui-primitives-and-theming.md](../reviews/2026-08-19-ui-primitives-and-theming.md),
+[2026-08-21-button-inventory.md](../reviews/2026-08-21-button-inventory.md),
+[la specifica del 2026-08-24](../superpowers/specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md).
+
+## Sommario
+
+**Il gruppo con più valore è A11Y.** Sono tre controlli che una persona che naviga da tastiera o
+con un lettore di schermo non può usare, e due dei tre erano già lì prima della migrazione.
+
+**Il gruppo CONS è il residuo onesto di una migrazione a lotti.** Quattro subagenti diversi hanno
+applicato una stessa ricetta ad aree diverse; le finestre di dialogo sono convergute in modo
+pulito, altri tre schemi no. Nessuno di questi rompe qualcosa: rendono l'interfaccia meno coerente
+di quanto la primitiva permetterebbe.
+
+**Il gruppo DEAD è codice scritto a specifica e mai adoperato.** Vale la pena deciderlo adesso:
+una primitiva testata ma senza consumatori è il modo migliore per far credere al prossimo che
+l'applicazione la usi.
+
+**ARCH-1 è la nota più importante da leggere prima di scrivere codice nuovo**, perché descrive un
+tranello che ha già prodotto tre difetti in questo lavoro.
+
+## Elenco
+
+- [ ] ID=A11Y-1, Severity=Medium, Complexity=Low, Priority=P1, Title=L'area di caricamento icona è un `<div>` cliccabile non raggiungibile da tastiera, Fix description=`components/rbac/functionalities/IconPicker.tsx:249` è un `<div>` con `onClick` e nessun `tabIndex`, `role` o gestore da tastiera. Chi naviga da tastiera non può caricare un'icona. È BTN-9 dell'inventario, preesistente e mai dentro il perimetro di UI-1. Diventa un `<button type="button">` oppure riceve `role="button"`, `tabIndex={0}` e i gestori per Invio e Spazio.
+- [ ] ID=A11Y-2, Severity=Medium, Complexity=Medium, Priority=P2, Title=Il menu azioni di riga non ha una vera navigazione da tastiera, Fix description=`components/rbac/GridRowActionsMenu.tsx` apre un elenco di bottoni senza `role="menu"`, senza `role="menuitem"`, senza frecce/Home/Fine, senza gestore di Escape, e portato su `document.body` senza `aria-controls`. Durante il lavoro `aria-haspopup` è stato **tolto** invece di essere indebolito, perché nella specifica WAI-ARIA `"true"` è sinonimo di `"menu"` e cambiarlo sarebbe stato un rietichettamento. Resta da implementare il pattern per davvero: i ruoli **insieme** alla tastiera che promettono, mai i ruoli da soli.
+- [ ] ID=A11Y-3, Severity=Medium, Complexity=Medium, Priority=P2, Title=La maniglia di trascinamento non funziona da tastiera, Fix description=`components/rbac/NavigationTree.tsx` registra solo il `PointerSensor` di dnd-kit, quindi la maniglia è un controllo focalizzabile e con un nome accessibile che da tastiera non fa nulla. Serve `KeyboardSensor` con la sua strategia di coordinate. Preesistente. Nota per chi lo prende: la maniglia è rimasta un `<button>` nativo di proposito, ma **non** più per il motivo scritto un tempo nel codice — `Button` accetta un `ref` dal commit `3e1eda9`; il motivo vero è che convertirla è un cambiamento al drag & drop e vuole il suo giro di E2E.
+- [ ] ID=CONS-1, Severity=Low, Complexity=Low, Priority=P2, Title=Due stili di campo sulla stessa maschera, Fix description=`components/rbac/functionalities/TranslationsAccordion.tsx:38,44` sono ancora `<input>`/`<textarea>` scritti a mano con `bg-transparent` e senza anello di focus, ma vengono resi dentro `FunctionalityForm.tsx`, i cui campi (`:104`, `:126`, `:148`) usano `Input`/`Textarea` con `bg-popover` e `focus:ring-2`. Il lotto ha migrato il genitore e saltato il componente figlio.
+- [ ] ID=CONS-2, Severity=Low, Complexity=Low, Priority=P3, Title=Una voce di elenco in un popup è resa in quattro modi, Fix description=`GridRowActionsMenu.tsx:109` usa `ghost`, quindi `text-muted-foreground` — prima ereditava `text-foreground` e ora le azioni di riga sono grigie; `EnumSelectFilter.tsx:38,49` sono bottoni nativi a `text-foreground-secondary`; le schede di `IconPicker.tsx:156` e `RoleDetailClient.tsx:73` sono un quarto schema, duplicato fra due file. Stesso intento, quattro rese.
+- [ ] ID=CONS-3, Severity=Low, Complexity=Low, Priority=P3, Title=La variante `link` non corrisponde a nessuno dei suoi due usi, Fix description=`Login.tsx:260` la sovrascrive con `text-muted-foreground`, `IconPicker.tsx:242` con `text-foreground underline`. Il `text-primary` che la variante dichiara non è usato da nessuna parte. O il colore della variante è sbagliato, o quei due non sono collegamenti. Da leggere insieme ad ARCH-1, che spiega perché `text-primary` è comunque una scelta fragile qui.
+- [ ] ID=CONS-4, Severity=Low, Complexity=Low, Priority=P3, Title=`Button` e `Input` trattano il focus in due modi, Fix description=`Button` usa `focus-visible:ring-2 ring-ring ring-offset-2 ring-offset-background`; `Input` usa `focus:ring-2 ring-primary/50`, senza scostamento e con `focus` invece di `focus-visible`. Il token `--ring` esiste proprio per essere l'unico colore del focus, e niente spiega perché `Input` lo aggiri.
+- [ ] ID=CONS-5, Severity=Low, Complexity=Low, Priority=P2, Title=Tre bottoni disabilitati moltiplicano ancora l'opacità, Fix description=`LanguageSwitcher.tsx:148`, `CustomSelect.tsx:139` e `PermissionsTree.tsx:29` portano `opacity-50` su elementi `<button>`, che si moltiplica con il `filter: opacity(0.6)` che `globals.css` applica a ogni `button:disabled`: il risultato reso è circa 0,3, che non è nessuno dei due valori. È l'osservazione di BTN-4, chiusa dove i lotti hanno guardato e rimasta dove non hanno guardato. **Non** riguarda i tre `disabled:opacity-40` di `AdminTheme.tsx:30,52,56`: sono `<input type="color">` e la regola globale vale solo per `button`.
+- [ ] ID=CONS-6, Severity=Info, Complexity=Low, Priority=P3, Title=Doppio indicatore di focus sui campi a etichette, Fix description=`TagInput.tsx:29` e `RoleMultiSelect.tsx:50` sovrascrivono quasi tutta la stringa di base di `Input` ma ereditano `focus:ring-2 focus:ring-primary/50` e `rounded-lg`, che quei campi senza bordo a `p-0` non avevano mai. I loro contenitori mostrano già `focus-within:border-primary`, quindi ora gli indicatori sono due. Da guardare, non necessariamente da cambiare.
+- [ ] ID=DEAD-1, Severity=Low, Complexity=Low, Priority=P2, Title=`components/ui/select.tsx` non ha consumatori, Fix description=Costruito a specifica e coperto da test unitari, ma nessun file lo importa: ogni controllo a discesa dell'applicazione è una listbox scritta a mano (`CustomSelect`, `EnumSelectFilter`, `LanguageSwitcher`, `RoleMultiSelect`). O lo si collega a uno di quei punti d'uso, o lo si cancella. Una primitiva testata e mai usata è il modo migliore per far concludere al prossimo che l'applicazione la usi.
+- [ ] ID=DEAD-2, Severity=Low, Complexity=Low, Priority=P3, Title=La variante `destructive` di `Button` non ha consumatori, Fix description=Esiste in `buttonVariants` e non compare in nessun punto d'uso. Il posto che la vorrebbe più di tutti è `ConfirmModal`, usato anche per confermare eliminazioni — ma `ConfirmModalProps` non ha un segnale per distinguere l'azione distruttiva e nessuno dei quattro chiamanti lo passa. Non inventare quel segnale dentro un altro lavoro: aggiungere una prop a `ConfirmModal` cambia i chiamanti ed è un compito suo. Finché non si fa, il bottone che conferma un'eliminazione resta del colore primario.
+- [ ] ID=DEAD-3, Severity=Info, Complexity=Low, Priority=P3, Title=Quattordici token CSS definiti e mai usati, Fix description=`--secondary`, `--secondary-foreground`, `--muted`, `--input`, `--card-foreground`, `--popover-foreground`, `--accent-foreground`, `--sidebar-border`, `--sidebar-ring`, `--destructive-border`, `--success`, `--success-foreground`, `--warning`, `--warning-foreground` non generano nessuna utility adoperata. La specifica ne aveva giustificati alcuni con «i componenti importati li citano» — ma non è stato importato nessun componente che li citi, quindi la giustificazione non è ancora stata guadagnata. Da rivalutare al primo `npx shadcn add`, non prima.
+- [ ] ID=ARCH-1, Severity=Medium, Complexity=Low, Priority=P1, Title=`--primary` non è un token accoppiato chiaro/scuro, e questo è un tranello, Fix description=`resolveThemeVars()` gli assegna un unico valore configurato dall'amministratore, identico nei due temi, mentre ogni altro token ha una coppia e si muove con la superficie. Conseguenza: **`text-primary` non può promettere contrasto contro nessuna superficie tematizzata** — misurato 2,33:1 su `--accent` scuro. La variante `link` di `Button` usa `text-primary`: oggi non è mai composta su una superficie tematizzata, quindi il difetto non è emerso, ma emergerà al primo punto d'uso che lo faccia. Da documentare vicino alla variante, e da tenere presente prima di usare `link` su `bg-accent`, `bg-card` o `bg-popover`.
+- [ ] ID=TEST-1, Severity=Low, Complexity=Medium, Priority=P2, Title=Instabilità nota della suite E2E, Fix description=`test_create_edit_delete_functionality` cade a intermittenza sotto il carico della suite intera con «element is not stable / retrying click action», e passa in isolamento e a file intero. Il sospetto principale è la regola globale `button:where(:not(:disabled)):hover { transform: translateY(-1px) }` di `globals.css`, che sposta l'elemento sotto il controllo di stabilità del clic di Playwright. La regola precede questo lavoro, ma la migrazione le ha dato più elementi su cui agire. Chi vede un giro rosso lì guardi la regola, non il lotto migrato.
+- [ ] ID=TEST-2, Severity=Low, Complexity=Medium, Priority=P3, Title=Nessun test a livello di render verifica i nomi accessibili, Fix description=La copertura poggia sul vincolo di tipo (che vale solo con `size="icon"`), sul guard AST introdotto per i bottoni con sola icona, sulla suite E2E e sulla verifica manuale. Manca un test che renda un componente e asserisca che l'`aria-label` arrivi al DOM. Il progetto non ha jsdom né testing-library, quindi la strada praticabile è `renderToStaticMarkup` con i provider simulati — è una scelta di infrastruttura, e va presa apposta invece che dentro un lotto.
+- [ ] ID=DOC-1, Severity=Info, Complexity=Low, Priority=P3, Title=L'intestazione della migration 0009 conta male, Fix description=`sources/devops/db/migrations/0009_rbac_button_migration_labels.sql` dice «moved five icon-only controls» ma semina quattro chiavi: la quinta, `users.roles.remove_label`, esisteva già. Solo il commento, la migration è corretta.
+
+## Come leggere il gruppo A11Y
+
+I tre punti hanno la stessa forma e vale la pena vederla: **un controllo che sembra accessibile e
+non lo è**. A11Y-1 è un `<div>` che si comporta da bottone senza esserlo. A11Y-2 annunciava un menu
+che non era un menu — e la correzione applicata è stata togliere l'annuncio, non fingere di avere
+il menu. A11Y-3 è un bottone con un nome accessibile perfetto che da tastiera non fa niente.
+
+In tutti e tre i casi la forma è a posto e la sostanza no, ed è lo stesso schema che ha prodotto i
+difetti più insidiosi del lavoro appena concluso. Se se ne prende uno, la domanda da tenere in
+mano è sempre: *cosa deve cambiare per chi lo usa davvero, e come lo dimostro?*
+
+## Perché ARCH-1 merita di essere letto per primo
+
+Tre difetti di questo lavoro sono stati la stessa cosa vista da tre lati: un lato della coppia
+colore/superficie si muove con il tema e l'altro no.
+
+1. Un primo piano **tematizzato** su una superficie **fissa** — le card pre-autenticazione, dove le
+   etichette leggevano 1,47:1 in tema scuro. Ha bloccato la fusione.
+2. Un colore di marca **fisso** su una superficie **tematizzata** — il collegamento «Registrati»,
+   a 1,99:1.
+3. Un token che **sembra** tematizzato e non lo è — `--primary`, che è ciò che ARCH-1 descrive.
+
+Nessuno dei sette guard ha visto i primi due. Il cricchetto ora copre anche `bg-white` e
+`bg-black`, il che chiude il primo caso alla radice, ma la regola generale resta da tenere a mente
+e nessun test la esprime: **prima di accostare un colore a una superficie, chiedersi se si muovono
+insieme.**
