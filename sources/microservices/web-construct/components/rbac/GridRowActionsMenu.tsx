@@ -74,17 +74,24 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
         variant="ghost" size="icon"
         data-testid={`row-menu-${rowId}`}
         aria-label={t('common.actions.row_actions')}
-        // Not `aria-haspopup="menu"`: that token promises the ARIA menu widget
-        // pattern — role="menu"/"menuitem" plus arrow-key roving focus, Home/End,
-        // typeahead — none of which the popup below implements (it is a plain
-        // list of buttons, closed by an outside click, with no keyboard traversal
-        // of its own). Claiming "menu" and then not being one is worse than not
-        // claiming it: assistive tech users get told to expect menu keys that do
-        // nothing. `"true"` is the generic, backward-compatible form of this
-        // attribute — it tells AT a popup exists without promising a specific
-        // interaction contract. Real menu semantics (roles + keyboard nav) are a
-        // separate piece of work, deliberately not bundled into this task.
-        aria-haspopup="true"
+        // No `aria-haspopup`. Every value the attribute accepts — `menu`,
+        // `listbox`, `tree`, `grid`, `dialog`, and `true` (a legacy synonym
+        // ARIA 1.0 defines as identical to `menu`, exposed the same way in
+        // the accessibility API and announced the same way by screen readers)
+        // — promises a specific widget contract. What opens below is a plain
+        // list of buttons: no role="menu"/"menuitem", no arrow-key roving
+        // focus, no Home/End, no typeahead. None of the accepted values
+        // describes it honestly, so the accurate move is to say nothing
+        // rather than pick the least-wrong option — an earlier pass here
+        // swapped "menu" for "true" believing that claimed less, which is
+        // false: the two are specified to be indistinguishable to AT, so
+        // that swap was a relabelling, not a fix.
+        // `aria-expanded` below carries the part that *is* real: whether the
+        // popup is currently open. Implementing the ARIA menu pattern
+        // properly — the roles above plus the keyboard navigation they
+        // imply — is a separate piece of work, left undone deliberately
+        // rather than half-done.
+        aria-expanded={open}
         onClick={e => {
           if (open) { close(); return }
           const rect = e.currentTarget.getBoundingClientRect()
