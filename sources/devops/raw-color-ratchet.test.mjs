@@ -58,7 +58,14 @@ if (process.env.UPDATE_RAW_COLOR_BASELINE === '1') {
 
 test('the scan still sees the files it is supposed to guard', () => {
   // A regex that stopped matching would leave the ratchet vacuously green.
-  assert.ok(Object.keys(counts).length >= 20,
+  // The floor was 20 before the shadcn batch migrations (task 10 of the
+  // 2026-08-24 plan) started zeroing whole files out on purpose: rbac/ alone
+  // dropped 14 files to 0, which is the intended outcome, not a broken regex.
+  // Lowered to 8 so it still catches a regex that stops matching (which would
+  // crater the count towards 0) without false-alarming on legitimate
+  // per-batch progress. Tasks 11-13 will shrink this further; task 14
+  // (raw-colour residual) is the place to retire this canary for good.
+  assert.ok(Object.keys(counts).length >= 8,
     `expected the scan to find the files carrying raw colours, got ${Object.keys(counts).length}`)
 })
 

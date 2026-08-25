@@ -19,7 +19,13 @@ const Toggle: React.FC<{ on: boolean; disabled: boolean; onToggle: () => void }>
     aria-checked={on}
     disabled={disabled}
     onClick={onToggle}
-    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${on ? 'bg-gray-900 dark:bg-primary' : 'bg-gray-300 dark:bg-gray-600'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    // BTN-7: the on-state collapses to plain bg-primary, matching Sidebar.tsx's
+    // theme toggle — the dark: pairing is unnecessary once the token itself
+    // changes with the theme. The off-state track moves onto bg-input, the
+    // token globals.css defines specifically for shadcn-sourced form chrome
+    // (see the comment by --input in globals.css), rather than leaving the
+    // Sidebar toggle's still-raw grey/grey-dark pairing in place.
+    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${on ? 'bg-primary' : 'bg-input'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
   >
     <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${on ? 'translate-x-5' : 'translate-x-1'}`} />
   </button>

@@ -6,6 +6,8 @@ import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, pointerWithin,
   useDraggable, useDroppable, type DragStartEvent, type DragMoveEvent, type DragEndEvent,
 } from '@dnd-kit/core'
+import { Button } from '@/components/ui/button'
+import { useI18n } from '@/context/I18nContext'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 
 type DropPos = 'before' | 'after' | 'into'
@@ -44,6 +46,7 @@ export function typeIcon(node: Pick<UserNavigationTreeDto, 'type' | 'functionali
 }
 
 const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDefault, dnd, activeId, indicator }) => {
+  const { t } = useI18n()
   const isCategory = node.type === 'CATEGORY'
   const hasChildren = node.children.length > 0
   const [open, setOpen] = useState(expandedByDefault)
@@ -91,6 +94,10 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
           </span>
         )}
         {dnd && (
+          // Kept as a native <button>, not the Button primitive: dnd-kit's
+          // setActivatorNodeRef must attach to the real DOM node, and Button is a
+          // plain function component (no forwardRef) so a ref passed to it would
+          // not reach the underlying element — silently breaking drag activation.
           <button
             // eslint-disable-next-line react-hooks/refs
             ref={dragActivatorRef}
@@ -100,19 +107,26 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
             {...dragAttributes}
             data-testid="drag-handle"
             disabled={!canDrag}
-            className={`p-0.5 text-gray-400 touch-none ${canDrag ? 'cursor-grab active:cursor-grabbing enabled:hover:text-gray-600' : 'opacity-30 cursor-not-allowed'}`}
+            aria-label={t('functionalities.tree.drag_handle')}
+            className={`p-0.5 touch-none text-muted-foreground ${canDrag ? 'cursor-grab active:cursor-grabbing enabled:hover:text-foreground' : ''}`}
           >
             <GripVertical size={14} />
           </button>
         )}
         {isCategory && hasChildren ? (
-          <button data-testid="tree-toggle" onClick={() => setOpen(o => !o)} className="p-0.5 text-gray-500">
+          <Button
+            variant="ghost" size="icon"
+            data-testid="tree-toggle"
+            aria-label={t('common.tree.toggle_row')}
+            aria-expanded={open}
+            onClick={() => setOpen(o => !o)}
+          >
             {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          </button>
+          </Button>
         ) : (
           <span className="w-5" />
         )}
-        {React.createElement(typeIcon(node), { size: 14, className: 'shrink-0 text-gray-400' })}
+        {React.createElement(typeIcon(node), { size: 14, className: 'shrink-0 text-muted-foreground' })}
         <span className={`flex-1 text-sm ${isCategory ? 'font-medium' : ''}`}>
           {node.name}
         </span>
@@ -238,8 +252,8 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
       <DragOverlay dropAnimation={null}>
         {activeNode ? (
           <div className="flex items-center gap-2 rounded-lg border border-primary bg-popover px-3 py-2 text-sm shadow-lg">
-            <GripVertical size={14} className="text-gray-400" />
-            {React.createElement(typeIcon(activeNode), { size: 14, className: 'shrink-0 text-gray-400' })}
+            <GripVertical size={14} className="text-muted-foreground" />
+            {React.createElement(typeIcon(activeNode), { size: 14, className: 'shrink-0 text-muted-foreground' })}
             <span className={activeNode.type === 'CATEGORY' ? 'font-medium' : ''}>{activeNode.name}</span>
           </div>
         ) : null}

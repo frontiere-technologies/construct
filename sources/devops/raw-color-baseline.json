@@ -1,5 +1,5 @@
 {
-  "total": 224,
+  "total": 126,
   "perFile": {
     "app/forgot-password/ForgotPasswordForm.tsx": 9,
     "app/forgot-password/page.tsx": 1,
@@ -19,20 +19,6 @@
     "components/i18n/translations/TranslationEditorDrawer.tsx": 10,
     "components/i18n/translations/TranslationValueCell.tsx": 4,
     "components/i18n/translations/TranslationsTableClient.tsx": 3,
-    "components/rbac/CustomSelect.tsx": 8,
-    "components/rbac/FilterDrawer.tsx": 4,
-    "components/rbac/NavigationTree.tsx": 6,
-    "components/rbac/PermissionsTree.tsx": 3,
-    "components/rbac/functionalities/FunctionalitiesTreeClient.tsx": 11,
-    "components/rbac/functionalities/FunctionalityForm.tsx": 6,
-    "components/rbac/functionalities/IconPicker.tsx": 33,
-    "components/rbac/functionalities/TagInput.tsx": 2,
-    "components/rbac/roles/CreateRoleModal.tsx": 2,
-    "components/rbac/roles/RenameRoleModal.tsx": 1,
-    "components/rbac/roles/RolesTableClient.tsx": 5,
-    "components/rbac/users/ManageRolesModal.tsx": 4,
-    "components/rbac/users/RoleMultiSelect.tsx": 5,
-    "components/rbac/users/StatusBadge.tsx": 8,
     "components/ui/ConfirmModal.tsx": 2
   }
 }

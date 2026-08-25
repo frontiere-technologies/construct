@@ -6,7 +6,8 @@ import { cn } from '@/lib/utils'
  * UI-1, non una scelta nuova. Le due differenze rispetto a com'erano scritte a
  * mano: l'anello di focus c'e' sempre (alcuni campi non ce l'avevano, ed erano
  * i campi in cui la navigazione da tastiera si perdeva), e il vestito dello
- * stato disabilitato usa un token invece della coppia bg-gray-100/dark:bg-gray-700.
+ * stato disabilitato usa un token invece della coppia grigio chiaro/grigio scuro
+ * che si scriveva prima a mano per i due temi.
  */
 export const inputBaseClasses =
   'w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text-sm ' +

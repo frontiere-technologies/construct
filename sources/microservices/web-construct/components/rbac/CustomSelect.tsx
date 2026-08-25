@@ -133,18 +133,18 @@ export default function CustomSelect({
         onKeyDown={onTriggerKeyDown}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg border bg-transparent text-left transition-colors
           ${open
-            ? 'border-gray-400 dark:border-gray-500 ring-2 ring-gray-100 dark:ring-gray-800'
+            ? 'border-primary ring-2 ring-primary/50'
             : 'border-border'}
           ${disabled
             ? 'opacity-50 cursor-not-allowed'
-            : 'enabled:hover:border-gray-300 dark:enabled:hover:border-gray-600 cursor-pointer'}`}
+            : 'enabled:hover:border-border cursor-pointer'}`}
       >
-        <span className={showPlaceholder ? 'text-gray-400' : 'text-foreground'}>
+        <span className={showPlaceholder ? 'text-muted-foreground' : 'text-foreground'}>
           {selectedLabel ?? placeholder ?? '—'}
         </span>
         <ChevronDown
           size={14}
-          className={`shrink-0 text-gray-400 transition-transform duration-150 ${open ? '-rotate-180' : ''}`}
+          className={`shrink-0 text-muted-foreground transition-transform duration-150 ${open ? '-rotate-180' : ''}`}
         />
       </button>
 

@@ -1,5 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import GridRowActionsMenu, { actionsColumnDef } from './GridRowActionsMenu'
+
+// GridRowActionsMenu now reads useI18n for its aria-label (BTN-2). The real
+// module chains into '@/lib/i18n/user-language-actions' ('use server') ->
+// '@/lib/auth' -> next-auth, which vitest's plain node environment cannot
+// resolve (next-auth probes 'next/server', not bundled here the way Next's
+// own compiler would). Stub it, same as TranslationsAccordion.test.tsx does.
+vi.mock('@/context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 
 interface Row { id: number }
 

@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { MoreHorizontal } from 'lucide-react'
 import type { ColDef, ICellRendererParams } from 'ag-grid-community'
+import { Button } from '@/components/ui/button'
+import { useI18n } from '@/context/I18nContext'
 
 export interface RowMenuItem { label: string; onClick: () => void; disabled?: boolean }
 
@@ -35,6 +37,7 @@ export function actionsColumnDef<T>(getItems: (data: T) => RowMenuItem[], header
 }
 
 export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T>) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -67,8 +70,11 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
     // below only stops the React synthetic event chain — it doesn't stop AG Grid's own
     // native row-click listener, which is attached directly to the DOM outside React.
     <div className="flex h-full items-center justify-center" data-grid-no-row-click onClick={e => e.stopPropagation()}>
-      <button
+      <Button
+        variant="ghost" size="icon"
         data-testid={`row-menu-${rowId}`}
+        aria-label={t('common.actions.row_actions')}
+        aria-haspopup="menu"
         onClick={e => {
           if (open) { close(); return }
           const rect = e.currentTarget.getBoundingClientRect()
@@ -77,21 +83,22 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
           setPos({ top: rect.bottom + 4, left: rect.left })
           setOpen(true)
         }}
-        className="p-1 rounded hover:bg-accent"
       >
         <MoreHorizontal size={16} />
-      </button>
+      </Button>
       {open && pos && createPortal(
         <div ref={menuRef} style={{ top: pos.top, left: pos.left }} className="fixed z-50 w-40 p-1 rounded-lg border border-border bg-popover shadow-lg">
           {items.map(item => (
-            <button
+            <Button
               key={item.label}
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-left"
               disabled={item.disabled}
               onClick={() => { close(); item.onClick() }}
-              className="block w-full text-left px-3 py-1.5 text-sm rounded enabled:hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {item.label}
-            </button>
+            </Button>
           ))}
         </div>,
         document.body
