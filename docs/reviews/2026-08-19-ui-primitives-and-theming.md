@@ -305,7 +305,7 @@ frattempo le utility `dark:` devono funzionare.
 ### Criteri di accettazione
 
 - [✅] Deciso e documentato il destino degli stati semantici (token fissi vs tematizzabili). Deciso il 2026-08-21: **token fissi**, definiti in `@theme`, non esposti in `AdminTheme`. Motivazione e vocabolario ricavato dalle occorrenze reali in fondo al documento.
-- [ ] Le occorrenze di colori raw sono ridotte a un residuo giustificato e documentato (es. loghi, colori di brand esterni come il pulsante Google in `Login.tsx`). Baseline al 2026-08-21: **231 su 34 file**, ora sorvegliata da `npm run test:raw-colors`, che impedisce al numero di salire durante la migrazione.
+- [✅] Le occorrenze di colori raw sono ridotte a un residuo giustificato e documentato (es. loghi, colori di brand esterni come il pulsante Google in `Login.tsx`). Chiuso il 2026-08-25 (task 14): il residuo era già sceso a **3 occorrenze su 1 file** (`components/Login.tsx`, il bottone "Accedi con Google") per merito dei lotti precedenti; questo task ha aggiunto il campo `justified` a `raw-color-baseline.json` con la motivazione per voce, così il numero non deve più essere reinterpretato a mente. `npm run test:raw-colors` verde.
 - [ ] Cambiando i colori da Admin → Tema, ogni area migrata risponde.
 - [ ] Verifica in browser nei due stati del tema.
 

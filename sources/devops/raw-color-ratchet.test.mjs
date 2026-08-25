@@ -64,7 +64,16 @@ const counts = countPerFile()
 const total = Object.values(counts).reduce((a, b) => a + b, 0)
 
 if (process.env.UPDATE_RAW_COLOR_BASELINE === '1') {
-  writeFileSync(baselinePath, JSON.stringify({ total, perFile: counts }, null, 2) + '\n')
+  // `justified` is metadata written by hand (task 14, THEME-2's acceptance
+  // criterion for a "residue giustificato e documentato"), not a measurement
+  // this scan produces. Carry it forward so lowering the baseline for a real
+  // migration does not silently erase the reasons the previous residue was
+  // allowed to survive.
+  const previous = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : {}
+  const rewritten = previous.justified
+    ? { total, justified: previous.justified, perFile: counts }
+    : { total, perFile: counts }
+  writeFileSync(baselinePath, JSON.stringify(rewritten, null, 2) + '\n')
   console.log(`baseline rewritten: ${total} raw colour classes`)
 }
 

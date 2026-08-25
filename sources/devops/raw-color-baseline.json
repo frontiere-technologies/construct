@@ -1,5 +1,8 @@
 {
   "total": 3,
+  "justified": {
+    "components/Login.tsx": "il bottone \"Accedi con Google\" replica la scheda prescritta da Google Identity Services (border-gray-300, bg-white, text-gray-700, hover:bg-gray-50): sono i colori di un terzo, non del tema, e ridipingerli col pannello Admin -> Tema romperebbe il riconoscimento visivo del pulsante che le linee guida di Google richiedono."
+  },
   "perFile": {
     "components/Login.tsx": 3
   }
