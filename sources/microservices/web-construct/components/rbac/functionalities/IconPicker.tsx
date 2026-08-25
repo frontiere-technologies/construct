@@ -190,6 +190,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                   <Button
                     variant="ghost"
                     title={t('icon_picker.no_icon')}
+                    aria-label={t('icon_picker.no_icon')}
                     onClick={() => pick('')}
                     className={`p-2 ${noIconSelected ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
                   >
@@ -200,6 +201,12 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                   <Button
                     key={name} title={name}
                     variant="ghost"
+                    // `title={name}` above is a raw, untranslated Lucide icon
+                    // name — never the accessible name by itself, since a
+                    // title attribute is only a hover tooltip. aria-label
+                    // wins the accessible-name computation over title, so
+                    // this is what a screen reader actually announces.
+                    aria-label={t('icon_picker.select_icon', { name })}
                     onClick={() => pick(name)}
                     className={`p-2 ${value === name ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
                   >
