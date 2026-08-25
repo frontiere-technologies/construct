@@ -1,9 +1,27 @@
 {
-  "total": 3,
+  "total": 32,
   "justified": {
-    "components/Login.tsx": "il bottone \"Accedi con Google\" replica la scheda prescritta da Google Identity Services (border-gray-300, bg-white, text-gray-700, hover:bg-gray-50): sono i colori di un terzo, non del tema, e ridipingerli col pannello Admin -> Tema romperebbe il riconoscimento visivo del pulsante che le linee guida di Google richiedono."
+    "components/Login.tsx": "il bottone \"Accedi con Google\" replica la scheda prescritta da Google Identity Services (border-gray-300, bg-white, text-gray-700, hover:bg-gray-50): sono i colori di un terzo, non del tema, e ridipingerli col pannello Admin -> Tema romperebbe il riconoscimento visivo del pulsante che le linee guida di Google richiedono. Le altre occorrenze di bg-white/text-white in questo file sono la decisione B-1: la card di /login e' fissa e deliberatamente indipendente dal tema — vedi il commento canonico sopra a 'Body' nel file.",
+    "app/register/page.tsx": "B-1: card fissa (bg-white) e intestazione fissa su sfondo scuro fisso (text-white su #0f2336) — pagina pre-autenticazione deliberatamente indipendente dal tema, gemella di components/Login.tsx. Vedi il commento canonico li'.",
+    "app/register/RegisterForm.tsx": "il bottone di submit del gruppo G (nativo, non <Button>) e' byte-identico negli stessi quattro file per decisione presa — text-white e' l'hover del bordo, non il tema. Vedi il commento sul bottone gemello in components/Login.tsx.",
+    "app/forgot-password/page.tsx": "B-1: card fissa (bg-white) e intestazione fissa su sfondo scuro fisso (text-white su #0f2336) — pagina pre-autenticazione deliberatamente indipendente dal tema, gemella di components/Login.tsx. Vedi il commento canonico li'.",
+    "app/forgot-password/ForgotPasswordForm.tsx": "il bottone di submit del gruppo G (nativo, non <Button>) e' byte-identico negli stessi quattro file per decisione presa — text-white e' l'hover del bordo, non il tema. Vedi il commento sul bottone gemello in components/Login.tsx.",
+    "app/set-password/page.tsx": "B-1: card fissa (bg-white, tre rami — invalid/expired/valido) e intestazione fissa su sfondo scuro fisso (text-white su #0f2336) — pagina pre-autenticazione deliberatamente indipendente dal tema, gemella di components/Login.tsx. Vedi il commento canonico li'.",
+    "app/set-password/SetPasswordForm.tsx": "il bottone di submit del gruppo G (nativo, non <Button>) e' byte-identico negli stessi quattro file per decisione presa — text-white e' l'hover del bordo, non il tema. Vedi il commento sul bottone gemello in components/Login.tsx.",
+    "components/Sidebar.tsx": "il pallino bianco dell'interruttore (bg-white): uno dei due 'switch knobs' — il colore del pallino e' fisso apposta, lo stato acceso/spento si legge dal binario (bg-primary / bg-switch-off), non dal pallino.",
+    "components/rbac/PermissionsTree.tsx": "il pallino bianco dell'interruttore (bg-white): l'altro dei due 'switch knobs', stessa motivazione di components/Sidebar.tsx.",
+    "components/ui/AccessibleDialog.tsx": "bg-black/40 e' la tenda (scrim) dietro un dialog modale: deliberatamente fissa in entrambi i temi — uno sfondo che scurisce la pagina sottostante non ha un 'colore del tema' sensato, e ridipingerlo col tema lo renderebbe invisibile o troppo scuro in quello scuro."
   },
   "perFile": {
-    "components/Login.tsx": 3
+    "app/forgot-password/ForgotPasswordForm.tsx": 2,
+    "app/forgot-password/page.tsx": 3,
+    "app/register/RegisterForm.tsx": 2,
+    "app/register/page.tsx": 3,
+    "app/set-password/SetPasswordForm.tsx": 2,
+    "app/set-password/page.tsx": 9,
+    "components/Login.tsx": 8,
+    "components/Sidebar.tsx": 1,
+    "components/rbac/PermissionsTree.tsx": 1,
+    "components/ui/AccessibleDialog.tsx": 1
   }
 }
