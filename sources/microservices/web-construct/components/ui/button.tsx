@@ -79,7 +79,30 @@ export type ButtonProps =
   | (ButtonBase & { size?: Exclude<ButtonSize, 'icon'>; 'aria-label'?: string })
   | (ButtonBase & { size: 'icon'; 'aria-label': string })
 
+/**
+ * Defaults the host `<button>` to `type="button"`, overridable by an explicit
+ * `type` on `props` (spread last, so it wins). HTML defaults an untyped
+ * `<button>` to `type="submit"`, so a button that only ever runs an `onClick`
+ * would silently submit any `<form>` it later ends up inside — a call site
+ * would have to remember to write `type="button"` itself to avoid that, and
+ * nothing enforces the reminder. Defaulting it here makes the bug class
+ * impossible instead of relying on every call site getting it right.
+ *
+ * Not applied on the `asChild` branch: `Comp` there is `Slot`, and the child
+ * it clones onto is frequently an `<a>` (see `EmbeddedBlockedNotice.tsx`).
+ * Verified with `renderToStaticMarkup` that `Slot` happily forwards an
+ * inherited `type="button"` onto a plain `<a>` with no React warning, but the
+ * attribute is real and wrong once it lands: `type` on an anchor is a MIME-type
+ * hint for the linked resource, and "button" is not a MIME type. Skipping the
+ * default on this branch avoids emitting that on every `asChild` anchor.
+ */
 export function Button({ className, variant, size, asChild = false, ...props }: ButtonProps) {
   const Comp = asChild ? Slot : 'button'
-  return <Comp className={cn(buttonVariants({ variant, size }), className)} {...props} />
+  return (
+    <Comp
+      {...(asChild ? {} : { type: 'button' as const })}
+      className={cn(buttonVariants({ variant, size }), className)}
+      {...props}
+    />
+  )
 }

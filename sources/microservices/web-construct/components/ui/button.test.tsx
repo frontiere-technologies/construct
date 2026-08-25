@@ -9,6 +9,23 @@ describe('Button', () => {
     expect(html).toContain('Salva')
   })
 
+  it('defaults to type="button" so an onClick-only button can never fall back to submit', () => {
+    // HTML defaults an untyped <button> to type="submit": a button that only
+    // runs an onClick would silently submit any <form> it later ends up
+    // inside, unless every call site remembers to write type="button" itself.
+    const html = renderToStaticMarkup(<Button>Salva</Button>)
+    expect(html).toContain('type="button"')
+  })
+
+  it('lets an explicit type="submit" override the default', () => {
+    // Proves the override direction: props is spread after the default, so a
+    // call site inside a real <form> (ChangePasswordForm, Login's test form)
+    // still gets type="submit" and not the primitive's default.
+    const html = renderToStaticMarkup(<Button type="submit">Salva</Button>)
+    expect(html).toContain('type="submit"')
+    expect(html).not.toContain('type="button"')
+  })
+
   it('paints the primary action with the theme token, not a fixed grey', () => {
     // Sedici dei diciannove bottoni di conferma usavano bg-gray-900, che il
     // pannello Admin -> Tema non puo' cambiare. E' la ragione per cui UI-1
@@ -73,6 +90,10 @@ describe('Button', () => {
     expect(html).toMatch(/^<a /)
     expect(html).toContain('href="/roles"')
     expect(html).toContain('text-primary')
+    // The type="button" default is for the host <button> branch only: on an
+    // <a>, `type` means the linked resource's MIME type, and "button" isn't
+    // one, so the default must not leak onto this branch.
+    expect(html).not.toContain('type="button"')
   })
 
   it('carries the accessible name through on an icon-only button', () => {

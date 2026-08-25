@@ -41,6 +41,8 @@ describe('GridToolbar', () => {
     const button = GridToolbarResetButton({ label: 'Reimposta filtri', onClearFilters })
 
     expect(button.props.children).toBe('Reimposta filtri')
+    // type="button" is no longer asserted here: the invariant moved into
+    // Button itself (see button.test.tsx), which now defaults to it.
     button.props.onClick()
     expect(onClearFilters).toHaveBeenCalledOnce()
   })
