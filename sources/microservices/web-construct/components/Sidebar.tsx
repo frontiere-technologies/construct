@@ -628,8 +628,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
                   aria-checked={settings.theme === 'dark'}
                   aria-label={t('nav.theme_mode')}
                   className={clsx(
+                    // Off-state track: bg-switch-off, not bg-input — see the
+                    // --switch-off comment in globals.css (task 14). Must stay
+                    // identical to the PermissionsTree.tsx toggle.
                     'relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 flex-shrink-0',
-                    settings.theme === 'dark' ? 'bg-primary' : 'bg-input'
+                    settings.theme === 'dark' ? 'bg-primary' : 'bg-switch-off'
                   )}
                 >
                   <span className={clsx(

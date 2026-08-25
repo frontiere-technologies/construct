@@ -181,4 +181,21 @@ describe('default palette contrast', () => {
       expect(worst(bordD, darkSurfaces)).toBeGreaterThanOrEqual(3)
     }
   })
+
+  it('keeps the switch off-track visible against its own knob (task 14)', () => {
+    // A switch conveys its state through the knob's position, so the ratio
+    // that matters is knob-against-track, not track-against-page: bg-input
+    // (== --border) measured 1.24:1 in light theme, a featureless pale pill
+    // that hid the white knob entirely. Fixed rather than themed, like the
+    // other state tokens above — see the --switch-off comment in globals.css.
+    const css = readFileSync(resolve(__dirname, '../app/globals.css'), 'utf8')
+    const switchOffLight = css.match(/:root\s*\{[^}]*--switch-off:\s*(#[0-9a-f]{6})/i)?.[1]
+    const switchOffDark = css.match(/\.dark\s*\{[^}]*--switch-off:\s*(#[0-9a-f]{6})/i)?.[1]
+    expect(switchOffLight).toMatch(/^#[0-9a-f]{6}$/i)
+    expect(switchOffDark).toMatch(/^#[0-9a-f]{6}$/i)
+
+    const knob = '#ffffff'
+    expect(contrast(knob, switchOffLight as string)).toBeGreaterThanOrEqual(3)
+    expect(contrast(knob, switchOffDark as string)).toBeGreaterThanOrEqual(3)
+  })
 })
