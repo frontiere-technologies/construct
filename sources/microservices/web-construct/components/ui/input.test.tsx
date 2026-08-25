@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { Input } from './input'
+import { Input, inputBaseClasses } from './input'
 import { Textarea } from './textarea'
 import { Select } from './select'
 
@@ -18,6 +18,7 @@ describe('Input', () => {
     expect(html).toContain('border-border')
     expect(html).toContain('text-foreground')
     expect(html).not.toMatch(/bg-(gray|slate|zinc)-\d+/)
+    expect(inputBaseClasses).toContain('disabled:bg-accent')
   })
 
   it('shows a visible focus ring, which most call sites had and some did not', () => {
@@ -31,10 +32,15 @@ describe('Input', () => {
     expect(html).not.toMatch(/class="[^"]*px-3/)
   })
 
-  it('dresses the disabled field with a token, not a raw grey', () => {
-    const html = renderToStaticMarkup(<Input disabled />)
-    expect(html).toContain('disabled:bg-accent')
-    expect(html).not.toContain('bg-gray-100')
+  it('forwards the disabled attribute to the underlying input', () => {
+    // Il vestito dello stato disabilitato vive nella stringa di classi, quindi
+    // compare nel markup anche senza la prop: asserirlo qui non proverebbe
+    // nulla. Cio' che varia davvero e' l'attributo nativo, ed e' anche l'unica
+    // cosa che si romperebbe se lo spread delle props sparisse.
+    const enabled = renderToStaticMarkup(<Input />)
+    const disabled = renderToStaticMarkup(<Input disabled />)
+    expect(disabled).toMatch(/<input[^>]*\sdisabled(=""|[\s>])/)
+    expect(enabled).not.toMatch(/<input[^>]*\sdisabled(=""|[\s>])/)
   })
 })
 
