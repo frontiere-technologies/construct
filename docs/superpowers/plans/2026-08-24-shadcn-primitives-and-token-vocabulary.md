@@ -895,7 +895,7 @@ Siccome la decisione 5 della specifica tiene le regole globali dov'erano per tut
 
 I call site che oggi scrivono la propria opacità la perdono durante la migrazione: è il punto, non un effetto collaterale.
 
-- [ ] **Step 1: Scrivere il test di comportamento che fallisce**
+- [✅] **Step 1: Scrivere il test di comportamento che fallisce**
 
 Crea `components/ui/button.test.tsx`. Il progetto rende i componenti con `renderToStaticMarkup` in ambiente `node`: non c'è jsdom, quindi si asseriscono le classi e gli attributi nel markup, non le interazioni.
 
@@ -983,7 +983,7 @@ describe('Button', () => {
 })
 ```
 
-- [ ] **Step 2: Scrivere il vincolo di tipo che fallisce**
+- [✅] **Step 2: Scrivere il vincolo di tipo che fallisce**
 
 Crea `components/ui/button.types.ts`. **Non è un file vitest** e non deve chiamarsi `.test.ts`: non c'è niente da eseguire a runtime, e un `expect(x).toBeTruthy()` messo lì solo per far accettare il file a vitest sarebbe un test che finge di asserire. Il controllo lo fa `npm run typecheck`, già presente nella pipeline dal commit `fc72693`.
 
@@ -1019,7 +1019,7 @@ export const textButton = <Button>Salva</Button>
 
 Rinomina il file in `components/ui/button.types.tsx`, perché contiene JSX. Verifica che **non** finisca fra i file raccolti da `vitest.config.ts`: il pattern è `components/**/*.test.tsx`, e questo nome non lo soddisfa.
 
-- [ ] **Step 3: Eseguire i test e verificare che falliscano**
+- [✅] **Step 3: Eseguire i test e verificare che falliscano**
 
 ```bash
 npm run test -- components/ui/button
@@ -1027,7 +1027,7 @@ npm run test -- components/ui/button
 
 Atteso: FAIL, `Failed to resolve import "./button"`.
 
-- [ ] **Step 4: Scrivere `components/ui/button.tsx`**
+- [✅] **Step 4: Scrivere `components/ui/button.tsx`**
 
 ```tsx
 import * as React from 'react'
@@ -1104,7 +1104,7 @@ export function Button({ className, variant, size, asChild = false, ...props }: 
 }
 ```
 
-- [ ] **Step 5: Eseguire i test e verificare che passino**
+- [✅] **Step 5: Eseguire i test e verificare che passino**
 
 ```bash
 npm run test -- components/ui/button && npm run typecheck
@@ -1112,7 +1112,7 @@ npm run test -- components/ui/button && npm run typecheck
 
 Atteso: PASS, 9 test di comportamento. `typecheck` verde: significa che il `@ts-expect-error` ha trovato l'errore che si aspettava. Se `typecheck` fallisce con `Unused '@ts-expect-error' directive`, il vincolo sull'etichetta **non** funziona e l'unione va corretta — è quello il modo in cui questo file segnala un problema.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add components/ui/button.tsx components/ui/button.test.tsx components/ui/button.types.tsx
