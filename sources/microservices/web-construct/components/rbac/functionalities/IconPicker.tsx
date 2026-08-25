@@ -140,7 +140,7 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
           type="button"
           onClick={clear}
           aria-label={t('functionalities.icon.remove_label')}
-          className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-destructive-muted hover:[transform:none] text-destructive-muted-foreground z-10"
+          className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-destructive-muted enabled:hover:bg-destructive enabled:hover:text-destructive-foreground hover:[transform:none] text-destructive-muted-foreground z-10"
         >
           <X size={9} />
         </button>

@@ -94,7 +94,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
             )}
           </Button>
           {search.trim() !== '' && (
-            <button data-testid="clear-filters" aria-label={t('functionalities.list.clear_filters_label')} onClick={clearFilters} className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-destructive-muted text-destructive-muted-foreground z-10">
+            <button data-testid="clear-filters" aria-label={t('functionalities.list.clear_filters_label')} onClick={clearFilters} className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-destructive-muted enabled:hover:bg-destructive enabled:hover:text-destructive-foreground text-destructive-muted-foreground z-10">
               <X size={9} />
             </button>
           )}
