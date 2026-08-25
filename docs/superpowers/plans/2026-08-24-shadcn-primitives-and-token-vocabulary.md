@@ -1405,7 +1405,7 @@ w-full px-3 py-2 rounded-lg border border-border bg-popover text-foreground text
 
 `Select` qui è l'elemento `<select>` nativo con lo stesso vestito, **non** il componente Radix. Sostituire `CustomSelect.tsx` con Radix Select è un lavoro a sé, fuori dal perimetro concordato.
 
-- [ ] **Step 1: Scrivere il test che fallisce**
+- [✅] **Step 1: Scrivere il test che fallisce**
 
 Crea `components/ui/input.test.tsx`:
 
@@ -1469,7 +1469,7 @@ describe('Select', () => {
 })
 ```
 
-- [ ] **Step 2: Eseguire e verificare che fallisca**
+- [✅] **Step 2: Eseguire e verificare che fallisca**
 
 ```bash
 npm run test -- components/ui/input.test.tsx
@@ -1477,7 +1477,7 @@ npm run test -- components/ui/input.test.tsx
 
 Atteso: FAIL, `Failed to resolve import "./input"`.
 
-- [ ] **Step 3: Scrivere i tre componenti**
+- [✅] **Step 3: Scrivere i tre componenti**
 
 `components/ui/input.tsx`:
 
@@ -1537,7 +1537,7 @@ export function Select({ className, ...props }: SelectProps) {
 }
 ```
 
-- [ ] **Step 4: Eseguire e verificare che passi**
+- [✅] **Step 4: Eseguire e verificare che passi**
 
 ```bash
 npm run test -- components/ui/input.test.tsx && npm run typecheck
@@ -1545,7 +1545,7 @@ npm run test -- components/ui/input.test.tsx && npm run typecheck
 
 Atteso: PASS, 7 test.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add components/ui/input.tsx components/ui/textarea.tsx components/ui/select.tsx components/ui/input.test.tsx
