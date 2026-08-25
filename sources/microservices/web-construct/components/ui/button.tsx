@@ -20,10 +20,16 @@ export type ButtonSize = 'default' | 'sm' | 'icon'
  *   il cursore not-allowed non si vede mai;
  * - niente `disabled:opacity-*`: globals.css applica gia' filter: opacity(0.6)
  *   a ogni button:disabled, e le due si moltiplicherebbero;
- * - ogni hover e' scritto `enabled:hover:`, cosi' un bottone disabilitato non
- *   reagisce al passaggio del mouse. E' l'invariante che
+ * - ogni hover e' scritto `[&:not(:disabled)]:hover:`, cosi' un bottone
+ *   disabilitato non reagisce al passaggio del mouse. E' l'invariante che
  *   disabledButtonHoverStyles.test.ts sorveglia sui punti d'uso e che qui e'
- *   garantito per costruzione.
+ *   garantito per costruzione. Non `enabled:hover:`: quella variante compila
+ *   in `:enabled:hover`, e `:enabled` matcha solo i controlli di modulo
+ *   (button, input, select, textarea, fieldset, optgroup) — su un `<a>`
+ *   iniettato da `asChild` (vedi EmbeddedBlockedNotice.tsx) non matcha mai,
+ *   quindi l'hover non scattava affatto. `:not(:disabled)` funziona per
+ *   entrambi: su un bottone disabilitato non matcha (stesso invariante), su
+ *   un'ancora — che non ha mai l'attributo `disabled` — matcha sempre.
  *
  * Le regole globali su `button` in globals.css stanno dentro @layer base con
  * :where(), quindi queste utility le sovrascrivono senza bisogno del
@@ -34,11 +40,11 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground enabled:hover:opacity-90',
-        outline: 'border border-border bg-transparent enabled:hover:bg-accent',
-        ghost: 'text-muted-foreground enabled:hover:bg-accent enabled:hover:text-foreground',
-        destructive: 'bg-destructive text-destructive-foreground enabled:hover:opacity-90',
-        link: 'text-primary underline-offset-4 enabled:hover:underline',
+        default: 'bg-primary text-primary-foreground [&:not(:disabled)]:hover:opacity-90',
+        outline: 'border border-border bg-transparent [&:not(:disabled)]:hover:bg-accent',
+        ghost: 'text-muted-foreground [&:not(:disabled)]:hover:bg-accent [&:not(:disabled)]:hover:text-foreground',
+        destructive: 'bg-destructive text-destructive-foreground [&:not(:disabled)]:hover:opacity-90',
+        link: 'text-primary underline-offset-4 [&:not(:disabled)]:hover:underline',
       },
       size: {
         default: 'px-4 py-2',

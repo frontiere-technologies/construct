@@ -45,15 +45,52 @@ describe('Button', () => {
     expect(secondary).toContain('px-4')
   })
 
-  it('guards every hover with the enabled state', () => {
+  it('guards every hover with a disabled-safe selector', () => {
     // Un bottone disabilitato non deve reagire al passaggio del mouse. Qui
     // l'invariante e' garantito per costruzione, una volta, invece che
-    // ricontrollato su ogni punto d'uso.
+    // ricontrollato su ogni punto d'uso. `[&:not(:disabled)]:hover:`, non
+    // `enabled:hover:` (== `:enabled:hover`): `:enabled` matcha solo i
+    // controlli di modulo, quindi su un'ancora iniettata da `asChild` non
+    // avrebbe mai scattato — vedi il test dedicato piu' sotto.
     for (const variant of ['default', 'outline', 'ghost', 'destructive', 'link'] as const) {
       const classes = buttonVariants({ variant })
-      const unguarded = classes.match(/(?<!enabled:)hover:[\w-]+/g) ?? []
+      const unguarded = classes.match(/(?<!\[&:not\(:disabled\)\]:)hover:[\w-]+/g) ?? []
       expect(unguarded, `variante ${variant}`).toEqual([])
     }
+  })
+
+  it('emits a hover style that actually reaches an asChild anchor, not just the host button', () => {
+    // Regressione reale: EmbeddedBlockedNotice.tsx:15 passava da
+    // hover:opacity-90 a niente perche' ogni hover era `enabled:hover:`, che
+    // compila in `:enabled:hover` — e `:enabled` matcha solo i controlli di
+    // modulo (button, input, select, textarea, fieldset, optgroup), mai un
+    // <a>. `[&:not(:disabled)]:hover:` risolve matchando su entrambi: un
+    // bottone disabilitato fallisce `:not(:disabled)` (niente hover, stesso
+    // invariante di sopra), un'ancora — che non porta mai l'attributo
+    // `disabled` — lo supera sempre.
+    //
+    // Qui si assume deliberatamente lo stesso selettore per i due rami: non
+    // "differiscono" come stringhe, perche' e' esattamente cio' che rende il
+    // fix corretto — un solo selettore che funziona per entrambi, invece di
+    // due trattamenti da tenere sincronizzati. Cio' che differiva PRIMA del
+    // fix non era la stringa (identica su entrambi i rami, dato che
+    // buttonVariants non si dirama su asChild) ma il suo effetto: scattava
+    // sul bottone e non sull'ancora. E' quell'effetto che questo test prova,
+    // confrontando la classe presente sui due rami invece di limitarsi a
+    // uno solo.
+    const hostHtml = renderToStaticMarkup(<Button variant="link">Salva</Button>)
+    const asChildHtml = renderToStaticMarkup(
+      // eslint-disable-next-line @next/next/no-html-link-for-pages
+      <Button asChild variant="link"><a href="/roles">Ruoli</a></Button>
+    )
+    // renderToStaticMarkup HTML-escapes the `&` inside the class attribute.
+    const hoverClass = '[&amp;:not(:disabled)]:hover:underline'
+    expect(hostHtml).toContain(hoverClass)
+    expect(asChildHtml).toContain(hoverClass)
+    // La classe che ha causato la regressione non deve tornare su nessuno dei
+    // due rami.
+    expect(hostHtml).not.toContain('enabled:hover:underline')
+    expect(asChildHtml).not.toContain('enabled:hover:underline')
   })
 
   it('leaves the disabled treatment to the global rule instead of stacking on it', () => {
