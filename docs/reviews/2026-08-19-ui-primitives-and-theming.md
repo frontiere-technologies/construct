@@ -497,9 +497,16 @@ non si adattano alla superficie su cui finiscono.
 - [✅] Le tre pagine non ancora controllate, nei due stati del tema.
 - [✅] Con OS in **dark** e applicazione in **light**, ripetuto su **tutte e tre** le pagine, non
   solo su una.
-- [ ] Le occorrenze di `text-gray-400` e `text-gray-500` convertite a token semantici — **resta
-  aperto e appartiene a THEME-2**, come la review prevedeva. I quattro punti sono ora identificati
-  con classe, testo e rapporto misurato.
+- [✅] Le occorrenze di `text-gray-400` e `text-gray-500` convertite a token semantici. Chiuso il
+  2026-08-25 (task 14): i quattro call site erano già stati migrati ai token dai lotti precedenti —
+  ma, come questa stessa sezione ammoniva, il nome del token non garantiva il rapporto, quindi sono
+  stati **rimisurati**, non assunti corretti. Tutti e quattro superano 4.5:1 sulla superficie reale
+  su cui poggiano: `(facoltativo)` su `/profile` (`text-muted-foreground`) **7.56:1** su `bg-card`
+  chiaro; il link del breadcrumb su `/roles-permissions/1` in hover (`hover:text-foreground`)
+  **20.13:1** su `--background` scuro; il separatore `/` (`text-muted-foreground`, colore di
+  default non-hover dello stesso contenitore) **7.93:1** sullo stesso sfondo; la scheda inattiva
+  (`text-muted-foreground`) **5.78:1** su `bg-card` scuro. Misurato via `getComputedStyle` nel
+  browser, non solo calcolato.
 
 ---
 
