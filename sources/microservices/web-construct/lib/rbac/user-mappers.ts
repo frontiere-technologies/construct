@@ -1,4 +1,4 @@
-import type { UserDTO, UserStatusId, UsersQuery } from './types'
+import type { UserDto, UserStatusId, UsersQuery } from './types'
 
 export interface UserRow {
   id: string
@@ -20,7 +20,7 @@ export const USER_SORT_COLUMN: Record<NonNullable<UsersQuery['sort']>, string> =
   status: 'id_user_status',
 }
 
-export function mapUserStatus(id: number): UserDTO['status'] {
+export function mapUserStatus(id: number): UserDto['status'] {
   return id === 2 ? { idUserStatus: 2, description: 'Active' } : { idUserStatus: 1, description: 'Deactivated' }
 }
 
@@ -28,7 +28,7 @@ export function buildUserDtos(
   userRows: UserRow[],
   userRoleRows: UserRoleRow[],
   roleNameById: Map<number, string>,
-): UserDTO[] {
+): UserDto[] {
   const rolesByUser = new Map<string, { id: number; name: string }[]>()
   for (const r of userRoleRows) {
     const arr = rolesByUser.get(r.user_id) ?? []

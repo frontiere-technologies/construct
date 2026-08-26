@@ -1,11 +1,11 @@
 'use client'
 
 import React from 'react'
-import type { UserDTO } from '@/lib/rbac/types'
+import type { UserDto } from '@/lib/rbac/types'
 import { USER_STATUS_ACTIVE } from '@/lib/rbac/types'
 import { useI18n } from '@/context/I18nContext'
 
-export default function StatusBadge({ status }: { status: UserDTO['status'] }) {
+export default function StatusBadge({ status }: { status: UserDto['status'] }) {
   const { t } = useI18n()
   const active = status.idUserStatus === USER_STATUS_ACTIVE
   return (

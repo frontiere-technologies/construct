@@ -6,7 +6,7 @@ import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { getAllRoles } from './roles-service'
 import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
 import { USER_SORT_COLUMN, buildUserDtos, type UserRow, type UserRoleRow } from './user-mappers'
-import type { UserDTO, UsersQuery } from './types'
+import type { UserDto, UsersQuery } from './types'
 
 const SORT_COLUMNS = {
   first_name: users.firstName,
@@ -57,7 +57,7 @@ export function applyUserFilters(query: UsersQuery, roleIds: number[] | undefine
   return conditions
 }
 
-export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserDTO[]; total: number }> => {
+export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserDto[]; total: number }> => {
   const conditions = applyUserFilters(query, query.roleIds)
   const where = conditions.length ? and(...conditions) : undefined
   const ascending = (query.direction ?? 'DESC') === 'ASC'

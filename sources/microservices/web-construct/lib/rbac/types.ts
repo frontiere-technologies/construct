@@ -154,7 +154,7 @@ export interface MoveInput { targetParentId: number; orderPosition: number }
 
 export type UserStatusId = 1 | 2 // 1 Deactivated, 2 Active
 
-export interface UserDTO {
+export interface UserDto {
   id: string
   firstName: string | null
   lastName: string | null

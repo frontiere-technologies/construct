@@ -2,7 +2,7 @@
 
 import type { IDatasource, IGetRowsParams } from 'ag-grid-community'
 import { GRID_BLOCK_SIZE } from '@/components/ui/DataGrid'
-import type { UserDTO } from '@/lib/rbac/types'
+import type { UserDto } from '@/lib/rbac/types'
 import { buildUsersGridQuery, type UsersGridFilterModel, type UsersGridSortItem } from '@/lib/rbac/users-grid-query'
 
 export function createUsersDatasource(): IDatasource {
@@ -21,7 +21,7 @@ export function createUsersDatasource(): IDatasource {
       })
         .then(res => {
           if (!res.ok) throw new Error(`Request failed with status ${res.status}`)
-          return res.json() as Promise<{ users: UserDTO[]; total: number }>
+          return res.json() as Promise<{ users: UserDto[]; total: number }>
         })
         .then(({ users, total }) => {
           const from = query.page * GRID_BLOCK_SIZE
