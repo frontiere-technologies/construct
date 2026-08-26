@@ -131,10 +131,14 @@ Se stampa un numero maggiore di zero, la chiave dello Step 3 è sbagliata: prova
 - [ ] **Step 6: Contare le violazioni di ordinamento, per confronto con A-3**
 
 ```bash
+npx eslint . 2>&1 | grep -c "import-x/order"
 npx eslint app components context lib types 2>&1 | grep -c "import-x/order"
 ```
 
-Expected: 47. Annota il numero: A-3 deve portarlo a 0.
+Expected: `49` e `47`. La differenza sono le due violazioni in
+`vitest.config.ts` e `vitest.integration.config.ts`: `npm run lint` e'
+`eslint .` e le conta, quindi A-3 deve lavorare sull'ambito intero e portare il
+primo numero a 0.
 
 Se ti aspettavi 44: quel numero veniva da una sonda fatta col plugin `import` e
 il resolver rotto, che non riusciva a classificare alcuni import `@/` e quindi
@@ -162,7 +166,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ### Task 2: [A-3] Ordinamento degli import applicato
 
 **Files:**
-- Modify: i file che l'autofix individua da sé in `app/`, `components/`, `lib/` — 47 violazioni su 26 file
+- Modify: i file che l'autofix individua da sé — 49 violazioni: 47 in `app/`, `components/`, `lib/` piu' 2 in `vitest.config.ts` e `vitest.integration.config.ts`
 
 **Interfaces:**
 - Consumes: la configurazione ESLint del compito A-1.
@@ -171,16 +175,22 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - [ ] **Step 1: Lanciare l'autofix**
 
 ```bash
-npx eslint app components context lib types --fix
+npx eslint . --fix
 ```
+
+Nota lo `.` e non l'elenco delle cinque cartelle: due delle violazioni vivono in
+`vitest.config.ts` e `vitest.integration.config.ts`, fuori da `app`,
+`components`, `context`, `lib` e `types`. `npm run lint` e' `eslint .` e le
+conta, quindi restringere l'ambito qui lascerebbe il lint rosso al passo 3.
 
 - [ ] **Step 2: Verificare che le violazioni siano a zero**
 
 ```bash
-npx eslint app components context lib types 2>&1 | grep -c "import-x/order"
+npx eslint . 2>&1 | grep -c "import-x/order"
 ```
 
-Expected: `0` (partendo dai 47 contati in A-1 Step 6).
+Expected: `0` (partendo dalle 49 che `eslint .` conta: le 47 delle cinque
+cartelle piu' le 2 dei due file di configurazione di vitest).
 
 - [ ] **Step 3: Verificare che l'autofix non abbia rotto niente**
 
