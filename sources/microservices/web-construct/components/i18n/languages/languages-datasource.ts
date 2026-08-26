@@ -1,7 +1,7 @@
 'use client'
 
 import type { IDatasource, IGetRowsParams } from 'ag-grid-community'
-import { GRID_BLOCK_SIZE } from '@/components/ui/DataGrid'
+import { GRID_BLOCK_SIZE } from '@/components/grid/DataGrid'
 import type { LanguagesPage } from '@/lib/i18n/types'
 import {
   buildLanguagesGridQuery,

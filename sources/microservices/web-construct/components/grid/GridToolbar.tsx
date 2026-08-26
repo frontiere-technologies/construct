@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import type { GridApi } from 'ag-grid-community'
 import { useI18n } from '@/context/I18nContext'
 import { Button } from '@/components/ui/button'
-import ColumnVisibilityToggle, { type ToggleableColumn } from './ColumnVisibilityToggle'
+import { ColumnVisibilityToggle, type ToggleableColumn } from './ColumnVisibilityToggle'
 
 interface GridToolbarProps<T> {
   gridApi: GridApi<T> | null
@@ -30,7 +30,7 @@ export function GridToolbarResetButton(
   )
 }
 
-export default function GridToolbar<T>({ gridApi, columns, onClearFilters, children }: GridToolbarProps<T>) {
+export function GridToolbar<T>({ gridApi, columns, onClearFilters, children }: GridToolbarProps<T>) {
   const { t } = useI18n()
 
   return (

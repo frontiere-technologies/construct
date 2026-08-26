@@ -8,8 +8,8 @@ import {
   type FilterChangedEvent, type SortChangedEvent,
 } from 'ag-grid-community'
 import { useI18n } from '@/context/I18nContext'
-import { appGridTheme, gridLocaleText, columnPinningState } from './dataGridConfig'
-import { normalizeGridColumnDefs } from './gridColumnSizing'
+import { appGridTheme, gridLocaleText, columnPinningState } from './data-grid-config'
+import { normalizeGridColumnDefs } from './grid-column-sizing'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
@@ -27,7 +27,7 @@ export interface DataGridProps<T> {
   onGridReady?: (event: GridReadyEvent<T>) => void
 }
 
-export default function DataGrid<T>({
+export function DataGrid<T>({
   columnDefs, datasource, getRowId, initialFilterModel, initialSortModel,
   onFilterChanged, onSortChanged, onRowClicked, onGridReady,
 }: DataGridProps<T>) {

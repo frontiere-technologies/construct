@@ -24,15 +24,15 @@ vi.mock('@/context/I18nContext', () => ({
   }),
 }))
 
-vi.mock('@/components/ui/DataGrid', () => ({
-  default: (props: { columnDefs: ColDef<TranslationRowDto>[] }) => {
+vi.mock('@/components/grid/DataGrid', () => ({
+  DataGrid: (props: { columnDefs: ColDef<TranslationRowDto>[] }) => {
     captured.columnDefs.push(props.columnDefs)
     return null
   },
 }))
 
-vi.mock('@/components/ui/GridToolbar', () => ({ default: () => null }))
-vi.mock('@/components/ui/grid-url-sync', () => ({
+vi.mock('@/components/grid/GridToolbar', () => ({ GridToolbar: () => null }))
+vi.mock('@/components/grid/grid-url-sync', () => ({
   useGridUrlSync: () => ({ update: vi.fn() }),
 }))
 vi.mock('@/lib/i18n/translation-actions', () => ({ deleteTranslationKey: vi.fn() }))

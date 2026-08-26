@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as I18nContext from '@/context/I18nContext'
 import { I18nProvider } from '@/context/I18nContext'
-import GridToolbar, { GridToolbarResetButton } from './GridToolbar'
+import { GridToolbar, GridToolbarResetButton } from './GridToolbar'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/lib/i18n/user-language-actions', () => ({ setPreferredLanguage: vi.fn() }))

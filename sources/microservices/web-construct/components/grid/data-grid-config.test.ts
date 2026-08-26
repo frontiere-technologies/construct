@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ColDef } from 'ag-grid-community'
-import { appGridThemeParams, columnPinningState } from './dataGridConfig'
+import { appGridThemeParams, columnPinningState } from './data-grid-config'
 
 describe('columnPinningState', () => {
   it('collects left- and right-pinned columns by id', () => {

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 
 export interface ToggleableColumn { colId: string; label: string }
 
-export default function ColumnVisibilityToggle<T>(
+export function ColumnVisibilityToggle<T>(
   { gridApi, columns }: { gridApi: GridApi<T> | null; columns: ToggleableColumn[] },
 ) {
   const { t } = useI18n()

@@ -1,7 +1,7 @@
 'use client'
 
 import type { IDatasource, IGetRowsParams } from 'ag-grid-community'
-import { GRID_BLOCK_SIZE } from '@/components/ui/DataGrid'
+import { GRID_BLOCK_SIZE } from '@/components/grid/DataGrid'
 import type { UserDto } from '@/lib/rbac/types'
 import { buildUsersGridQuery, type UsersGridFilterModel, type UsersGridSortItem } from '@/lib/rbac/users-grid-query'
 
