@@ -1073,21 +1073,36 @@ grep -rl --include='*.ts' --include='*.tsx' \
     -e 's#components/IconRenderer#components/shared/IconRenderer#g'
 ```
 
-- [ ] **Step 4: Aggiustare gli import relativi rimasti**
+- [ ] **Step 4: Aggiustare l'unico import relativo che si rompe**
 
-`ConfirmModal.tsx` importava `AccessibleDialog` con `./`, e sono ancora vicini: quello non cambia. Ma `Sidebar.tsx` e `IconPicker.tsx` importavano `IconRenderer` per via relativa, e ora non lo è più:
-
-```bash
-grep -rn "from '\./IconRenderer'\|from '\.\./\.\./IconRenderer'\|from '\.\./IconRenderer'" components
-```
-
-Per ogni riscontro, sostituisci l'import relativo con `from '@/components/shared/IconRenderer'`. Stessa cosa per `PageContainer` se compare:
+Ce n'e' uno solo, verificato: `components/Sidebar.tsx:15` importa `IconRenderer` con `./`, e
+dopo lo spostamento quel percorso non esiste piu'.
 
 ```bash
-grep -rn "from '\./PageContainer'\|from '\.\./PageContainer'\|from '\.\./\.\./PageContainer'" components app
+sed -i '' "s#^import { IconRenderer } from './IconRenderer'#import { IconRenderer } from '@/components/shared/IconRenderer'#" components/Sidebar.tsx
 ```
+
+Gli altri due import relativi dei file che si spostano **non** si rompono, perche' bersaglio e
+importatore si muovono insieme dentro `components/shared/`:
+`AccessibleDialog.test.tsx` con `'./AccessibleDialog'` e `LoadingStatus.test.tsx` con
+`'./LoadingStatus'`. A quei due serve solo la conversione da default a nominato, al passo 6.
+`PageContainer` non ha nessun importatore relativo. `IconPicker.tsx` importa `IconRenderer`
+per alias, non per via relativa, quindi lo prende il passo 3.
+
+Verifica che non resti nessun relativo rotto:
+
+```bash
+grep -rnE "from '\.{1,2}(/[a-zA-Z-]+)*/(AccessibleDialog|ConfirmModal|LoadingStatus|PageContainer|IconRenderer)'" app components context lib
+```
+
+Expected: esattamente due righe, entrambe dentro `components/shared/` — i due test che importano
+il loro vicino.
 
 - [ ] **Step 5: Convertire i tre componenti a export nominati**
+
+`PageContainer` e `IconRenderer` sono **gia'** export nominati (`export function PageContainer`
+e `export const IconRenderer: React.FC<...> = memo(...)`): non si toccano. Solo i tre che
+arrivano da `components/ui/` vanno convertiti.
 
 In `components/shared/AccessibleDialog.tsx`, cambiare `export default function AccessibleDialog({` in `export function AccessibleDialog({`.
 In `components/shared/ConfirmModal.tsx`, cambiare
