@@ -10,7 +10,7 @@
     "app/set-password/SetPasswordForm.tsx": "il bottone di submit del gruppo G (nativo, non <Button>) e' byte-identico negli stessi quattro file per decisione presa — text-white e' l'hover del bordo, non il tema. Vedi il commento sul bottone gemello in components/Login.tsx.",
     "components/Sidebar.tsx": "il pallino bianco dell'interruttore (bg-white): uno dei due 'switch knobs' — il colore del pallino e' fisso apposta, lo stato acceso/spento si legge dal binario (bg-primary / bg-switch-off), non dal pallino.",
     "components/rbac/PermissionsTree.tsx": "il pallino bianco dell'interruttore (bg-white): l'altro dei due 'switch knobs', stessa motivazione di components/Sidebar.tsx.",
-    "components/ui/AccessibleDialog.tsx": "bg-black/40 e' la tenda (scrim) dietro un dialog modale: deliberatamente fissa in entrambi i temi — uno sfondo che scurisce la pagina sottostante non ha un 'colore del tema' sensato, e ridipingerlo col tema lo renderebbe invisibile o troppo scuro in quello scuro."
+    "components/shared/AccessibleDialog.tsx": "bg-black/40 e' la tenda (scrim) dietro un dialog modale: deliberatamente fissa in entrambi i temi — uno sfondo che scurisce la pagina sottostante non ha un 'colore del tema' sensato, e ridipingerlo col tema lo renderebbe invisibile o troppo scuro in quello scuro."
   },
   "perFile": {
     "app/forgot-password/ForgotPasswordForm.tsx": 2,
@@ -22,6 +22,6 @@
     "components/Login.tsx": 8,
     "components/Sidebar.tsx": 1,
     "components/rbac/PermissionsTree.tsx": 1,
-    "components/ui/AccessibleDialog.tsx": 1
+    "components/shared/AccessibleDialog.tsx": 1
   }
 }
