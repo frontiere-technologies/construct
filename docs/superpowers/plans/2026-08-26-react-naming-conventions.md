@@ -26,7 +26,7 @@
 
 # PR-A — meccanica
 
-### Task A-1: Configurazione ESLint provata su due file
+### Task 1: [A-1] Configurazione ESLint provata su due file
 
 **Files:**
 - Modify: `package.json` (devDependencies)
@@ -154,7 +154,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task A-2: Guardia sui nomi dei file, scritta rossa
+### Task 2: [A-2] Guardia sui nomi dei file, scritta rossa
 
 **Files:**
 - Create: `guards/file-naming.test.ts`
@@ -433,174 +433,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task A-3: Ordinamento degli import applicato
-
-**Files:**
-- Modify: 26 file in `app/`, `components/`, `lib/` (l'autofix li individua da sé)
-
-**Interfaces:**
-- Consumes: la configurazione ESLint del compito A-1.
-- Produces: `npx eslint` senza errori `import-x/order`.
-
-- [ ] **Step 1: Lanciare l'autofix**
-
-```bash
-npx eslint app components context lib types --fix
-```
-
-- [ ] **Step 2: Verificare che le violazioni siano a zero**
-
-```bash
-npx eslint app components context lib types 2>&1 | grep -c "import-x/order"
-```
-
-Expected: `0` (partendo dai 44 contati in A-1 Step 6).
-
-- [ ] **Step 3: Verificare che l'autofix non abbia rotto niente**
-
-```bash
-npm run lint && npm run typecheck && npm test
-```
-
-Expected: tutti verdi, 634 test più quelli della guardia. Se `npm test` fallisce, l'autofix ha spostato un import oltre un effetto collaterale a livello di modulo: guarda il diff del file in questione con `git diff` e riordina a mano quel solo file invece di accettare l'autofix.
-
-- [ ] **Step 4: Verificare a campione che l'ordine sia quello voluto**
-
-```bash
-sed -n '1,12p' lib/rbac/users-service.ts
-```
-
-Expected: `react` per primo, poi `drizzle-orm`, poi gli `@/`, poi i relativi `./`.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add -A app components context lib types
-git commit -m "style(imports): order import groups the way AGENTS.md states
-
-Autofixed: framework, then external packages, then @/ aliases, then relatives.
-44 violations across 26 files — the one thing manual discipline actually failed
-at, which is why it is now a lint rule rather than a line in a document.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
-
----
-
-### Task A-4: `UserDTO` diventa `UserDto`
-
-**Files:**
-- Modify: `lib/rbac/types.ts:157` (la dichiarazione), `lib/rbac/user-mappers.ts`, `lib/rbac/users-service.ts`, `components/rbac/users/UsersTableClient.tsx`, `components/rbac/users/ManageRolesModal.tsx`, `components/rbac/users/StatusBadge.tsx`, `components/rbac/users/usersDatasource.ts`
-
-**Interfaces:**
-- Consumes: niente.
-- Produces: il tipo `UserDto` (era `UserDTO`), esportato da `lib/rbac/types.ts`. Nessun altro compito lo usa.
-
-**Perché:** sette tipi del progetto scrivono `Dto` (`UserNavigationTreeDto`, `LanguageDto`, `TranslationRowDto`, `LanguagePageItemDto`, `RolePageItemDto`, `TranslationValueDto`, `RoleInformationDto`), uno solo scriveva `DTO`. Nessun altro acronimo va toccato: `Id`, `Url`, `Api`, `Svg` sono già uniformi.
-
-- [ ] **Step 1: Sostituire in tutti i sette file**
-
-```bash
-grep -rl --include='*.ts' --include='*.tsx' '\bUserDTO\b' app components context lib types \
-  | xargs sed -i '' 's/\bUserDTO\b/UserDto/g'
-```
-
-- [ ] **Step 2: Verificare che non resti nessuna occorrenza**
-
-```bash
-grep -rn --include='*.ts' --include='*.tsx' '\bUserDTO\b' app components context lib types | wc -l
-```
-
-Expected: `0`.
-
-- [ ] **Step 3: Verificare che ci siano 27 occorrenze del nome nuovo**
-
-```bash
-grep -rn --include='*.ts' --include='*.tsx' '\bUserDto\b' app components context lib types | wc -l
-```
-
-Expected: `27`.
-
-- [ ] **Step 4: Verificare tipi e test**
-
-```bash
-npm run typecheck && npm test
-```
-
-Expected: entrambi verdi.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add -A components lib
-git commit -m "refactor(rbac): rename UserDTO to UserDto for one acronym casing
-
-Seven types here spell it Dto; this one spelled it DTO. One outlier, 27 uses,
-and one fewer hesitation for every future author and every agent.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
-
----
-
-### Task A-5: I punti e virgola di `types/menu.ts`
-
-**Files:**
-- Modify: `types/menu.ts` (49 righe), `components/rbac/functionalities/TranslationsAccordion.test.tsx:8`
-
-**Interfaces:**
-- Consumes: niente.
-- Produces: niente. Nessun tipo cambia, solo la forma.
-
-**Perché:** il progetto separa i membri di `interface` **solo con l'andata a capo** — zero membri terminati da `;` in tutto il codice fuori da questo file. I `;` che separano membri scritti *sulla stessa riga* (`{ id: number; name: string }`) sono sintassi obbligatoria e restano.
-
-- [ ] **Step 1: Togliere i punti e virgola a fine riga**
-
-```bash
-sed -i '' 's/;$//' types/menu.ts
-sed -i '' '8s/;$//' components/rbac/functionalities/TranslationsAccordion.test.tsx
-```
-
-- [ ] **Step 2: Verificare che non ne resti nessuno a fine riga**
-
-```bash
-grep -rnP ';$' types/menu.ts components/rbac/functionalities/TranslationsAccordion.test.tsx | wc -l
-```
-
-Expected: `0`.
-
-- [ ] **Step 3: Verificare che i `;` in linea siano sopravvissuti**
-
-```bash
-grep -n 'id: number; name: string\|; ' types/menu.ts | head -5
-```
-
-Expected: le righe con più membri sulla stessa riga sono intatte. Se `sed` ne ha mangiato uno, `npm run typecheck` dello Step 4 lo trova.
-
-- [ ] **Step 4: Verificare tipi e test**
-
-```bash
-npm run typecheck && npm test
-```
-
-Expected: entrambi verdi.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add types/menu.ts components/rbac/functionalities/TranslationsAccordion.test.tsx
-git commit -m "style(types): drop the line-final semicolons from types/menu.ts
-
-An island of a different style: 49 lines here, one stray line in a test, and
-zero semicolon-terminated members anywhere else in 20,304 lines. The in-line
-separators that TypeScript requires are untouched.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
-
----
-
-### Task A-6: Le due estensioni sbagliate
+### Task 3: [A-6] Le due estensioni sbagliate
 
 **Files:**
 - Rename: `components/AppHydrationMarker.tsx` → `components/AppHydrationMarker.ts`
@@ -666,7 +499,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task A-7: Gli otto nomi `camelCase` fuori da `components/ui/`
+### Task 4: [A-7] Gli otto nomi `camelCase` fuori da `components/ui/`
 
 **Files:**
 - Rename: `components/sidebarPresentation.ts` → `components/sidebar-presentation.ts`
@@ -753,7 +586,175 @@ exported symbols keep their names.
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 7: Aprire PR-A**
+
+---
+
+### Task 5: [A-3] Ordinamento degli import applicato
+
+**Files:**
+- Modify: 26 file in `app/`, `components/`, `lib/` (l'autofix li individua da sé)
+
+**Interfaces:**
+- Consumes: la configurazione ESLint del compito A-1.
+- Produces: `npx eslint` senza errori `import-x/order`.
+
+- [ ] **Step 1: Lanciare l'autofix**
+
+```bash
+npx eslint app components context lib types --fix
+```
+
+- [ ] **Step 2: Verificare che le violazioni siano a zero**
+
+```bash
+npx eslint app components context lib types 2>&1 | grep -c "import-x/order"
+```
+
+Expected: `0` (partendo dai 44 contati in A-1 Step 6).
+
+- [ ] **Step 3: Verificare che l'autofix non abbia rotto niente**
+
+```bash
+npm run lint && npm run typecheck && npm test
+```
+
+Expected: tutti verdi, 634 test più quelli della guardia. Se `npm test` fallisce, l'autofix ha spostato un import oltre un effetto collaterale a livello di modulo: guarda il diff del file in questione con `git diff` e riordina a mano quel solo file invece di accettare l'autofix.
+
+- [ ] **Step 4: Verificare a campione che l'ordine sia quello voluto**
+
+```bash
+sed -n '1,12p' lib/rbac/users-service.ts
+```
+
+Expected: `react` per primo, poi `drizzle-orm`, poi gli `@/`, poi i relativi `./`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A app components context lib types
+git commit -m "style(imports): order import groups the way AGENTS.md states
+
+Autofixed: framework, then external packages, then @/ aliases, then relatives.
+44 violations across 26 files — the one thing manual discipline actually failed
+at, which is why it is now a lint rule rather than a line in a document.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 6: [A-4] `UserDTO` diventa `UserDto`
+
+**Files:**
+- Modify: `lib/rbac/types.ts:157` (la dichiarazione), `lib/rbac/user-mappers.ts`, `lib/rbac/users-service.ts`, `components/rbac/users/UsersTableClient.tsx`, `components/rbac/users/ManageRolesModal.tsx`, `components/rbac/users/StatusBadge.tsx`, `components/rbac/users/usersDatasource.ts`
+
+**Interfaces:**
+- Consumes: niente.
+- Produces: il tipo `UserDto` (era `UserDTO`), esportato da `lib/rbac/types.ts`. Nessun altro compito lo usa.
+
+**Perché:** sette tipi del progetto scrivono `Dto` (`UserNavigationTreeDto`, `LanguageDto`, `TranslationRowDto`, `LanguagePageItemDto`, `RolePageItemDto`, `TranslationValueDto`, `RoleInformationDto`), uno solo scriveva `DTO`. Nessun altro acronimo va toccato: `Id`, `Url`, `Api`, `Svg` sono già uniformi.
+
+- [ ] **Step 1: Sostituire in tutti i sette file**
+
+```bash
+grep -rl --include='*.ts' --include='*.tsx' '\bUserDTO\b' app components context lib types \
+  | xargs sed -i '' 's/\bUserDTO\b/UserDto/g'
+```
+
+- [ ] **Step 2: Verificare che non resti nessuna occorrenza**
+
+```bash
+grep -rn --include='*.ts' --include='*.tsx' '\bUserDTO\b' app components context lib types | wc -l
+```
+
+Expected: `0`.
+
+- [ ] **Step 3: Verificare che ci siano 27 occorrenze del nome nuovo**
+
+```bash
+grep -rn --include='*.ts' --include='*.tsx' '\bUserDto\b' app components context lib types | wc -l
+```
+
+Expected: `27`.
+
+- [ ] **Step 4: Verificare tipi e test**
+
+```bash
+npm run typecheck && npm test
+```
+
+Expected: entrambi verdi.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A components lib
+git commit -m "refactor(rbac): rename UserDTO to UserDto for one acronym casing
+
+Seven types here spell it Dto; this one spelled it DTO. One outlier, 27 uses,
+and one fewer hesitation for every future author and every agent.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 7: [A-5] I punti e virgola di `types/menu.ts`
+
+**Files:**
+- Modify: `types/menu.ts` (49 righe), `components/rbac/functionalities/TranslationsAccordion.test.tsx:8`
+
+**Interfaces:**
+- Consumes: niente.
+- Produces: niente. Nessun tipo cambia, solo la forma.
+
+**Perché:** il progetto separa i membri di `interface` **solo con l'andata a capo** — zero membri terminati da `;` in tutto il codice fuori da questo file. I `;` che separano membri scritti *sulla stessa riga* (`{ id: number; name: string }`) sono sintassi obbligatoria e restano.
+
+- [ ] **Step 1: Togliere i punti e virgola a fine riga**
+
+```bash
+sed -i '' 's/;$//' types/menu.ts
+sed -i '' '8s/;$//' components/rbac/functionalities/TranslationsAccordion.test.tsx
+```
+
+- [ ] **Step 2: Verificare che non ne resti nessuno a fine riga**
+
+```bash
+grep -rnP ';$' types/menu.ts components/rbac/functionalities/TranslationsAccordion.test.tsx | wc -l
+```
+
+Expected: `0`.
+
+- [ ] **Step 3: Verificare che i `;` in linea siano sopravvissuti**
+
+```bash
+grep -n 'id: number; name: string\|; ' types/menu.ts | head -5
+```
+
+Expected: le righe con più membri sulla stessa riga sono intatte. Se `sed` ne ha mangiato uno, `npm run typecheck` dello Step 4 lo trova.
+
+- [ ] **Step 4: Verificare tipi e test**
+
+```bash
+npm run typecheck && npm test
+```
+
+Expected: entrambi verdi.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add types/menu.ts components/rbac/functionalities/TranslationsAccordion.test.tsx
+git commit -m "style(types): drop the line-final semicolons from types/menu.ts
+
+An island of a different style: 49 lines here, one stray line in a test, and
+zero semicolon-terminated members anywhere else in 20,304 lines. The in-line
+separators that TypeScript requires are untouched.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 6: Aprire PR-A**
 
 ```bash
 git push -u origin feature/react-naming-conventions
@@ -781,11 +782,12 @@ BODY
 )"
 ```
 
+
 ---
 
 # PR-B — strutturale
 
-### Task B-1: Estrazione di `components/grid/`
+### Task 8: [B-1] Estrazione di `components/grid/`
 
 **Files:**
 - Create (via `git mv`): `components/grid/` con 14 file
@@ -963,7 +965,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task B-2: Creazione di `components/shared/`
+### Task 9: [B-2] Creazione di `components/shared/`
 
 **Files:**
 - Move: `components/ui/AccessibleDialog.tsx`, `components/ui/AccessibleDialog.test.tsx`, `components/ui/ConfirmModal.tsx`, `components/ui/LoadingStatus.tsx`, `components/ui/LoadingStatus.test.tsx` → `components/shared/`
@@ -1072,7 +1074,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task B-3: Riparare i due accoppiamenti per percorso
+### Task 10: [B-3] Riparare i due accoppiamenti per percorso
 
 **Files:**
 - Modify: `sources/devops/raw-color-baseline.json` (dalla radice del repo)
@@ -1133,7 +1135,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task B-4: Le quattro guardie in `guards/`
+### Task 11: [B-4] Le quattro guardie in `guards/`
 
 **Files:**
 - Rename+move: `components/ui/buttonInteractionStyles.test.ts` → `guards/button-interaction-styles.test.ts`
@@ -1199,7 +1201,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task B-5: `components/ui/` resta solo-fornitore, e l'esenzione sparisce
+### Task 12: [B-5] `components/ui/` resta solo-fornitore, e l'esenzione sparisce
 
 **Files:**
 - Modify: `guards/file-naming.test.ts` (rimuovere `EXEMPT_FROM_FILENAME_RULES`, `exempt()` e i due `.filter()` che la usano)
@@ -1263,7 +1265,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task B-6: Export nominati, con una lista fatta per accorciarsi
+### Task 13: [B-6] Export nominati, con una lista fatta per accorciarsi
 
 **Files:**
 - Modify: `eslint.config.mjs`
@@ -1389,7 +1391,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task B-7: `app/providers.tsx` diventa `app/Providers.tsx`
+### Task 14: [B-7] `app/providers.tsx` diventa `app/Providers.tsx`
 
 **Files:**
 - Rename: `app/providers.tsx` → `app/Providers.tsx`
@@ -1464,7 +1466,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task B-8: `test:tokens` agganciato a `quality.yml`
+### Task 15: [B-8] `test:tokens` agganciato a `quality.yml`
 
 **Files:**
 - Modify: `.github/workflows/quality.yml` (dalla radice del repo)
@@ -1520,7 +1522,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task B-9: Aggiornare i documenti vivi
+### Task 16: [B-9] Aggiornare i documenti vivi
 
 **Files:**
 - Modify: `docs/leftovers/2026-08-25-shadcn-migration-leftovers.md`
@@ -1662,3 +1664,29 @@ anche attraverso A-3, A-4 e A-5, e chi legge la storia del ramo troverebbe
 quattro commit consecutivi coi test rossi senza capire subito perche'.
 A-3 (l'autofix degli import) va dopo le rinomine e non prima: cosi' gira una
 volta sola, sui percorsi definitivi.
+
+## Numerazione per la strumentazione
+
+Le intestazioni portano il numero d'ordine d'esecuzione e, fra parentesi
+quadre, l'ID che le lega alla specifica. `scripts/task-brief` e
+`scripts/review-package` vogliono il numero; le referenze in prosa dentro il
+piano usano l'ID.
+
+| Ordine | ID |
+|---|---|
+| 1 | A-1 |
+| 2 | A-2 |
+| 3 | A-6 |
+| 4 | A-7 |
+| 5 | A-3 |
+| 6 | A-4 |
+| 7 | A-5 |
+| 8 | B-1 |
+| 9 | B-2 |
+| 10 | B-3 |
+| 11 | B-4 |
+| 12 | B-5 |
+| 13 | B-6 |
+| 14 | B-7 |
+| 15 | B-8 |
+| 16 | B-9 |
