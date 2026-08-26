@@ -18,7 +18,7 @@ import {
 } from '@/lib/rbac/users-grid-query'
 import type { UserDTO } from '@/lib/rbac/types'
 import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from '@/lib/rbac/types'
-import { createUsersDatasource } from './usersDatasource'
+import { createUsersDatasource } from './users-datasource'
 import ManageRolesModal from './ManageRolesModal'
 import StatusBadge from './StatusBadge'
 

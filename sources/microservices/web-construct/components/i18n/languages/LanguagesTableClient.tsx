@@ -19,7 +19,7 @@ import {
   type LanguagesGridFilterModel, type LanguagesUrlParams,
 } from '@/lib/i18n/languages-grid-query'
 import type { LanguagePageItemDto } from '@/lib/i18n/types'
-import { createLanguagesDatasource } from './languagesDatasource'
+import { createLanguagesDatasource } from './languages-datasource'
 import LanguageFormModal from './LanguageFormModal'
 
 type Props = LanguagesUrlParams

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { translationStatusFilterOptions } from './translationStatusFilter'
+import { translationStatusFilterOptions } from './translation-status-filter'
 
 describe('translationStatusFilterOptions', () => {
   it('uses the plain Missing and Complete translation keys', () => {

@@ -19,7 +19,7 @@ import {
   type RolesGridFilterModel,
 } from '@/lib/rbac/roles-grid-query'
 import type { RolePageItemDto } from '@/lib/rbac/types'
-import { createRolesDatasource } from './rolesDatasource'
+import { createRolesDatasource } from './roles-datasource'
 import RenameRoleModal from './RenameRoleModal'
 import CreateRoleModal from './CreateRoleModal'
 
