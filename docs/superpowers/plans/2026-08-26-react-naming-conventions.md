@@ -618,38 +618,55 @@ git mv components/rbac/roles/rolesDatasource.ts components/rbac/roles/roles-data
 git mv components/rbac/users/usersDatasource.ts components/rbac/users/users-datasource.ts
 ```
 
-- [ ] **Step 2: Aggiornare tutti gli import**
+- [ ] **Step 2: Aggiornare gli specificatori di modulo — ancorati alle virgolette**
+
+**Non** sostituire la parola nuda. Il simbolo esportato da `translationStatusFilter.ts` si
+chiama `translationStatusFilterOptions`: il nome del file ne e' un prefisso, con lo stesso
+casing. Un `sed` sulla parola nuda lo trasformerebbe in `translation-status-filterOptions`, che
+non e' un identificatore valido — e quel simbolo compare in cinque posti su sei.
+
+Sostituisci invece la stringa **quotata**, che e' sempre e solo uno specificatore di modulo.
+Tutti e nove gli specificatori sono relativi (`'./nome'`); nessuno usa l'alias `@/`, verificato.
+Nota che uno dei nove non e' una clausola `from` ma un `vi.mock('./translationsDatasource', ...)`
+in `TranslationsTableClient.test.tsx:39`: ancorare alle virgolette lo prende, ancorare a `from`
+lo mancherebbe.
 
 ```bash
-grep -rl --include='*.ts' --include='*.tsx' \
-  'sidebarPresentation\|languagesDatasource\|translationsDatasource\|translationStatusFilter\|rolesDatasource\|usersDatasource' \
+grep -rlE "'\./(sidebarPresentation|languagesDatasource|translationsDatasource|translationStatusFilter|rolesDatasource|usersDatasource)'" \
   app components context lib \
   | xargs sed -i '' \
-    -e 's#sidebarPresentation#sidebar-presentation#g' \
-    -e 's#languagesDatasource#languages-datasource#g' \
-    -e 's#translationsDatasource#translations-datasource#g' \
-    -e 's#translationStatusFilter#translation-status-filter#g' \
-    -e 's#rolesDatasource#roles-datasource#g' \
-    -e 's#usersDatasource#users-datasource#g'
+    -e "s#'\./sidebarPresentation'#'./sidebar-presentation'#g" \
+    -e "s#'\./languagesDatasource'#'./languages-datasource'#g" \
+    -e "s#'\./translationsDatasource'#'./translations-datasource'#g" \
+    -e "s#'\./translationStatusFilter'#'./translation-status-filter'#g" \
+    -e "s#'\./rolesDatasource'#'./roles-datasource'#g" \
+    -e "s#'\./usersDatasource'#'./users-datasource'#g"
 ```
 
-- [ ] **Step 3: Controllare che `sed` non abbia toccato nomi di simboli**
+- [ ] **Step 3: Controllare che nessun nome di simbolo sia stato toccato**
 
 ```bash
-git diff -U0 | grep '^[-+]' | grep -v '^[-+][-+]' | grep -iE 'datasource|statusfilter|sidebarpresentation'
+git diff -U0 -- '*.ts' '*.tsx' | grep '^[-+]' | grep -v '^[-+][-+]'
 ```
 
-Expected: solo righe di `import`/`from`, mai una dichiarazione o un uso di simbolo. I sei nomi cercati sono nomi di *file*; se i simboli esportati si chiamassero allo stesso modo, `sed` li avrebbe rinominati anche nel codice. Se in questo diff compare una riga che non è un import, annullala a mano.
+Expected: **nove** righe modificate, tutte e sole specificatori di modulo — otto clausole `from`
+e un `vi.mock`. Nessuna dichiarazione, nessuna chiamata, nessun uso di simbolo.
+In particolare `translationStatusFilterOptions` deve comparire **intatto**: se in questo diff
+vedi `translation-status-filterOptions`, il `sed` ha morso la parola nuda — annulla tutto con
+`git checkout -- .` e rifai il passo 2 con le virgolette.
 
-- [ ] **Step 4: Verificare che non resti nessun riferimento vecchio**
+- [ ] **Step 4: Verificare che non resti nessuno specificatore vecchio**
 
 ```bash
-grep -rn --include='*.ts' --include='*.tsx' \
-  'sidebarPresentation\|languagesDatasource\|translationsDatasource\|translationStatusFilter\|rolesDatasource\|usersDatasource' \
+grep -rnE "'\./(sidebarPresentation|languagesDatasource|translationsDatasource|translationStatusFilter|rolesDatasource|usersDatasource)'" \
   app components context lib | wc -l
 ```
 
 Expected: `0`.
+
+Attenzione: **non** cercare la parola nuda qui. `translationStatusFilter` resta legittimamente
+nel codice, dentro `translationStatusFilterOptions`, e un controllo sulla parola nuda
+fallirebbe per un motivo giusto.
 
 - [ ] **Step 5: Verificare la guardia, i tipi e i test**
 
