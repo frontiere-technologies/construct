@@ -16,7 +16,8 @@
 - Tutti i comandi si lanciano da `sources/microservices/web-construct/`, tranne quelli su `sources/devops/` e `.github/`, che si lanciano dalla radice del repo.
 - Ogni rinomina e ogni spostamento passa da `git mv`, mai da cancella-e-ricrea: `git log --follow` deve continuare a mostrare la storia.
 - Virgolette singole, nessun punto e virgola a fine riga, nessun `console.*`, nessun `any`.
-- Al termine di ogni compito: `npm run lint`, `npm run typecheck`, `npm test` devono essere verdi. Nessun compito si committa con la CI rossa.
+- **La testa di ogni PR** deve avere `npm run lint`, `npm run typecheck` e `npm test` verdi. La CI di questo repo scatta su `pull_request`, non su push: valuta la testa della PR, non i commit intermedi.
+- Un compito che **introduce una guardia** committa deliberatamente rosso — e' il senso del metodo guard-first — e dichiara nel messaggio di commit quale compito la porta al verde. Solo A-2 lo fa, e A-6 e A-7 lo chiudono subito dopo. Ogni altro compito termina verde.
 - I test si chiamano `*.test.ts(x)`, non `*.spec`. Non si introduce Prettier. Non si convertono `interface` in `type`.
 - Ramo: `feature/react-naming-conventions`, già creato, con i due commit di documentazione (`554d67f`, `a87112f`).
 - I file in `docs/superpowers/plans/` e `docs/superpowers/specs/` datati prima del 2026-08-26 sono archivio storico: non si aggiornano mai, nemmeno se citano nomi di file cambiati.
@@ -200,13 +201,38 @@ const FRAMEWORK_RESERVED = new Set([
 /**
  * Esenzione temporanea, da rimuovere nel compito B-5.
  *
- * In PR-A `components/ui/` contiene ancora dieci nomi camelCase: i sei helper
- * del modulo data-grid e le quattro guardie, che PR-B sposta in
- * `components/grid/` e in `guards/`. Senza questa riga la guardia sarebbe rossa
- * su una PR gia' fusa. Quando in `components/ui/` restano solo le primitive
- * shadcn, questa costante e i due `.filter()` che la usano spariscono.
+ * Sono i diciannove file non-kebab che `components/ui/` contiene ancora in
+ * PR-A e che PR-B smonta: il modulo data-grid verso `components/grid/`, i tre
+ * componenti propri verso `components/shared/`, le quattro guardie verso
+ * `guards/`. Senza l'esenzione la guardia sarebbe rossa su una PR gia' fusa.
+ *
+ * Elencati per nome e non come prefisso di cartella, di proposito: esentare
+ * `components/ui/` in blocco lascerebbe il test sul kebab-case a girare su un
+ * elenco vuoto, cioe' a non asserire nulla. Cosi' invece continua a controllare
+ * gli altri undici file della cartella, e acchiappa una violazione nuova
+ * introdotta lì dentro nel frattempo.
  */
-const EXEMPT_FROM_FILENAME_RULES = ['components/ui/']
+const EXEMPT_FROM_FILENAME_RULES = [
+  'components/ui/AccessibleDialog.test.tsx',
+  'components/ui/AccessibleDialog.tsx',
+  'components/ui/ColumnVisibilityToggle.tsx',
+  'components/ui/ConfirmModal.tsx',
+  'components/ui/DataGrid.tsx',
+  'components/ui/GridToolbar.test.tsx',
+  'components/ui/GridToolbar.tsx',
+  'components/ui/LoadingStatus.test.tsx',
+  'components/ui/LoadingStatus.tsx',
+  'components/ui/buttonInteractionStyles.test.ts',
+  'components/ui/dataGridConfig.test.ts',
+  'components/ui/dataGridConfig.ts',
+  'components/ui/dialogConsumers.test.ts',
+  'components/ui/disabledButtonHoverStyles.test.ts',
+  'components/ui/gridColumnFilters.test.ts',
+  'components/ui/gridColumnFilters.ts',
+  'components/ui/gridColumnSizing.test.ts',
+  'components/ui/gridColumnSizing.ts',
+  'components/ui/iconOnlyButtonAccessibleName.test.ts',
+]
 
 function sourceFiles(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap(entry => {
@@ -227,7 +253,7 @@ function allSourceFiles(): string[] {
 }
 
 function exempt(file: string): boolean {
-  return EXEMPT_FROM_FILENAME_RULES.some(prefix => file.startsWith(prefix))
+  return EXEMPT_FROM_FILENAME_RULES.includes(file)
 }
 
 /** Il gambo del nome: il basename senza nessuno dei suffissi puntati. */
@@ -367,7 +393,17 @@ Expected: FAIL. Due test rossi:
 - `gives the .tsx extension only to files that contain JSX` elenca `components/AppHydrationMarker.tsx` e `components/rbac/NavigationTree.test.tsx`.
 
 I dodici test a fixture (`stemOf`, `isCamelCase`, `isKebabCase`, `containsJsx`) devono essere verdi: sono la prova che i controlli funzionano.
-Il test `names every file under components/ui in kebab-case` passa a vuoto, perché l'esenzione svuota il suo elenco: è voluto, e B-5 lo attiva.
+Il test `names every file under components/ui in kebab-case` **passa asserendo su undici file veri** — `button.tsx`, `button.types.tsx`, `input.tsx`, `select.tsx`, `textarea.tsx`, `grid-reset.ts`, `grid-url-sync.ts` e i loro test — perché l'esenzione elenca i diciannove non-kebab per nome invece di coprire la cartella. Verifica che sia così e non a vuoto:
+
+```bash
+node -e "
+const { readdirSync } = require('node:fs')
+const all = readdirSync('components/ui')
+console.log('file in components/ui:', all.length, '— esentati: 19 — controllati:', all.length - 19)
+"
+```
+
+Expected: `file in components/ui: 30 — esentati: 19 — controllati: 11`.
 
 - [ ] **Step 4: Commit**
 
@@ -375,14 +411,18 @@ Il test `names every file under components/ui in kebab-case` passa a vuoto, perc
 git add guards/file-naming.test.ts vitest.config.ts
 git commit -m "test(guards): put the filename conventions under a guard
 
-Red on the eight camelCase names outside components/ui and on the two .tsx
-files with no JSX — which is the point: a guard written after the renames is
-only ever proven by not complaining.
+Commits red, deliberately: red on the eight camelCase names outside
+components/ui and on the two .tsx files with no JSX. Tasks A-6 and A-7 turn it
+green, in the two commits that follow this one. CI evaluates the PR head, not
+intermediate commits, so nothing downstream sees this. A guard written after
+the renames is only ever proven by not complaining.
 
-components/ui is exempt until task B-5, because it still holds the ten
-camelCase names that PR-B dismantles; without the exemption npm test would be
-red on a merged PR. The four matchers are pure functions with fixture tests,
-following the idiom of the guards already in components/ui.
+The nineteen non-kebab files still in components/ui are exempt until task B-5,
+listed by name rather than by folder prefix — exempting the folder wholesale
+would leave the kebab-case test asserting over an empty list, which is to say
+asserting nothing. Listed this way it still checks the folder's other eleven
+files. The four matchers are pure functions with fixture tests, following the
+idiom of the guards already in components/ui.
 
 The .tsx rule exempts framework-reserved stems: app/(protected)/(admin)/layout.tsx
 has no JSX, and renaming it layout.ts would move it away from the Next
@@ -1180,7 +1220,7 @@ Expected, esattamente questi sette e nient'altro:
 - [ ] **Step 2: Rimuovere l'esenzione dalla guardia**
 
 In `guards/file-naming.test.ts`:
-- cancellare il blocco di commento `Esenzione temporanea, da rimuovere nel compito B-5` e la costante `EXEMPT_FROM_FILENAME_RULES` che segue;
+- cancellare il blocco di commento `Esenzione temporanea, da rimuovere nel compito B-5` e l'array `EXEMPT_FROM_FILENAME_RULES` con i suoi diciannove percorsi;
 - cancellare la funzione `exempt()`;
 - nel test `has no camelCase filename anywhere`, cancellare la riga `.filter(file => !exempt(file))`;
 - nel test `names every file under components/ui in kebab-case`, cancellare la riga `.filter(file => !exempt(file))`.
@@ -1611,4 +1651,14 @@ B-1, B-2, B-4 ─► B-5  (l'esenzione cade solo quando components/ui e' vuota)
 B-1, B-2 ─► B-6     (i sei convertiti non entrano nella lista dei 27)
 ```
 
-A-4 e A-5 non hanno dipendenze e si possono fare in qualunque momento dentro PR-A. B-7, B-8 e B-9 dipendono solo dai compiti che li precedono nella stessa PR.
+A-4 e A-5 non hanno dipendenze. B-7, B-8 e B-9 dipendono solo dai compiti che li precedono nella stessa PR.
+
+**Ordine di esecuzione di PR-A: A-1, A-2, A-6, A-7, A-3, A-4, A-5.**
+
+Non e' l'ordine numerico, di proposito. A-2 committa la guardia rossa, e A-6 e
+A-7 sono i due compiti che la portano al verde: eseguirli subito dopo riduce la
+finestra rossa a due commit. Nell'ordine numerico la guardia resterebbe rossa
+anche attraverso A-3, A-4 e A-5, e chi legge la storia del ramo troverebbe
+quattro commit consecutivi coi test rossi senza capire subito perche'.
+A-3 (l'autofix degli import) va dopo le rinomine e non prima: cosi' gira una
+volta sola, sui percorsi definitivi.
