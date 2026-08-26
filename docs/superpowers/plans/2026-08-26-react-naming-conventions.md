@@ -1627,25 +1627,48 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ### Task 16: [B-9] Aggiornare i documenti vivi
 
 **Files:**
-- Modify: `docs/leftovers/2026-08-25-shadcn-migration-leftovers.md`
+- Modify: `docs/input-specs/rbac/users-roles-functionalities-specs.md`
 - Modify: `docs/reviews/2026-08-26-verify-naming-conventions-react.md`
 
 **Interfaces:**
 - Consumes: la struttura finale prodotta dai compiti B-1 … B-7.
 - Produces: niente.
 
-**Perché solo questi due:** gli altri ~18 file in `docs/` che citano i nomi vecchi sono piani e specifiche datati, cioè archivio storico. Riscrivere un piano di luglio per farlo combaciare col codice di agosto cancella il racconto di cosa è stato fatto allora.
+**Quali documenti sono vivi, verificato contro il repo.** Una versione precedente di questo
+piano diceva di aggiornare `docs/leftovers/2026-08-25-shadcn-migration-leftovers.md`. Quel file
+**non esiste su questo ramo**: vive solo su `feature/other-ui-fixes`, che non e' mai stato fuso
+in `development`. Appartiene alla PR di quel ramo e non a questa — non va creato qui.
 
-- [ ] **Step 1: Vedere quali riferimenti sono diventati falsi nel documento vivo**
+Gli altri file di `docs/` che citano i nomi vecchi sono **archivio storico e non si toccano**:
+`docs/reviews/2026-07-31-ui-ux-tester.md`, `docs/reviews/2026-08-19-ui-primitives-and-theming.md`,
+`docs/reviews/2026-08-21-button-inventory.md` e i piani datati sotto
+`docs/superpowers/plans/`. Riscrivere una revisione di luglio per farla combaciare col codice di
+agosto cancella il racconto di cosa era vero allora.
+
+Resta un solo riferimento genuinamente stantio in un documento vivo.
+
+- [ ] **Step 1: Aggiornare il tipo nell'input-spec**
+
+`docs/input-specs/rbac/users-roles-functionalities-specs.md` descrive il modello dati e nomina il
+tipo nel titolo della sezione 3.3. Il tipo ora si chiama `UserDto`.
 
 ```bash
-grep -nE "components/ui/(DataGrid|GridToolbar|ColumnVisibilityToggle|AccessibleDialog|ConfirmModal|LoadingStatus|dataGridConfig|gridColumnFilters|gridColumnSizing)|UserDTO" \
-  docs/leftovers/2026-08-25-shadcn-migration-leftovers.md
+grep -n "UserDTO" docs/input-specs/rbac/users-roles-functionalities-specs.md
+sed -i '' 's/\bUserDTO\b/UserDto/g' docs/input-specs/rbac/users-roles-functionalities-specs.md
+grep -c "UserDTO" docs/input-specs/rbac/users-roles-functionalities-specs.md
 ```
 
-- [ ] **Step 2: Aggiornare quei riferimenti ai percorsi nuovi**
+Expected: il primo comando elenca le occorrenze, il terzo stampa `0`.
 
-Per ogni riscontro dello Step 1, sostituire il percorso vecchio con quello nuovo secondo questa corrispondenza: `components/ui/DataGrid` → `components/grid/DataGrid`; `components/ui/GridToolbar` → `components/grid/GridToolbar`; `components/ui/ColumnVisibilityToggle` → `components/grid/ColumnVisibilityToggle`; `components/ui/dataGridConfig` → `components/grid/data-grid-config`; `components/ui/gridColumnFilters` → `components/grid/grid-column-filters`; `components/ui/gridColumnSizing` → `components/grid/grid-column-sizing`; `components/ui/AccessibleDialog` → `components/shared/AccessibleDialog`; `components/ui/ConfirmModal` → `components/shared/ConfirmModal`; `components/ui/LoadingStatus` → `components/shared/LoadingStatus`; `UserDTO` → `UserDto`.
+- [ ] **Step 2: Verificare che nessun altro documento vivo sia rimasto indietro**
+
+```bash
+grep -rlE "components/ui/(DataGrid|GridToolbar|ColumnVisibilityToggle|AccessibleDialog|ConfirmModal|LoadingStatus|dataGridConfig|gridColumnFilters|gridColumnSizing)|UserDTO" docs README.md
+```
+
+Expected: solo file datati — le tre revisioni di luglio e agosto elencate sopra, i piani datati,
+e i due documenti di questo lavoro (la specifica e il piano del 2026-08-26), che descrivono
+legittimamente lo stato di partenza. Nessun altro.
 
 - [ ] **Step 3: Aggiungere in coda alla verifica una sezione di esito**
 
