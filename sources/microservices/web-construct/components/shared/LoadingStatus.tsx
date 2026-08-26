@@ -1,4 +1,4 @@
-export default function LoadingStatus({ label }: { label: string }) {
+export function LoadingStatus({ label }: { label: string }) {
   return (
     <div role="status" aria-label={label} className="flex items-center justify-center h-full min-h-[200px]">
       <div

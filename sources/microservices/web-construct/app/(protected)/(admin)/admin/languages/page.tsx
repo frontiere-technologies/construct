@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
-import { PageContainer } from '@/components/PageContainer'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
 import LanguagesTableClient from '@/components/i18n/languages/LanguagesTableClient'
 import { parseLanguagesGridUrlParams } from '@/lib/i18n/languages-grid-query'

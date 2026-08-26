@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { usePathname } from 'next/navigation'
-import { PageContainer } from '@/components/PageContainer'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { useI18n } from '@/context/I18nContext'
 
 const toTitle = (path: string, dashboardLabel: string): string =>

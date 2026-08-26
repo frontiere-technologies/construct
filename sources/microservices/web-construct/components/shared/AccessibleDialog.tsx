@@ -31,7 +31,7 @@ interface AccessibleDialogProps {
   children: ReactNode
 }
 
-export default function AccessibleDialog({
+export function AccessibleDialog({
   titleId,
   descriptionId,
   onClose,

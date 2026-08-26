@@ -1,6 +1,6 @@
 import RolesTableClient from '@/components/rbac/roles/RolesTableClient'
 import { parseRolesGridUrlParams } from '@/lib/rbac/roles-grid-query'
-import { PageContainer } from '@/components/PageContainer'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
 
 export default async function RolesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {

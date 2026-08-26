@@ -5,7 +5,7 @@ import { X } from 'lucide-react'
 import { updateUserRoles } from '@/lib/rbac/users-actions'
 import { ROLE_REGISTERED, type UserDto } from '@/lib/rbac/types'
 import { useI18n } from '@/context/I18nContext'
-import AccessibleDialog from '@/components/ui/AccessibleDialog'
+import { AccessibleDialog } from '@/components/shared/AccessibleDialog'
 import { Button } from '@/components/ui/button'
 import RoleMultiSelect from './RoleMultiSelect'
 

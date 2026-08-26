@@ -12,7 +12,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useI18n } from '@/context/I18nContext'
 import type { MenuItem } from '@/types/menu'
 import { activeAncestorIds, activeAncestorPath, togglePathAt, navHighlight, type NavHighlight } from '@/lib/sidebar-highlight'
-import { IconRenderer } from './IconRenderer'
+import { IconRenderer } from '@/components/shared/IconRenderer'
 import LanguageSwitcher from './LanguageSwitcher'
 import { resolveSidebarPresentation } from './sidebar-presentation'
 

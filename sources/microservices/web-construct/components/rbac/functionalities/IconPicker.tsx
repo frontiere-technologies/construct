@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Search, Upload, X, ImageOff } from 'lucide-react'
-import { IconRenderer } from '@/components/IconRenderer'
+import { IconRenderer } from '@/components/shared/IconRenderer'
 import { sanitizeSvg } from '@/lib/rbac/svg-sanitize'
 import { useI18n } from '@/context/I18nContext'
 import { Button } from '@/components/ui/button'

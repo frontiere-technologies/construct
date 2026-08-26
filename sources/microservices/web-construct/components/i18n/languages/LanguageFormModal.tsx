@@ -4,7 +4,7 @@ import React, { useId, useState } from 'react'
 import { useI18n } from '@/context/I18nContext'
 import { createLanguage, updateLanguage } from '@/lib/i18n/language-actions'
 import type { LanguagePageItemDto } from '@/lib/i18n/types'
-import AccessibleDialog from '@/components/ui/AccessibleDialog'
+import { AccessibleDialog } from '@/components/shared/AccessibleDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 

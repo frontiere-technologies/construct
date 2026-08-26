@@ -4,7 +4,7 @@ import React, { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { renameRole } from '@/lib/rbac/roles-actions'
 import { useI18n } from '@/context/I18nContext'
-import AccessibleDialog from '@/components/ui/AccessibleDialog'
+import { AccessibleDialog } from '@/components/shared/AccessibleDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
