@@ -468,7 +468,7 @@ npx vitest run guards/file-naming.test.ts
 ```
 
 Expected: FAIL. Due test rossi:
-- `has no camelCase filename anywhere` elenca gli 8 file fuori da `components/ui/`, ancora coi nomi vecchi: `components/sidebarPresentation.ts`, `components/sidebarPresentation.test.ts`, `components/i18n/languages/languagesDatasource.ts`, `components/i18n/translations/translationsDatasource.ts`, `components/i18n/translations/translationStatusFilter.ts`, `components/i18n/translations/translationStatusFilter.test.ts`, `components/rbac/roles/rolesDatasource.ts`, `components/rbac/users/usersDatasource.ts`.
+- `has no camelCase filename anywhere` elenca gli 8 file fuori da `components/ui/`, ancora coi nomi vecchi: `components/sidebarPresentation.ts`, `components/sidebarPresentation.test.ts`, `components/i18n/languages/languagesDatasource.ts`, `components/i18n/translations/translationsDatasource.ts`, `components/i18n/translations/translationStatusFilter.ts`, `components/i18n/translations/translationStatusFilter.test.ts`, `components/rbac/roles/rolesDatasource.ts`, `components/rbac/users/users-datasource.ts`.
 - `gives the .tsx extension only to files that contain JSX` elenca **tre** file: `components/AppHydrationMarker.tsx`, `components/rbac/NavigationTree.test.tsx` e `context/AuthContext.tsx`.
 
 I dodici test a fixture (`stemOf`, `isCamelCase`, `isKebabCase`, `containsJsx`) devono essere verdi: sono la prova che i controlli funzionano.
@@ -596,7 +596,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Rename: `components/i18n/translations/translationStatusFilter.ts` → `components/i18n/translations/translation-status-filter.ts`
 - Rename: `components/i18n/translations/translationStatusFilter.test.ts` → `components/i18n/translations/translation-status-filter.test.ts`
 - Rename: `components/rbac/roles/rolesDatasource.ts` → `components/rbac/roles/roles-datasource.ts`
-- Rename: `components/rbac/users/usersDatasource.ts` → `components/rbac/users/users-datasource.ts`
+- Rename: `components/rbac/users/users-datasource.ts` → `components/rbac/users/users-datasource.ts`
 - Modify (import): `components/Sidebar.tsx`, `components/i18n/languages/LanguagesTableClient.tsx`, `components/i18n/translations/TranslationsTableClient.tsx`, `components/i18n/translations/TranslationsTableClient.test.tsx`, `components/rbac/roles/RolesTableClient.tsx`, `components/rbac/users/UsersTableClient.tsx`, e i due file di test rinominati (che importano sé stessi)
 
 **Interfaces:**
@@ -696,7 +696,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ### Task 6: [A-4] `UserDTO` diventa `UserDto`
 
 **Files:**
-- Modify: `lib/rbac/types.ts:157` (la dichiarazione), `lib/rbac/user-mappers.ts`, `lib/rbac/users-service.ts`, `components/rbac/users/UsersTableClient.tsx`, `components/rbac/users/ManageRolesModal.tsx`, `components/rbac/users/StatusBadge.tsx`, `components/rbac/users/usersDatasource.ts`
+- Modify: `lib/rbac/types.ts:157` (la dichiarazione), `lib/rbac/user-mappers.ts`, `lib/rbac/users-service.ts`, `components/rbac/users/UsersTableClient.tsx`, `components/rbac/users/ManageRolesModal.tsx`, `components/rbac/users/StatusBadge.tsx`, `components/rbac/users/users-datasource.ts`
 
 **Interfaces:**
 - Consumes: niente.
