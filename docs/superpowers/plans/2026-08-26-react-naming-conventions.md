@@ -1723,12 +1723,17 @@ Expected: per entrambi, commit anteriori a questo lavoro. Se ne compare uno solo
 - [ ] **Step 7: Commit**
 
 ```bash
-git add docs/leftovers/2026-08-25-shadcn-migration-leftovers.md docs/reviews/2026-08-26-verify-naming-conventions-react.md
-git commit -m "docs: point the living documents at the new paths
+git add docs/input-specs/rbac/users-roles-functionalities-specs.md docs/reviews/2026-08-26-verify-naming-conventions-react.md
+git commit -m "docs: point the one living reference at the new name
 
-Only the two living ones. The ~18 dated plans and specs that name the old paths
-are the archive: rewriting a July plan to match August's code deletes the record
-of what was actually done then.
+The RBAC input spec named the type in its section 3.3 heading, and the type is
+now UserDto. That is the only stale reference left in a living document.
+
+Everything else in docs/ that cites the old paths is dated archive — the July
+and August reviews, the dated plans — and rewriting a July review to match
+August's code deletes the record of what was true then. The shadcn leftovers
+document the plan originally named lives on an unmerged branch and belongs to
+that branch's pull request, not this one.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
