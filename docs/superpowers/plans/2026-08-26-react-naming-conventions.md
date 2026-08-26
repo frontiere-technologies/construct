@@ -1174,18 +1174,40 @@ cd ../../.. && npm --prefix sources/microservices/web-construct run test:raw-col
 
 Expected: FAIL, con `components/shared/AccessibleDialog.tsx: 0 -> 1`.
 
-- [ ] **Step 2: Aggiornare la chiave nel baseline**
+- [ ] **Step 2: Aggiornare la chiave nel baseline — in DUE posti**
 
-In `sources/devops/raw-color-baseline.json`, dentro `perFile`, rinominare la chiave
-`"components/ui/AccessibleDialog.tsx"` in `"components/shared/AccessibleDialog.tsx"`, lasciandone il valore `1`.
-Non toccare `total`, che resta `32`: il conteggio dei colori grezzi non è cambiato, è cambiato solo dove vivono.
+`sources/devops/raw-color-baseline.json` ha tre chiavi di primo livello: `total`, `justified` e
+`perFile`. Il percorso `components/ui/AccessibleDialog.tsx` compare **in due di esse**, e vanno
+rinominate entrambe in `components/shared/AccessibleDialog.tsx`:
 
-- [ ] **Step 3: Aggiornare il percorso in `dialogConsumers.test.ts`**
+- in `perFile`, dove il valore e' `1`;
+- in `justified`, dove il valore e' la motivazione per cui quel colore grezzo resta
+  (`bg-black/40` e' la tenda dietro un dialog modale). Se rinomini solo `perFile`, quella
+  motivazione resta agganciata a un percorso che non esiste piu': il cricchetto torna verde e
+  la spiegazione diventa orfana, cioe' il residuo che fra sei mesi nessuno sa piu' leggere.
+
+Non toccare `total`, che resta `32`: il conteggio dei colori grezzi non e' cambiato, e' cambiato
+solo dove vivono.
+
+- [ ] **Step 3: Verificare che `dialogConsumers.test.ts` sia gia' a posto**
+
+Questo passo e' **gia' stato svolto dal compito B-2**, e non per gentilezza: quel file non
+asserisce solo su un percorso, asserisce sulla **forma dell'import**. Si aspettava
+`import AccessibleDialog from '@/components/ui/AccessibleDialog'`, in forma default. Convertendo
+`AccessibleDialog` a export nominato, B-2 ha rotto otto test e ha dovuto aggiornare la regex
+nello stesso commit. L'accoppiamento era quindi piu' largo di quanto la specifica avesse
+previsto: non due percorsi, ma due percorsi piu' un contratto di forma.
+
+Verifica soltanto che sia coerente:
 
 ```bash
-sed -i '' "s#'components/ui/ConfirmModal.tsx'#'components/shared/ConfirmModal.tsx'#" \
-  sources/microservices/web-construct/components/ui/dialogConsumers.test.ts
+grep -n "components/shared" sources/microservices/web-construct/components/ui/dialogConsumers.test.ts
 ```
+
+Expected: due riscontri — `'components/shared/ConfirmModal.tsx'` nell'elenco dei consumatori, e
+la regex che ora pretende `import \{ AccessibleDialog \}` da `@/components/shared/AccessibleDialog`.
+Se la regex fosse stata allargata invece che aggiornata, la guardia avrebbe smesso di guardare:
+controlla che pretenda ancora la forma esatta e non un `.*`.
 
 - [ ] **Step 4: Verificare che entrambi i controlli siano verdi**
 
@@ -1728,7 +1750,7 @@ BODY
 A-1 ─► A-3          (l'autofix ha bisogno della configurazione)
 A-2 ─► A-6, A-7     (la guardia deve essere rossa prima delle rinomine)
 A-7 ─► B-1          (i nomi kebab-case prima dello spostamento in grid/)
-B-2 ─► B-3          (il baseline segue lo spostamento, nello stesso commit)
+B-2 ─► B-3          (il baseline segue lo spostamento, nel commit immediatamente dopo)
 B-1, B-2, B-4 ─► B-5  (l'esenzione cade solo quando components/ui e' vuota)
 B-1, B-2 ─► B-6     (i sei convertiti non entrano nella lista dei 27)
 ```
