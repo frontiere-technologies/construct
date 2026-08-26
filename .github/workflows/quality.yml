@@ -36,6 +36,7 @@ jobs:
       - run: npm run test:i18n-keys
       - run: npm run test:env-contract
       - run: npm run test:raw-colors
+      - run: npm run test:tokens
       - run: npm run schema:check
       - run: npm run lint -- --max-warnings=0
       # Separate from `npm run build`: Next only type-checks what its own
