@@ -2,11 +2,11 @@ import { cache } from 'react'
 import { and, asc, desc, count, eq, exists, gte, ilike, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { users, userRole } from '@/lib/db/schema'
+import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { getAllRoles } from './roles-service'
 import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
 import { USER_SORT_COLUMN, buildUserDtos, type UserRow, type UserRoleRow } from './user-mappers'
 import type { UserDTO, UsersQuery } from './types'
-import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 
 const SORT_COLUMNS = {
   first_name: users.firstName,

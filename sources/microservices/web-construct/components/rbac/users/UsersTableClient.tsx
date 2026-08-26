@@ -10,10 +10,7 @@ import { resetGridFilters } from '@/components/ui/grid-reset'
 import { useGridUrlSync } from '@/components/ui/grid-url-sync'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
-import StatusBadge from './StatusBadge'
-import ManageRolesModal from './ManageRolesModal'
 import { setUserStatus } from '@/lib/rbac/users-actions'
-import { createUsersDatasource } from './usersDatasource'
 import { useI18n } from '@/context/I18nContext'
 import {
   usersUrlParamsToFilterModel, usersUrlParamsToSortModel, usersFilterModelToSearchParams,
@@ -21,6 +18,9 @@ import {
 } from '@/lib/rbac/users-grid-query'
 import type { UserDTO } from '@/lib/rbac/types'
 import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from '@/lib/rbac/types'
+import { createUsersDatasource } from './usersDatasource'
+import ManageRolesModal from './ManageRolesModal'
+import StatusBadge from './StatusBadge'
 
 interface Props {
   sortField: string

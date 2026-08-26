@@ -12,16 +12,16 @@ import { useGridUrlSync } from '@/components/ui/grid-url-sync'
 import { DATE_FILTER, NUMBER_FILTER, TEXT_FILTER } from '@/components/ui/gridColumnFilters'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
-import CreateRoleModal from './CreateRoleModal'
-import RenameRoleModal from './RenameRoleModal'
 import { deleteRole } from '@/lib/rbac/roles-actions'
-import { createRolesDatasource } from './rolesDatasource'
 import { useI18n } from '@/context/I18nContext'
 import {
   rolesUrlParamsToFilterModel, rolesUrlParamsToSortModel, rolesFilterModelToSearchParams,
   type RolesGridFilterModel,
 } from '@/lib/rbac/roles-grid-query'
 import type { RolePageItemDto } from '@/lib/rbac/types'
+import { createRolesDatasource } from './rolesDatasource'
+import RenameRoleModal from './RenameRoleModal'
+import CreateRoleModal from './CreateRoleModal'
 
 const ROLE_TEXT_FILTER = TEXT_FILTER as Pick<ColDef<RolePageItemDto>, 'filter' | 'filterParams'>
 const ROLE_NUMBER_FILTER = NUMBER_FILTER as Pick<ColDef<RolePageItemDto>, 'filter' | 'filterParams'>

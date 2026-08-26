@@ -1,10 +1,10 @@
-import type { UsersQuery, UserStatusId } from './types'
 import {
   gridTextFilterToSearch, gridTextFilterToSearchParams,
   searchParamsToGridTextFilter,
   type GridTextFilterModel, type TextSearchOperator,
 } from '@/lib/grid-text-search'
 import { dateRangeToGridFilter, gridDateFilterToRange, type GridDateFilterModel } from '@/lib/grid-filter-models'
+import type { UsersQuery, UserStatusId } from './types'
 import { isSupportedRbacInclusiveDateTo } from './date-utils'
 
 export interface UsersGridFilterModel {

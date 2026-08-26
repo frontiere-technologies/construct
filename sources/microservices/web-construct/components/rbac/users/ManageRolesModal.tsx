@@ -4,10 +4,10 @@ import React, { useId, useState } from 'react'
 import { X } from 'lucide-react'
 import { updateUserRoles } from '@/lib/rbac/users-actions'
 import { ROLE_REGISTERED, type UserDTO } from '@/lib/rbac/types'
-import RoleMultiSelect from './RoleMultiSelect'
 import { useI18n } from '@/context/I18nContext'
 import AccessibleDialog from '@/components/ui/AccessibleDialog'
 import { Button } from '@/components/ui/button'
+import RoleMultiSelect from './RoleMultiSelect'
 
 export default function ManageRolesModal(
   { user, allRoles, onClose, onSaved }:

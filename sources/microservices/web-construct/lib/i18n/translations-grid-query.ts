@@ -1,9 +1,9 @@
-import type { TranslationsQuery, TranslationStatusFilter } from './types'
 import {
   gridTextFilterToSearch, gridTextFilterToSearchParams, searchParamsToGridTextFilter,
   type GridTextFilterModel, type TextSearch, type TextSearchOperator,
 } from '@/lib/grid-text-search'
 import { dateRangeToGridFilter, gridDateFilterToRange, type GridDateFilterModel } from '@/lib/grid-filter-models'
+import type { TranslationsQuery, TranslationStatusFilter } from './types'
 import { isSupportedTranslationUpdatedTo } from './translation-grid-boundaries'
 
 export interface TranslationsGridFilterModel {

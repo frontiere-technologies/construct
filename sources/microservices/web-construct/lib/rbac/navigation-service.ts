@@ -2,10 +2,10 @@ import { cache } from 'react'
 import { asc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { navigationItem, roleItem } from '@/lib/db/schema'
+import type { MenuItem } from '@/types/menu'
 import { toNavigationItemRow } from './nav-row-mapper'
 import { resolveAuthorizedItemIds, mapNavigationToSidebar } from './sidebar-adapter'
 import { DEFAULT_LOCALE, type Locale, type NavigationItemRow, type RoleItemRow } from './types'
-import type { MenuItem } from '@/types/menu'
 
 export const getSidebarMenu = cache(async (
   roleIds: number[],

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { activeAncestorIds, activeAncestorPath, navHighlight, togglePathAt } from './sidebar-highlight'
 import type { MenuItem } from '@/types/menu'
+import { activeAncestorIds, activeAncestorPath, navHighlight, togglePathAt } from './sidebar-highlight'
 
 const container = (id: string, parentId: string | null): MenuItem => ({
   id, label: id, type: 'container', parentId, order: 0, visible: true, active: true, position: 'main',

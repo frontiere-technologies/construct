@@ -1,5 +1,5 @@
-import { ROOT_ID, type ParentOption } from './types'
 import type { SelectOption } from '@/components/rbac/CustomSelect'
+import { ROOT_ID, type ParentOption } from './types'
 
 /** Label of the virtual root (ROOT_ID) in the Genitore dropdown. */
 export const ROOT_OPTION_LABEL = 'Root'

@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { POST } from '@/app/api/rbac/users-grid/route'
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -8,8 +9,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
 vi.mock('@/lib/rbac/users-service', () => ({ listUsers: mocks.listUsers }))
-
-import { POST } from '@/app/api/rbac/users-grid/route'
 
 function request(body: unknown): NextRequest {
   return new Request('http://localhost/api/rbac/users-grid', {

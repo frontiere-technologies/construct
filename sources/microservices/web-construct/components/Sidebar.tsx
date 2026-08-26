@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { createPortal } from 'react-dom'
 import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight, PanelLeftOpen, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useUI } from '@/context/UIContext'

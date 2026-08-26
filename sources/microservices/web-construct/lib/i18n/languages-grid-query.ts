@@ -1,4 +1,3 @@
-import type { LanguagesQuery } from './types'
 import {
   gridTextFilterToSearch, gridTextFilterToSearchParams, searchParamsToGridTextFilter,
   type GridTextFilterModel, type TextSearchOperator,
@@ -7,6 +6,7 @@ import {
   dateRangeToGridFilter, gridDateFilterToRange, gridNumberFilterToRange, numberRangeToGridFilter,
   type GridDateFilterModel, type GridNumberFilterModel,
 } from '@/lib/grid-filter-models'
+import type { LanguagesQuery } from './types'
 import { isSupportedLanguageCreatedTo } from './language-grid-boundaries'
 
 export interface LanguagesGridFilterModel {
