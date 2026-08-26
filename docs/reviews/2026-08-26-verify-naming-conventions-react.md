@@ -91,6 +91,10 @@ Do not mix the application and library filename strategies within the same folde
   }) {
     // ...
   }
+  ```
+
+La guida originale è stata troncata in questo punto, a metà dell'esempio nella sezione "Types".
+
 ---
 
 ## Esito, 2026-08-26
