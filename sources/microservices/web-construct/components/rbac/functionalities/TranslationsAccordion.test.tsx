@@ -5,9 +5,12 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TranslationsAccordion from './TranslationsAccordion'
 
-vi.mock('@/context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-
+// This assignment must not follow an expression statement: a line opening with (
+// would be parsed as a call on the previous statement's result. Vitest hoists
+// vi.mock() above every import regardless of source position, so order is safe.
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+vi.mock('@/context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 
 let root: Root | undefined
 let container: HTMLDivElement | undefined

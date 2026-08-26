@@ -1,60 +1,60 @@
-export type MenuPosition = 'top' | 'main' | 'bottom';
-export type MenuItemType = 'link' | 'container';
+export type MenuPosition = 'top' | 'main' | 'bottom'
+export type MenuItemType = 'link' | 'container'
 
 export interface MenuItem {
-  id: string;
-  label: string;
-  icon?: string;
-  route?: string;
-  type: MenuItemType;
-  parentId: string | null;
-  order: number;
-  visible: boolean;
-  active: boolean;
-  roles?: string[];
-  target?: '_blank' | '_self';
-  position: MenuPosition;
-  collapsible?: boolean;
-  defaultExpanded?: boolean;
-  system?: boolean;
+  id: string
+  label: string
+  icon?: string
+  route?: string
+  type: MenuItemType
+  parentId: string | null
+  order: number
+  visible: boolean
+  active: boolean
+  roles?: string[]
+  target?: '_blank' | '_self'
+  position: MenuPosition
+  collapsible?: boolean
+  defaultExpanded?: boolean
+  system?: boolean
 }
 
 export interface ThemeConfig {
-  primaryColor: string;
-  sidebarBgLight: string;
-  sidebarBgDark: string;
-  sidebarTextLight: string;
-  sidebarTextDark: string;
-  activeItemBgLight: string;
-  activeItemBgDark: string;
-  activeItemTextLight: string;
-  activeItemTextDark: string;
-  pageLight: string;
-  pageDark: string;
-  surfaceLight: string;
-  surfaceDark: string;
-  surfaceOverlayLight: string;
-  surfaceOverlayDark: string;
-  surfaceHoverLight: string;
-  surfaceHoverDark: string;
-  borderLight: string;
-  borderDark: string;
-  borderSubtleLight: string;
-  borderSubtleDark: string;
-  foregroundLight: string;
-  foregroundDark: string;
-  foregroundSecondaryLight: string;
-  foregroundSecondaryDark: string;
-  foregroundMutedLight: string;
-  foregroundMutedDark: string;
-  foregroundFaintLight: string;
-  foregroundFaintDark: string;
+  primaryColor: string
+  sidebarBgLight: string
+  sidebarBgDark: string
+  sidebarTextLight: string
+  sidebarTextDark: string
+  activeItemBgLight: string
+  activeItemBgDark: string
+  activeItemTextLight: string
+  activeItemTextDark: string
+  pageLight: string
+  pageDark: string
+  surfaceLight: string
+  surfaceDark: string
+  surfaceOverlayLight: string
+  surfaceOverlayDark: string
+  surfaceHoverLight: string
+  surfaceHoverDark: string
+  borderLight: string
+  borderDark: string
+  borderSubtleLight: string
+  borderSubtleDark: string
+  foregroundLight: string
+  foregroundDark: string
+  foregroundSecondaryLight: string
+  foregroundSecondaryDark: string
+  foregroundMutedLight: string
+  foregroundMutedDark: string
+  foregroundFaintLight: string
+  foregroundFaintDark: string
 }
 
 export interface AppSettings {
-  language: string;
-  theme: 'light' | 'dark';
-  themeConfig: ThemeConfig;
+  language: string
+  theme: 'light' | 'dark'
+  themeConfig: ThemeConfig
 }
 
 /**
