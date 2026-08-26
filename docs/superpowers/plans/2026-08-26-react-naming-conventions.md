@@ -211,12 +211,22 @@ Expected: `react` per primo, poi `drizzle-orm`, poi gli `@/`, poi i relativi `./
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A app components context lib types
+git add -A
 git commit -m "style(imports): order import groups the way AGENTS.md states
 
 Autofixed: framework, then external packages, then @/ aliases, then relatives.
-44 violations across 26 files — the one thing manual discipline actually failed
+49 violations across 35 files — the one thing manual discipline actually failed
 at, which is why it is now a lint rule rather than a line in a document.
+
+Four route tests needed the imports moved by hand: eslint's fixer will not
+move an import across a vi.mock() or vi.hoisted() call, so it left
+@/app/api/.../route sitting after them in languages-grid-route.test.ts,
+translations-grid-route.test.ts, roles-grid-route.test.ts and
+users-grid-route.test.ts. Moving them is safe — Vitest hoists vi.mock() above
+every import regardless of where it appears in the source — and verified by
+running those tests in isolation. Done by hand rather than by carving an
+eslint-disable into the rule, because the rule is right here and the fixer is
+merely conservative.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
@@ -782,7 +792,7 @@ analysis in three months.
 This half is mechanical:
 
 - `import-x` replaces the broken plugin/resolver pair next ships, and
-  `import-x/order` autofixes 44 violations across 26 files
+  `import-x/order` autofixes 49 violations across 35 files
 - `UserDTO` becomes `UserDto`, the one acronym outlier out of eight types
 - `types/menu.ts` loses its line-final semicolons, an island of a different style
 - two `.tsx` files with no JSX become `.ts`
