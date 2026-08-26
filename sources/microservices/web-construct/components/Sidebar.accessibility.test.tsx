@@ -19,7 +19,7 @@ vi.mock('next/link', () => ({
 vi.mock('@/context/UIContext', () => ({
   useUI: () => ({ settings: { theme: 'light' }, setSettings: vi.fn() }),
 }))
-vi.mock('@/context/AuthContext', () => ({
+vi.mock('@/context/use-auth', () => ({
   useAuth: () => ({ user: { email: 'reviewer@example.com' }, signOut: vi.fn() }),
 }))
 vi.mock('@/context/I18nContext', () => ({

@@ -93,6 +93,13 @@ export interface ParentOption {
   navbarPosition: 'TOP' | 'BOTTOM' | null
 }
 
+/** An option in a `CustomSelect`. Lives here, not in `components/`, because `lib/` code
+ * (`buildGenitoreOptions`) needs the shape too and `lib/` cannot import from `components/`. */
+export interface SelectOption {
+  value: string | number
+  label: string
+}
+
 export interface PermissionDelta {
   idItem: number
   authorization: boolean

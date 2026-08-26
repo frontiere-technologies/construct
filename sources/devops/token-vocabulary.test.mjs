@@ -53,7 +53,12 @@ function sourceFiles(dir) {
 test('no name from the retired token vocabulary survives anywhere', () => {
   const offenders = []
   const dirsToScan = [
-    ...['app', 'components', 'lib', 'context', 'types'].map(dir => join(ROOT, dir)),
+    // Final whole-branch review: four source-scanning guards moved out of
+    // components/ui/ into guards/ (a top-level directory, not under
+    // components/), and this array still named the old parent — the scan
+    // had to follow them, or a retired token surviving inside a guard file
+    // would pass unnoticed, same shape of blind spot as DEVOPS_ROOT below.
+    ...['app', 'components', 'lib', 'context', 'types', 'guards'].map(dir => join(ROOT, dir)),
     // Task 5: the E2E suite asserts on class names and CSS custom properties
     // too, and the rename guard above never looked there. Two Python tests
     // survived a completed rename by asserting on retired vocabulary — this
