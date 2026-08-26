@@ -23,6 +23,12 @@ Le regole senza controllo automatico sono desideri.
   (se il vincolo che descrive sparisse, il typecheck deve rompersi) e va commentato.
 - `eslint-disable` sempre sulla riga singola e con il motivo accanto. Mai a livello di file.
 - Virgolette singole. Nessun punto e virgola a fine riga.
+  L'unico punto in cui un separatore serve davvero e' una riga che apre con `(` o `[` subito
+  dopo un'espressione: senza separatore il parser la legge come una chiamata o un indice sul
+  risultato della riga precedente. Non si risolve tenendosi il punto e virgola: si sposta la
+  riga in questione sotto un `import` o una dichiarazione, dove il pericolo non esiste.
+  `components/AppHydrationMarker.test.tsx` e
+  `components/rbac/functionalities/TranslationsAccordion.test.tsx` hanno entrambi quella forma.
 - **Niente `console.*`.** Il logging passa da `lib/logger.ts` (pino).
 - Parametri inutilizzati con prefisso `_` solo quando una firma esterna li impone
   (callback di `it.each`, callback di lookup DNS).

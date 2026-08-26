@@ -764,8 +764,22 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ```bash
 sed -i '' 's/;$//' types/menu.ts
-sed -i '' '8s/;$//' components/rbac/functionalities/TranslationsAccordion.test.tsx
 ```
+
+Il secondo file **non** si tratta con un `sed`. Il punto e virgola alla riga 8 di
+`components/rbac/functionalities/TranslationsAccordion.test.tsx` non e' una svista di stile:
+e' sintassi portante. La riga dopo apre con `(`, quindi togliendo il separatore il parser
+legge `vi.mock(...)(globalThis as ...)` — una chiamata sul risultato di `vi.mock()`, che
+ritorna `void`. TypeScript fallisce con `TS2349: This expression is not callable`.
+
+La soluzione non e' tenersi il punto e virgola con un'eccezione, ma dare al file la forma del
+suo gemello. `components/AppHydrationMarker.test.tsx` ha la stessa riga `(globalThis as ...)`
+senza alcun separatore, perche' la' e' preceduta da un `import`: una dichiarazione, non
+un'espressione, quindi nessun pericolo. Sposta quindi la riga `(globalThis as ...)` subito
+sotto il blocco degli import e lascia `vi.mock(...)` dopo di essa, senza punto e virgola. Lo
+spostamento e' inerte: il compito A-3 ha gia' stabilito, e un revisore ha verificato dai primi
+principi, che Vitest solleva `vi.mock()` sopra ogni import indipendentemente da dove sia
+scritto. La riga che seguira' `vi.mock(...)` comincia con `let`, quindi nessun nuovo pericolo.
 
 - [ ] **Step 2: Verificare che non ne resti nessuno a fine riga**
 
@@ -773,7 +787,8 @@ sed -i '' '8s/;$//' components/rbac/functionalities/TranslationsAccordion.test.t
 grep -rnP ';$' types/menu.ts components/rbac/functionalities/TranslationsAccordion.test.tsx | wc -l
 ```
 
-Expected: `0`.
+Expected: `0`, e `npm run typecheck` verde — quest'ultimo e' il controllo che conta, perche' un
+separatore togliendo il quale il codice non compila si manifesta li' e non nel grep.
 
 - [ ] **Step 3: Verificare che i `;` in linea siano sopravvissuti**
 
