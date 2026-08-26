@@ -17,7 +17,7 @@
 - Ogni rinomina e ogni spostamento passa da `git mv`, mai da cancella-e-ricrea: `git log --follow` deve continuare a mostrare la storia.
 - Virgolette singole, nessun punto e virgola a fine riga, nessun `console.*`, nessun `any`.
 - **La testa di ogni PR** deve avere `npm run lint`, `npm run typecheck` e `npm test` verdi. La CI di questo repo scatta su `pull_request`, non su push: valuta la testa della PR, non i commit intermedi.
-- Un compito che **introduce una guardia** committa deliberatamente rosso — e' il senso del metodo guard-first — e dichiara nel messaggio di commit quale compito la porta al verde. Solo A-2 lo fa, e A-6 e A-7 lo chiudono subito dopo. Ogni altro compito termina verde.
+- Un compito che **introduce una guardia o una regola di lint** committa deliberatamente rosso — e' il senso del metodo guard-first — e dichiara nel messaggio di commit quale compito lo porta al verde. Due lo fanno: A-1 accende `import-x/order` (A-3 lo chiude, subito dopo) e A-2 introduce la guardia sui nomi (A-6 e A-7 la chiudono). Ogni altro compito termina verde.
 - I test si chiamano `*.test.ts(x)`, non `*.spec`. Non si introduce Prettier. Non si convertono `interface` in `type`.
 - Ramo: `feature/react-naming-conventions`, già creato, con i due commit di documentazione (`554d67f`, `a87112f`).
 - I file in `docs/superpowers/plans/` e `docs/superpowers/specs/` datati prima del 2026-08-26 sono archivio storico: non si aggiornano mai, nemmeno se citano nomi di file cambiati.
@@ -134,7 +134,12 @@ Se stampa un numero maggiore di zero, la chiave dello Step 3 è sbagliata: prova
 npx eslint app components context lib types 2>&1 | grep -c "import-x/order"
 ```
 
-Expected: 44. Annota il numero: A-3 deve portarlo a 0.
+Expected: 47. Annota il numero: A-3 deve portarlo a 0.
+
+Se ti aspettavi 44: quel numero veniva da una sonda fatta col plugin `import` e
+il resolver rotto, che non riusciva a classificare alcuni import `@/` e quindi
+non li segnalava. Con un resolver funzionante le violazioni viste sono 47, ed e'
+il conteggio giusto.
 
 - [ ] **Step 7: Commit**
 
@@ -154,7 +159,61 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 2: [A-2] Guardia sui nomi dei file, scritta rossa
+### Task 2: [A-3] Ordinamento degli import applicato
+
+**Files:**
+- Modify: i file che l'autofix individua da sé in `app/`, `components/`, `lib/` — 47 violazioni su 26 file
+
+**Interfaces:**
+- Consumes: la configurazione ESLint del compito A-1.
+- Produces: `npx eslint` senza errori `import-x/order`.
+
+- [ ] **Step 1: Lanciare l'autofix**
+
+```bash
+npx eslint app components context lib types --fix
+```
+
+- [ ] **Step 2: Verificare che le violazioni siano a zero**
+
+```bash
+npx eslint app components context lib types 2>&1 | grep -c "import-x/order"
+```
+
+Expected: `0` (partendo dai 47 contati in A-1 Step 6).
+
+- [ ] **Step 3: Verificare che l'autofix non abbia rotto niente**
+
+```bash
+npm run lint && npm run typecheck && npm test
+```
+
+Expected: tutti verdi, 634 test più quelli della guardia. Se `npm test` fallisce, l'autofix ha spostato un import oltre un effetto collaterale a livello di modulo: guarda il diff del file in questione con `git diff` e riordina a mano quel solo file invece di accettare l'autofix.
+
+- [ ] **Step 4: Verificare a campione che l'ordine sia quello voluto**
+
+```bash
+sed -n '1,12p' lib/rbac/users-service.ts
+```
+
+Expected: `react` per primo, poi `drizzle-orm`, poi gli `@/`, poi i relativi `./`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A app components context lib types
+git commit -m "style(imports): order import groups the way AGENTS.md states
+
+Autofixed: framework, then external packages, then @/ aliases, then relatives.
+44 violations across 26 files — the one thing manual discipline actually failed
+at, which is why it is now a lint rule rather than a line in a document.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 3: [A-2] Guardia sui nomi dei file, scritta rossa
 
 **Files:**
 - Create: `guards/file-naming.test.ts`
@@ -433,7 +492,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 3: [A-6] Le due estensioni sbagliate
+### Task 4: [A-6] Le due estensioni sbagliate
 
 **Files:**
 - Rename: `components/AppHydrationMarker.tsx` → `components/AppHydrationMarker.ts`
@@ -499,7 +558,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 4: [A-7] Gli otto nomi `camelCase` fuori da `components/ui/`
+### Task 5: [A-7] Gli otto nomi `camelCase` fuori da `components/ui/`
 
 **Files:**
 - Rename: `components/sidebarPresentation.ts` → `components/sidebar-presentation.ts`
@@ -586,60 +645,6 @@ exported symbols keep their names.
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
-
----
-
-### Task 5: [A-3] Ordinamento degli import applicato
-
-**Files:**
-- Modify: 26 file in `app/`, `components/`, `lib/` (l'autofix li individua da sé)
-
-**Interfaces:**
-- Consumes: la configurazione ESLint del compito A-1.
-- Produces: `npx eslint` senza errori `import-x/order`.
-
-- [ ] **Step 1: Lanciare l'autofix**
-
-```bash
-npx eslint app components context lib types --fix
-```
-
-- [ ] **Step 2: Verificare che le violazioni siano a zero**
-
-```bash
-npx eslint app components context lib types 2>&1 | grep -c "import-x/order"
-```
-
-Expected: `0` (partendo dai 44 contati in A-1 Step 6).
-
-- [ ] **Step 3: Verificare che l'autofix non abbia rotto niente**
-
-```bash
-npm run lint && npm run typecheck && npm test
-```
-
-Expected: tutti verdi, 634 test più quelli della guardia. Se `npm test` fallisce, l'autofix ha spostato un import oltre un effetto collaterale a livello di modulo: guarda il diff del file in questione con `git diff` e riordina a mano quel solo file invece di accettare l'autofix.
-
-- [ ] **Step 4: Verificare a campione che l'ordine sia quello voluto**
-
-```bash
-sed -n '1,12p' lib/rbac/users-service.ts
-```
-
-Expected: `react` per primo, poi `drizzle-orm`, poi gli `@/`, poi i relativi `./`.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add -A app components context lib types
-git commit -m "style(imports): order import groups the way AGENTS.md states
-
-Autofixed: framework, then external packages, then @/ aliases, then relatives.
-44 violations across 26 files — the one thing manual discipline actually failed
-at, which is why it is now a lint rule rather than a line in a document.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
 
 ---
 
@@ -1655,15 +1660,21 @@ B-1, B-2 ─► B-6     (i sei convertiti non entrano nella lista dei 27)
 
 A-4 e A-5 non hanno dipendenze. B-7, B-8 e B-9 dipendono solo dai compiti che li precedono nella stessa PR.
 
-**Ordine di esecuzione di PR-A: A-1, A-2, A-6, A-7, A-3, A-4, A-5.**
+**Ordine di esecuzione di PR-A: A-1, A-3, A-2, A-6, A-7, A-4, A-5.**
 
-Non e' l'ordine numerico, di proposito. A-2 committa la guardia rossa, e A-6 e
-A-7 sono i due compiti che la portano al verde: eseguirli subito dopo riduce la
-finestra rossa a due commit. Nell'ordine numerico la guardia resterebbe rossa
-anche attraverso A-3, A-4 e A-5, e chi legge la storia del ramo troverebbe
-quattro commit consecutivi coi test rossi senza capire subito perche'.
-A-3 (l'autofix degli import) va dopo le rinomine e non prima: cosi' gira una
-volta sola, sui percorsi definitivi.
+Non e' l'ordine numerico, di proposito: ogni compito che lascia qualcosa di
+rosso e' seguito immediatamente da quello che lo chiude. A-1 accende
+`import-x/order` e il lint diventa rosso; A-3 e' l'autofix, quindi va subito
+dopo. A-2 committa la guardia rossa; A-6 e A-7 la portano al verde.
+Cosi' nessuna finestra rossa dura piu' di un commit.
+
+Una versione precedente di questo piano metteva A-3 per ultimo, con la
+motivazione che avrebbe girato «una volta sola, sui percorsi definitivi». La
+motivazione era sbagliata: la configurazione non imposta `alphabetize`, quindi
+l'ordinamento e' solo per gruppo, e una rinomina non puo' spostare un import di
+gruppo — `./sidebarPresentation` e `./sidebar-presentation` sono entrambi
+`sibling`, `@/components/ui/X` e `@/components/grid/X` entrambi `internal`.
+L'autofix non ha niente da guadagnare dall'attendere le rinomine.
 
 ## Numerazione per la strumentazione
 
@@ -1675,10 +1686,10 @@ piano usano l'ID.
 | Ordine | ID |
 |---|---|
 | 1 | A-1 |
-| 2 | A-2 |
-| 3 | A-6 |
-| 4 | A-7 |
-| 5 | A-3 |
+| 2 | A-3 |
+| 3 | A-2 |
+| 4 | A-6 |
+| 5 | A-7 |
 | 6 | A-4 |
 | 7 | A-5 |
 | 8 | B-1 |
