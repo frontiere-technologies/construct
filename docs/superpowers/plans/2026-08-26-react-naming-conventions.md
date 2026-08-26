@@ -469,7 +469,7 @@ npx vitest run guards/file-naming.test.ts
 
 Expected: FAIL. Due test rossi:
 - `has no camelCase filename anywhere` elenca gli 8 file fuori da `components/ui/`, ancora coi nomi vecchi: `components/sidebarPresentation.ts`, `components/sidebarPresentation.test.ts`, `components/i18n/languages/languagesDatasource.ts`, `components/i18n/translations/translationsDatasource.ts`, `components/i18n/translations/translationStatusFilter.ts`, `components/i18n/translations/translationStatusFilter.test.ts`, `components/rbac/roles/rolesDatasource.ts`, `components/rbac/users/usersDatasource.ts`.
-- `gives the .tsx extension only to files that contain JSX` elenca `components/AppHydrationMarker.tsx` e `components/rbac/NavigationTree.test.tsx`.
+- `gives the .tsx extension only to files that contain JSX` elenca **tre** file: `components/AppHydrationMarker.tsx`, `components/rbac/NavigationTree.test.tsx` e `context/AuthContext.tsx`.
 
 I dodici test a fixture (`stemOf`, `isCamelCase`, `isKebabCase`, `containsJsx`) devono essere verdi: sono la prova che i controlli funzionano.
 Il test `names every file under components/ui in kebab-case` **passa asserendo su undici file veri** — `button.tsx`, `button.types.tsx`, `input.tsx`, `select.tsx`, `textarea.tsx`, `grid-reset.ts`, `grid-url-sync.ts` e i loro test — perché l'esenzione elenca i diciannove non-kebab per nome invece di coprire la cartella. Verifica che sia così e non a vuoto:
@@ -512,29 +512,33 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 4: [A-6] Le due estensioni sbagliate
+### Task 4: [A-6] Le tre estensioni sbagliate
 
 **Files:**
 - Rename: `components/AppHydrationMarker.tsx` → `components/AppHydrationMarker.ts`
 - Rename: `components/rbac/NavigationTree.test.tsx` → `components/rbac/NavigationTree.test.ts`
+- Rename: `context/AuthContext.tsx` → `context/AuthContext.ts`
 
 **Interfaces:**
 - Consumes: la guardia del compito A-2.
 - Produces: due dei tre test della guardia più vicini al verde.
 
-**Perché:** `AppHydrationMarker` esporta un componente che ritorna `null` — nessun JSX, quindi `.ts`. Il nome resta `PascalCase`, perché rispecchia il componente esportato: la regola sull'estensione e quella sul nome sono indipendenti. `NavigationTree.test.tsx` verifica solo `typeIcon()` e non contiene JSX.
+**Perché:** `AppHydrationMarker` esporta un componente che ritorna `null` — nessun JSX, quindi `.ts`. Il nome resta `PascalCase`, perché rispecchia il componente esportato: la regola sull'estensione e quella sul nome sono indipendenti. `NavigationTree.test.tsx` verifica solo `typeIcon()` e non contiene JSX. `context/AuthContext.tsx` contiene solo l'hook `useAuth()`.
+
+Il terzo file non era nel piano originale: lo scan di verifica del 2026-08-26 lo aveva mancato perche' cercava `<` testualmente e `Promise<void>` gli e' sembrato JSX. La guardia ad AST del compito A-2 lo ha trovato. Nessuno dei tre import va aggiornato: gli import TypeScript non portano l'estensione.
 
 - [ ] **Step 1: Rinominare con `git mv`**
 
 ```bash
 git mv components/AppHydrationMarker.tsx components/AppHydrationMarker.ts
 git mv components/rbac/NavigationTree.test.tsx components/rbac/NavigationTree.test.ts
+git mv context/AuthContext.tsx context/AuthContext.ts
 ```
 
 - [ ] **Step 2: Verificare che nessun import citasse l'estensione**
 
 ```bash
-grep -rn --include='*.ts' --include='*.tsx' "AppHydrationMarker\.tsx\|NavigationTree\.test\.tsx" app components context lib
+grep -rn --include='*.ts' --include='*.tsx' "AppHydrationMarker\.tsx\|NavigationTree\.test\.tsx\|AuthContext\.tsx" app components context lib
 ```
 
 Expected: nessun risultato. Gli import TypeScript non portano l'estensione, quindi non c'è niente da aggiornare.
@@ -567,11 +571,15 @@ Expected: entrambi verdi.
 
 ```bash
 git add -A components guards
-git commit -m "refactor(components): give .ts to the two files with no JSX
+git commit -m "refactor(components): give .ts to the three files with no JSX
 
-AppHydrationMarker returns null and NavigationTree.test only exercises
-typeIcon(). The name still mirrors the exported component — the extension rule
-and the naming rule are independent.
+AppHydrationMarker returns null, NavigationTree.test only exercises typeIcon(),
+and AuthContext holds nothing but the useAuth() hook. The names still mirror
+what they export — the extension rule and the naming rule are independent.
+
+The third was missed by the verification scan that started this work: that scan
+looked for a literal '<' and took Promise<void> for JSX. The AST guard from A-2
+found it. No imports change; TypeScript imports carry no extension.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
