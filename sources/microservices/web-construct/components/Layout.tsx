@@ -1,8 +1,8 @@
 'use client'
 
 import React from 'react'
-import { Sidebar } from './Sidebar'
 import type { MenuItem } from '@/types/menu'
+import { Sidebar } from './Sidebar'
 
 interface LayoutProps {
   children: React.ReactNode

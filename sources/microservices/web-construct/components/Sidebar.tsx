@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { createPortal } from 'react-dom'
 import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight, PanelLeftOpen, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useUI } from '@/context/UIContext'
@@ -14,7 +14,7 @@ import type { MenuItem } from '@/types/menu'
 import { activeAncestorIds, activeAncestorPath, togglePathAt, navHighlight, type NavHighlight } from '@/lib/sidebar-highlight'
 import { IconRenderer } from './IconRenderer'
 import LanguageSwitcher from './LanguageSwitcher'
-import { resolveSidebarPresentation } from './sidebarPresentation'
+import { resolveSidebarPresentation } from './sidebar-presentation'
 
 // One visual language for every column: the current page (and the sections holding it) carry
 // the ring, while a section that is merely expanded gets a softer fill so it can't be mistaken

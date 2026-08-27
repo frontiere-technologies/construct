@@ -1,6 +1,6 @@
+import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 import { loadEnv } from 'vite'
-import { resolve } from 'node:path'
 
 // Vitest, unlike Next, reads no .env file on its own: TEST_DATABASE_URL and
 // TEST_DATABASE_DISPOSABLE previously had to be pushed in with a

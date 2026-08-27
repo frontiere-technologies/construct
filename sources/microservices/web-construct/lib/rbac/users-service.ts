@@ -2,11 +2,11 @@ import { cache } from 'react'
 import { and, asc, desc, count, eq, exists, gte, ilike, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { users, userRole } from '@/lib/db/schema'
+import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { getAllRoles } from './roles-service'
 import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
 import { USER_SORT_COLUMN, buildUserDtos, type UserRow, type UserRoleRow } from './user-mappers'
-import type { UserDTO, UsersQuery } from './types'
-import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
+import type { UserDto, UsersQuery } from './types'
 
 const SORT_COLUMNS = {
   first_name: users.firstName,
@@ -57,7 +57,7 @@ export function applyUserFilters(query: UsersQuery, roleIds: number[] | undefine
   return conditions
 }
 
-export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserDTO[]; total: number }> => {
+export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserDto[]; total: number }> => {
   const conditions = applyUserFilters(query, query.roleIds)
   const where = conditions.length ? and(...conditions) : undefined
   const ascending = (query.direction ?? 'DESC') === 'ASC'

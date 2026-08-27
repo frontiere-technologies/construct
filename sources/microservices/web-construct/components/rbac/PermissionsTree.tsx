@@ -1,9 +1,9 @@
 'use client'
 
 import React from 'react'
-import NavigationTree from './NavigationTree'
 import { applyToggle } from '@/lib/rbac/permission-tree'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
+import NavigationTree from './NavigationTree'
 
 interface PermissionsTreeProps {
   trees: UserNavigationTreeDto[]

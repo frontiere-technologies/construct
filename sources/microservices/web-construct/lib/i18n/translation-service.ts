@@ -2,11 +2,11 @@ import { cache } from 'react'
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, lt, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
+import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { listActiveLanguages } from './language-service'
 import type {
   LanguageDto, TranslationRowDto, TranslationsPage, TranslationsQuery, TranslationValueDto,
 } from './types'
-import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { isSupportedTranslationUpdatedTo } from './translation-grid-boundaries'
 
 const SORT_COLUMN = {

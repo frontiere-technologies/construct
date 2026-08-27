@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveSidebarPresentation } from './sidebarPresentation'
+import { resolveSidebarPresentation } from './sidebar-presentation'
 
 describe('resolveSidebarPresentation', () => {
   it('forces only the column into icon mode on a narrow viewport', () => {

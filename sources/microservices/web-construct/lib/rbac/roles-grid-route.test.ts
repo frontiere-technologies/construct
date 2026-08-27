@@ -1,5 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+// Sits above vi.hoisted()/vi.mock() on purpose: Vitest hoists both above every
+// import regardless of source position, and the factories below close over
+// nothing imported — so this order cannot change which mocks apply.
+import { POST } from '@/app/api/rbac/roles-grid/route'
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -8,8 +12,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
 vi.mock('@/lib/rbac/roles-service', () => ({ listRoles: mocks.listRoles }))
-
-import { POST } from '@/app/api/rbac/roles-grid/route'
 
 function request(body: unknown): NextRequest {
   return new Request('http://localhost/api/rbac/roles-grid', {

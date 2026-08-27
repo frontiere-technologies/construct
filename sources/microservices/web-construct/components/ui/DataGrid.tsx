@@ -7,9 +7,9 @@ import {
   type ColDef, type IDatasource, type GridReadyEvent,
   type FilterChangedEvent, type SortChangedEvent,
 } from 'ag-grid-community'
+import { useI18n } from '@/context/I18nContext'
 import { appGridTheme, gridLocaleText, columnPinningState } from './dataGridConfig'
 import { normalizeGridColumnDefs } from './gridColumnSizing'
-import { useI18n } from '@/context/I18nContext'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 

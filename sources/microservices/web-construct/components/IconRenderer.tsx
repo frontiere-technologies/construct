@@ -1,8 +1,8 @@
 'use client'
 
 import React, { lazy, Suspense, useMemo, memo } from 'react'
-import Image from 'next/image'
 import type { ComponentType } from 'react'
+import Image from 'next/image'
 import type { LucideProps } from 'lucide-react'
 import { HelpCircle } from 'lucide-react'
 import { isInlineSvg, isImagePath } from '@/lib/icon-utils'

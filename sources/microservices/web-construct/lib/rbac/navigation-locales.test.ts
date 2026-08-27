@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { defaultNavigationLocale, navigationFallbackChain, resolveNavigationText, toNavigationLocales } from './navigation-locales'
 import type { LanguageDto } from '@/lib/i18n/types'
+import { defaultNavigationLocale, navigationFallbackChain, resolveNavigationText, toNavigationLocales } from './navigation-locales'
 
 const language = (overrides: Partial<LanguageDto>): LanguageDto => ({
   id: 1,

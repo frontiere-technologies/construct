@@ -19,11 +19,11 @@ import {
   translationsUrlParamsToSortModel, type TranslationsGridFilterModel, type TranslationsUrlParams,
 } from '@/lib/i18n/translations-grid-query'
 import type { TranslationRowDto } from '@/lib/i18n/types'
-import { createTranslationsDatasource } from './translationsDatasource'
+import { createTranslationsDatasource } from './translations-datasource'
 import TranslationEditorDrawer from './TranslationEditorDrawer'
 import CreateTranslationKeyModal from './CreateTranslationKeyModal'
 import TranslationValueCell from './TranslationValueCell'
-import { translationStatusFilterOptions } from './translationStatusFilter'
+import { translationStatusFilterOptions } from './translation-status-filter'
 
 interface Props {
   /** Full URL state, including dynamic value_<languageCode> filters (Task 4 consumes it). */

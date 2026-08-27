@@ -10,17 +10,17 @@ import { resetGridFilters } from '@/components/ui/grid-reset'
 import { useGridUrlSync } from '@/components/ui/grid-url-sync'
 import { actionsColumnDef } from '@/components/rbac/GridRowActionsMenu'
 import EnumSelectFilter from '@/components/rbac/filters/EnumSelectFilter'
-import StatusBadge from './StatusBadge'
-import ManageRolesModal from './ManageRolesModal'
 import { setUserStatus } from '@/lib/rbac/users-actions'
-import { createUsersDatasource } from './usersDatasource'
 import { useI18n } from '@/context/I18nContext'
 import {
   usersUrlParamsToFilterModel, usersUrlParamsToSortModel, usersFilterModelToSearchParams,
   type UsersGridFilterModel,
 } from '@/lib/rbac/users-grid-query'
-import type { UserDTO } from '@/lib/rbac/types'
+import type { UserDto } from '@/lib/rbac/types'
 import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from '@/lib/rbac/types'
+import { createUsersDatasource } from './users-datasource'
+import ManageRolesModal from './ManageRolesModal'
+import StatusBadge from './StatusBadge'
 
 interface Props {
   sortField: string
@@ -45,18 +45,18 @@ export default function UsersTableClient(props: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
-  const [managing, setManaging] = useState<UserDTO | null>(null)
-  const [gridApi, setGridApi] = useState<GridApi<UserDTO> | null>(null)
+  const [managing, setManaging] = useState<UserDto | null>(null)
+  const [gridApi, setGridApi] = useState<GridApi<UserDto> | null>(null)
   // Kept alongside the `gridApi` state: `columnDefs` below is memoized and its cell
   // renderers close over `toggleStatus`, so a ref (always current, regardless of when
   // the memo last recomputed) is used inside those closures instead of the state value,
   // which could otherwise stay stale at `null` from before onGridReady fired.
-  const gridApiRef = useRef<GridApi<UserDTO> | null>(null)
+  const gridApiRef = useRef<GridApi<UserDto> | null>(null)
 
   const gridUrlSync = useGridUrlSync(pathname, sp.toString(), url => router.replace(url))
   const setParam = (updates: Record<string, string | null>) => gridUrlSync.update(updates)
 
-  const toggleStatus = async (u: UserDTO) => {
+  const toggleStatus = async (u: UserDto) => {
     const next = u.status.idUserStatus === USER_STATUS_ACTIVE ? USER_STATUS_DEACTIVATED : USER_STATUS_ACTIVE
     const confirmMessage = next === USER_STATUS_DEACTIVATED
       ? t('users.confirm.deactivate', { email: u.email })
@@ -66,7 +66,7 @@ export default function UsersTableClient(props: Props) {
     catch (e) { alert(e instanceof Error ? e.message : t('errors.generic')) }
   }
 
-  const fullName = (u: UserDTO) => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email
+  const fullName = (u: UserDto) => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email
 
   const datasource = useMemo(() => createUsersDatasource(), [])
 
@@ -75,11 +75,11 @@ export default function UsersTableClient(props: Props) {
   // Keying the memo on this derived string instead of the array itself avoids rebuilding
   // columnDefs (and the Ruolo filter's option list) on every unrelated interaction.
   const allRolesKey = props.allRoles.map(r => `${r.id}:${r.name}`).join('|')
-  const textFilter = TEXT_FILTER as Pick<ColDef<UserDTO>, 'filter' | 'filterParams'>
-  const dateFilter = DATE_FILTER as Pick<ColDef<UserDTO>, 'filter' | 'filterParams'>
+  const textFilter = TEXT_FILTER as Pick<ColDef<UserDto>, 'filter' | 'filterParams'>
+  const dateFilter = DATE_FILTER as Pick<ColDef<UserDto>, 'filter' | 'filterParams'>
 
-  const columnDefs = useMemo<ColDef<UserDTO>[]>(() => [
-    actionsColumnDef<UserDTO>(u => [
+  const columnDefs = useMemo<ColDef<UserDto>[]>(() => [
+    actionsColumnDef<UserDto>(u => [
       { label: t('users.actions.manage_roles'), onClick: () => setManaging(u) },
       { label: u.status.idUserStatus === USER_STATUS_ACTIVE ? t('users.actions.deactivate') : t('users.actions.activate'), onClick: () => toggleStatus(u) },
     ]),
@@ -97,7 +97,7 @@ export default function UsersTableClient(props: Props) {
     {
       colId: 'status', headerName: t('users.list.status'), sortable: true, filter: EnumSelectFilter,
       filterParams: { options: [{ value: USER_STATUS_ACTIVE, label: t('users.status.active') }, { value: USER_STATUS_DEACTIVATED, label: t('users.status.deactivated') }] },
-      cellRenderer: (p: { data?: UserDTO }) => p.data ? <StatusBadge status={p.data.status} /> : null,
+      cellRenderer: (p: { data?: UserDto }) => p.data ? <StatusBadge status={p.data.status} /> : null,
     },
     {
       colId: 'dateIns', headerName: t('users.list.created_at'), sortable: true,
@@ -120,17 +120,17 @@ export default function UsersTableClient(props: Props) {
     { colId: 'dateMod', label: t('users.list.updated_at') },
   ], [t])
 
-  const onFilterChanged = (event: FilterChangedEvent<UserDTO>) => {
+  const onFilterChanged = (event: FilterChangedEvent<UserDto>) => {
     const model = event.api.getFilterModel() as UsersGridFilterModel
     setParam(usersFilterModelToSearchParams(model))
   }
 
-  const onSortChanged = (event: SortChangedEvent<UserDTO>) => {
+  const onSortChanged = (event: SortChangedEvent<UserDto>) => {
     const active = event.api.getColumnState().find(c => c.sort)
     setParam({ sort: active?.colId ?? null, direction: active ? (active.sort === 'asc' ? 'ASC' : 'DESC') : null })
   }
 
-  const onGridReady = (event: GridReadyEvent<UserDTO>) => {
+  const onGridReady = (event: GridReadyEvent<UserDto>) => {
     gridApiRef.current = event.api
     setGridApi(event.api)
   }
@@ -142,7 +142,7 @@ export default function UsersTableClient(props: Props) {
         columns={columnLabels}
         onClearFilters={() => resetGridFilters(gridApiRef.current, () => setParam(usersFilterModelToSearchParams({})))}
       />
-      <DataGrid<UserDTO>
+      <DataGrid<UserDto>
         columnDefs={columnDefs}
         datasource={datasource}
         getRowId={u => u.id}

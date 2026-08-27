@@ -36,7 +36,7 @@ vi.mock('@/components/ui/grid-url-sync', () => ({
   useGridUrlSync: () => ({ update: vi.fn() }),
 }))
 vi.mock('@/lib/i18n/translation-actions', () => ({ deleteTranslationKey: vi.fn() }))
-vi.mock('./translationsDatasource', () => ({ createTranslationsDatasource: () => ({ getRows: vi.fn() }) }))
+vi.mock('./translations-datasource', () => ({ createTranslationsDatasource: () => ({ getRows: vi.fn() }) }))
 
 describe('TranslationsTableClient column sizing', () => {
   beforeEach(() => { captured.columnDefs.length = 0 })

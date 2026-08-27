@@ -4,8 +4,8 @@ import { getTableConfig, getViewConfig, PgDialect, PgTable, PgView } from 'drizz
 import type { IndexedColumn } from 'drizzle-orm/pg-core'
 import { db } from '@/lib/db'
 import * as drizzleSchema from '@/lib/db/schema'
-import { assertExactCatalogSection } from './schema-contract'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
+import { assertExactCatalogSection } from './schema-contract'
 
 describeIntegration('database runtime boundary', () => {
   it('keeps the deployed catalog aligned with the complete Drizzle model', async () => {

@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import TagInput from './TagInput'
 import { useI18n } from '@/context/I18nContext'
 import type { NavigationLocale } from '@/lib/rbac/navigation-locales'
+import TagInput from './TagInput'
 
 type Tr = Record<string, { name?: string; description?: string }>
 type Tg = Record<string, string[]>

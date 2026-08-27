@@ -7,11 +7,11 @@ import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageContainer } from '@/components/PageContainer'
 import PermissionsTree from '@/components/rbac/PermissionsTree'
-import RenameRoleModal from './RenameRoleModal'
 import { buildAuthMap, computeDeltas } from '@/lib/rbac/permission-tree'
 import { updateRolePermissions } from '@/lib/rbac/roles-actions'
 import { useI18n } from '@/context/I18nContext'
 import type { RoleInformationDto, UserNavigationTreeDto } from '@/lib/rbac/types'
+import RenameRoleModal from './RenameRoleModal'
 
 interface Props {
   role: RoleInformationDto

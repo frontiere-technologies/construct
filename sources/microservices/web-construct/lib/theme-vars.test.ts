@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { resolveThemeVars, primaryForeground } from './theme-vars'
+import { describe, it, expect } from 'vitest'
 import { defaultThemeConfig } from '@/types/menu'
+import { resolveThemeVars, primaryForeground } from './theme-vars'
 
 describe('resolveThemeVars', () => {
   it('resolves light values when isDark is false', () => {

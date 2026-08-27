@@ -2,6 +2,7 @@ import { cache } from 'react'
 import { and, asc, count, desc, eq, gte, ilike, inArray, lt, lte, or, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { navigationItem, roleItem, roleListView } from '@/lib/db/schema'
+import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { toNavigationItemRow } from './nav-row-mapper'
 import { buildAuthTree } from './permission-tree'
 import {
@@ -10,7 +11,6 @@ import {
   ROOT_ID, OPERATIONS_ID,
 } from './types'
 import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
-import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 
 const SORT_COLUMN = {
   id: roleListView.id,
