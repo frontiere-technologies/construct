@@ -776,11 +776,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: le variabili dichiarate dal task 2.
 - Produces: niente di nuovo. Chiude il rinomino.
 
-- [ ] **Step 1: Aggiornare l'atteso in `dataGridConfig.test.ts`**
+- [✅] **Step 1: Aggiornare l'atteso in `dataGridConfig.test.ts`**
 
 Il test asserisce i valori del tema di ag-grid. Sostituire ogni `var(--theme-X)` con il nome nuovo secondo la tabella: `primary` → `primary`, `surface` → `card`, `surface-hover` → `accent`, `foreground` → `foreground`, `border` → `border`.
 
-- [ ] **Step 2: Eseguire il test e verificare che fallisca**
+- [✅] **Step 2: Eseguire il test e verificare che fallisca**
 
 ```bash
 npm run test -- components/ui/dataGridConfig.test.ts
@@ -788,7 +788,7 @@ npm run test -- components/ui/dataGridConfig.test.ts
 
 Atteso: FAIL, il codice emette ancora `var(--theme-surface)`.
 
-- [ ] **Step 3: Applicare le sostituzioni nei sei file**
+- [✅] **Step 3: Applicare le sostituzioni nei sei file**
 
 ```bash
 cd sources/microservices/web-construct
@@ -803,13 +803,13 @@ perl -pi -e '
 
 `surface-hover` prima di `surface`, per la stessa ragione del task 4.
 
-- [ ] **Step 4: Convertire BTN-8 — i due `bg-[var(--primary)]` diventano `bg-primary`**
+- [✅] **Step 4: Convertire BTN-8 — i due `bg-[var(--primary)]` diventano `bg-primary`**
 
 `app/(protected)/error.tsx:26` e `components/EmbeddedBlockedNotice.tsx:19` scrivono il token a mano dentro una parentesi quadra, aggirando il tema di Tailwind. Sostituire `bg-[var(--primary)] text-white` con `bg-primary text-primary-foreground` in entrambi.
 
 `text-white` diventa `text-primary-foreground` perché è la stessa correzione: il bianco fisso non sa su quale primario finirà, ed è l'errore che `primaryForeground()` esiste per evitare.
 
-- [ ] **Step 5: Eseguire i test e verificare che passino**
+- [✅] **Step 5: Eseguire i test e verificare che passino**
 
 ```bash
 npm run test -- components/ui/dataGridConfig.test.ts && npm run test:tokens
@@ -817,7 +817,7 @@ npm run test -- components/ui/dataGridConfig.test.ts && npm run test:tokens
 
 Atteso: PASS entrambi. `test:tokens` ora non trova più nessun `--theme-`.
 
-- [ ] **Step 6: Verifica in browser — pagina per pagina, nei due temi**
+- [✅] **Step 6: Verifica in browser — pagina per pagina, nei due temi**
 
 Questa è la verifica che il task 4 non poteva fare e che nessun test sostituisce.
 
@@ -834,7 +834,7 @@ Per ciascuna verifica tre cose:
 
 Il punto 3 è quello che dice se il rinomino ha davvero funzionato: prima di questo lavoro non funzionava, ed è la funzione di prodotto che THEME-2 esiste per riparare.
 
-- [ ] **Step 7: Verifica completa, E2E e commit**
+- [✅] **Step 7: Verifica completa, E2E e commit**
 
 ```bash
 npm run lint && npm run test && npm run typecheck && npm run build
@@ -1151,7 +1151,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 Il guard oggi controlla `node.tagName.getText(source) === 'button'`. Nel momento in cui un call site diventa `<Button>`, il guard smette di vederlo — e **non fallisce**: continua a passare verde su un codebase in cui non controlla più niente. È il rischio che UI-1 segnala come «poco visibile», e va chiuso nello stesso commit in cui i primi call site migrano.
 
-- [ ] **Step 1: Scrivere il caso che dimostra il buco**
+- [✅] **Step 1: Scrivere il caso che dimostra il buco**
 
 Aggiungi in `components/ui/disabledButtonHoverStyles.test.ts`, dentro il `describe`, prima del test esistente:
 
@@ -1191,7 +1191,7 @@ Aggiungi in `components/ui/disabledButtonHoverStyles.test.ts`, dentro il `descri
   })
 ```
 
-- [ ] **Step 2: Eseguire e verificare che fallisca**
+- [✅] **Step 2: Eseguire e verificare che fallisca**
 
 ```bash
 npm run test -- components/ui/disabledButtonHoverStyles.test.ts
@@ -1199,7 +1199,7 @@ npm run test -- components/ui/disabledButtonHoverStyles.test.ts
 
 Atteso: FAIL, `unsafeHoversIn is not defined`. La funzione oggi si chiama `unsafeDisabledButtonHovers` e prende solo un percorso: legge il file da disco, quindi non è verificabile su un frammento.
 
-- [ ] **Step 3: Separare l'analisi dalla lettura del file, e riconoscere `Button`**
+- [✅] **Step 3: Separare l'analisi dalla lettura del file, e riconoscere `Button`**
 
 Sostituire `unsafeDisabledButtonHovers` con due funzioni: una pura che analizza del testo, e un involucro che legge il file.
 
@@ -1243,7 +1243,7 @@ function unsafeDisabledButtonHovers(path: string): string[] {
 }
 ```
 
-- [ ] **Step 4: Eseguire e verificare che passi**
+- [✅] **Step 4: Eseguire e verificare che passi**
 
 ```bash
 npm run test -- components/ui/disabledButtonHoverStyles.test.ts
@@ -1251,7 +1251,7 @@ npm run test -- components/ui/disabledButtonHoverStyles.test.ts
 
 Atteso: PASS, 4 test.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add components/ui/disabledButtonHoverStyles.test.ts
@@ -1283,7 +1283,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 Scelto come pilota perché in venti righe contiene quattro dei casi del piano: un primario a `bg-gray-900` (BTN-1), un secondario `outline`, un bottone con sola icona **senza nome accessibile** (BTN-2), una scheda che è gruppo F e quindi **resta un `<button>` nativo**, e sette colori raw da migrare.
 
-- [ ] **Step 1: Migrare i tre bottoni nel perimetro**
+- [✅] **Step 1: Migrare i tre bottoni nel perimetro**
 
 Il bottone di rinomina — gruppo C, oggi senza nome accessibile:
 
@@ -1313,11 +1313,11 @@ Il secondario e il primario in fondo:
 
 Il primario perde `bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed`: il colore arriva dal token, l'opacità e il cursore dalla regola globale.
 
-- [ ] **Step 2: Lasciare la scheda com'è, e dire perché**
+- [✅] **Step 2: Lasciare la scheda com'è, e dire perché**
 
 Il `<button>` delle schede `sezioni`/`operazioni` è gruppo F, fuori dal perimetro di UI-1. Resta un `<button>` nativo. Migrarne i colori raw sì, la struttura no.
 
-- [ ] **Step 3: Migrare i sette colori raw dello stesso file**
+- [✅] **Step 3: Migrare i sette colori raw dello stesso file**
 
 | oggi | diventa |
 |---|---|
@@ -1328,7 +1328,7 @@ Il `<button>` delle schede `sezioni`/`operazioni` è gruppo F, fuori dal perimet
 
 `border-foreground` sostituisce la coppia chiaro/scuro in una classe sola: è il caso che THEME-2 descrive quando dice che un colore espresso con token non ha bisogno della variante `dark:`.
 
-- [ ] **Step 4: Aggiornare il cricchetto**
+- [✅] **Step 4: Aggiornare il cricchetto**
 
 `sources/devops/raw-color-baseline.json`: la voce `components/rbac/roles/RoleDetailClient.tsx` scende da 7 a 0, e `total` da 231 a 224. Il cricchetto impedisce al numero di salire, quindi va abbassato a mano quando scende davvero.
 
@@ -1338,7 +1338,7 @@ Il `<button>` delle schede `sezioni`/`operazioni` è gruppo F, fuori dal perimet
 npm run lint && npm run test && npm run typecheck && npm run test:tokens && npm run test:raw-colors && npm run test:i18n-keys && npm run build
 ```
 
-- [ ] **Step 6: Verifica in browser**
+- [✅] **Step 6: Verifica in browser**
 
 ```bash
 npm run dev
@@ -1353,7 +1353,7 @@ Sulla pagina di dettaglio di un ruolo, in tema chiaro e poi scuro:
 5. Annulla e Salva hanno la stessa imbottitura orizzontale e appaiono proporzionati.
 6. Le schede `sezioni`/`operazioni` sono invariate rispetto a prima.
 
-- [ ] **Step 7: E2E e commit** (E2E deferito al chiamante; il commit e stato fatto da questa sessione)
+- [✅] **Step 7: E2E e commit** (E2E deferito al chiamante; il commit e stato fatto da questa sessione)
 
 ```bash
 cd /Users/mario.stefanutti/mario/programming/github-frontiere/construct && uv run pytest sources/tests/e2e
