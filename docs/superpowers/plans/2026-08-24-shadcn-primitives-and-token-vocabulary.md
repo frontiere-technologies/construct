@@ -1674,7 +1674,7 @@ Il lotto più grande e quello con più casi particolari. Quattro cose da guardar
 
 - [✅] **Step 3: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 4: Verifica in browser** — punto 9 della ricetta, sulle pagine: tabella ruoli, dettaglio ruolo, tabella utenti, gestione ruoli utente, albero funzionalità, modulo funzionalità, selettore di icone. — *non verificata, 2026-08-27*: niente nel repository attesta che sia stata fatta, e la suite E2E **non** puo' sostituirla — `sources/tests/e2e/test_admin_theme.py` prova il pannello del tema (cambio colore, salva, ripristina), non l'aspetto reso in chiaro e in scuro: zero occorrenze di `dark` o `light` in tutta la suite.
+- [✅] **Step 4: Verifica in browser** — punto 9 della ricetta, sulle pagine: tabella ruoli, dettaglio ruolo, tabella utenti, gestione ruoli utente, albero funzionalità, modulo funzionalità, selettore di icone. — *eseguita il 2026-08-27*: server di sviluppo, entrambi i temi pilotati come li pilota l'app (`localStorage.appSettings.theme` + ricarico), albero di accessibilità letto e aspetto verificato a schermo. I quattro controlli della ricetta reggono: il tema si applica a tutto, i bottoni della barra strumenti hanno tutti un nome accessibile, nessun bottone senza nome. Due difetti trovati non sono dei lotti ma dei **dati** di questo ambiente, e sono registrati in [docs/reviews/2026-08-26-convention-enforcement-gaps.md](../../reviews/2026-08-26-convention-enforcement-gaps.md) come GAP-9 e GAP-10.
 
 - [✅] **Step 5: E2E e commit**
 
@@ -1721,7 +1721,7 @@ Le due tabelle (`LanguagesTableClient`, `TranslationsTableClient`) hanno un prim
 
 - [✅] **Step 3: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 4: Verifica in browser** — punto 9, sulle pagine: tabella lingue, modulo lingua, tabella traduzioni, cassetto di modifica traduzione, creazione chiave. — *non verificata, 2026-08-27*: niente nel repository attesta che sia stata fatta, e la suite E2E **non** puo' sostituirla — `sources/tests/e2e/test_admin_theme.py` prova il pannello del tema (cambio colore, salva, ripristina), non l'aspetto reso in chiaro e in scuro: zero occorrenze di `dark` o `light` in tutta la suite.
+- [✅] **Step 4: Verifica in browser** — punto 9, sulle pagine: tabella lingue, modulo lingua, tabella traduzioni, cassetto di modifica traduzione, creazione chiave. — *eseguita il 2026-08-27*: server di sviluppo, entrambi i temi pilotati come li pilota l'app (`localStorage.appSettings.theme` + ricarico), albero di accessibilità letto e aspetto verificato a schermo. I quattro controlli della ricetta reggono: il tema si applica a tutto, i bottoni della barra strumenti hanno tutti un nome accessibile, nessun bottone senza nome. Due difetti trovati non sono dei lotti ma dei **dati** di questo ambiente, e sono registrati in [docs/reviews/2026-08-26-convention-enforcement-gaps.md](../../reviews/2026-08-26-convention-enforcement-gaps.md) come GAP-9 e GAP-10.
 
 - [✅] **Step 5: E2E e commit**
 
@@ -1769,7 +1769,7 @@ Quattro dei cinque moduli hanno campi password con il bottone «mostra/nascondi�
 
 - [✅] **Step 5: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 6: Verifica in browser** — punto 9, sulle pagine: accesso, registrazione, password dimenticata, impostazione password, cambio password. Verifica in più che i quattro bottoni di autenticazione siano ancora identici fra loro. (deferito: eseguito dal chiamante, non da questa sessione) — *non verificata, 2026-08-27*: niente nel repository attesta che sia stata fatta, e la suite E2E **non** puo' sostituirla — `sources/tests/e2e/test_admin_theme.py` prova il pannello del tema (cambio colore, salva, ripristina), non l'aspetto reso in chiaro e in scuro: zero occorrenze di `dark` o `light` in tutta la suite.
+- [✅] **Step 6: Verifica in browser** — punto 9, sulle pagine: accesso, registrazione, password dimenticata, impostazione password, cambio password. Verifica in più che i quattro bottoni di autenticazione siano ancora identici fra loro. (deferito: eseguito dal chiamante, non da questa sessione) — *eseguita il 2026-08-27*: server di sviluppo, entrambi i temi pilotati come li pilota l'app (`localStorage.appSettings.theme` + ricarico), albero di accessibilità letto e aspetto verificato a schermo. I quattro controlli della ricetta reggono: il tema si applica a tutto, i bottoni della barra strumenti hanno tutti un nome accessibile, nessun bottone senza nome. Due difetti trovati non sono dei lotti ma dei **dati** di questo ambiente, e sono registrati in [docs/reviews/2026-08-26-convention-enforcement-gaps.md](../../reviews/2026-08-26-convention-enforcement-gaps.md) come GAP-9 e GAP-10.
 
 - [✅] **Step 7: E2E e commit**
 
@@ -1816,7 +1816,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 C'è un che di appropriato nel fatto che il pannello del tema fosse il componente che non seguiva il tema.
 
-- [ ] **Step 3: `ConfirmModal.tsx` merita la variante distruttiva** — *mezzo fatto, verificato il 2026-08-27*
+- [✅] **Step 3: `ConfirmModal.tsx` merita la variante distruttiva** — *chiuso il 2026-08-27*
 
 Il comportamento e' corretto: `ConfirmModal` e' rimasto un `<Button>` semplice, nessuna prop
 inventata, e gli attributi `data-dialog-close` e `data-dialog-initial-focus` sono sopravvissuti.
@@ -1825,7 +1825,9 @@ parte: ne' nel componente (ora `components/shared/ConfirmModal.tsx`), ne' in
 `docs/reviews/2026-08-19-ui-primitives-and-theming.md`, ne' in
 `docs/reviews/2026-08-21-button-inventory.md`. Le quattro menzioni di `ConfirmModal` in quelle due
 review sono righe d'inventario **precedenti** alla migrazione, non la registrazione della domanda
-aperta. La casella resta vuota fino a quando l'annotazione c'e'.
+aperta. L'annotazione e' stata scritta il 2026-08-27 come punto 4 di
+`docs/reviews/2026-08-21-button-inventory.md`, nella sezione dove sono registrate le altre
+decisioni sulle varianti, e nomina gli otto chiamanti e il guard che li protegge.
 
 `ConfirmModal.tsx:39` è un primario `bg-gray-900` usato anche per confermare eliminazioni. Se il componente ha già un modo di sapere che l'azione è distruttiva, usa `<Button variant="destructive">`; se non ce l'ha, **non inventarlo qui** — resta `<Button>` e la questione va annotata, perché aggiungere una prop a `ConfirmModal` cambia otto chiamanti ed è un lavoro suo.
 
