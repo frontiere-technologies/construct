@@ -106,11 +106,11 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
           // drag & drop behaviour change that wants its own E2E coverage,
           // not a drive-by edit here.
           <button
-            // eslint-disable-next-line react-hooks/refs
+            // eslint-disable-next-line react-hooks/refs -- ref e listener di dnd-kit sul nodo nativo, per il motivo nel commento qui sopra
             ref={dragActivatorRef}
-            // eslint-disable-next-line react-hooks/refs
+            // eslint-disable-next-line react-hooks/refs -- ref e listener di dnd-kit sul nodo nativo, per il motivo nel commento qui sopra
             {...dragListeners}
-            // eslint-disable-next-line react-hooks/refs
+            // eslint-disable-next-line react-hooks/refs -- ref e listener di dnd-kit sul nodo nativo, per il motivo nel commento qui sopra
             {...dragAttributes}
             data-testid="drag-handle"
             disabled={!canDrag}
@@ -183,7 +183,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
   // the pointer is released before React flushes the onDragMove state update (real race).
   const setInd = useCallback((v: Indicator | null) => { indicatorRef.current = v; setIndicator(v) }, [])
 
-  const onDragStart = useCallback((e: DragStartEvent) => {
+  const handleDragStart = useCallback((e: DragStartEvent) => {
     const ae = e.activatorEvent as { clientY?: number }
     pointerStartY.current = ae?.clientY ?? 0
     setActiveId(Number(String(e.active.id).replace('item-', '')))
@@ -191,7 +191,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
 
   // onDragMove (not onDragOver) so the indicator updates continuously as the pointer
   // moves *within* the same row — onDragOver only fires when the over droppable changes.
-  const onDragMove = useCallback((e: DragMoveEvent) => {
+  const handleDragMove = useCallback((e: DragMoveEvent) => {
     const { active, over } = e
     if (!over) { setInd(null); return }
     const activeNum = Number(String(active.id).replace('item-', ''))
@@ -257,8 +257,8 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
       id="navigation-tree"
       sensors={sensors}
       collisionDetection={pointerWithin}
-      onDragStart={onDragStart}
-      onDragMove={onDragMove}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onDragCancel={reset}
     >

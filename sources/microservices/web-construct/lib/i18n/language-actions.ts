@@ -12,7 +12,7 @@ import {
   languageInputSchema, type LanguageInput,
 } from './language-rules'
 
-export type ActionResult = { error: string | null }
+export interface ActionResult { error: string | null }
 
 /**
  * drizzle-orm 0.45.2 wraps every driver error before it escapes

@@ -13,9 +13,9 @@ import { ITEM_TYPE_FUNCTIONALITY } from '@/lib/rbac/types'
 import { useI18n } from '@/context/I18nContext'
 import type { CreateNavItemInput, ParentOption } from '@/lib/rbac/types'
 import { defaultNavigationLocale, type NavigationLocale } from '@/lib/rbac/navigation-locales'
+import CustomSelect from '@/components/rbac/CustomSelect'
 import TranslationsAccordion from './TranslationsAccordion'
 import TagInput from './TagInput'
-import CustomSelect from '../CustomSelect'
 import IconPicker from './IconPicker'
 
 interface Initial {

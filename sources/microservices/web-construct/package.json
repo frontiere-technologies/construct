@@ -19,7 +19,9 @@
     "test:env-contract": "node --test ../../devops/env-contract.test.mjs",
     "test:raw-colors": "node --test ../../devops/raw-color-ratchet.test.mjs",
     "test:tokens": "node --test ../../devops/token-vocabulary.test.mjs",
-    "schema:check": "node ../../devops/db/db.mjs schema-check"
+    "test:collection": "node --test ../../devops/test-collection.test.mjs",
+    "schema:check": "node ../../devops/db/db.mjs schema-check",
+    "shadcn:drift": "node ../../devops/shadcn-drift.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

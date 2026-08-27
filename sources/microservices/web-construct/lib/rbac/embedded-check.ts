@@ -5,8 +5,8 @@ import { isIP, type LookupFunction } from 'node:net'
 
 const FETCH_TIMEOUT_MS = 4000
 
-type ResolvedAddress = { address: string; family: number }
-type EmbeddedCheckDependencies = {
+interface ResolvedAddress { address: string; family: number }
+interface EmbeddedCheckDependencies {
   resolveHost: (hostname: string) => Promise<ResolvedAddress[]>
   request: (url: URL, method: 'HEAD' | 'GET', address: ResolvedAddress) => Promise<Response>
 }

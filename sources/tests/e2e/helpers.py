@@ -170,6 +170,6 @@ def switch_language(page, code: str) -> None:
     native_name = option.inner_text().strip()
     option.click()
     expect(switcher).to_contain_text(native_name, timeout=15_000)
-    # The trigger is `disabled` for as long as `switching` is true; waiting for it
+    # The trigger is `disabled` for as long as `isSwitching` is true; waiting for it
     # to come back confirms the transition committed rather than merely started.
     expect(switcher).to_be_enabled(timeout=15_000)

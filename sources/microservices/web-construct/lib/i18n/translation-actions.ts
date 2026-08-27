@@ -13,7 +13,7 @@ import {
   type SaveTranslationsInput, type SaveTranslationsResult, type TranslationConflict,
 } from './types'
 
-export type KeyActionResult = { error: string | null; id?: number }
+export interface KeyActionResult { error: string | null; id?: number }
 
 /** Postgres SQLSTATE for `unique_violation` — see postgres.js's `errorFields` (`67: 'code'`). */
 const PG_UNIQUE_VIOLATION = '23505'

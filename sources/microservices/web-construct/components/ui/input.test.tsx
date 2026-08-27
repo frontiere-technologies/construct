@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { Input, inputBaseClasses } from './input'
 import { Textarea } from './textarea'
-import { Select } from './select'
 
 describe('Input', () => {
   it('renders a native input carrying its type and value through', () => {
@@ -50,14 +49,5 @@ describe('Textarea', () => {
     expect(html).toMatch(/^<textarea /)
     expect(html).toContain('bg-popover')
     expect(html).toContain('border-border')
-  })
-})
-
-describe('Select', () => {
-  it('renders a native select wearing the same clothes as Input', () => {
-    const html = renderToStaticMarkup(<Select><option value="a">A</option></Select>)
-    expect(html).toMatch(/^<select /)
-    expect(html).toContain('bg-popover')
-    expect(html).toContain('<option value="a">A</option>')
   })
 })

@@ -31,7 +31,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
     return walk(nodes)
   }
 
-  const onMove = async (id: number, targetParentId: number, orderPosition: number) => {
+  const handleMove = async (id: number, targetParentId: number, orderPosition: number) => {
     try { await moveNavigationItem(id, { targetParentId, orderPosition }); router.refresh() }
     catch (e) { alert(e instanceof Error ? e.message : t('functionalities.tree.move_failed')) }
   }
@@ -124,7 +124,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
       <NavigationTree
         nodes={filterTree(tree)}
         renderTrailing={trailing}
-        dnd={search.trim() ? undefined : { canDrag: n => !n.isImmutable, onMove }}
+        dnd={search.trim() ? undefined : { canDrag: n => !n.isImmutable, onMove: handleMove }}
       />
     </PageContainer>
   )

@@ -8,6 +8,17 @@ import React, {
 import { ChevronDown, Check } from 'lucide-react'
 import type { SelectOption } from '@/lib/rbac/types'
 
+/**
+ * Il listbox a discesa scritto a mano di questo progetto.
+ *
+ * Sostituirlo con una primitiva accessibile vera — il Select di Radix, che
+ * `npx shadcn add select` porterebbe — e' un lavoro a se': cambia il markup, la
+ * gestione del focus e le asserzioni degli E2E che ci passano. Fino a quel
+ * giorno vive qui, fra i componenti di feature, e non in `components/ui/`:
+ * tenerne un segnaposto la' sotto il nome `Select` e' stato provato e ritirato
+ * il 2026-08-27, perche' occupava un nome dello stock con semantica diversa.
+ */
+
 interface Props {
   value: string | number
   onChange: (v: string | number) => void
@@ -71,7 +82,7 @@ export default function CustomSelect({
     if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) close()
   }
 
-  const onTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+  const handleTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || open) return
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
@@ -79,7 +90,7 @@ export default function CustomSelect({
     }
   }
 
-  const onListKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleListKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || options.length === 0) return
 
     switch (e.key) {
@@ -129,7 +140,7 @@ export default function CustomSelect({
           if (open) close()
           else openList()
         }}
-        onKeyDown={onTriggerKeyDown}
+        onKeyDown={handleTriggerKeyDown}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg border bg-transparent text-left transition-colors
           ${open
             ? 'border-primary ring-2 ring-primary/50'
@@ -156,7 +167,7 @@ export default function CustomSelect({
           tabIndex={-1}
           aria-label={ariaLabel}
           aria-activedescendant={options[activeIndex] ? `${listboxId}-option-${String(options[activeIndex].value)}` : undefined}
-          onKeyDown={onListKeyDown}
+          onKeyDown={handleListKeyDown}
           className="absolute left-0 right-0 top-full mt-1 z-40 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover py-1 shadow-lg outline-none"
         >
           {options.map((opt, index) => {
