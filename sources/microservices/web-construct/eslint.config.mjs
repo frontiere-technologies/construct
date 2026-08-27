@@ -41,6 +41,58 @@ const config = [
       }],
     },
   },
+  {
+    // Export nominati per componenti, hook, utility e tipi. Il motivo non e'
+    // l'ordine: le porte di qualita' di questo progetto — raw-color-ratchet,
+    // token-vocabulary, icon-only-button-accessible-name — leggono il sorgente
+    // per nome di simbolo, e l'export default permette a ogni import di
+    // rinominare il simbolo a piacere. La regola non si applica ad app/**,
+    // dove Next impone export default per page, layout, route, error e loading.
+    files: ['components/**/*.{ts,tsx}'],
+    rules: { 'import-x/no-default-export': 'error' },
+  },
+  {
+    // Lista fatta per accorciarsi, non per restare.
+    //
+    // Questi 27 file avevano un export default prima che la regola esistesse, e
+    // convertirli tutti in una volta avrebbe gonfiato un diff che sposta gia' 36
+    // file. I sei che si sono spostati in components/grid/ e components/shared/
+    // sono gia' convertiti, perche' i loro import si toccavano comunque.
+    //
+    // Quando ne converti uno, cancella la sua riga. E se ne rinomini uno senza
+    // convertirlo, la riga non combacia piu' ed ESLint inizia a pretendere
+    // l'export nominato: e' voluto — quel file lo hai toccato.
+    files: [
+      'components/LanguageSwitcher.tsx',
+      'components/ProfileForm.tsx',
+      'components/i18n/languages/LanguageFormModal.tsx',
+      'components/i18n/languages/LanguagesTableClient.tsx',
+      'components/i18n/translations/CreateTranslationKeyModal.tsx',
+      'components/i18n/translations/TranslationEditorDrawer.tsx',
+      'components/i18n/translations/TranslationValueCell.tsx',
+      'components/i18n/translations/TranslationsTableClient.tsx',
+      'components/rbac/CustomSelect.tsx',
+      'components/rbac/FilterDrawer.tsx',
+      'components/rbac/GridRowActionsMenu.tsx',
+      'components/rbac/NavigationTree.tsx',
+      'components/rbac/PermissionsTree.tsx',
+      'components/rbac/filters/EnumSelectFilter.tsx',
+      'components/rbac/functionalities/FunctionalitiesTreeClient.tsx',
+      'components/rbac/functionalities/FunctionalityForm.tsx',
+      'components/rbac/functionalities/IconPicker.tsx',
+      'components/rbac/functionalities/TagInput.tsx',
+      'components/rbac/functionalities/TranslationsAccordion.tsx',
+      'components/rbac/roles/CreateRoleModal.tsx',
+      'components/rbac/roles/RenameRoleModal.tsx',
+      'components/rbac/roles/RoleDetailClient.tsx',
+      'components/rbac/roles/RolesTableClient.tsx',
+      'components/rbac/users/ManageRolesModal.tsx',
+      'components/rbac/users/RoleMultiSelect.tsx',
+      'components/rbac/users/StatusBadge.tsx',
+      'components/rbac/users/UsersTableClient.tsx',
+    ],
+    rules: { 'import-x/no-default-export': 'off' },
+  },
 ]
 
 export default config

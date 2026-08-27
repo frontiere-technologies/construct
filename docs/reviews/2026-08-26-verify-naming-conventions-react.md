@@ -91,3 +91,21 @@ Do not mix the application and library filename strategies within the same folde
   }) {
     // ...
   }
+  ```
+
+La guida originale è stata troncata in questo punto, a metà dell'esempio nella sezione "Types".
+
+---
+
+## Esito, 2026-08-26
+
+Questa guida è stata misurata contro il codice e poi adottata in forma rivista.
+Le convenzioni valide per il progetto vivono ora in
+`sources/microservices/web-construct/AGENTS.md`, che registra anche le cinque
+regole respinte e il motivo di ciascuna. Il lavoro di allineamento è descritto in
+`docs/superpowers/specs/2026-08-26-react-naming-conventions-design.md` e
+`docs/superpowers/plans/2026-08-26-react-naming-conventions.md`.
+
+Nota: il file originale arriva troncato a metà dell'esempio nella sezione
+"Types". Tutto ciò che contiene è stato verificato; se dopo quella sezione
+c'erano altre regole, non sono mai arrivate.

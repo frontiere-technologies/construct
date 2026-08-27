@@ -6,8 +6,7 @@ import React, {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
-
-export interface SelectOption { value: string | number; label: string }
+import type { SelectOption } from '@/lib/rbac/types'
 
 interface Props {
   value: string | number

@@ -25,41 +25,6 @@ const FRAMEWORK_RESERVED = new Set([
   'not-found', 'template', 'default', 'middleware',
 ])
 
-/**
- * Esenzione temporanea, da rimuovere nel compito B-5.
- *
- * Sono i diciannove file non-kebab che `components/ui/` contiene ancora in
- * PR-A e che PR-B smonta: il modulo data-grid verso `components/grid/`, i tre
- * componenti propri verso `components/shared/`, le quattro guardie verso
- * `guards/`. Senza l'esenzione la guardia sarebbe rossa su una PR gia' fusa.
- *
- * Elencati per nome e non come prefisso di cartella, di proposito: esentare
- * `components/ui/` in blocco lascerebbe il test sul kebab-case a girare su un
- * elenco vuoto, cioe' a non asserire nulla. Cosi' invece continua a controllare
- * gli altri undici file della cartella, e acchiappa una violazione nuova
- * introdotta lì dentro nel frattempo.
- */
-const EXEMPT_FROM_FILENAME_RULES = [
-  'components/ui/AccessibleDialog.test.tsx',
-  'components/ui/AccessibleDialog.tsx',
-  'components/ui/ColumnVisibilityToggle.tsx',
-  'components/ui/ConfirmModal.tsx',
-  'components/ui/DataGrid.tsx',
-  'components/ui/GridToolbar.test.tsx',
-  'components/ui/GridToolbar.tsx',
-  'components/ui/LoadingStatus.test.tsx',
-  'components/ui/LoadingStatus.tsx',
-  'components/ui/buttonInteractionStyles.test.ts',
-  'components/ui/dataGridConfig.test.ts',
-  'components/ui/dataGridConfig.ts',
-  'components/ui/dialogConsumers.test.ts',
-  'components/ui/disabledButtonHoverStyles.test.ts',
-  'components/ui/gridColumnFilters.test.ts',
-  'components/ui/gridColumnFilters.ts',
-  'components/ui/gridColumnSizing.test.ts',
-  'components/ui/gridColumnSizing.ts',
-  'components/ui/iconOnlyButtonAccessibleName.test.ts',
-]
 
 function sourceFiles(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap(entry => {
@@ -77,10 +42,6 @@ function allSourceFiles(): string[] {
     })
     .flatMap(sourceFiles)
     .map(path => relative(process.cwd(), path))
-}
-
-function exempt(file: string): boolean {
-  return EXEMPT_FROM_FILENAME_RULES.includes(file)
 }
 
 /** Il gambo del nome: il basename senza nessuno dei suffissi puntati. */
@@ -175,7 +136,6 @@ describe('containsJsx', () => {
 describe('file naming conventions', () => {
   it('has no camelCase filename anywhere', () => {
     const offenders = allSourceFiles()
-      .filter(file => !exempt(file))
       .filter(file => isCamelCase(stemOf(file)))
 
     expect(offenders).toEqual([])
@@ -184,7 +144,6 @@ describe('file naming conventions', () => {
   it('names every file under components/ui in kebab-case', () => {
     const offenders = allSourceFiles()
       .filter(file => file.startsWith('components/ui/'))
-      .filter(file => !exempt(file))
       .filter(file => !isKebabCase(stemOf(file)))
 
     expect(offenders).toEqual([])

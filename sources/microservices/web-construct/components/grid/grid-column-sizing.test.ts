@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ColDef } from 'ag-grid-community'
-import { GRID_MIN_COLUMN_WIDTH, normalizeGridColumnDefs } from './gridColumnSizing'
+import { GRID_MIN_COLUMN_WIDTH, normalizeGridColumnDefs } from './grid-column-sizing'
 
 describe('normalizeGridColumnDefs', () => {
   it('keeps actions fixed and gives every data column a readable resize minimum', () => {

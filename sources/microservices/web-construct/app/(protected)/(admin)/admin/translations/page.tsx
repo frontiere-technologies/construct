@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
-import { PageContainer } from '@/components/PageContainer'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
 import { listModules, listNamespaces } from '@/lib/i18n/translation-service'
 import { listActiveLanguages } from '@/lib/i18n/language-service'

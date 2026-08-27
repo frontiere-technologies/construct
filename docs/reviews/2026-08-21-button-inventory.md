@@ -134,6 +134,21 @@ Figma rappresenterà comunque a parte. **Fuori dal perimetro di UI-1.**
 l'unico posto del progetto dove il problema è già stato risolto, in piccolo. **Da lasciare come
 sono**, finché non si decide se la voce di navigazione diventa un componente a sé.
 
+**4. Questione aperta, non decisa: `ConfirmModal` merita la variante `destructive`?** Il suo bottone
+di conferma è un `default` — un primario — e serve anche a confermare eliminazioni, dove
+`destructive` sarebbe la variante giusta. Non è stato risolto durante la migrazione shadcn del
+2026-08-24, e per una ragione: `ConfirmModal` non ha oggi alcun modo di sapere se l'azione che
+conferma è distruttiva. Dargliene uno significa aggiungere una prop e passarla da **otto**
+chiamanti, che è un lavoro suo e non la coda di una migrazione di bottoni. Inventare la prop lì
+dentro sarebbe stato peggio: avrebbe messo la scelta della variante nel componente sbagliato.
+
+Resta quindi un `<Button>` semplice, e questa voce esiste perché la domanda non si perda. Chi la
+riprende parta da qui: gli otto chiamanti sono quelli che
+`guards/dialog-consumers.test.ts` già elenca, e quel guard è anche la rete che impedisce alla
+migrazione di rompere `data-dialog-close` e `titleId=` mentre li si tocca. *Registrata il
+2026-08-27, verificando voce per voce il piano del 2026-08-24: il comportamento era corretto, ma
+l'annotazione che quel piano chiedeva non era mai stata scritta.*
+
 Sommando: UI-1 deve coprire **59 bottoni** con le varianti di `Button` (A, B, C, D, J), più il gruppo
 G — 5 bottoni veri, ma rimasti nativi per decisione — che porta la migrazione effettiva a toccare
 64 punti d'uso su 81, contando anche chi resta fuori per scelta esplicita invece che per omissione.

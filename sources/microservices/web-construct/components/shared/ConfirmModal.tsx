@@ -2,7 +2,7 @@
 
 import React, { useId, useState } from 'react'
 import { useI18n } from '@/context/I18nContext'
-import AccessibleDialog from '@/components/ui/AccessibleDialog'
+import { AccessibleDialog } from '@/components/shared/AccessibleDialog'
 import { Button } from '@/components/ui/button'
 
 interface ConfirmModalProps {
@@ -13,7 +13,7 @@ interface ConfirmModalProps {
   onCancel: () => void
 }
 
-export default function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }: ConfirmModalProps) {
+export function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }: ConfirmModalProps) {
   const { t } = useI18n()
   const [busy, setBusy] = useState(false)
   const titleId = useId()

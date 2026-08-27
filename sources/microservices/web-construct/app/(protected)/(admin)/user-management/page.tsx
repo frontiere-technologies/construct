@@ -1,6 +1,6 @@
 import { getAllRoles } from '@/lib/rbac/roles-service'
 import UsersTableClient from '@/components/rbac/users/UsersTableClient'
-import { PageContainer } from '@/components/PageContainer'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
 import { parseUsersGridUrlParams } from '@/lib/rbac/users-grid-query'
 

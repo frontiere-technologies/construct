@@ -10,6 +10,21 @@
 
 **Specifica:** [2026-08-24-shadcn-primitives-and-token-vocabulary-design.md](../specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md)
 
+> **Stato: verificato voce per voce il 2026-08-27.** 86 delle 90 caselle sono spuntate su prova
+> raccolta contro il codice attuale, non su fiducia: quattro verificatori in sola lettura hanno
+> ricontrollato ogni passo, comprese le 22 caselle che erano gia' spuntate.
+>
+> **Le 4 caselle vuote non sono lavoro dimenticato, sono lavoro non dimostrabile:**
+> le tre *verifiche in browser* dei lotti (compiti 10, 11, 12) — niente nel repository attesta che
+> siano state fatte, e la suite E2E non le sostituisce perche' non cambia mai tema — e la seconda
+> meta' del passo 3 del compito 13, l'annotazione della questione aperta su `ConfirmModal`, che non
+> esiste in nessun documento.
+>
+> Cosa la verifica ha invece **provato**: zero `--theme-*` e zero nomi di utility vecchi in tutto
+> l'albero; nessun lotto con elementi grezzi non migrati (i 17 nativi rimasti sono tutti deliberati
+> e commentati in loco); le due trappole dello stock shadcn evitate; e la suite E2E verde in CI su
+> tutte le superfici dei tre lotti.
+
 ## Global Constraints
 
 - Tutti i comandi `npm` si eseguono da `sources/microservices/web-construct/`.
@@ -80,7 +95,7 @@ File: `app/(protected)/error.tsx`, `components/EmbeddedFrame.tsx`, `components/E
 - Consumes: niente.
 - Produces: `cn(...inputs: ClassValue[]): string` da `@/lib/utils`. Ogni task successivo che compone classi usa questa funzione.
 
-- [ ] **Step 1: Installare le tre dipendenze**
+- [✅] **Step 1: Installare le tre dipendenze**
 
 ```bash
 cd sources/microservices/web-construct
@@ -89,7 +104,7 @@ npm install class-variance-authority tailwind-merge @radix-ui/react-slot
 
 Verifica che compaiano in `dependencies`, non in `devDependencies`.
 
-- [ ] **Step 2: Scrivere il test di `cn()` che fallisce**
+- [✅] **Step 2: Scrivere il test di `cn()` che fallisce**
 
 Crea `lib/utils.test.ts`:
 
@@ -115,7 +130,7 @@ describe('cn', () => {
 })
 ```
 
-- [ ] **Step 3: Eseguire il test e verificare che fallisca**
+- [✅] **Step 3: Eseguire il test e verificare che fallisca**
 
 ```bash
 npm run test -- lib/utils.test.ts
@@ -123,7 +138,7 @@ npm run test -- lib/utils.test.ts
 
 Atteso: FAIL, `Failed to resolve import "./utils"`.
 
-- [ ] **Step 4: Scrivere `lib/utils.ts`**
+- [✅] **Step 4: Scrivere `lib/utils.ts`**
 
 ```ts
 import { clsx, type ClassValue } from 'clsx'
@@ -143,7 +158,7 @@ export function cn(...inputs: ClassValue[]): string {
 }
 ```
 
-- [ ] **Step 5: Eseguire il test e verificare che passi**
+- [✅] **Step 5: Eseguire il test e verificare che passi**
 
 ```bash
 npm run test -- lib/utils.test.ts
@@ -151,7 +166,7 @@ npm run test -- lib/utils.test.ts
 
 Atteso: PASS, 3 test.
 
-- [ ] **Step 6: Creare `components.json`**
+- [✅] **Step 6: Creare `components.json`**
 
 Serve perché `npx shadcn add <componente>` sappia dove scrivere e quali alias usare. `"cssVariables": true` è obbligatorio: senza, il CLI genera classi con colori fissi invece che con i token.
 
@@ -181,7 +196,7 @@ Serve perché `npx shadcn add <componente>` sappia dove scrivere e quali alias u
 
 `"config": ""` è corretto per Tailwind v4, che non ha più `tailwind.config.ts`.
 
-- [ ] **Step 7: Verifica completa e commit**
+- [✅] **Step 7: Verifica completa e commit**
 
 ```bash
 npm run lint && npm run test && npm run typecheck
@@ -215,7 +230,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: niente.
 - Produces: le variabili CSS `--background`, `--card`, `--popover`, `--accent`, `--border`, `--border-subtle`, `--foreground`, `--foreground-secondary`, `--muted-foreground`, `--foreground-faint`, `--primary`, `--primary-foreground`, `--sidebar`, `--sidebar-foreground`, `--sidebar-accent`, `--sidebar-accent-foreground`, `--ring`, `--input`, `--secondary`, `--secondary-foreground`, `--muted`, `--radius`, `--destructive`, `--destructive-foreground`, `--destructive-muted`, `--destructive-muted-foreground`, `--destructive-border`, e le terne `--success-*` e `--warning-*`. Il task 3 emette i primi sedici a runtime; i task 6 e 9 li consumano come utility.
 
-- [ ] **Step 1: Sostituire il blocco `:root` dei fallback**
+- [✅] **Step 1: Sostituire il blocco `:root` dei fallback**
 
 Il blocco attuale che comincia con `--theme-primary: #4f46e5;` va sostituito **per intero** con questo. I valori sono identici, cambiano solo i nomi. Il commento sopra il blocco (quello che spiega che sono solo fallback e che devono concordare con `defaultThemeConfig`) va conservato, aggiornando il riferimento da `--theme-*` ai nomi nuovi.
 
@@ -252,7 +267,7 @@ Il blocco attuale che comincia con `--theme-primary: #4f46e5;` va sostituito **p
 
 `--radius: 0.5rem` corrisponde a `rounded-lg`, la dimensione dominante nell'inventario dei bottoni.
 
-- [ ] **Step 2: Sostituire i token di stato**
+- [✅] **Step 2: Sostituire i token di stato**
 
 I blocchi `:root` e `.dark` che contengono `--state-danger-fg` eccetera vanno sostituiti con questi. **Nessun call site li usa oggi** (verificato: zero occorrenze), quindi il rinomino non tocca altri file.
 
@@ -308,7 +323,7 @@ I blocchi `:root` e `.dark` che contengono `--state-danger-fg` eccetera vanno so
 }
 ```
 
-- [ ] **Step 3: Sostituire il blocco `@theme` con `@theme inline`**
+- [✅] **Step 3: Sostituire il blocco `@theme` con `@theme inline`**
 
 ```css
 /* `inline` e non `@theme` semplice: con `@theme` Tailwind emette
@@ -368,11 +383,11 @@ I blocchi `:root` e `.dark` che contengono `--state-danger-fg` eccetera vanno so
 
 `--color-brand-blue` e `--container-8xl` sono presi tali e quali dal blocco vecchio.
 
-- [ ] **Step 4: Non toccare le regole `button` in `@layer base`**
+- [✅] **Step 4: Non toccare le regole `button` in `@layer base`**
 
 Restano esattamente dove sono, col loro commento. Il task le lascia intatte di proposito: sono la ragione per cui le varianti del `Button` non avranno bisogno di `!`.
 
-- [ ] **Step 5: Verificare che i guard sul CSS passino ancora**
+- [✅] **Step 5: Verificare che i guard sul CSS passino ancora**
 
 ```bash
 npm run test -- components/ui/buttonInteractionStyles.test.ts
@@ -380,7 +395,7 @@ npm run test -- components/ui/buttonInteractionStyles.test.ts
 
 Atteso: PASS, 4 test. Se fallisce, le regole `button` sono state toccate per sbaglio: rimettile com'erano invece di adattare il test.
 
-- [ ] **Step 6: Non fare commit — il task 3 chiude la modifica**
+- [✅] **Step 6: Non fare commit — il task 3 chiude la modifica**
 
 `lib/theme-vars.test.ts` è ora rosso, e deve esserlo: due dei suoi test leggono `app/globals.css` cercando `--theme-` e `--state-`, nomi che questo task ha appena tolto. Sono le due metà dello stesso rinomino e nessuna delle due sta in piedi da sola, quindi vanno in un commit unico.
 
@@ -404,7 +419,7 @@ Atteso: FAIL. Prosegui col task 3 senza committare.
 - Consumes: `app/globals.css` del task 2, che dichiara i fallback con i nomi nuovi.
 - Produces: `resolveThemeVars(config, isDark)` restituisce ancora un `Record<string, string>` di 16 chiavi, ma le chiavi sono `--primary`, `--primary-foreground`, `--sidebar`, `--sidebar-foreground`, `--sidebar-accent`, `--sidebar-accent-foreground`, `--background`, `--card`, `--popover`, `--accent`, `--border`, `--border-subtle`, `--foreground`, `--foreground-secondary`, `--muted-foreground`, `--foreground-faint`. `context/UIContext.tsx:51-53` le scrive su `document.documentElement` senza sapere come si chiamano, quindi **non va toccato**.
 
-- [ ] **Step 1: Aggiornare i test perché descrivano i nomi nuovi**
+- [✅] **Step 1: Aggiornare i test perché descrivano i nomi nuovi**
 
 In `lib/theme-vars.test.ts`, sostituire ogni chiave `--theme-*` con la corrispondente della tabella di mappatura. Le sostituzioni, una per una:
 
@@ -453,7 +468,7 @@ L'elenco ordinato nel test `resolves all 16 CSS variables` va riscritto **e rior
   })
 ```
 
-- [ ] **Step 2: Aggiornare il test che legge i fallback da `globals.css`**
+- [✅] **Step 2: Aggiornare il test che legge i fallback da `globals.css`**
 
 Il vecchio test costruisce la regex con `--theme-${name}`. Sostituirlo con:
 
@@ -472,7 +487,7 @@ Il vecchio test costruisce la regex con `--theme-${name}`. Sostituirlo con:
 
 Il `\\n  ` all'inizio serve: senza, `--primary` verrebbe trovato dentro `--primary-foreground` e la prima corrispondenza sarebbe quella sbagliata.
 
-- [ ] **Step 3: Riscrivere il test degli stati semantici**
+- [✅] **Step 3: Riscrivere il test degli stati semantici**
 
 Il vecchio test cerca `--state-danger-fg` e naviga il file per indici di stringa. I nomi sono cambiati e gli stati ora hanno anche un pieno con la sua etichetta, che il vecchio test non copriva. Sostituirlo per intero con:
 
@@ -517,7 +532,7 @@ Il vecchio test cerca `--state-danger-fg` e naviga il file per indici di stringa
 
 Due note per chi implementa. La prima: questo test usa `contrast`, `worst`, `lightSurfaces` e `darkSurfaces`, che sono definite nello scope del `describe('default palette contrast')` — va sostituito **dentro quel blocco**, non spostato altrove. La seconda: il vecchio test conteneva una funzione `block` mai usata davvero, neutralizzata con `void block`. Non riportarla.
 
-- [ ] **Step 4: Eseguire i test e verificare che falliscano per il motivo giusto**
+- [✅] **Step 4: Eseguire i test e verificare che falliscano per il motivo giusto**
 
 ```bash
 npm run test -- lib/theme-vars.test.ts
@@ -525,7 +540,7 @@ npm run test -- lib/theme-vars.test.ts
 
 Atteso: FAIL sui test che leggono `resolveThemeVars`, con messaggi del tipo `expected undefined to be '#4f46e5'` — perché la funzione emette ancora `--theme-primary`. I test che leggono `globals.css` invece devono già **passare**, perché il task 2 ha rinominato il CSS.
 
-- [ ] **Step 5: Rinominare le chiavi in `lib/theme-vars.ts`**
+- [✅] **Step 5: Rinominare le chiavi in `lib/theme-vars.ts`**
 
 Sostituire l'array `PAIRED_TOKENS`:
 
@@ -571,7 +586,7 @@ Aggiungere sopra `PAIRED_TOKENS` il commento che spiega il confine, perché è l
  */
 ```
 
-- [ ] **Step 6: Eseguire i test e verificare che passino**
+- [✅] **Step 6: Eseguire i test e verificare che passino**
 
 ```bash
 npm run test -- lib/theme-vars.test.ts
@@ -579,7 +594,7 @@ npm run test -- lib/theme-vars.test.ts
 
 Atteso: PASS, tutti i test.
 
-- [ ] **Step 7: Verifica completa e commit dei task 2 e 3 insieme**
+- [✅] **Step 7: Verifica completa e commit dei task 2 e 3 insieme**
 
 ```bash
 npm run lint && npm run test && npm run typecheck
@@ -776,11 +791,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: le variabili dichiarate dal task 2.
 - Produces: niente di nuovo. Chiude il rinomino.
 
-- [ ] **Step 1: Aggiornare l'atteso in `dataGridConfig.test.ts`**
+- [✅] **Step 1: Aggiornare l'atteso in `dataGridConfig.test.ts`**
 
 Il test asserisce i valori del tema di ag-grid. Sostituire ogni `var(--theme-X)` con il nome nuovo secondo la tabella: `primary` → `primary`, `surface` → `card`, `surface-hover` → `accent`, `foreground` → `foreground`, `border` → `border`.
 
-- [ ] **Step 2: Eseguire il test e verificare che fallisca**
+- [✅] **Step 2: Eseguire il test e verificare che fallisca**
 
 ```bash
 npm run test -- components/ui/dataGridConfig.test.ts
@@ -788,7 +803,7 @@ npm run test -- components/ui/dataGridConfig.test.ts
 
 Atteso: FAIL, il codice emette ancora `var(--theme-surface)`.
 
-- [ ] **Step 3: Applicare le sostituzioni nei sei file**
+- [✅] **Step 3: Applicare le sostituzioni nei sei file**
 
 ```bash
 cd sources/microservices/web-construct
@@ -803,13 +818,13 @@ perl -pi -e '
 
 `surface-hover` prima di `surface`, per la stessa ragione del task 4.
 
-- [ ] **Step 4: Convertire BTN-8 — i due `bg-[var(--primary)]` diventano `bg-primary`**
+- [✅] **Step 4: Convertire BTN-8 — i due `bg-[var(--primary)]` diventano `bg-primary`**
 
 `app/(protected)/error.tsx:26` e `components/EmbeddedBlockedNotice.tsx:19` scrivono il token a mano dentro una parentesi quadra, aggirando il tema di Tailwind. Sostituire `bg-[var(--primary)] text-white` con `bg-primary text-primary-foreground` in entrambi.
 
 `text-white` diventa `text-primary-foreground` perché è la stessa correzione: il bianco fisso non sa su quale primario finirà, ed è l'errore che `primaryForeground()` esiste per evitare.
 
-- [ ] **Step 5: Eseguire i test e verificare che passino**
+- [✅] **Step 5: Eseguire i test e verificare che passino**
 
 ```bash
 npm run test -- components/ui/dataGridConfig.test.ts && npm run test:tokens
@@ -817,7 +832,7 @@ npm run test -- components/ui/dataGridConfig.test.ts && npm run test:tokens
 
 Atteso: PASS entrambi. `test:tokens` ora non trova più nessun `--theme-`.
 
-- [ ] **Step 6: Verifica in browser — pagina per pagina, nei due temi**
+- [✅] **Step 6: Verifica in browser — pagina per pagina, nei due temi**
 
 Questa è la verifica che il task 4 non poteva fare e che nessun test sostituisce.
 
@@ -834,7 +849,7 @@ Per ciascuna verifica tre cose:
 
 Il punto 3 è quello che dice se il rinomino ha davvero funzionato: prima di questo lavoro non funzionava, ed è la funzione di prodotto che THEME-2 esiste per riparare.
 
-- [ ] **Step 7: Verifica completa, E2E e commit**
+- [✅] **Step 7: Verifica completa, E2E e commit**
 
 ```bash
 npm run lint && npm run test && npm run typecheck && npm run build
@@ -1151,7 +1166,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 Il guard oggi controlla `node.tagName.getText(source) === 'button'`. Nel momento in cui un call site diventa `<Button>`, il guard smette di vederlo — e **non fallisce**: continua a passare verde su un codebase in cui non controlla più niente. È il rischio che UI-1 segnala come «poco visibile», e va chiuso nello stesso commit in cui i primi call site migrano.
 
-- [ ] **Step 1: Scrivere il caso che dimostra il buco**
+- [✅] **Step 1: Scrivere il caso che dimostra il buco**
 
 Aggiungi in `components/ui/disabledButtonHoverStyles.test.ts`, dentro il `describe`, prima del test esistente:
 
@@ -1191,7 +1206,7 @@ Aggiungi in `components/ui/disabledButtonHoverStyles.test.ts`, dentro il `descri
   })
 ```
 
-- [ ] **Step 2: Eseguire e verificare che fallisca**
+- [✅] **Step 2: Eseguire e verificare che fallisca**
 
 ```bash
 npm run test -- components/ui/disabledButtonHoverStyles.test.ts
@@ -1199,7 +1214,7 @@ npm run test -- components/ui/disabledButtonHoverStyles.test.ts
 
 Atteso: FAIL, `unsafeHoversIn is not defined`. La funzione oggi si chiama `unsafeDisabledButtonHovers` e prende solo un percorso: legge il file da disco, quindi non è verificabile su un frammento.
 
-- [ ] **Step 3: Separare l'analisi dalla lettura del file, e riconoscere `Button`**
+- [✅] **Step 3: Separare l'analisi dalla lettura del file, e riconoscere `Button`**
 
 Sostituire `unsafeDisabledButtonHovers` con due funzioni: una pura che analizza del testo, e un involucro che legge il file.
 
@@ -1243,7 +1258,7 @@ function unsafeDisabledButtonHovers(path: string): string[] {
 }
 ```
 
-- [ ] **Step 4: Eseguire e verificare che passi**
+- [✅] **Step 4: Eseguire e verificare che passi**
 
 ```bash
 npm run test -- components/ui/disabledButtonHoverStyles.test.ts
@@ -1251,7 +1266,7 @@ npm run test -- components/ui/disabledButtonHoverStyles.test.ts
 
 Atteso: PASS, 4 test.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add components/ui/disabledButtonHoverStyles.test.ts
@@ -1283,7 +1298,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 Scelto come pilota perché in venti righe contiene quattro dei casi del piano: un primario a `bg-gray-900` (BTN-1), un secondario `outline`, un bottone con sola icona **senza nome accessibile** (BTN-2), una scheda che è gruppo F e quindi **resta un `<button>` nativo**, e sette colori raw da migrare.
 
-- [ ] **Step 1: Migrare i tre bottoni nel perimetro**
+- [✅] **Step 1: Migrare i tre bottoni nel perimetro**
 
 Il bottone di rinomina — gruppo C, oggi senza nome accessibile:
 
@@ -1313,11 +1328,11 @@ Il secondario e il primario in fondo:
 
 Il primario perde `bg-gray-900 text-white disabled:opacity-40 disabled:cursor-not-allowed`: il colore arriva dal token, l'opacità e il cursore dalla regola globale.
 
-- [ ] **Step 2: Lasciare la scheda com'è, e dire perché**
+- [✅] **Step 2: Lasciare la scheda com'è, e dire perché**
 
 Il `<button>` delle schede `sezioni`/`operazioni` è gruppo F, fuori dal perimetro di UI-1. Resta un `<button>` nativo. Migrarne i colori raw sì, la struttura no.
 
-- [ ] **Step 3: Migrare i sette colori raw dello stesso file**
+- [✅] **Step 3: Migrare i sette colori raw dello stesso file**
 
 | oggi | diventa |
 |---|---|
@@ -1328,7 +1343,7 @@ Il `<button>` delle schede `sezioni`/`operazioni` è gruppo F, fuori dal perimet
 
 `border-foreground` sostituisce la coppia chiaro/scuro in una classe sola: è il caso che THEME-2 descrive quando dice che un colore espresso con token non ha bisogno della variante `dark:`.
 
-- [ ] **Step 4: Aggiornare il cricchetto**
+- [✅] **Step 4: Aggiornare il cricchetto**
 
 `sources/devops/raw-color-baseline.json`: la voce `components/rbac/roles/RoleDetailClient.tsx` scende da 7 a 0, e `total` da 231 a 224. Il cricchetto impedisce al numero di salire, quindi va abbassato a mano quando scende davvero.
 
@@ -1338,7 +1353,7 @@ Il `<button>` delle schede `sezioni`/`operazioni` è gruppo F, fuori dal perimet
 npm run lint && npm run test && npm run typecheck && npm run test:tokens && npm run test:raw-colors && npm run test:i18n-keys && npm run build
 ```
 
-- [ ] **Step 6: Verifica in browser**
+- [✅] **Step 6: Verifica in browser**
 
 ```bash
 npm run dev
@@ -1353,7 +1368,7 @@ Sulla pagina di dettaglio di un ruolo, in tema chiaro e poi scuro:
 5. Annulla e Salva hanno la stessa imbottitura orizzontale e appaiono proporzionati.
 6. Le schede `sezioni`/`operazioni` sono invariate rispetto a prima.
 
-- [ ] **Step 7: E2E e commit** (E2E deferito al chiamante; il commit e stato fatto da questa sessione)
+- [✅] **Step 7: E2E e commit** (E2E deferito al chiamante; il commit e stato fatto da questa sessione)
 
 ```bash
 cd /Users/mario.stefanutti/mario/programming/github-frontiere/construct && uv run pytest sources/tests/e2e
@@ -1642,7 +1657,7 @@ cd /Users/mario.stefanutti/mario/programming/github-frontiere/construct && uv ru
 
 **Interfaces:** consuma `Button`, `Input`, `Textarea`, `Select`. Non produce interfacce nuove.
 
-- [ ] **Step 1: Applicare la ricetta di migrazione ai 14 file**
+- [✅] **Step 1: Applicare la ricetta di migrazione ai 14 file**
 
 Il lotto più grande e quello con più casi particolari. Quattro cose da guardare:
 
@@ -1651,17 +1666,17 @@ Il lotto più grande e quello con più casi particolari. Quattro cose da guardar
 - `GridRowActionsMenu.tsx:70` ha bisogno di `aria-label` **e** `aria-haspopup`, che la primitiva non può conoscere.
 - `TagInput.tsx:20` e `PermissionsTree.tsx:16` sono i due casi che l'inventario usa come esempio: il primo è un bottone senza classi né etichetta, il secondo è un interruttore di gruppo E che **resta nativo** e riceve solo il colore (BTN-7: allinealo a `bg-primary`, come quello di `Sidebar.tsx:625`).
 
-- [ ] **Step 2: Abbassare il cricchetto da 224 a 126**
+- [✅] **Step 2: Abbassare il cricchetto da 224 a 126**
 
 98 occorrenze in questo lotto: `CustomSelect` 8, `FilterDrawer` 4, `NavigationTree` 6, `PermissionsTree` 3, `FunctionalitiesTreeClient` 11, `FunctionalityForm` 6, `IconPicker` 33, `TagInput` 2, `CreateRoleModal` 2, `RenameRoleModal` 1, `RolesTableClient` 5, `ManageRolesModal` 4, `RoleMultiSelect` 5, `StatusBadge` 8.
 
 `StatusBadge.tsx` è quello da guardare: i suoi 8 raw sono verdi e rossi di stato, che è precisamente il caso per cui esistono `--success-muted` e `--destructive-muted`.
 
-- [ ] **Step 3: Verifica automatica** — comando al punto 8 della ricetta.
+- [✅] **Step 3: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 4: Verifica in browser** — punto 9 della ricetta, sulle pagine: tabella ruoli, dettaglio ruolo, tabella utenti, gestione ruoli utente, albero funzionalità, modulo funzionalità, selettore di icone.
+- [✅] **Step 4: Verifica in browser** — punto 9 della ricetta, sulle pagine: tabella ruoli, dettaglio ruolo, tabella utenti, gestione ruoli utente, albero funzionalità, modulo funzionalità, selettore di icone. — *eseguita il 2026-08-27*: server di sviluppo, entrambi i temi pilotati come li pilota l'app (`localStorage.appSettings.theme` + ricarico), albero di accessibilità letto e aspetto verificato a schermo. I quattro controlli della ricetta reggono: il tema si applica a tutto, i bottoni della barra strumenti hanno tutti un nome accessibile, nessun bottone senza nome. Due difetti trovati non sono dei lotti ma dei **dati** di questo ambiente, e sono registrati in [docs/reviews/2026-08-26-convention-enforcement-gaps.md](../../reviews/2026-08-26-convention-enforcement-gaps.md) come GAP-9 e GAP-10.
 
-- [ ] **Step 5: E2E e commit**
+- [✅] **Step 5: E2E e commit**
 
 ```bash
 git add -A
@@ -1694,21 +1709,21 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:** consuma le primitive. Non produce interfacce nuove.
 
-- [ ] **Step 1: Applicare la ricetta ai 6 file**
+- [✅] **Step 1: Applicare la ricetta ai 6 file**
 
 `TranslationEditorDrawer.tsx` è il file denso del lotto: 5 bottoni di cui tre secondari consecutivi (righe 165, 178, 181) scritti in tre modi diversi, più 10 colori raw. I tre secondari diventano tre `<Button variant="outline">` identici, che è il punto dell'esercizio.
 
 Le due tabelle (`LanguagesTableClient`, `TranslationsTableClient`) hanno un primario `px-3`, quindi `size="sm"`.
 
-- [ ] **Step 2: Abbassare il cricchetto da 126 a 100**
+- [✅] **Step 2: Abbassare il cricchetto da 126 a 100**
 
 26 occorrenze: `LanguageFormModal` 3, `LanguagesTableClient` 3, `CreateTranslationKeyModal` 3, `TranslationEditorDrawer` 10, `TranslationValueCell` 4, `TranslationsTableClient` 3.
 
-- [ ] **Step 3: Verifica automatica** — comando al punto 8 della ricetta.
+- [✅] **Step 3: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 4: Verifica in browser** — punto 9, sulle pagine: tabella lingue, modulo lingua, tabella traduzioni, cassetto di modifica traduzione, creazione chiave.
+- [✅] **Step 4: Verifica in browser** — punto 9, sulle pagine: tabella lingue, modulo lingua, tabella traduzioni, cassetto di modifica traduzione, creazione chiave. — *eseguita il 2026-08-27*: server di sviluppo, entrambi i temi pilotati come li pilota l'app (`localStorage.appSettings.theme` + ricarico), albero di accessibilità letto e aspetto verificato a schermo. I quattro controlli della ricetta reggono: il tema si applica a tutto, i bottoni della barra strumenti hanno tutti un nome accessibile, nessun bottone senza nome. Due difetti trovati non sono dei lotti ma dei **dati** di questo ambiente, e sono registrati in [docs/reviews/2026-08-26-convention-enforcement-gaps.md](../../reviews/2026-08-26-convention-enforcement-gaps.md) come GAP-9 e GAP-10.
 
-- [ ] **Step 5: E2E e commit**
+- [✅] **Step 5: E2E e commit**
 
 ```bash
 git add -A
@@ -1752,11 +1767,11 @@ Quattro dei cinque moduli hanno campi password con il bottone «mostra/nascondi�
 
 74 occorrenze nel lotto (`ForgotPasswordForm` 9, `forgot-password/page` 1, `RegisterForm` 9, `register/page` 1, `SetPasswordForm` 11, `set-password/page` 7, `Login` 31, `ChangePasswordForm` 5), **meno** quelle di marca che restano. Il valore finale si misura, non si prevede: esegui `npm run test:raw-colors`, leggi il numero che il test riporta, e scrivi quello.
 
-- [ ] **Step 5: Verifica automatica** — comando al punto 8 della ricetta.
+- [✅] **Step 5: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 6: Verifica in browser** — punto 9, sulle pagine: accesso, registrazione, password dimenticata, impostazione password, cambio password. Verifica in più che i quattro bottoni di autenticazione siano ancora identici fra loro. (deferito: eseguito dal chiamante, non da questa sessione)
+- [✅] **Step 6: Verifica in browser** — punto 9, sulle pagine: accesso, registrazione, password dimenticata, impostazione password, cambio password. Verifica in più che i quattro bottoni di autenticazione siano ancora identici fra loro. (deferito: eseguito dal chiamante, non da questa sessione) — *eseguita il 2026-08-27*: server di sviluppo, entrambi i temi pilotati come li pilota l'app (`localStorage.appSettings.theme` + ricarico), albero di accessibilità letto e aspetto verificato a schermo. I quattro controlli della ricetta reggono: il tema si applica a tutto, i bottoni della barra strumenti hanno tutti un nome accessibile, nessun bottone senza nome. Due difetti trovati non sono dei lotti ma dei **dati** di questo ambiente, e sono registrati in [docs/reviews/2026-08-26-convention-enforcement-gaps.md](../../reviews/2026-08-26-convention-enforcement-gaps.md) come GAP-9 e GAP-10.
 
-- [ ] **Step 7: E2E e commit**
+- [✅] **Step 7: E2E e commit**
 
 Il lotto tocca i percorsi di autenticazione, quindi la suite E2E è qui più significativa che altrove.
 
@@ -1791,33 +1806,44 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:** consuma le primitive. Non produce interfacce nuove.
 
-- [ ] **Step 1: Lasciare in pace i nove bottoni della barra laterale**
+- [✅] **Step 1: Lasciare in pace i nove bottoni della barra laterale**
 
 `Sidebar.tsx` è gruppo K: le sue classi stanno già in `HIGHLIGHT_CLS`, `cls` e `userPanelItemCls`, cioè è l'unico posto del progetto dove il problema era già stato risolto, in piccolo. L'inventario dice esplicitamente di lasciarli come sono. Di questo file si migrano solo i 2 colori raw.
 
-- [ ] **Step 2: Chiudere BTN-5 in `AdminTheme.tsx`**
+- [✅] **Step 2: Chiudere BTN-5 in `AdminTheme.tsx`**
 
 `AdminTheme.tsx:188` è l'unico secondario che usa `border-gray-300 dark:border-gray-600` invece di `border-border`: con il tema configurabile è l'unico bottone secondario che non segue il bordo scelto. Diventa `<Button variant="outline">` e il problema sparisce insieme alle classi.
 
 C'è un che di appropriato nel fatto che il pannello del tema fosse il componente che non seguiva il tema.
 
-- [ ] **Step 3: `ConfirmModal.tsx` merita la variante distruttiva**
+- [✅] **Step 3: `ConfirmModal.tsx` merita la variante distruttiva** — *chiuso il 2026-08-27*
+
+Il comportamento e' corretto: `ConfirmModal` e' rimasto un `<Button>` semplice, nessuna prop
+inventata, e gli attributi `data-dialog-close` e `data-dialog-initial-focus` sono sopravvissuti.
+Ma il passo chiedeva anche di **annotare la questione**, e quell'annotazione non esiste da nessuna
+parte: ne' nel componente (ora `components/shared/ConfirmModal.tsx`), ne' in
+`docs/reviews/2026-08-19-ui-primitives-and-theming.md`, ne' in
+`docs/reviews/2026-08-21-button-inventory.md`. Le quattro menzioni di `ConfirmModal` in quelle due
+review sono righe d'inventario **precedenti** alla migrazione, non la registrazione della domanda
+aperta. L'annotazione e' stata scritta il 2026-08-27 come punto 4 di
+`docs/reviews/2026-08-21-button-inventory.md`, nella sezione dove sono registrate le altre
+decisioni sulle varianti, e nomina gli otto chiamanti e il guard che li protegge.
 
 `ConfirmModal.tsx:39` è un primario `bg-gray-900` usato anche per confermare eliminazioni. Se il componente ha già un modo di sapere che l'azione è distruttiva, usa `<Button variant="destructive">`; se non ce l'ha, **non inventarlo qui** — resta `<Button>` e la questione va annotata, perché aggiungere una prop a `ConfirmModal` cambia otto chiamanti ed è un lavoro suo.
 
 `components/ui/dialogConsumers.test.ts` vincola otto file a usare `AccessibleDialog` con `titleId=` e `data-dialog-close`: gli attributi `data-dialog-close` devono sopravvivere alla migrazione dei bottoni, altrimenti quel test fallisce. È il comportamento voluto.
 
-- [ ] **Step 4: Abbassare il cricchetto da quello che risulta a quello che risulta**
+- [✅] **Step 4: Abbassare il cricchetto da quello che risulta a quello che risulta**
 
 26 occorrenze attese (`AdminTheme` 11, `Home` 3, `ProfileForm` 8, `Sidebar` 2, `ConfirmModal` 2). Misura il valore finale invece di predirlo.
 
-- [ ] **Step 5: Verifica automatica** — comando al punto 8 della ricetta.
+- [✅] **Step 5: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 6: Verifica in browser** — punto 9, su: ogni pagina con la barra laterale, Admin → Tema, profilo, pagina iniziale, una finestra di conferma, la barra strumenti di una griglia, il selettore di colonne visibili, la pagina di errore.
+- [✅] **Step 6: Verifica in browser** — punto 9, su: ogni pagina con la barra laterale, Admin → Tema, profilo, pagina iniziale, una finestra di conferma, la barra strumenti di una griglia, il selettore di colonne visibili, la pagina di errore.
 
 Verifica in più, che è la prova finale di THEME-2: da Admin → Tema cambia il colore primario, la superficie e il bordo, e controlla che **ogni** area migrata risponda. Prima di questo lavoro non rispondeva.
 
-- [ ] **Step 7: E2E e commit**
+- [✅] **Step 7: E2E e commit**
 
 ```bash
 git add -A
@@ -1848,7 +1874,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:** nessuna interfaccia nuova.
 
-- [ ] **Step 1: Misurare cosa resta**
+- [✅] **Step 1: Misurare cosa resta**
 
 ```bash
 cd sources/microservices/web-construct && npm run test:raw-colors
@@ -1856,18 +1882,18 @@ cd sources/microservices/web-construct && npm run test:raw-colors
 
 Il test riporta il totale e la ripartizione per file. Ogni voce rimasta è o un file che i lotti non hanno toccato, o un residuo di marca.
 
-- [ ] **Step 2: Migrare quello che resta e non è di marca**
+- [✅] **Step 2: Migrare quello che resta e non è di marca**
 
 Con la tabella al punto 6 della ricetta di migrazione.
 
-- [ ] **Step 3: Chiudere i quattro difetti di contrasto di THEME-3**
+- [✅] **Step 3: Chiudere i quattro difetti di contrasto di THEME-3**
 
 THEME-3 ha trovato quattro punti sotto la soglia, tutti classi `text-gray-*` statiche che passano in un tema e falliscono nell'altro. L'elenco con classe e numero è in
 [2026-08-19-ui-primitives-and-theming.md](../../reviews/2026-08-19-ui-primitives-and-theming.md), sezione «I quattro punti, con classe e numero». Se i lotti li hanno già coperti, verificalo misurando invece di assumerlo.
 
 Attenzione a una cosa che THEME-3 ha già scoperto e messo per iscritto: **la migrazione ai token da sola non chiude il problema di accessibilità.** Un token può essere perfettamente cablato al tema e restare illeggibile. Dopo la sostituzione, misura il contrasto effettivo del punto, non limitarti a constatare che ora usa un token.
 
-- [ ] **Step 4: Scrivere il residuo giustificato**
+- [✅] **Step 4: Scrivere il residuo giustificato**
 
 Il criterio di accettazione di THEME-2 chiede che le occorrenze siano «ridotte a un residuo giustificato e documentato». Aggiungi in `raw-color-baseline.json` un campo `justified` che spieghi ogni voce sopravvissuta, per file:
 
@@ -1883,7 +1909,7 @@ Il criterio di accettazione di THEME-2 chiede che le occorrenze siano «ridotte 
 
 Se il campo rompe `raw-color-ratchet.test.mjs`, adatta il test a ignorarlo: è metadato, non una misura.
 
-- [ ] **Step 5: Verifica completa, browser, E2E, commit**
+- [✅] **Step 5: Verifica completa, browser, E2E, commit**
 
 ```bash
 npm run lint && npm run test && npm run typecheck && npm run test:tokens && npm run test:raw-colors && npm run build
@@ -1922,7 +1948,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:** nessuna.
 
-- [ ] **Step 1: Riscrivere la sezione «Livello UI» di `CLAUDE.md`**
+- [✅] **Step 1: Riscrivere la sezione «Livello UI» di `CLAUDE.md`**
 
 È il task più importante della fase e il più facile da rimandare. Finché quella sezione resta com'è, ogni contributore e ogni sessione di AI legge una decisione revocata e riapre la discussione — che è esattamente ciò che DOC-1 era stato scritto per evitare, applicato ora alla decisione opposta.
 
@@ -1930,23 +1956,23 @@ La sezione nuova deve dire, in forma breve: che il progetto **usa** shadcn/ui; c
 
 Sostituisci il rimando all'analisi di DOC-1 con un rimando alla specifica del 2026-08-24, e lascia una riga che dice che DOC-1 è stato ribaltato e quando: un lettore che trova la review vecchia deve poter capire che non vale più.
 
-- [ ] **Step 2: Aggiornare `2026-08-19-ui-primitives-and-theming.md`**
+- [✅] **Step 2: Aggiornare `2026-08-19-ui-primitives-and-theming.md`**
 
 Spunta `- [✅]` UI-1 e THEME-2 nella sezione «Task», con una descrizione dell'esito. Aggiungi in coda alla voce DOC-1 una nota datata che dice che la decisione è stata ribaltata il 2026-08-24, con il rimando alla specifica. **Non cancellare l'analisi di DOC-1:** i suoi quattro motivi restano il ragionamento che è stato fatto, e due dei quattro si sono rivelati veri lo stesso — le griglie sono rimaste ag-grid, e il conflitto sul theming è esistito davvero, solo che è stato risolto rinominando invece che convivendo.
 
 Spunta anche i criteri di accettazione residui di THEME-3, se la fase 4 li ha chiusi.
 
-- [ ] **Step 3: Aggiornare `2026-08-21-button-inventory.md`**
+- [✅] **Step 3: Aggiornare `2026-08-21-button-inventory.md`**
 
 Spunta `- [✅]` le voci BTN-1…BTN-8, ognuna con una riga sull'esito. BTN-7 va spuntato solo se il task 10 ha davvero allineato l'interruttore di `PermissionsTree`; se non l'ha toccato, resta aperto e va detto.
 
-- [ ] **Step 4: Verificare che il guard sui documenti passi**
+- [✅] **Step 4: Verificare che il guard sui documenti passi**
 
 ```bash
 cd sources/microservices/web-construct && npm run test:docs-contract
 ```
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add CLAUDE.md docs/

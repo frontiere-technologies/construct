@@ -330,7 +330,7 @@ Aperta dal menu `⋯` → "Gestisci Ruoli".
 
 ---
 
-### 3.3 Data Model — UserDTO
+### 3.3 Data Model — UserDto
 
 | Campo | Tipo | Note |
 |---|---|---|

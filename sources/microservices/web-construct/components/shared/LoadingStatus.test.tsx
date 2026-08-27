@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import LoadingStatus from './LoadingStatus'
+import { LoadingStatus } from './LoadingStatus'
 
 describe('LoadingStatus', () => {
   it('announces loading while keeping the spinner decorative', () => {

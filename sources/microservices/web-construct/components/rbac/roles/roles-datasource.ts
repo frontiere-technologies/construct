@@ -1,7 +1,7 @@
 'use client'
 
 import type { IDatasource, IGetRowsParams } from 'ag-grid-community'
-import { GRID_BLOCK_SIZE } from '@/components/ui/DataGrid'
+import { GRID_BLOCK_SIZE } from '@/components/grid/DataGrid'
 import type { RolesPage } from '@/lib/rbac/types'
 import { buildRolesGridQuery, type RolesGridFilterModel, type RolesGridSortItem } from '@/lib/rbac/roles-grid-query'
 

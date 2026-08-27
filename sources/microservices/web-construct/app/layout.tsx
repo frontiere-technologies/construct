@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { getI18nBundle } from '@/lib/i18n/server'
-import { Providers } from './providers'
+import { Providers } from './Providers'
 import './globals.css'
 
 export const metadata: Metadata = {

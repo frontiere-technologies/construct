@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DATE_FILTER, NUMBER_FILTER, TEXT_FILTER } from './gridColumnFilters'
+import { DATE_FILTER, NUMBER_FILTER, TEXT_FILTER } from './grid-column-filters'
 
 describe('shared grid filter presets', () => {
   it('uses a contains text filter with explicit apply and reset controls', () => {
