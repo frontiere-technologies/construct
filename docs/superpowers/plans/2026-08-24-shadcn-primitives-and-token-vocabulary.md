@@ -10,6 +10,21 @@
 
 **Specifica:** [2026-08-24-shadcn-primitives-and-token-vocabulary-design.md](../specs/2026-08-24-shadcn-primitives-and-token-vocabulary-design.md)
 
+> **Stato: verificato voce per voce il 2026-08-27.** 86 delle 90 caselle sono spuntate su prova
+> raccolta contro il codice attuale, non su fiducia: quattro verificatori in sola lettura hanno
+> ricontrollato ogni passo, comprese le 22 caselle che erano gia' spuntate.
+>
+> **Le 4 caselle vuote non sono lavoro dimenticato, sono lavoro non dimostrabile:**
+> le tre *verifiche in browser* dei lotti (compiti 10, 11, 12) — niente nel repository attesta che
+> siano state fatte, e la suite E2E non le sostituisce perche' non cambia mai tema — e la seconda
+> meta' del passo 3 del compito 13, l'annotazione della questione aperta su `ConfirmModal`, che non
+> esiste in nessun documento.
+>
+> Cosa la verifica ha invece **provato**: zero `--theme-*` e zero nomi di utility vecchi in tutto
+> l'albero; nessun lotto con elementi grezzi non migrati (i 17 nativi rimasti sono tutti deliberati
+> e commentati in loco); le due trappole dello stock shadcn evitate; e la suite E2E verde in CI su
+> tutte le superfici dei tre lotti.
+
 ## Global Constraints
 
 - Tutti i comandi `npm` si eseguono da `sources/microservices/web-construct/`.
@@ -1642,7 +1657,7 @@ cd /Users/mario.stefanutti/mario/programming/github-frontiere/construct && uv ru
 
 **Interfaces:** consuma `Button`, `Input`, `Textarea`, `Select`. Non produce interfacce nuove.
 
-- [ ] **Step 1: Applicare la ricetta di migrazione ai 14 file**
+- [✅] **Step 1: Applicare la ricetta di migrazione ai 14 file**
 
 Il lotto più grande e quello con più casi particolari. Quattro cose da guardare:
 
@@ -1651,17 +1666,17 @@ Il lotto più grande e quello con più casi particolari. Quattro cose da guardar
 - `GridRowActionsMenu.tsx:70` ha bisogno di `aria-label` **e** `aria-haspopup`, che la primitiva non può conoscere.
 - `TagInput.tsx:20` e `PermissionsTree.tsx:16` sono i due casi che l'inventario usa come esempio: il primo è un bottone senza classi né etichetta, il secondo è un interruttore di gruppo E che **resta nativo** e riceve solo il colore (BTN-7: allinealo a `bg-primary`, come quello di `Sidebar.tsx:625`).
 
-- [ ] **Step 2: Abbassare il cricchetto da 224 a 126**
+- [✅] **Step 2: Abbassare il cricchetto da 224 a 126**
 
 98 occorrenze in questo lotto: `CustomSelect` 8, `FilterDrawer` 4, `NavigationTree` 6, `PermissionsTree` 3, `FunctionalitiesTreeClient` 11, `FunctionalityForm` 6, `IconPicker` 33, `TagInput` 2, `CreateRoleModal` 2, `RenameRoleModal` 1, `RolesTableClient` 5, `ManageRolesModal` 4, `RoleMultiSelect` 5, `StatusBadge` 8.
 
 `StatusBadge.tsx` è quello da guardare: i suoi 8 raw sono verdi e rossi di stato, che è precisamente il caso per cui esistono `--success-muted` e `--destructive-muted`.
 
-- [ ] **Step 3: Verifica automatica** — comando al punto 8 della ricetta.
+- [✅] **Step 3: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 4: Verifica in browser** — punto 9 della ricetta, sulle pagine: tabella ruoli, dettaglio ruolo, tabella utenti, gestione ruoli utente, albero funzionalità, modulo funzionalità, selettore di icone.
+- [ ] **Step 4: Verifica in browser** — punto 9 della ricetta, sulle pagine: tabella ruoli, dettaglio ruolo, tabella utenti, gestione ruoli utente, albero funzionalità, modulo funzionalità, selettore di icone. — *non verificata, 2026-08-27*: niente nel repository attesta che sia stata fatta, e la suite E2E **non** puo' sostituirla — `sources/tests/e2e/test_admin_theme.py` prova il pannello del tema (cambio colore, salva, ripristina), non l'aspetto reso in chiaro e in scuro: zero occorrenze di `dark` o `light` in tutta la suite.
 
-- [ ] **Step 5: E2E e commit**
+- [✅] **Step 5: E2E e commit**
 
 ```bash
 git add -A
@@ -1694,21 +1709,21 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:** consuma le primitive. Non produce interfacce nuove.
 
-- [ ] **Step 1: Applicare la ricetta ai 6 file**
+- [✅] **Step 1: Applicare la ricetta ai 6 file**
 
 `TranslationEditorDrawer.tsx` è il file denso del lotto: 5 bottoni di cui tre secondari consecutivi (righe 165, 178, 181) scritti in tre modi diversi, più 10 colori raw. I tre secondari diventano tre `<Button variant="outline">` identici, che è il punto dell'esercizio.
 
 Le due tabelle (`LanguagesTableClient`, `TranslationsTableClient`) hanno un primario `px-3`, quindi `size="sm"`.
 
-- [ ] **Step 2: Abbassare il cricchetto da 126 a 100**
+- [✅] **Step 2: Abbassare il cricchetto da 126 a 100**
 
 26 occorrenze: `LanguageFormModal` 3, `LanguagesTableClient` 3, `CreateTranslationKeyModal` 3, `TranslationEditorDrawer` 10, `TranslationValueCell` 4, `TranslationsTableClient` 3.
 
-- [ ] **Step 3: Verifica automatica** — comando al punto 8 della ricetta.
+- [✅] **Step 3: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 4: Verifica in browser** — punto 9, sulle pagine: tabella lingue, modulo lingua, tabella traduzioni, cassetto di modifica traduzione, creazione chiave.
+- [ ] **Step 4: Verifica in browser** — punto 9, sulle pagine: tabella lingue, modulo lingua, tabella traduzioni, cassetto di modifica traduzione, creazione chiave. — *non verificata, 2026-08-27*: niente nel repository attesta che sia stata fatta, e la suite E2E **non** puo' sostituirla — `sources/tests/e2e/test_admin_theme.py` prova il pannello del tema (cambio colore, salva, ripristina), non l'aspetto reso in chiaro e in scuro: zero occorrenze di `dark` o `light` in tutta la suite.
 
-- [ ] **Step 5: E2E e commit**
+- [✅] **Step 5: E2E e commit**
 
 ```bash
 git add -A
@@ -1752,11 +1767,11 @@ Quattro dei cinque moduli hanno campi password con il bottone «mostra/nascondi�
 
 74 occorrenze nel lotto (`ForgotPasswordForm` 9, `forgot-password/page` 1, `RegisterForm` 9, `register/page` 1, `SetPasswordForm` 11, `set-password/page` 7, `Login` 31, `ChangePasswordForm` 5), **meno** quelle di marca che restano. Il valore finale si misura, non si prevede: esegui `npm run test:raw-colors`, leggi il numero che il test riporta, e scrivi quello.
 
-- [ ] **Step 5: Verifica automatica** — comando al punto 8 della ricetta.
+- [✅] **Step 5: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 6: Verifica in browser** — punto 9, sulle pagine: accesso, registrazione, password dimenticata, impostazione password, cambio password. Verifica in più che i quattro bottoni di autenticazione siano ancora identici fra loro. (deferito: eseguito dal chiamante, non da questa sessione)
+- [ ] **Step 6: Verifica in browser** — punto 9, sulle pagine: accesso, registrazione, password dimenticata, impostazione password, cambio password. Verifica in più che i quattro bottoni di autenticazione siano ancora identici fra loro. (deferito: eseguito dal chiamante, non da questa sessione) — *non verificata, 2026-08-27*: niente nel repository attesta che sia stata fatta, e la suite E2E **non** puo' sostituirla — `sources/tests/e2e/test_admin_theme.py` prova il pannello del tema (cambio colore, salva, ripristina), non l'aspetto reso in chiaro e in scuro: zero occorrenze di `dark` o `light` in tutta la suite.
 
-- [ ] **Step 7: E2E e commit**
+- [✅] **Step 7: E2E e commit**
 
 Il lotto tocca i percorsi di autenticazione, quindi la suite E2E è qui più significativa che altrove.
 
