@@ -1791,33 +1791,42 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:** consuma le primitive. Non produce interfacce nuove.
 
-- [ ] **Step 1: Lasciare in pace i nove bottoni della barra laterale**
+- [✅] **Step 1: Lasciare in pace i nove bottoni della barra laterale**
 
 `Sidebar.tsx` è gruppo K: le sue classi stanno già in `HIGHLIGHT_CLS`, `cls` e `userPanelItemCls`, cioè è l'unico posto del progetto dove il problema era già stato risolto, in piccolo. L'inventario dice esplicitamente di lasciarli come sono. Di questo file si migrano solo i 2 colori raw.
 
-- [ ] **Step 2: Chiudere BTN-5 in `AdminTheme.tsx`**
+- [✅] **Step 2: Chiudere BTN-5 in `AdminTheme.tsx`**
 
 `AdminTheme.tsx:188` è l'unico secondario che usa `border-gray-300 dark:border-gray-600` invece di `border-border`: con il tema configurabile è l'unico bottone secondario che non segue il bordo scelto. Diventa `<Button variant="outline">` e il problema sparisce insieme alle classi.
 
 C'è un che di appropriato nel fatto che il pannello del tema fosse il componente che non seguiva il tema.
 
-- [ ] **Step 3: `ConfirmModal.tsx` merita la variante distruttiva**
+- [ ] **Step 3: `ConfirmModal.tsx` merita la variante distruttiva** — *mezzo fatto, verificato il 2026-08-27*
+
+Il comportamento e' corretto: `ConfirmModal` e' rimasto un `<Button>` semplice, nessuna prop
+inventata, e gli attributi `data-dialog-close` e `data-dialog-initial-focus` sono sopravvissuti.
+Ma il passo chiedeva anche di **annotare la questione**, e quell'annotazione non esiste da nessuna
+parte: ne' nel componente (ora `components/shared/ConfirmModal.tsx`), ne' in
+`docs/reviews/2026-08-19-ui-primitives-and-theming.md`, ne' in
+`docs/reviews/2026-08-21-button-inventory.md`. Le quattro menzioni di `ConfirmModal` in quelle due
+review sono righe d'inventario **precedenti** alla migrazione, non la registrazione della domanda
+aperta. La casella resta vuota fino a quando l'annotazione c'e'.
 
 `ConfirmModal.tsx:39` è un primario `bg-gray-900` usato anche per confermare eliminazioni. Se il componente ha già un modo di sapere che l'azione è distruttiva, usa `<Button variant="destructive">`; se non ce l'ha, **non inventarlo qui** — resta `<Button>` e la questione va annotata, perché aggiungere una prop a `ConfirmModal` cambia otto chiamanti ed è un lavoro suo.
 
 `components/ui/dialogConsumers.test.ts` vincola otto file a usare `AccessibleDialog` con `titleId=` e `data-dialog-close`: gli attributi `data-dialog-close` devono sopravvivere alla migrazione dei bottoni, altrimenti quel test fallisce. È il comportamento voluto.
 
-- [ ] **Step 4: Abbassare il cricchetto da quello che risulta a quello che risulta**
+- [✅] **Step 4: Abbassare il cricchetto da quello che risulta a quello che risulta**
 
 26 occorrenze attese (`AdminTheme` 11, `Home` 3, `ProfileForm` 8, `Sidebar` 2, `ConfirmModal` 2). Misura il valore finale invece di predirlo.
 
-- [ ] **Step 5: Verifica automatica** — comando al punto 8 della ricetta.
+- [✅] **Step 5: Verifica automatica** — comando al punto 8 della ricetta.
 
-- [ ] **Step 6: Verifica in browser** — punto 9, su: ogni pagina con la barra laterale, Admin → Tema, profilo, pagina iniziale, una finestra di conferma, la barra strumenti di una griglia, il selettore di colonne visibili, la pagina di errore.
+- [✅] **Step 6: Verifica in browser** — punto 9, su: ogni pagina con la barra laterale, Admin → Tema, profilo, pagina iniziale, una finestra di conferma, la barra strumenti di una griglia, il selettore di colonne visibili, la pagina di errore.
 
 Verifica in più, che è la prova finale di THEME-2: da Admin → Tema cambia il colore primario, la superficie e il bordo, e controlla che **ogni** area migrata risponda. Prima di questo lavoro non rispondeva.
 
-- [ ] **Step 7: E2E e commit**
+- [✅] **Step 7: E2E e commit**
 
 ```bash
 git add -A
@@ -1848,7 +1857,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:** nessuna interfaccia nuova.
 
-- [ ] **Step 1: Misurare cosa resta**
+- [✅] **Step 1: Misurare cosa resta**
 
 ```bash
 cd sources/microservices/web-construct && npm run test:raw-colors
@@ -1856,18 +1865,18 @@ cd sources/microservices/web-construct && npm run test:raw-colors
 
 Il test riporta il totale e la ripartizione per file. Ogni voce rimasta è o un file che i lotti non hanno toccato, o un residuo di marca.
 
-- [ ] **Step 2: Migrare quello che resta e non è di marca**
+- [✅] **Step 2: Migrare quello che resta e non è di marca**
 
 Con la tabella al punto 6 della ricetta di migrazione.
 
-- [ ] **Step 3: Chiudere i quattro difetti di contrasto di THEME-3**
+- [✅] **Step 3: Chiudere i quattro difetti di contrasto di THEME-3**
 
 THEME-3 ha trovato quattro punti sotto la soglia, tutti classi `text-gray-*` statiche che passano in un tema e falliscono nell'altro. L'elenco con classe e numero è in
 [2026-08-19-ui-primitives-and-theming.md](../../reviews/2026-08-19-ui-primitives-and-theming.md), sezione «I quattro punti, con classe e numero». Se i lotti li hanno già coperti, verificalo misurando invece di assumerlo.
 
 Attenzione a una cosa che THEME-3 ha già scoperto e messo per iscritto: **la migrazione ai token da sola non chiude il problema di accessibilità.** Un token può essere perfettamente cablato al tema e restare illeggibile. Dopo la sostituzione, misura il contrasto effettivo del punto, non limitarti a constatare che ora usa un token.
 
-- [ ] **Step 4: Scrivere il residuo giustificato**
+- [✅] **Step 4: Scrivere il residuo giustificato**
 
 Il criterio di accettazione di THEME-2 chiede che le occorrenze siano «ridotte a un residuo giustificato e documentato». Aggiungi in `raw-color-baseline.json` un campo `justified` che spieghi ogni voce sopravvissuta, per file:
 
@@ -1883,7 +1892,7 @@ Il criterio di accettazione di THEME-2 chiede che le occorrenze siano «ridotte 
 
 Se il campo rompe `raw-color-ratchet.test.mjs`, adatta il test a ignorarlo: è metadato, non una misura.
 
-- [ ] **Step 5: Verifica completa, browser, E2E, commit**
+- [✅] **Step 5: Verifica completa, browser, E2E, commit**
 
 ```bash
 npm run lint && npm run test && npm run typecheck && npm run test:tokens && npm run test:raw-colors && npm run build
@@ -1922,7 +1931,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:** nessuna.
 
-- [ ] **Step 1: Riscrivere la sezione «Livello UI» di `CLAUDE.md`**
+- [✅] **Step 1: Riscrivere la sezione «Livello UI» di `CLAUDE.md`**
 
 È il task più importante della fase e il più facile da rimandare. Finché quella sezione resta com'è, ogni contributore e ogni sessione di AI legge una decisione revocata e riapre la discussione — che è esattamente ciò che DOC-1 era stato scritto per evitare, applicato ora alla decisione opposta.
 
@@ -1930,23 +1939,23 @@ La sezione nuova deve dire, in forma breve: che il progetto **usa** shadcn/ui; c
 
 Sostituisci il rimando all'analisi di DOC-1 con un rimando alla specifica del 2026-08-24, e lascia una riga che dice che DOC-1 è stato ribaltato e quando: un lettore che trova la review vecchia deve poter capire che non vale più.
 
-- [ ] **Step 2: Aggiornare `2026-08-19-ui-primitives-and-theming.md`**
+- [✅] **Step 2: Aggiornare `2026-08-19-ui-primitives-and-theming.md`**
 
 Spunta `- [✅]` UI-1 e THEME-2 nella sezione «Task», con una descrizione dell'esito. Aggiungi in coda alla voce DOC-1 una nota datata che dice che la decisione è stata ribaltata il 2026-08-24, con il rimando alla specifica. **Non cancellare l'analisi di DOC-1:** i suoi quattro motivi restano il ragionamento che è stato fatto, e due dei quattro si sono rivelati veri lo stesso — le griglie sono rimaste ag-grid, e il conflitto sul theming è esistito davvero, solo che è stato risolto rinominando invece che convivendo.
 
 Spunta anche i criteri di accettazione residui di THEME-3, se la fase 4 li ha chiusi.
 
-- [ ] **Step 3: Aggiornare `2026-08-21-button-inventory.md`**
+- [✅] **Step 3: Aggiornare `2026-08-21-button-inventory.md`**
 
 Spunta `- [✅]` le voci BTN-1…BTN-8, ognuna con una riga sull'esito. BTN-7 va spuntato solo se il task 10 ha davvero allineato l'interruttore di `PermissionsTree`; se non l'ha toccato, resta aperto e va detto.
 
-- [ ] **Step 4: Verificare che il guard sui documenti passi**
+- [✅] **Step 4: Verificare che il guard sui documenti passi**
 
 ```bash
 cd sources/microservices/web-construct && npm run test:docs-contract
 ```
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add CLAUDE.md docs/
