@@ -2,6 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Stato: eseguito.** Tutti e 16 i compiti completati, ognuno con revisione indipendente
+> chiusa `Approved`, piu' una revisione finale su tutto il ramo e la sua ondata di correzioni.
+> Consegnato in due pull request impilate:
+> [#69 metà meccanica](https://github.com/frontiere-technologies/construct/pull/69) verso
+> `development`, e [#70 metà strutturale](https://github.com/frontiere-technologies/construct/pull/70)
+> con #69 come base. CI verde su entrambe, su tutt'e due i job.
+>
+> Undici difetti di questo piano sono emersi durante l'esecuzione e sono stati corretti qui:
+> ognuno ha il suo commit, accanto al lavoro che l'ha rivelato. Le convenzioni che restano
+> senza difesa automatica sono elencate in
+> [docs/reviews/2026-08-26-convention-enforcement-gaps.md](../../reviews/2026-08-26-convention-enforcement-gaps.md).
+
 **Goal:** Rendere vere nel codice di `sources/microservices/web-construct` le convenzioni scritte in `AGENTS.md`, e metterle sotto guardia automatica.
 
 **Architecture:** Due pull request. PR-A meccanica: regole ESLint, guardia sui nomi, rinomine fuori da `components/ui/`. PR-B strutturale: `components/ui/` diventa solo-fornitore, il modulo data-grid esce in `components/grid/`, i cinque elementi riusabili in `components/shared/`, le quattro guardie in `guards/`. Metodo guard-first: ogni convenzione nasce da una guardia rossa che elenca i trasgressori.
@@ -38,13 +50,13 @@
 
 **Perché non basta usare il plugin che c'è già:** `eslint-config-next` registra un plugin `import` (la 2.32, annidata in `node_modules/eslint-config-next/node_modules/`) e imposta `settings['import/resolver']` con un'entrata `typescript`. Il resolver installato è `eslint-import-resolver-typescript@3.10.1`, che espone l'interfaccia v3; il plugin 2.32 si aspetta la v2 e produce `Resolve error: typescript with invalid interface loaded as resolver` — 149 errori, uno per file. Non si vede oggi solo perché nessuna regola `import/*` è accesa. Sovrascrivere `settings['import/resolver']` non funziona: ESLint fonde `settings` in profondità e l'entrata `typescript` sopravvive anche impostandola a `false`. Il plugin 2.32 non conosce `import/resolver-next` (nessuna occorrenza nel suo `lib/`), quindi non c'è via d'uscita dentro quel plugin.
 
-- [ ] **Step 1: Installare le due dipendenze esplicite**
+- [✅] **Step 1: Installare le due dipendenze esplicite**
 
 ```bash
 npm install --save-dev eslint-plugin-import-x eslint-import-resolver-typescript
 ```
 
-- [ ] **Step 2: Accertare la chiave di configurazione del resolver per la major installata**
+- [✅] **Step 2: Accertare la chiave di configurazione del resolver per la major installata**
 
 Il nome della chiave cambia fra le major di `import-x`. Non indovinarlo, leggilo:
 
@@ -56,7 +68,7 @@ grep -rlo "import-x/resolver-next" node_modules/eslint-plugin-import-x/lib node_
 Expected: la versione stampata, e almeno un file che contiene `import-x/resolver-next`.
 Se il `grep` non trova nulla, la major installata usa la chiave vecchia: allora nello Step 3 scrivi `'import-x/resolver': { typescript: { alwaysTryTypes: true } }` al posto di `'import-x/resolver-next': [...]` e togli l'import di `createTypeScriptImportResolver`. Lo Step 5 verifica quale delle due funziona.
 
-- [ ] **Step 3: Scrivere la configurazione**
+- [✅] **Step 3: Scrivere la configurazione**
 
 Contenuto completo di `eslint.config.mjs`:
 
@@ -109,7 +121,7 @@ const config = [
 export default config
 ```
 
-- [ ] **Step 4: Verificare che le violazioni attese siano rilevate**
+- [✅] **Step 4: Verificare che le violazioni attese siano rilevate**
 
 ```bash
 npx eslint components/ui/DataGrid.tsx lib/rbac/users-service.ts
@@ -119,7 +131,7 @@ Expected: due errori `import-x/order`, uno per file —
 `@/context/I18nContext import should occur before import of ./dataGridConfig` su `DataGrid.tsx`,
 `@/lib/grid-text-search import should occur before import of ./roles-service` su `users-service.ts`.
 
-- [ ] **Step 5: Verificare che NON compaia nessun errore di resolver**
+- [✅] **Step 5: Verificare che NON compaia nessun errore di resolver**
 
 ```bash
 npx eslint app components context lib types 2>&1 | grep -c "Resolve error"
@@ -128,7 +140,7 @@ npx eslint app components context lib types 2>&1 | grep -c "Resolve error"
 Expected: `0`.
 Se stampa un numero maggiore di zero, la chiave dello Step 3 è sbagliata: prova l'altra delle due candidate dello Step 2 e ripeti questo Step. Non proseguire con un numero diverso da zero — l'autofix del compito A-3 girerebbe su una configurazione rotta.
 
-- [ ] **Step 6: Contare le violazioni di ordinamento, per confronto con A-3**
+- [✅] **Step 6: Contare le violazioni di ordinamento, per confronto con A-3**
 
 ```bash
 npx eslint . 2>&1 | grep -c "import-x/order"
@@ -145,7 +157,7 @@ il resolver rotto, che non riusciva a classificare alcuni import `@/` e quindi
 non li segnalava. Con un resolver funzionante le violazioni viste sono 47, ed e'
 il conteggio giusto.
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add package.json package-lock.json eslint.config.mjs
@@ -172,7 +184,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: la configurazione ESLint del compito A-1.
 - Produces: `npx eslint` senza errori `import-x/order`.
 
-- [ ] **Step 1: Lanciare l'autofix**
+- [✅] **Step 1: Lanciare l'autofix**
 
 ```bash
 npx eslint . --fix
@@ -183,7 +195,7 @@ Nota lo `.` e non l'elenco delle cinque cartelle: due delle violazioni vivono in
 `components`, `context`, `lib` e `types`. `npm run lint` e' `eslint .` e le
 conta, quindi restringere l'ambito qui lascerebbe il lint rosso al passo 3.
 
-- [ ] **Step 2: Verificare che le violazioni siano a zero**
+- [✅] **Step 2: Verificare che le violazioni siano a zero**
 
 ```bash
 npx eslint . 2>&1 | grep -c "import-x/order"
@@ -192,7 +204,7 @@ npx eslint . 2>&1 | grep -c "import-x/order"
 Expected: `0` (partendo dalle 49 che `eslint .` conta: le 47 delle cinque
 cartelle piu' le 2 dei due file di configurazione di vitest).
 
-- [ ] **Step 3: Verificare che l'autofix non abbia rotto niente**
+- [✅] **Step 3: Verificare che l'autofix non abbia rotto niente**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -200,7 +212,7 @@ npm run lint && npm run typecheck && npm test
 
 Expected: tutti verdi, 634 test più quelli della guardia. Se `npm test` fallisce, l'autofix ha spostato un import oltre un effetto collaterale a livello di modulo: guarda il diff del file in questione con `git diff` e riordina a mano quel solo file invece di accettare l'autofix.
 
-- [ ] **Step 4: Verificare a campione che l'ordine sia quello voluto**
+- [✅] **Step 4: Verificare a campione che l'ordine sia quello voluto**
 
 ```bash
 sed -n '1,12p' lib/rbac/users-service.ts
@@ -208,7 +220,7 @@ sed -n '1,12p' lib/rbac/users-service.ts
 
 Expected: `react` per primo, poi `drizzle-orm`, poi gli `@/`, poi i relativi `./`.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -245,7 +257,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Perché l'esenzione:** in PR-A `components/ui/` contiene ancora i dieci nomi `camelCase` che PR-B smonta (sei del modulo data-grid, quattro delle guardie). Senza esenzione questa guardia sarebbe rossa su una PR già fusa, cioè `npm test` rotto in CI. L'esenzione è una riga commentata col suo motivo e il compito che la rimuove. La guardia nasce comunque rossa su ciò che PR-A corregge: gli otto nomi `camelCase` fuori da `ui/` e le due estensioni.
 
-- [ ] **Step 1: Scrivere la guardia**
+- [✅] **Step 1: Scrivere la guardia**
 
 Contenuto completo di `guards/file-naming.test.ts`:
 
@@ -453,7 +465,7 @@ describe('file naming conventions', () => {
 })
 ```
 
-- [ ] **Step 2: Aggiungere `guards/` a vitest**
+- [✅] **Step 2: Aggiungere `guards/` a vitest**
 
 In `vitest.config.ts`, dentro `test.include`, aggiungere una riga dopo `'components/**/*.test.tsx',`:
 
@@ -461,7 +473,7 @@ In `vitest.config.ts`, dentro `test.include`, aggiungere una riga dopo `'compone
       'guards/**/*.test.ts',
 ```
 
-- [ ] **Step 3: Lanciare la guardia e verificare che sia rossa sui trasgressori attesi**
+- [✅] **Step 3: Lanciare la guardia e verificare che sia rossa sui trasgressori attesi**
 
 ```bash
 npx vitest run guards/file-naming.test.ts
@@ -484,7 +496,7 @@ console.log('file in components/ui:', all.length, '— esentati: 19 — controll
 
 Expected: `file in components/ui: 30 — esentati: 19 — controllati: 11`.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add guards/file-naming.test.ts vitest.config.ts
@@ -527,7 +539,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 Il terzo file non era nel piano originale: lo scan di verifica del 2026-08-26 lo aveva mancato perche' cercava `<` testualmente e `Promise<void>` gli e' sembrato JSX. La guardia ad AST del compito A-2 lo ha trovato. Nessuno dei tre import va aggiornato: gli import TypeScript non portano l'estensione.
 
-- [ ] **Step 1: Rinominare con `git mv`**
+- [✅] **Step 1: Rinominare con `git mv`**
 
 ```bash
 git mv components/AppHydrationMarker.tsx components/AppHydrationMarker.ts
@@ -535,7 +547,7 @@ git mv components/rbac/NavigationTree.test.tsx components/rbac/NavigationTree.te
 git mv context/AuthContext.tsx context/AuthContext.ts
 ```
 
-- [ ] **Step 2: Verificare che nessun import citasse l'estensione**
+- [✅] **Step 2: Verificare che nessun import citasse l'estensione**
 
 ```bash
 grep -rn --include='*.ts' --include='*.tsx' "AppHydrationMarker\.tsx\|NavigationTree\.test\.tsx\|AuthContext\.tsx" app components context lib
@@ -543,7 +555,7 @@ grep -rn --include='*.ts' --include='*.tsx' "AppHydrationMarker\.tsx\|Navigation
 
 Expected: nessun risultato. Gli import TypeScript non portano l'estensione, quindi non c'è niente da aggiornare.
 
-- [ ] **Step 3: Verificare che vitest raccolga ancora entrambi i test**
+- [✅] **Step 3: Verificare che vitest raccolga ancora entrambi i test**
 
 ```bash
 npx vitest run components/AppHydrationMarker.test.tsx components/rbac/NavigationTree.test.ts
@@ -551,7 +563,7 @@ npx vitest run components/AppHydrationMarker.test.tsx components/rbac/Navigation
 
 Expected: PASS su entrambi i file. `vitest.config.ts` include già sia `components/**/*.test.ts` sia `components/**/*.test.tsx`, quindi il cambio di estensione non sfugge alla raccolta.
 
-- [ ] **Step 4: Verificare che il terzo test della guardia sia verde**
+- [✅] **Step 4: Verificare che il terzo test della guardia sia verde**
 
 ```bash
 npx vitest run guards/file-naming.test.ts -t 'gives the .tsx extension only'
@@ -559,7 +571,7 @@ npx vitest run guards/file-naming.test.ts -t 'gives the .tsx extension only'
 
 Expected: PASS.
 
-- [ ] **Step 5: Verificare tipi e test**
+- [✅] **Step 5: Verificare tipi e test**
 
 ```bash
 npm run typecheck && npm test
@@ -567,7 +579,7 @@ npm run typecheck && npm test
 
 Expected: entrambi verdi.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add -A components guards
@@ -605,7 +617,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Perché nessuno di questi è un componente:** in fase di verifica, la ricerca di `^export (default )?(function|const) [A-Z]` dava riscontri su tre di questi file, ma erano costanti `UPPER_SNAKE` (`DATE_FILTER`, `GRID_MIN_COLUMN_WIDTH`), non componenti. Quindi tutti e otto vanno in `kebab-case`.
 
-- [ ] **Step 1: Rinominare gli otto file**
+- [✅] **Step 1: Rinominare gli otto file**
 
 ```bash
 git mv components/sidebarPresentation.ts components/sidebar-presentation.ts
@@ -618,7 +630,7 @@ git mv components/rbac/roles/rolesDatasource.ts components/rbac/roles/roles-data
 git mv components/rbac/users/usersDatasource.ts components/rbac/users/users-datasource.ts
 ```
 
-- [ ] **Step 2: Aggiornare gli specificatori di modulo — ancorati alle virgolette**
+- [✅] **Step 2: Aggiornare gli specificatori di modulo — ancorati alle virgolette**
 
 **Non** sostituire la parola nuda. Il simbolo esportato da `translationStatusFilter.ts` si
 chiama `translationStatusFilterOptions`: il nome del file ne e' un prefisso, con lo stesso
@@ -643,7 +655,7 @@ grep -rlE "'\./(sidebarPresentation|languagesDatasource|translationsDatasource|t
     -e "s#'\./usersDatasource'#'./users-datasource'#g"
 ```
 
-- [ ] **Step 3: Controllare che nessun nome di simbolo sia stato toccato**
+- [✅] **Step 3: Controllare che nessun nome di simbolo sia stato toccato**
 
 ```bash
 git diff -U0 -- '*.ts' '*.tsx' | grep '^[-+]' | grep -v '^[-+][-+]'
@@ -655,7 +667,7 @@ In particolare `translationStatusFilterOptions` deve comparire **intatto**: se i
 vedi `translation-status-filterOptions`, il `sed` ha morso la parola nuda — annulla tutto con
 `git checkout -- .` e rifai il passo 2 con le virgolette.
 
-- [ ] **Step 4: Verificare che non resti nessuno specificatore vecchio**
+- [✅] **Step 4: Verificare che non resti nessuno specificatore vecchio**
 
 ```bash
 grep -rnE "'\./(sidebarPresentation|languagesDatasource|translationsDatasource|translationStatusFilter|rolesDatasource|usersDatasource)'" \
@@ -668,7 +680,7 @@ Attenzione: **non** cercare la parola nuda qui. `translationStatusFilter` resta 
 nel codice, dentro `translationStatusFilterOptions`, e un controllo sulla parola nuda
 fallirebbe per un motivo giusto.
 
-- [ ] **Step 5: Verificare la guardia, i tipi e i test**
+- [✅] **Step 5: Verificare la guardia, i tipi e i test**
 
 ```bash
 npx vitest run guards/file-naming.test.ts -t 'has no camelCase filename'
@@ -677,7 +689,7 @@ npm run lint && npm run typecheck && npm test
 
 Expected: il test della guardia PASS (l'esenzione copre `components/ui/`, il resto è pulito); lint, typecheck e i 634 test verdi.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add -A components guards
@@ -704,14 +716,14 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Perché:** sette tipi del progetto scrivono `Dto` (`UserNavigationTreeDto`, `LanguageDto`, `TranslationRowDto`, `LanguagePageItemDto`, `RolePageItemDto`, `TranslationValueDto`, `RoleInformationDto`), uno solo scriveva `DTO`. Nessun altro acronimo va toccato: `Id`, `Url`, `Api`, `Svg` sono già uniformi.
 
-- [ ] **Step 1: Sostituire in tutti i sette file**
+- [✅] **Step 1: Sostituire in tutti i sette file**
 
 ```bash
 grep -rl --include='*.ts' --include='*.tsx' '\bUserDTO\b' app components context lib types \
   | xargs sed -i '' 's/\bUserDTO\b/UserDto/g'
 ```
 
-- [ ] **Step 2: Verificare che non resti nessuna occorrenza**
+- [✅] **Step 2: Verificare che non resti nessuna occorrenza**
 
 ```bash
 grep -rn --include='*.ts' --include='*.tsx' '\bUserDTO\b' app components context lib types | wc -l
@@ -719,7 +731,7 @@ grep -rn --include='*.ts' --include='*.tsx' '\bUserDTO\b' app components context
 
 Expected: `0`.
 
-- [ ] **Step 3: Verificare che ci siano 27 occorrenze del nome nuovo**
+- [✅] **Step 3: Verificare che ci siano 27 occorrenze del nome nuovo**
 
 ```bash
 grep -rn --include='*.ts' --include='*.tsx' '\bUserDto\b' app components context lib types | wc -l
@@ -727,7 +739,7 @@ grep -rn --include='*.ts' --include='*.tsx' '\bUserDto\b' app components context
 
 Expected: `27`.
 
-- [ ] **Step 4: Verificare tipi e test**
+- [✅] **Step 4: Verificare tipi e test**
 
 ```bash
 npm run typecheck && npm test
@@ -735,7 +747,7 @@ npm run typecheck && npm test
 
 Expected: entrambi verdi.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add -A components lib
@@ -760,7 +772,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Perché:** il progetto separa i membri di `interface` **solo con l'andata a capo** — zero membri terminati da `;` in tutto il codice fuori da questo file. I `;` che separano membri scritti *sulla stessa riga* (`{ id: number; name: string }`) sono sintassi obbligatoria e restano.
 
-- [ ] **Step 1: Togliere i punti e virgola a fine riga**
+- [✅] **Step 1: Togliere i punti e virgola a fine riga**
 
 ```bash
 sed -i '' 's/;$//' types/menu.ts
@@ -781,7 +793,7 @@ spostamento e' inerte: il compito A-3 ha gia' stabilito, e un revisore ha verifi
 principi, che Vitest solleva `vi.mock()` sopra ogni import indipendentemente da dove sia
 scritto. La riga che seguira' `vi.mock(...)` comincia con `let`, quindi nessun nuovo pericolo.
 
-- [ ] **Step 2: Verificare che non ne resti nessuno a fine riga**
+- [✅] **Step 2: Verificare che non ne resti nessuno a fine riga**
 
 ```bash
 grep -rnP ';$' types/menu.ts components/rbac/functionalities/TranslationsAccordion.test.tsx | wc -l
@@ -790,7 +802,7 @@ grep -rnP ';$' types/menu.ts components/rbac/functionalities/TranslationsAccordi
 Expected: `0`, e `npm run typecheck` verde — quest'ultimo e' il controllo che conta, perche' un
 separatore togliendo il quale il codice non compila si manifesta li' e non nel grep.
 
-- [ ] **Step 3: Verificare che i `;` in linea siano sopravvissuti**
+- [✅] **Step 3: Verificare che i `;` in linea siano sopravvissuti**
 
 ```bash
 grep -n 'id: number; name: string\|; ' types/menu.ts | head -5
@@ -798,7 +810,7 @@ grep -n 'id: number; name: string\|; ' types/menu.ts | head -5
 
 Expected: le righe con più membri sulla stessa riga sono intatte. Se `sed` ne ha mangiato uno, `npm run typecheck` dello Step 4 lo trova.
 
-- [ ] **Step 4: Verificare tipi e test**
+- [✅] **Step 4: Verificare tipi e test**
 
 ```bash
 npm run typecheck && npm test
@@ -806,7 +818,7 @@ npm run typecheck && npm test
 
 Expected: entrambi verdi.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add types/menu.ts components/rbac/functionalities/TranslationsAccordion.test.tsx
@@ -819,7 +831,7 @@ separators that TypeScript requires are untouched.
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 6: Aprire PR-A**
+- [✅] **Step 6: Aprire PR-A**
 
 ```bash
 git push -u origin feature/react-naming-conventions
@@ -866,7 +878,7 @@ BODY
 - Consumes: i nomi di file già in `kebab-case` prodotti dal compito A-7.
 - Produces: `DataGrid`, `GridToolbar`, `GridToolbarResetButton` e `ColumnVisibilityToggle` come **export nominati** da `@/components/grid/DataGrid`, `@/components/grid/GridToolbar` e `@/components/grid/ColumnVisibilityToggle`. Il compito B-6 conta su questi tre file come già convertiti, e quindi **non** li mette nella lista dei 27.
 
-- [ ] **Step 1: Creare la cartella e spostare i quattro file già in `kebab-case`**
+- [✅] **Step 1: Creare la cartella e spostare i quattro file già in `kebab-case`**
 
 ```bash
 mkdir -p components/grid
@@ -876,7 +888,7 @@ git mv components/ui/grid-url-sync.ts components/grid/grid-url-sync.ts
 git mv components/ui/grid-url-sync.test.ts components/grid/grid-url-sync.test.ts
 ```
 
-- [ ] **Step 2: Spostare e rinominare i sei helper `camelCase`**
+- [✅] **Step 2: Spostare e rinominare i sei helper `camelCase`**
 
 ```bash
 git mv components/ui/dataGridConfig.ts components/grid/data-grid-config.ts
@@ -887,7 +899,7 @@ git mv components/ui/gridColumnSizing.ts components/grid/grid-column-sizing.ts
 git mv components/ui/gridColumnSizing.test.ts components/grid/grid-column-sizing.test.ts
 ```
 
-- [ ] **Step 3: Spostare i quattro componenti**
+- [✅] **Step 3: Spostare i quattro componenti**
 
 ```bash
 git mv components/ui/ColumnVisibilityToggle.tsx components/grid/ColumnVisibilityToggle.tsx
@@ -896,7 +908,7 @@ git mv components/ui/GridToolbar.tsx components/grid/GridToolbar.tsx
 git mv components/ui/GridToolbar.test.tsx components/grid/GridToolbar.test.tsx
 ```
 
-- [ ] **Step 4: Aggiornare i percorsi negli import**
+- [✅] **Step 4: Aggiornare i percorsi negli import**
 
 ```bash
 grep -rl --include='*.ts' --include='*.tsx' 'components/ui/\(DataGrid\|GridToolbar\|ColumnVisibilityToggle\|dataGridConfig\|gridColumnFilters\|gridColumnSizing\|grid-reset\|grid-url-sync\)' \
@@ -912,7 +924,7 @@ grep -rl --include='*.ts' --include='*.tsx' 'components/ui/\(DataGrid\|GridToolb
     -e 's#components/ui/grid-url-sync#components/grid/grid-url-sync#g'
 ```
 
-- [ ] **Step 5: Aggiustare gli import relativi dentro `components/grid/`**
+- [✅] **Step 5: Aggiustare gli import relativi dentro `components/grid/`**
 
 I file spostati si importavano fra loro con `./`, e continuano a funzionare perché sono ancora vicini — tranne i nomi cambiati. Aggiorna quelli:
 
@@ -926,7 +938,7 @@ sed -i '' -e "s#from './gridColumnFilters'#from './grid-column-filters'#" compon
 sed -i '' -e "s#from './gridColumnSizing'#from './grid-column-sizing'#" components/grid/grid-column-sizing.test.ts
 ```
 
-- [ ] **Step 6: Verificare che non resti nessun riferimento a `components/ui/` per questi otto nomi**
+- [✅] **Step 6: Verificare che non resti nessun riferimento a `components/ui/` per questi otto nomi**
 
 ```bash
 grep -rn --include='*.ts' --include='*.tsx' \
@@ -936,7 +948,7 @@ grep -rn --include='*.ts' --include='*.tsx' \
 
 Expected: `0`.
 
-- [ ] **Step 7: Convertire i tre componenti a export nominati**
+- [✅] **Step 7: Convertire i tre componenti a export nominati**
 
 In `components/grid/DataGrid.tsx`, cambiare
 `export default function DataGrid<T>({` in `export function DataGrid<T>({`.
@@ -946,7 +958,7 @@ in `export function GridToolbar<T>({ gridApi, columns, onClearFilters, children 
 In `components/grid/ColumnVisibilityToggle.tsx`, cambiare
 `export default function ColumnVisibilityToggle<T>(` in `export function ColumnVisibilityToggle<T>(`.
 
-- [ ] **Step 8: Aggiornare i loro import dal default al nominato**
+- [✅] **Step 8: Aggiornare i loro import dal default al nominato**
 
 Gli otto import in forma semplice, via alias:
 
@@ -970,7 +982,7 @@ sed -i '' \
   components/grid/GridToolbar.test.tsx
 ```
 
-- [ ] **Step 8b: Aggiornare i due `vi.mock` che restituiscono `default`**
+- [✅] **Step 8b: Aggiornare i due `vi.mock` che restituiscono `default`**
 
 `components/i18n/translations/TranslationsTableClient.test.tsx` finge `DataGrid` e `GridToolbar`
 con `{ default: ... }`. Passando all'export nominato, quel mock fornirebbe `default` mentre il
@@ -997,7 +1009,7 @@ Nota: `lib/rbac/users-grid-query.test.ts:11` finge `UsersTableClient` con `{ def
 e va lasciato com'e' — quel componente resta un export default, e sta nella lista dei 27 del
 compito B-6.
 
-- [ ] **Step 9: Verificare che nessun import default di questi tre sia rimasto**
+- [✅] **Step 9: Verificare che nessun import default di questi tre sia rimasto**
 
 ```bash
 npm run typecheck
@@ -1005,7 +1017,7 @@ npm run typecheck
 
 Expected: verde. Se compare `has no default export`, un import è sfuggito ai pattern dello Step 8: correggilo a mano — il messaggio d'errore nomina il file e la riga.
 
-- [ ] **Step 10: Verificare lint e test**
+- [✅] **Step 10: Verificare lint e test**
 
 ```bash
 npm run lint && npm test
@@ -1013,7 +1025,7 @@ npm run lint && npm test
 
 Expected: entrambi verdi.
 
-- [ ] **Step 11: Commit**
+- [✅] **Step 11: Commit**
 
 ```bash
 git add -A components
@@ -1041,7 +1053,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: niente dai compiti precedenti.
 - Produces: `AccessibleDialog`, `ConfirmModal`, `LoadingStatus` come **export nominati** da `@/components/shared/AccessibleDialog`, `@/components/shared/ConfirmModal`, `@/components/shared/LoadingStatus`. `PageContainer` e `IconRenderer` erano già nominati e restano tali, a `@/components/shared/PageContainer` e `@/components/shared/IconRenderer`. Il compito B-6 conta su `AccessibleDialog`, `ConfirmModal` e `LoadingStatus` come già convertiti, e quindi **non** li mette nella lista dei 27.
 
-- [ ] **Step 1: Creare la cartella e spostare i cinque file da `ui/`**
+- [✅] **Step 1: Creare la cartella e spostare i cinque file da `ui/`**
 
 ```bash
 mkdir -p components/shared
@@ -1052,14 +1064,14 @@ git mv components/ui/LoadingStatus.tsx components/shared/LoadingStatus.tsx
 git mv components/ui/LoadingStatus.test.tsx components/shared/LoadingStatus.test.tsx
 ```
 
-- [ ] **Step 2: Spostare i due dalla radice**
+- [✅] **Step 2: Spostare i due dalla radice**
 
 ```bash
 git mv components/PageContainer.tsx components/shared/PageContainer.tsx
 git mv components/IconRenderer.tsx components/shared/IconRenderer.tsx
 ```
 
-- [ ] **Step 3: Aggiornare i percorsi negli import**
+- [✅] **Step 3: Aggiornare i percorsi negli import**
 
 ```bash
 grep -rl --include='*.ts' --include='*.tsx' \
@@ -1073,7 +1085,7 @@ grep -rl --include='*.ts' --include='*.tsx' \
     -e 's#components/IconRenderer#components/shared/IconRenderer#g'
 ```
 
-- [ ] **Step 4: Aggiustare l'unico import relativo che si rompe**
+- [✅] **Step 4: Aggiustare l'unico import relativo che si rompe**
 
 Ce n'e' uno solo, verificato: `components/Sidebar.tsx:15` importa `IconRenderer` con `./`, e
 dopo lo spostamento quel percorso non esiste piu'.
@@ -1098,7 +1110,7 @@ grep -rnE "from '\.{1,2}(/[a-zA-Z-]+)*/(AccessibleDialog|ConfirmModal|LoadingSta
 Expected: esattamente due righe, entrambe dentro `components/shared/` — i due test che importano
 il loro vicino.
 
-- [ ] **Step 5: Convertire i tre componenti a export nominati**
+- [✅] **Step 5: Convertire i tre componenti a export nominati**
 
 `PageContainer` e `IconRenderer` sono **gia'** export nominati (`export function PageContainer`
 e `export const IconRenderer: React.FC<...> = memo(...)`): non si toccano. Solo i tre che
@@ -1112,7 +1124,7 @@ In `components/shared/LoadingStatus.tsx`, cambiare
 `export default function LoadingStatus({ label }: { label: string }) {`
 in `export function LoadingStatus({ label }: { label: string }) {`.
 
-- [ ] **Step 6: Aggiornare i loro import dal default al nominato**
+- [✅] **Step 6: Aggiornare i loro import dal default al nominato**
 
 ```bash
 grep -rl --include='*.ts' --include='*.tsx' "from '@/components/shared/\(AccessibleDialog\|ConfirmModal\|LoadingStatus\)'" app components lib \
@@ -1128,7 +1140,7 @@ sed -i '' -e "s#^import LoadingStatus from './LoadingStatus'#import { LoadingSta
 (`from '@/components/ui/AccessibleDialog'`), non per via relativa, quindi lo Step 3 ne ha già
 riscritto il percorso e il `grep` per alias qui sopra ne converte la forma.
 
-- [ ] **Step 7: Verificare tipi, lint e test**
+- [✅] **Step 7: Verificare tipi, lint e test**
 
 ```bash
 npm run typecheck && npm run lint && npm test
@@ -1136,7 +1148,7 @@ npm run typecheck && npm run lint && npm test
 
 Expected: tutti verdi. Se `typecheck` dice `has no default export`, un import è sfuggito: il messaggio nomina file e riga.
 
-- [ ] **Step 8: Commit**
+- [✅] **Step 8: Commit**
 
 ```bash
 git add -A app components
@@ -1166,7 +1178,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Perché ora e non dopo:** `raw-color-baseline.json` indicizza per percorso di file, e il controllo confronta il conteggio di ogni file con la sua soglia — assente significa zero. Appena `AccessibleDialog.tsx` cambia percorso, il cricchetto vede un file nuovo con un colore grezzo sopra una soglia inesistente e diventa rosso. Dei dieci file tracciati, è l'unico che si muove.
 
-- [ ] **Step 1: Verificare che il cricchetto sia rosso adesso**
+- [✅] **Step 1: Verificare che il cricchetto sia rosso adesso**
 
 ```bash
 cd ../../.. && npm --prefix sources/microservices/web-construct run test:raw-colors 2>&1 | tail -20
@@ -1174,7 +1186,7 @@ cd ../../.. && npm --prefix sources/microservices/web-construct run test:raw-col
 
 Expected: FAIL, con `components/shared/AccessibleDialog.tsx: 0 -> 1`.
 
-- [ ] **Step 2: Aggiornare la chiave nel baseline — in DUE posti**
+- [✅] **Step 2: Aggiornare la chiave nel baseline — in DUE posti**
 
 `sources/devops/raw-color-baseline.json` ha tre chiavi di primo livello: `total`, `justified` e
 `perFile`. Il percorso `components/ui/AccessibleDialog.tsx` compare **in due di esse**, e vanno
@@ -1189,7 +1201,7 @@ rinominate entrambe in `components/shared/AccessibleDialog.tsx`:
 Non toccare `total`, che resta `32`: il conteggio dei colori grezzi non e' cambiato, e' cambiato
 solo dove vivono.
 
-- [ ] **Step 3: Verificare che `dialogConsumers.test.ts` sia gia' a posto**
+- [✅] **Step 3: Verificare che `dialogConsumers.test.ts` sia gia' a posto**
 
 Questo passo e' **gia' stato svolto dal compito B-2**, e non per gentilezza: quel file non
 asserisce solo su un percorso, asserisce sulla **forma dell'import**. Si aspettava
@@ -1209,7 +1221,7 @@ la regex che ora pretende `import \{ AccessibleDialog \}` da `@/components/share
 Se la regex fosse stata allargata invece che aggiornata, la guardia avrebbe smesso di guardare:
 controlla che pretenda ancora la forma esatta e non un `.*`.
 
-- [ ] **Step 4: Verificare che entrambi i controlli siano verdi**
+- [✅] **Step 4: Verificare che entrambi i controlli siano verdi**
 
 ```bash
 npm --prefix sources/microservices/web-construct run test:raw-colors
@@ -1218,7 +1230,7 @@ npm --prefix sources/microservices/web-construct test
 
 Expected: entrambi verdi. **Non** lanciare `UPDATE_RAW_COLOR_BASELINE=1`: se servisse, vorrebbe dire che una chiave è stata dimenticata invece di aggiornata.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/devops/raw-color-baseline.json sources/microservices/web-construct/components/ui/dialogConsumers.test.ts
@@ -1251,7 +1263,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Perché non serve riscriverle:** i percorsi che leggono sono risolti con `process.cwd()`, non relativi alla posizione del file, quindi lo spostamento non li tocca. Gli unici import relativi da controllare sono quelli verso `./button`.
 
-- [ ] **Step 1: Spostare e rinominare**
+- [✅] **Step 1: Spostare e rinominare**
 
 ```bash
 git mv components/ui/buttonInteractionStyles.test.ts guards/button-interaction-styles.test.ts
@@ -1260,7 +1272,7 @@ git mv components/ui/iconOnlyButtonAccessibleName.test.ts guards/icon-only-butto
 git mv components/ui/dialogConsumers.test.ts guards/dialog-consumers.test.ts
 ```
 
-- [ ] **Step 2: Trovare gli import relativi rotti dallo spostamento**
+- [✅] **Step 2: Trovare gli import relativi rotti dallo spostamento**
 
 ```bash
 grep -n "from '\./\|from '\.\./" guards/*.test.ts
@@ -1269,7 +1281,7 @@ grep -n "from '\./\|from '\.\./" guards/*.test.ts
 Per ogni riscontro, sostituisci il relativo con l'alias: `'./button'` diventa `'@/components/ui/button'`.
 Nota: `disabled-button-hover-styles.test.ts` contiene anche la **stringa** `'components/ui/button'` (non un import) dentro il test che vieta gli alias sugli import di `Button` — quella è un percorso letterale e va lasciata com'è, perché `button.tsx` non si è mosso.
 
-- [ ] **Step 3: Verificare che le quattro guardie girino e trovino ancora ciò che trovavano**
+- [✅] **Step 3: Verificare che le quattro guardie girino e trovino ancora ciò che trovavano**
 
 ```bash
 npx vitest run guards/
@@ -1277,7 +1289,7 @@ npx vitest run guards/
 
 Expected: PASS su tutti e cinque i file di `guards/` (le quattro spostate più `file-naming`). Se una guardia passa ora ma prima trovava trasgressori, è un falso verde: controlla che stia ancora camminando `app/` e `components/` e non una cartella che non esiste più.
 
-- [ ] **Step 4: Verificare che vitest raccolga lo stesso numero di file di prima**
+- [✅] **Step 4: Verificare che vitest raccolga lo stesso numero di file di prima**
 
 ```bash
 npm test 2>&1 | tail -6
@@ -1285,7 +1297,7 @@ npm test 2>&1 | tail -6
 
 Expected: `Test Files 80 passed (80)` — i 79 di prima più `guards/file-naming.test.ts`. Se il numero è più basso, un file di `guards/` non viene raccolto: ricontrolla `test.include` in `vitest.config.ts`.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add -A components guards
@@ -1312,7 +1324,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: `components/ui/` svuotato dai compiti B-1, B-2 e B-4.
 - Produces: la guardia sui nomi attiva senza esenzioni. Nessun compito successivo la modifica.
 
-- [ ] **Step 1: Verificare che in `components/ui/` restino esattamente sette file**
+- [✅] **Step 1: Verificare che in `components/ui/` restino esattamente sette file**
 
 ```bash
 ls components/ui
@@ -1321,7 +1333,7 @@ ls components/ui
 Expected, esattamente questi sette e nient'altro:
 `button.test.tsx`, `button.tsx`, `button.types.tsx`, `input.test.tsx`, `input.tsx`, `select.tsx`, `textarea.tsx`.
 
-- [ ] **Step 2: Rimuovere l'esenzione dalla guardia**
+- [✅] **Step 2: Rimuovere l'esenzione dalla guardia**
 
 In `guards/file-naming.test.ts`:
 - cancellare il blocco di commento `Esenzione temporanea, da rimuovere nel compito B-5` e l'array `EXEMPT_FROM_FILENAME_RULES` con i suoi diciannove percorsi;
@@ -1329,7 +1341,7 @@ In `guards/file-naming.test.ts`:
 - nel test `has no camelCase filename anywhere`, cancellare la riga `.filter(file => !exempt(file))`;
 - nel test `names every file under components/ui in kebab-case`, cancellare la riga `.filter(file => !exempt(file))`.
 
-- [ ] **Step 3: Verificare che la guardia sia verde su tutti e tre i controlli, senza esenzioni**
+- [✅] **Step 3: Verificare che la guardia sia verde su tutti e tre i controlli, senza esenzioni**
 
 ```bash
 npx vitest run guards/file-naming.test.ts
@@ -1337,7 +1349,7 @@ npx vitest run guards/file-naming.test.ts
 
 Expected: PASS su tutto, inclusi i dodici test a fixture.
 
-- [ ] **Step 4: Verificare che l'esenzione non sopravviva da nessuna parte**
+- [✅] **Step 4: Verificare che l'esenzione non sopravviva da nessuna parte**
 
 ```bash
 grep -rn "EXEMPT_FROM_FILENAME_RULES\|exempt(" guards/ | wc -l
@@ -1345,7 +1357,7 @@ grep -rn "EXEMPT_FROM_FILENAME_RULES\|exempt(" guards/ | wc -l
 
 Expected: `0`.
 
-- [ ] **Step 5: Verificare l'insieme**
+- [✅] **Step 5: Verificare l'insieme**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -1353,7 +1365,7 @@ npm run lint && npm run typecheck && npm test
 
 Expected: tutti verdi.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add guards/file-naming.test.ts
@@ -1378,7 +1390,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Perché una lista e non un file di baseline separato:** la lista vive dove vive la regola, quindi si legge insieme a essa. E ha una proprietà voluta: se domani uno di quei 27 file viene rinominato o spostato, la sua riga non combacia più e ESLint inizia a pretendere l'export nominato — che è il comportamento giusto, perché quel file è stato toccato.
 
-- [ ] **Step 1: Aggiungere i due blocchi in coda all'array di `eslint.config.mjs`**
+- [✅] **Step 1: Aggiungere i due blocchi in coda all'array di `eslint.config.mjs`**
 
 Dopo il blocco `import-x` e prima della chiusura `]`:
 
@@ -1437,7 +1449,7 @@ Dopo il blocco `import-x` e prima della chiusura `]`:
   },
 ```
 
-- [ ] **Step 2: Verificare che il lint sia verde**
+- [✅] **Step 2: Verificare che il lint sia verde**
 
 ```bash
 npm run lint
@@ -1445,7 +1457,7 @@ npm run lint
 
 Expected: nessun errore. Se compare `Prefer named exports` su un file, quel file ha un export default e non è nella lista: o è uno dei sei che B-1 e B-2 dovevano convertire (allora convertilo, non aggiungerlo alla lista), o la lista ha un percorso sbagliato.
 
-- [ ] **Step 3: Verificare che la regola morda davvero, con una prova a mano**
+- [✅] **Step 3: Verificare che la regola morda davvero, con una prova a mano**
 
 ```bash
 printf "export default function Probe() {\n  return null\n}\n" > components/probe-check.ts
@@ -1455,7 +1467,7 @@ rm components/probe-check.ts
 
 Expected: un errore `import-x/no-default-export` sul file di prova — la prova che la regola è accesa e non spenta da un `files:` troppo largo.
 
-- [ ] **Step 4: Verificare che `app/**` non sia toccata**
+- [✅] **Step 4: Verificare che `app/**` non sia toccata**
 
 ```bash
 npx eslint "app/(protected)/page.tsx" "app/layout.tsx"
@@ -1463,7 +1475,7 @@ npx eslint "app/(protected)/page.tsx" "app/layout.tsx"
 
 Expected: nessun errore. Quei file hanno `export default` per obbligo di Next.
 
-- [ ] **Step 5: Verificare l'insieme**
+- [✅] **Step 5: Verificare l'insieme**
 
 ```bash
 npm run typecheck && npm test
@@ -1471,7 +1483,7 @@ npm run typecheck && npm test
 
 Expected: entrambi verdi.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add eslint.config.mjs
@@ -1505,14 +1517,14 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Perché in due passi:** è l'unica rinomina di solo maiuscolo/minuscolo del lavoro. Su APFS, che non distingue le maiuscole, `git mv app/providers.tsx app/Providers.tsx` in un passo non registra niente e Git resta convinto che il file non sia cambiato.
 
-- [ ] **Step 1: Rinominare passando da un nome temporaneo**
+- [✅] **Step 1: Rinominare passando da un nome temporaneo**
 
 ```bash
 git mv app/providers.tsx app/providers-tmp.tsx
 git mv app/providers-tmp.tsx app/Providers.tsx
 ```
 
-- [ ] **Step 2: Verificare che Git abbia registrato la rinomina**
+- [✅] **Step 2: Verificare che Git abbia registrato la rinomina**
 
 ```bash
 git status --short
@@ -1520,14 +1532,14 @@ git status --short
 
 Expected: una riga `R  app/providers.tsx -> app/Providers.tsx`. Se non compare, il doppio passo non è andato: ricontrolla con `git diff --cached --name-status`.
 
-- [ ] **Step 3: Aggiornare i due import**
+- [✅] **Step 3: Aggiornare i due import**
 
 ```bash
 sed -i '' "s#from './providers'#from './Providers'#" app/layout.tsx
 sed -i '' "s#from '@/app/providers'#from '@/app/Providers'#" components/AppHydrationMarker.test.tsx
 ```
 
-- [ ] **Step 4: Verificare che non resti nessun riferimento minuscolo**
+- [✅] **Step 4: Verificare che non resti nessun riferimento minuscolo**
 
 ```bash
 grep -rn --include='*.ts' --include='*.tsx' "app/providers'\|from '\./providers'" app components context lib | wc -l
@@ -1535,7 +1547,7 @@ grep -rn --include='*.ts' --include='*.tsx' "app/providers'\|from '\./providers'
 
 Expected: `0`.
 
-- [ ] **Step 5: Verificare che l'applicazione compili davvero**
+- [✅] **Step 5: Verificare che l'applicazione compili davvero**
 
 ```bash
 npm run typecheck && npm run build
@@ -1543,7 +1555,7 @@ npm run typecheck && npm run build
 
 Expected: entrambi verdi. `npm run build` qui non è di troppo: su un filesystem che non distingue le maiuscole, un import rimasto minuscolo continua a risolvere in locale e si rompe solo sul Linux della CI. Il build è il controllo più vicino a quel comportamento che si può fare da qui.
 
-- [ ] **Step 6: Verificare lint e test**
+- [✅] **Step 6: Verificare lint e test**
 
 ```bash
 npm run lint && npm test
@@ -1551,7 +1563,7 @@ npm run lint && npm test
 
 Expected: entrambi verdi.
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add -A app components
@@ -1579,7 +1591,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Perché:** `npm run test:tokens` esiste in `package.json` dal 2026-08-24, scritto insieme alla migrazione shadcn, ma non è mai stato messo nel workflow. Oggi non protegge niente. È l'esempio vivo del secondo passo che si dimentica, quello citato in `AGENTS.md`.
 
-- [ ] **Step 1: Verificare che il cricchetto passi in locale**
+- [✅] **Step 1: Verificare che il cricchetto passi in locale**
 
 ```bash
 npm --prefix sources/microservices/web-construct run test:tokens
@@ -1587,7 +1599,7 @@ npm --prefix sources/microservices/web-construct run test:tokens
 
 Expected: verde.
 
-- [ ] **Step 2: Aggiungere il passo al workflow**
+- [✅] **Step 2: Aggiungere il passo al workflow**
 
 In `.github/workflows/quality.yml`, nel job `application`, subito dopo la riga `      - run: npm run test:raw-colors`, aggiungere:
 
@@ -1595,7 +1607,7 @@ In `.github/workflows/quality.yml`, nel job `application`, subito dopo la riga `
       - run: npm run test:tokens
 ```
 
-- [ ] **Step 3: Verificare che il file YAML resti valido**
+- [✅] **Step 3: Verificare che il file YAML resti valido**
 
 ```bash
 node -e "
@@ -1608,7 +1620,7 @@ console.log(steps.join('\n'))
 
 Expected: l'elenco contiene `test:migrations`, `test:docs-contract`, `test:i18n-keys`, `test:env-contract`, `test:raw-colors`, `test:tokens`, e più in basso `test:integration`.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/quality.yml
@@ -1647,7 +1659,7 @@ agosto cancella il racconto di cosa era vero allora.
 
 Resta un solo riferimento genuinamente stantio in un documento vivo.
 
-- [ ] **Step 1: Aggiornare il tipo nell'input-spec**
+- [✅] **Step 1: Aggiornare il tipo nell'input-spec**
 
 `docs/input-specs/rbac/users-roles-functionalities-specs.md` descrive il modello dati e nomina il
 tipo nel titolo della sezione 3.3. Il tipo ora si chiama `UserDto`.
@@ -1660,7 +1672,7 @@ grep -c "UserDTO" docs/input-specs/rbac/users-roles-functionalities-specs.md
 
 Expected: il primo comando elenca le occorrenze, il terzo stampa `0`.
 
-- [ ] **Step 2: Verificare che nessun altro documento vivo sia rimasto indietro**
+- [✅] **Step 2: Verificare che nessun altro documento vivo sia rimasto indietro**
 
 ```bash
 grep -rlE "components/ui/(DataGrid|GridToolbar|ColumnVisibilityToggle|AccessibleDialog|ConfirmModal|LoadingStatus|dataGridConfig|gridColumnFilters|gridColumnSizing)|UserDTO" docs README.md
@@ -1670,7 +1682,7 @@ Expected: solo file datati — le tre revisioni di luglio e agosto elencate sopr
 e i due documenti di questo lavoro (la specifica e il piano del 2026-08-26), che descrivono
 legittimamente lo stato di partenza. Nessun altro.
 
-- [ ] **Step 3: Aggiungere in coda alla verifica una sezione di esito**
+- [✅] **Step 3: Aggiungere in coda alla verifica una sezione di esito**
 
 In `docs/reviews/2026-08-26-verify-naming-conventions-react.md`, aggiungere in fondo:
 
@@ -1691,7 +1703,7 @@ Nota: il file originale arriva troncato a metà dell'esempio nella sezione
 c'erano altre regole, non sono mai arrivate.
 ```
 
-- [ ] **Step 4: Verificare che il cricchetto sui documenti regga**
+- [✅] **Step 4: Verificare che il cricchetto sui documenti regga**
 
 ```bash
 npm --prefix sources/microservices/web-construct run test:docs-contract
@@ -1699,7 +1711,7 @@ npm --prefix sources/microservices/web-construct run test:docs-contract
 
 Expected: verde.
 
-- [ ] **Step 5: Verificare l'insieme, un'ultima volta**
+- [✅] **Step 5: Verificare l'insieme, un'ultima volta**
 
 ```bash
 cd sources/microservices/web-construct
@@ -1711,7 +1723,7 @@ npm --prefix sources/microservices/web-construct run test:tokens
 
 Expected: tutti verdi.
 
-- [ ] **Step 6: Verificare che la storia dei file spostati sia sopravvissuta**
+- [✅] **Step 6: Verificare che la storia dei file spostati sia sopravvissuta**
 
 ```bash
 git log --follow --oneline -- sources/microservices/web-construct/components/grid/DataGrid.tsx | tail -3
@@ -1720,7 +1732,7 @@ git log --follow --oneline -- sources/microservices/web-construct/components/sha
 
 Expected: per entrambi, commit anteriori a questo lavoro. Se ne compare uno solo, lo spostamento è passato da cancella-e-ricrea invece che da `git mv`.
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add docs/input-specs/rbac/users-roles-functionalities-specs.md docs/reviews/2026-08-26-verify-naming-conventions-react.md
@@ -1738,7 +1750,7 @@ that branch's pull request, not this one.
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 8: Aprire PR-B**
+- [✅] **Step 8: Aprire PR-B**
 
 ```bash
 git push
