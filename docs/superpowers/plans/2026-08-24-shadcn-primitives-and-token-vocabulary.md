@@ -80,7 +80,7 @@ File: `app/(protected)/error.tsx`, `components/EmbeddedFrame.tsx`, `components/E
 - Consumes: niente.
 - Produces: `cn(...inputs: ClassValue[]): string` da `@/lib/utils`. Ogni task successivo che compone classi usa questa funzione.
 
-- [ ] **Step 1: Installare le tre dipendenze**
+- [✅] **Step 1: Installare le tre dipendenze**
 
 ```bash
 cd sources/microservices/web-construct
@@ -89,7 +89,7 @@ npm install class-variance-authority tailwind-merge @radix-ui/react-slot
 
 Verifica che compaiano in `dependencies`, non in `devDependencies`.
 
-- [ ] **Step 2: Scrivere il test di `cn()` che fallisce**
+- [✅] **Step 2: Scrivere il test di `cn()` che fallisce**
 
 Crea `lib/utils.test.ts`:
 
@@ -115,7 +115,7 @@ describe('cn', () => {
 })
 ```
 
-- [ ] **Step 3: Eseguire il test e verificare che fallisca**
+- [✅] **Step 3: Eseguire il test e verificare che fallisca**
 
 ```bash
 npm run test -- lib/utils.test.ts
@@ -123,7 +123,7 @@ npm run test -- lib/utils.test.ts
 
 Atteso: FAIL, `Failed to resolve import "./utils"`.
 
-- [ ] **Step 4: Scrivere `lib/utils.ts`**
+- [✅] **Step 4: Scrivere `lib/utils.ts`**
 
 ```ts
 import { clsx, type ClassValue } from 'clsx'
@@ -143,7 +143,7 @@ export function cn(...inputs: ClassValue[]): string {
 }
 ```
 
-- [ ] **Step 5: Eseguire il test e verificare che passi**
+- [✅] **Step 5: Eseguire il test e verificare che passi**
 
 ```bash
 npm run test -- lib/utils.test.ts
@@ -151,7 +151,7 @@ npm run test -- lib/utils.test.ts
 
 Atteso: PASS, 3 test.
 
-- [ ] **Step 6: Creare `components.json`**
+- [✅] **Step 6: Creare `components.json`**
 
 Serve perché `npx shadcn add <componente>` sappia dove scrivere e quali alias usare. `"cssVariables": true` è obbligatorio: senza, il CLI genera classi con colori fissi invece che con i token.
 
@@ -181,7 +181,7 @@ Serve perché `npx shadcn add <componente>` sappia dove scrivere e quali alias u
 
 `"config": ""` è corretto per Tailwind v4, che non ha più `tailwind.config.ts`.
 
-- [ ] **Step 7: Verifica completa e commit**
+- [✅] **Step 7: Verifica completa e commit**
 
 ```bash
 npm run lint && npm run test && npm run typecheck
@@ -215,7 +215,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: niente.
 - Produces: le variabili CSS `--background`, `--card`, `--popover`, `--accent`, `--border`, `--border-subtle`, `--foreground`, `--foreground-secondary`, `--muted-foreground`, `--foreground-faint`, `--primary`, `--primary-foreground`, `--sidebar`, `--sidebar-foreground`, `--sidebar-accent`, `--sidebar-accent-foreground`, `--ring`, `--input`, `--secondary`, `--secondary-foreground`, `--muted`, `--radius`, `--destructive`, `--destructive-foreground`, `--destructive-muted`, `--destructive-muted-foreground`, `--destructive-border`, e le terne `--success-*` e `--warning-*`. Il task 3 emette i primi sedici a runtime; i task 6 e 9 li consumano come utility.
 
-- [ ] **Step 1: Sostituire il blocco `:root` dei fallback**
+- [✅] **Step 1: Sostituire il blocco `:root` dei fallback**
 
 Il blocco attuale che comincia con `--theme-primary: #4f46e5;` va sostituito **per intero** con questo. I valori sono identici, cambiano solo i nomi. Il commento sopra il blocco (quello che spiega che sono solo fallback e che devono concordare con `defaultThemeConfig`) va conservato, aggiornando il riferimento da `--theme-*` ai nomi nuovi.
 
@@ -252,7 +252,7 @@ Il blocco attuale che comincia con `--theme-primary: #4f46e5;` va sostituito **p
 
 `--radius: 0.5rem` corrisponde a `rounded-lg`, la dimensione dominante nell'inventario dei bottoni.
 
-- [ ] **Step 2: Sostituire i token di stato**
+- [✅] **Step 2: Sostituire i token di stato**
 
 I blocchi `:root` e `.dark` che contengono `--state-danger-fg` eccetera vanno sostituiti con questi. **Nessun call site li usa oggi** (verificato: zero occorrenze), quindi il rinomino non tocca altri file.
 
@@ -308,7 +308,7 @@ I blocchi `:root` e `.dark` che contengono `--state-danger-fg` eccetera vanno so
 }
 ```
 
-- [ ] **Step 3: Sostituire il blocco `@theme` con `@theme inline`**
+- [✅] **Step 3: Sostituire il blocco `@theme` con `@theme inline`**
 
 ```css
 /* `inline` e non `@theme` semplice: con `@theme` Tailwind emette
@@ -368,11 +368,11 @@ I blocchi `:root` e `.dark` che contengono `--state-danger-fg` eccetera vanno so
 
 `--color-brand-blue` e `--container-8xl` sono presi tali e quali dal blocco vecchio.
 
-- [ ] **Step 4: Non toccare le regole `button` in `@layer base`**
+- [✅] **Step 4: Non toccare le regole `button` in `@layer base`**
 
 Restano esattamente dove sono, col loro commento. Il task le lascia intatte di proposito: sono la ragione per cui le varianti del `Button` non avranno bisogno di `!`.
 
-- [ ] **Step 5: Verificare che i guard sul CSS passino ancora**
+- [✅] **Step 5: Verificare che i guard sul CSS passino ancora**
 
 ```bash
 npm run test -- components/ui/buttonInteractionStyles.test.ts
@@ -380,7 +380,7 @@ npm run test -- components/ui/buttonInteractionStyles.test.ts
 
 Atteso: PASS, 4 test. Se fallisce, le regole `button` sono state toccate per sbaglio: rimettile com'erano invece di adattare il test.
 
-- [ ] **Step 6: Non fare commit — il task 3 chiude la modifica**
+- [✅] **Step 6: Non fare commit — il task 3 chiude la modifica**
 
 `lib/theme-vars.test.ts` è ora rosso, e deve esserlo: due dei suoi test leggono `app/globals.css` cercando `--theme-` e `--state-`, nomi che questo task ha appena tolto. Sono le due metà dello stesso rinomino e nessuna delle due sta in piedi da sola, quindi vanno in un commit unico.
 
@@ -404,7 +404,7 @@ Atteso: FAIL. Prosegui col task 3 senza committare.
 - Consumes: `app/globals.css` del task 2, che dichiara i fallback con i nomi nuovi.
 - Produces: `resolveThemeVars(config, isDark)` restituisce ancora un `Record<string, string>` di 16 chiavi, ma le chiavi sono `--primary`, `--primary-foreground`, `--sidebar`, `--sidebar-foreground`, `--sidebar-accent`, `--sidebar-accent-foreground`, `--background`, `--card`, `--popover`, `--accent`, `--border`, `--border-subtle`, `--foreground`, `--foreground-secondary`, `--muted-foreground`, `--foreground-faint`. `context/UIContext.tsx:51-53` le scrive su `document.documentElement` senza sapere come si chiamano, quindi **non va toccato**.
 
-- [ ] **Step 1: Aggiornare i test perché descrivano i nomi nuovi**
+- [✅] **Step 1: Aggiornare i test perché descrivano i nomi nuovi**
 
 In `lib/theme-vars.test.ts`, sostituire ogni chiave `--theme-*` con la corrispondente della tabella di mappatura. Le sostituzioni, una per una:
 
@@ -453,7 +453,7 @@ L'elenco ordinato nel test `resolves all 16 CSS variables` va riscritto **e rior
   })
 ```
 
-- [ ] **Step 2: Aggiornare il test che legge i fallback da `globals.css`**
+- [✅] **Step 2: Aggiornare il test che legge i fallback da `globals.css`**
 
 Il vecchio test costruisce la regex con `--theme-${name}`. Sostituirlo con:
 
@@ -472,7 +472,7 @@ Il vecchio test costruisce la regex con `--theme-${name}`. Sostituirlo con:
 
 Il `\\n  ` all'inizio serve: senza, `--primary` verrebbe trovato dentro `--primary-foreground` e la prima corrispondenza sarebbe quella sbagliata.
 
-- [ ] **Step 3: Riscrivere il test degli stati semantici**
+- [✅] **Step 3: Riscrivere il test degli stati semantici**
 
 Il vecchio test cerca `--state-danger-fg` e naviga il file per indici di stringa. I nomi sono cambiati e gli stati ora hanno anche un pieno con la sua etichetta, che il vecchio test non copriva. Sostituirlo per intero con:
 
@@ -517,7 +517,7 @@ Il vecchio test cerca `--state-danger-fg` e naviga il file per indici di stringa
 
 Due note per chi implementa. La prima: questo test usa `contrast`, `worst`, `lightSurfaces` e `darkSurfaces`, che sono definite nello scope del `describe('default palette contrast')` — va sostituito **dentro quel blocco**, non spostato altrove. La seconda: il vecchio test conteneva una funzione `block` mai usata davvero, neutralizzata con `void block`. Non riportarla.
 
-- [ ] **Step 4: Eseguire i test e verificare che falliscano per il motivo giusto**
+- [✅] **Step 4: Eseguire i test e verificare che falliscano per il motivo giusto**
 
 ```bash
 npm run test -- lib/theme-vars.test.ts
@@ -525,7 +525,7 @@ npm run test -- lib/theme-vars.test.ts
 
 Atteso: FAIL sui test che leggono `resolveThemeVars`, con messaggi del tipo `expected undefined to be '#4f46e5'` — perché la funzione emette ancora `--theme-primary`. I test che leggono `globals.css` invece devono già **passare**, perché il task 2 ha rinominato il CSS.
 
-- [ ] **Step 5: Rinominare le chiavi in `lib/theme-vars.ts`**
+- [✅] **Step 5: Rinominare le chiavi in `lib/theme-vars.ts`**
 
 Sostituire l'array `PAIRED_TOKENS`:
 
@@ -571,7 +571,7 @@ Aggiungere sopra `PAIRED_TOKENS` il commento che spiega il confine, perché è l
  */
 ```
 
-- [ ] **Step 6: Eseguire i test e verificare che passino**
+- [✅] **Step 6: Eseguire i test e verificare che passino**
 
 ```bash
 npm run test -- lib/theme-vars.test.ts
@@ -579,7 +579,7 @@ npm run test -- lib/theme-vars.test.ts
 
 Atteso: PASS, tutti i test.
 
-- [ ] **Step 7: Verifica completa e commit dei task 2 e 3 insieme**
+- [✅] **Step 7: Verifica completa e commit dei task 2 e 3 insieme**
 
 ```bash
 npm run lint && npm run test && npm run typecheck
