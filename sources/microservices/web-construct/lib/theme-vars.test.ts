@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { defaultThemeConfig } from '@/types/menu'
-import { resolveThemeVars, primaryForeground } from './theme-vars'
+import { resolveThemeVars, primaryForeground, themeContrastViolations } from './theme-vars'
 
 describe('resolveThemeVars', () => {
   it('resolves light values when isDark is false', () => {
@@ -197,5 +197,71 @@ describe('default palette contrast', () => {
     const knob = '#ffffff'
     expect(contrast(knob, switchOffLight as string)).toBeGreaterThanOrEqual(3)
     expect(contrast(knob, switchOffDark as string)).toBeGreaterThanOrEqual(3)
+  })
+})
+
+/**
+ * La stessa soglia, applicata a cio' che un amministratore salva.
+ *
+ * Il blocco qui sopra fissa il pavimento dei valori *spediti*. Non protegge
+ * nulla di cio' che Admin -> Tema scrive nel database: mergeThemeConfig lascia
+ * vincere il valore salvato, quindi un colore illeggibile scelto a mano vestiva
+ * testo piccolo senza che niente lo dicesse. I numeri qui sotto sono quelli
+ * misurati in questo ambiente prima del blocco.
+ */
+describe('themeContrastViolations', () => {
+  it('accepts the shipped palette', () => {
+    expect(themeContrastViolations(defaultThemeConfig)).toEqual([])
+  })
+
+  it('rejects the faint light value measured at 2,31:1 on surfaceHover', () => {
+    const violations = themeContrastViolations({ ...defaultThemeConfig, foregroundFaintLight: '#9ca3af' })
+
+    expect(violations.map(v => v.key)).toEqual(['foregroundFaintLight'])
+    expect(violations[0].ratio).toBeCloseTo(2.31, 2)
+    expect(violations[0].floor).toBe(4.5)
+  })
+
+  it('rejects the faint dark value measured at 3,04:1', () => {
+    const violations = themeContrastViolations({ ...defaultThemeConfig, foregroundFaintDark: '#6b7280' })
+
+    expect(violations.map(v => v.key)).toEqual(['foregroundFaintDark'])
+    expect(violations[0].ratio).toBeCloseTo(3.04, 2)
+  })
+
+  it('measures a foreground against the worst surface of its own theme, not against white', () => {
+    // #6b7280 su bianco legge 4,83:1 e passerebbe; su #f3f4f6, che e'
+    // surfaceHover e activeItemBg, legge 4,39:1. E' il modo esatto in cui
+    // foregroundMutedLight passo' la revisione.
+    const violations = themeContrastViolations({ ...defaultThemeConfig, foregroundMutedLight: '#6b7280' })
+
+    expect(violations.map(v => v.key)).toEqual(['foregroundMutedLight'])
+    expect(violations[0].ratio).toBeCloseTo(4.39, 2)
+  })
+
+  it('checks the sidebar and active-item text against their own background', () => {
+    const violations = themeContrastViolations({ ...defaultThemeConfig, sidebarTextDark: '#4b5563' })
+
+    expect(violations.map(v => v.key)).toEqual(['sidebarTextDark'])
+  })
+
+  it('reports every offending key, not just the first', () => {
+    const violations = themeContrastViolations({
+      ...defaultThemeConfig,
+      foregroundFaintLight: '#9ca3af',
+      foregroundFaintDark: '#6b7280',
+    })
+
+    expect(violations.map(v => v.key).sort()).toEqual(['foregroundFaintDark', 'foregroundFaintLight'])
+  })
+
+  it('ignores a value that is not a six-digit hex, because rendering falls back to the default', () => {
+    expect(themeContrastViolations({ ...defaultThemeConfig, foregroundFaintLight: 'rebeccapurple' })).toEqual([])
+  })
+
+  it('leaves the primary colour to primaryForeground instead of rejecting it', () => {
+    // #6366f1 non arriva a 4,5:1 con nessuna etichetta, ma e' un colore di
+    // marchio: il progetto deriva la meno peggio invece di rifiutare la scelta.
+    expect(themeContrastViolations({ ...defaultThemeConfig, primaryColor: '#6366f1' })).toEqual([])
   })
 })

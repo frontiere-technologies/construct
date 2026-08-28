@@ -42,6 +42,6 @@ export const withRef = <Button ref={hostRef}>Salva</Button>
 
 const slotRef: React.Ref<HTMLButtonElement> = React.createRef<HTMLButtonElement>()
 export const withRefAsChild = (
-  // eslint-disable-next-line @next/next/no-html-link-for-pages
+  // eslint-disable-next-line @next/next/no-html-link-for-pages -- ancora finta di fixture, non una rotta: questo file esiste solo per essere compilato
   <Button asChild ref={slotRef}><a href="/roles">Ruoli</a></Button>
 )

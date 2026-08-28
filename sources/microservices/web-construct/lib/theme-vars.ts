@@ -74,6 +74,88 @@ export function primaryForeground(primary: string): string {
   return onWhite >= onDark ? '#ffffff' : defaultThemeConfig.foregroundLight
 }
 
+/** WCAG 2.1 AA per il testo normale. Il testo piccolo non ha una soglia piu' bassa. */
+const CONTRAST_FLOOR = 4.5
+
+/**
+ * Le superfici che un testo puo' trovarsi sotto, tema per tema. Un livello di
+ * testo si misura contro la *peggiore* delle proprie, non contro il bianco: e'
+ * misurando su #ffffff che foregroundMutedLight passo' la revisione stando a
+ * 4,39:1 su una superficie reale.
+ */
+const SURFACE_KEYS: { light: (keyof ThemeConfig)[]; dark: (keyof ThemeConfig)[] } = {
+  light: ['pageLight', 'surfaceLight', 'surfaceOverlayLight', 'surfaceHoverLight', 'sidebarBgLight', 'activeItemBgLight'],
+  dark: ['pageDark', 'surfaceDark', 'surfaceOverlayDark', 'surfaceHoverDark', 'sidebarBgDark', 'activeItemBgDark'],
+}
+
+/** I quattro livelli di testo, che vanno provati su ogni superficie del loro tema. */
+const FOREGROUND_KEYS: { light: keyof ThemeConfig; dark: keyof ThemeConfig }[] = [
+  { light: 'foregroundLight', dark: 'foregroundDark' },
+  { light: 'foregroundSecondaryLight', dark: 'foregroundSecondaryDark' },
+  { light: 'foregroundMutedLight', dark: 'foregroundMutedDark' },
+  { light: 'foregroundFaintLight', dark: 'foregroundFaintDark' },
+]
+
+/**
+ * I testi con un fondo definito: qui non c'e' un minimo da prendere, i fondi
+ * possibili sono quelli elencati e nessun altro.
+ */
+const EXACT_PAIRS: { text: keyof ThemeConfig; backgrounds: (keyof ThemeConfig)[] }[] = [
+  { text: 'sidebarTextLight', backgrounds: ['sidebarBgLight', 'activeItemBgLight'] },
+  { text: 'sidebarTextDark', backgrounds: ['sidebarBgDark', 'activeItemBgDark'] },
+  { text: 'activeItemTextLight', backgrounds: ['activeItemBgLight'] },
+  { text: 'activeItemTextDark', backgrounds: ['activeItemBgDark'] },
+]
+
+export interface ContrastViolation {
+  key: keyof ThemeConfig
+  ratio: number
+  floor: number
+}
+
+/**
+ * I colori di una configurazione che non arrivano alla soglia di contrasto.
+ *
+ * `lib/theme-vars.test.ts` fissa lo stesso pavimento su `defaultThemeConfig`,
+ * cioe' sui valori spediti. Questa funzione lo applica a cio' che Admin -> Tema
+ * scrive nel database, che e' l'unico posto dove il pavimento puo' cedere: il
+ * valore salvato vince sul predefinito, e veste testo piccolo — `text-xs` in
+ * `app/(protected)/error.tsx`, `text-[10px]` in `components/AdminTheme.tsx`, il
+ * testo degli input disabilitati in `components/ui/input.tsx`.
+ *
+ * Si misura sui valori *efficaci*, quelli che `resolveThemeVars` produrrebbe:
+ * un valore che non e' un hex a sei cifre non viene mai reso, quindi non e' una
+ * violazione, e' un predefinito.
+ *
+ * Fuori perimetro di proposito: `primaryColor`. E' un colore di marchio, e il
+ * progetto ne deriva l'etichetta meno peggio con `primaryForeground()` invece
+ * di rifiutare la scelta di chi lo sceglie.
+ */
+export function themeContrastViolations(config: ThemeConfig): ContrastViolation[] {
+  const effective = (key: keyof ThemeConfig) => safeColor(config[key], defaultThemeConfig[key])
+  const violations: ContrastViolation[] = []
+
+  const record = (key: keyof ThemeConfig, ratio: number) => {
+    if (ratio < CONTRAST_FLOOR) violations.push({ key, ratio, floor: CONTRAST_FLOOR })
+  }
+
+  for (const level of FOREGROUND_KEYS) {
+    for (const theme of ['light', 'dark'] as const) {
+      const text = effective(level[theme])
+      const worst = Math.min(...SURFACE_KEYS[theme].map(key => contrastRatio(text, effective(key))))
+      record(level[theme], worst)
+    }
+  }
+
+  for (const pair of EXACT_PAIRS) {
+    const text = effective(pair.text)
+    const worst = Math.min(...pair.backgrounds.map(key => contrastRatio(text, effective(key))))
+    record(pair.text, worst)
+  }
+
+  return violations
+}
+
 export function resolveThemeVars(config: ThemeConfig, isDark: boolean): Record<string, string> {
   const primary = safeColor(config.primaryColor, defaultThemeConfig.primaryColor)
   const vars: Record<string, string> = {

@@ -13,13 +13,13 @@ Background reading on the "why" behind this setup: the team's internal [Vibe Cod
 3. [ ] Install project agents into `.claude/agents/` or equivalent
 4. [ ] Install project skills into `.claude/skills/` or equivalent
 5. [ ] Verify MCP servers in `.mcp.json`
-6. [ ] Set up the AI instructions file for this repo (`CLAUDE.md`) with the conventions below
+6. [ ] Set up the AI instructions file for this repo (`AGENTS.md`), starting from `vibe/AGENTS.template.md`
 
 ---
 
 ## 1. Install prerequisites
 
-- [`uv`](https://docs.astral.sh/uv/) (never invoke `python`/`pip` directly — see repo `CLAUDE.md`)
+- [`uv`](https://docs.astral.sh/uv/) (never invoke `python`/`pip` directly — see repo `AGENTS.md`)
 - `git` and `gh` (for PRs)
 - One AI coding CLI, configured per the table below
 
@@ -30,7 +30,7 @@ Background reading on the "why" behind this setup: the team's internal [Vibe Cod
 | OpenAI Codex | `.codex/` | `AGENTS.md` |
 | Gemini CLI | `.gemini/` | `GEMINI.md` |
 
-Each tool reads its own instructions file at startup — keep them all pointing back to the canonical `README.md` / `CLAUDE.md` at the repo root instead of duplicating content (see how `AGENTS.md` does it).
+Each tool reads its own instructions file at startup. Keep one canonical file — `AGENTS.md` at the repo root, next to `README.md` — and make every other instructions file a one-line import of it (`CLAUDE.md` in this repo contains just `@AGENTS.md`), instead of duplicating content.
 
 ---
 
@@ -108,35 +108,16 @@ GitHub, Supabase, Mail, Calendar, Google Drive and others maybe usefull for your
 
 ## 6. Setup of the AI instructions file for this repo
 
-`CLAUDE.md` (or the equivalent `AGENTS.md`/`GEMINI.md` from the table in step 1) is the file every AI coding CLI reads at startup. It must include:
+`AGENTS.md` at the repo root is the canonical instructions file — every AI coding CLI reads it, either directly or through a one-line import (see step 1). It must include:
 
 - **A pointer to `README.md`** — so the project overview isn't duplicated across instruction files.
 - **Commands** — how to run dev/build/lint/clean for the app, and how to run the test suite (this repo: `uv run pytest`, never `python`/`pip` directly — see step 1).
 - **Stack** — a one-line summary of the tech stack, so the assistant doesn't have to infer it from `package.json`.
 
-## Copy them into the AGENTS.md file or CLAUDE.md
+Start from [`AGENTS.template.md`](AGENTS.template.md) in this folder: copy it to the repo root under the name your CLI reads, fill in the `<placeholders>` for **Commands** and **Stack**, and keep its last two sections — *Tasks as checkboxes* and *Commit AI-tooling folders to Git* — verbatim: they are project-independent conventions, not examples to adapt.
 
 NOTE:
-- 27/Jun/2026: Still does not work. Sometimes it forgets to do it
-
----
-### Tasks as checkboxes
-
-**Scope:** applies only to markdown files writte under `./docs` (`docs/**/*.md`). Markdown files outside `./docs` are exempt.
-
-When generating a markdown file under `./docs` that lists actions, tasks, or items to address (reports, plans, reviews), always use unchecked checkboxes (`- [ ]`) per item, with a summary of findings/recommendations up front. Keep IDs and titles consistent across sections for traceability, e.g.:
-
-- [ ] ID=CRIT-1, Severity=Critical, Complexity=Low, Priority=P0, Title=Title A, Fix description=Description of the fix to be implemented for CRIT-1, updated as tasks are completed.
-- [ ] ID=HIGH-1, Severity=High, Complexity=Low, Priority=P1, Title=Title C, Fix description=Description of the fix to be implemented for HIGH-1, updated as tasks are completed.
-
-If the originating request came from a `.md` file under `./docs` with checkboxes, mark the corresponding checkbox `- [✅]` as soon as that work is done — regardless of whether it was done: via a workflow (like Superpowers implementation), a direct command, a bug fix, or delegated to a subagent. Do this per item, not in one batch at the end. Only mark items actually completed and tested.
----
-
-### Commit AI-tooling folders to Git
-
-Folders that the Superpowers plugin creates under `docs/` (e.g. `docs/superpowers/`, containing plans and other workflow artifacts) must be committed to Git, not left untracked or gitignored. They are part of the project's traceable history of AI-assisted work.
-
-The same applies to the `agents/` and `skills/` folders inside `.claude/`, and to the equivalent folders inside any other AI coding CLI's config directory (`.github/`, `.codex/`, `.gemini/`, etc., per the table in step 1). These contain the agent and skill definitions the project standardizes on and must be tracked so every contributor and every AI assistant gets the same setup.
+- 27/Jun/2026: The *Tasks as checkboxes* convention still does not work reliably. Sometimes the assistant forgets to tick the boxes.
 
 ---
 

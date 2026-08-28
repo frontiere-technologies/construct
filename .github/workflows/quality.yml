@@ -43,6 +43,11 @@ jobs:
       # module graph reaches, so integration-test files sat with six type
       # errors while the build stayed green. This checks everything in tsconfig.
       - run: npm run typecheck
+      # Prima di `npm test`, non dopo: verifica che vitest raccolga davvero
+      # ogni file *.test.* che esiste su disco. Una raccolta che si restringe
+      # non fa fallire la suite, la fa passare con meno test dentro — quindi
+      # il controllo deve parlare prima della riga che sembrerebbe verde.
+      - run: npm run test:collection
       - run: npm test
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=low

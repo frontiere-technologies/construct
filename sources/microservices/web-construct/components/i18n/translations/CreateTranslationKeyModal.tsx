@@ -21,7 +21,7 @@ export default function CreateTranslationKeyModal({ onClose }: { onClose: (saved
   const titleId = useId()
 
   // The namespace follows the key by convention until the admin overrides it.
-  const onKeyChange = (next: string) => {
+  const handleKeyChange = (next: string) => {
     setKey(next)
     if (!namespaceTouched) setNamespace(next.includes('.') ? namespaceOf(next) : '')
   }
@@ -48,7 +48,7 @@ export default function CreateTranslationKeyModal({ onClose }: { onClose: (saved
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="tk-key">{t('translation.key')}</label>
-            <Input data-dialog-initial-focus id="tk-key" value={key} onChange={e => onKeyChange(e.target.value)} placeholder="common.actions.save" />
+            <Input data-dialog-initial-focus id="tk-key" value={key} onChange={e => handleKeyChange(e.target.value)} placeholder="common.actions.save" />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="tk-ns">{t('translation.namespace')}</label>

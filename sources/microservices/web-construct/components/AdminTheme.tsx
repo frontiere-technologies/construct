@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useUI } from '@/context/UIContext'
 import { defaultThemeConfig } from '@/types/menu'
 import { saveThemeConfig } from '@/lib/theme-actions'
+import type { ContrastViolation } from '@/lib/theme-vars'
 import type { ThemeConfig } from '@/types/menu'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { useI18n } from '@/context/I18nContext'
@@ -58,7 +59,7 @@ const TokenRow: React.FC<TokenRowProps & { lightLabel: string; darkLabel: string
   </div>
 )
 
-interface TokenGroup {
+export interface TokenGroup {
   key: string
   title: string
   rows: { key: string; label: string; lightKey: keyof ThemeConfig; darkKey: keyof ThemeConfig }[]
@@ -112,12 +113,58 @@ function buildTokenGroups(t: TranslateFn): TokenGroup[] {
   ]
 }
 
+/**
+ * Il nome che l'amministratore vede accanto al colore, non la chiave di
+ * ThemeConfig: chi legge un rifiuto deve sapere quale riga aprire. Pura e
+ * esportata per essere provata direttamente, senza montare il pannello.
+ */
+export function tokenLabel(
+  groups: TokenGroup[],
+  key: keyof ThemeConfig,
+  lightWord: string,
+  darkWord: string,
+): string {
+  for (const group of groups) {
+    for (const row of group.rows) {
+      if (row.lightKey === key) return `${row.label} (${lightWord})`
+      if (row.darkKey === key) return `${row.label} (${darkWord})`
+    }
+  }
+  return key
+}
+
+interface ContrastRejectionProps {
+  message: string
+  items: { key: string; label: string; ratio: number }[]
+}
+
+/**
+ * Il rifiuto per contrasto insufficiente. Un elenco, non una frase sola: se tre
+ * colori sono sotto soglia, l'amministratore deve vederli tutti e tre con il
+ * proprio rapporto, altrimenti li scopre uno per volta a tentativi.
+ */
+export const ContrastRejection: React.FC<ContrastRejectionProps> = ({ message, items }) => (
+  <div className="text-sm text-destructive-muted-foreground" role="alert">
+    <p>{message}</p>
+    <ul className="mt-1 space-y-0.5">
+      {items.map(item => (
+        <li key={item.key} className="font-mono text-xs">
+          {item.label} — {item.ratio.toFixed(2)}:1
+        </li>
+      ))}
+    </ul>
+  </div>
+)
+
 export const AdminTheme: React.FC = () => {
   const { t } = useI18n()
   const { settings, setSettings } = useUI()
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [violations, setViolations] = useState<ContrastViolation[]>([])
   const tokenGroups = buildTokenGroups(t)
+
+
 
   const updateTheme = (key: keyof ThemeConfig, value: string) => {
     setSettings(prev => ({ ...prev, themeConfig: { ...prev.themeConfig, [key]: value } }))
@@ -130,10 +177,13 @@ export const AdminTheme: React.FC = () => {
   const handleSave = async () => {
     setSaving(true)
     setSaveStatus('idle')
-    const { error } = await saveThemeConfig(settings.themeConfig)
+    const { error, violations: rejected } = await saveThemeConfig(settings.themeConfig)
     setSaving(false)
+    setViolations(rejected ?? [])
     setSaveStatus(error ? 'error' : 'success')
-    setTimeout(() => setSaveStatus('idle'), 3000)
+    // Un rifiuto per contrasto va letto e agito: resta finche' non si salva di
+    // nuovo, mentre gli altri esiti sfumano come prima.
+    if (!rejected?.length) setTimeout(() => setSaveStatus('idle'), 3000)
   }
 
   return (
@@ -181,8 +231,18 @@ export const AdminTheme: React.FC = () => {
             {saveStatus === 'success' && (
               <span className="text-sm text-success-muted-foreground">{t('theme.status.saved')}</span>
             )}
-            {saveStatus === 'error' && (
+            {saveStatus === 'error' && violations.length === 0 && (
               <span className="text-sm text-destructive-muted-foreground">{t('theme.status.save_failed')}</span>
+            )}
+            {saveStatus === 'error' && violations.length > 0 && (
+              <ContrastRejection
+                message={t('theme.status.contrast_rejected')}
+                items={violations.map(violation => ({
+                  key: violation.key,
+                  label: tokenLabel(tokenGroups, violation.key, t('theme.token.light'), t('theme.token.dark')),
+                  ratio: violation.ratio,
+                }))}
+              />
             )}
           </div>
           <div className="flex gap-3">

@@ -20,17 +20,17 @@ interface LanguageSwitcherProps {
  * aria-activedescendant instead of Tab), and focus returns to the trigger on close.
  */
 export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageSwitcherProps) {
-  const { t, code, languages, setLanguage, switching } = useI18n()
+  const { t, code, languages, setLanguage, isSwitching } = useI18n()
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   // Set by choose() right before it starts a real language switch. The trigger is
-  // `disabled={switching}` while the new bundle loads, so the focus() call inside
+  // `disabled={isSwitching}` while the new bundle loads, so the focus() call inside
   // choose() lands an instant before React commits `disabled`, and the browser
   // immediately un-focuses the now-disabled button back to <body>. This restores
-  // focus once switching flips back to false — but only if nothing else has since
+  // focus once isSwitching flips back to false — but only if nothing else has since
   // claimed it, so it never yanks focus away from a user who moved on.
   const pendingFocusRef = useRef(false)
 
@@ -47,15 +47,15 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
 
   useEffect(() => {
     if (!open) return
-    const onOutside = (e: MouseEvent) => {
+    const handleOutside = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
     }
-    const onEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-    document.addEventListener('mousedown', onOutside)
-    document.addEventListener('keydown', onEscape)
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('keydown', handleEscape)
     return () => {
-      document.removeEventListener('mousedown', onOutside)
-      document.removeEventListener('keydown', onEscape)
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('keydown', handleEscape)
     }
   }, [open])
 
@@ -66,11 +66,11 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
   }, [open])
 
   useEffect(() => {
-    if (!switching && pendingFocusRef.current) {
+    if (!isSwitching && pendingFocusRef.current) {
       pendingFocusRef.current = false
       if (document.activeElement === document.body) triggerRef.current?.focus()
     }
-  }, [switching])
+  }, [isSwitching])
 
   // A single available language is not a choice — don't show a control for it.
   if (languages.length < 2) return null
@@ -92,7 +92,7 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
     }
   }
 
-  const onTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+  const handleTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (open) return
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
@@ -100,7 +100,7 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
     }
   }
 
-  const onListKeyDown = (e: ReactKeyboardEvent<HTMLUListElement>) => {
+  const handleListKeyDown = (e: ReactKeyboardEvent<HTMLUListElement>) => {
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault()
@@ -142,9 +142,9 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
         aria-expanded={open}
         aria-label={t('profile.language')}
         title={collapsed ? `${t('profile.language')}: ${current?.nativeName ?? code}` : undefined}
-        disabled={switching}
+        disabled={isSwitching}
         onClick={toggle}
-        onKeyDown={onTriggerKeyDown}
+        onKeyDown={handleTriggerKeyDown}
         className={clsx(itemClassName, 'disabled:opacity-50')}
       >
         <Globe size={16} className="flex-shrink-0" />
@@ -165,7 +165,7 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
           aria-activedescendant={
             languages[activeIndex] ? `language-option-${languages[activeIndex].code}` : undefined
           }
-          onKeyDown={onListKeyDown}
+          onKeyDown={handleListKeyDown}
           data-testid="language-switcher-options"
           className="absolute bottom-full left-0 z-50 mb-1 w-44 rounded-lg border border-sidebar-foreground/10 bg-sidebar p-1 shadow-lg outline-none"
         >

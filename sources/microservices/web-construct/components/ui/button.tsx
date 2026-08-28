@@ -15,14 +15,14 @@ export type ButtonSize = 'default' | 'sm' | 'icon'
  * Tre cose che il Button di shadcn fa di serie e qui non si fanno, ognuna
  * perche' contraddice una decisione gia' presa e gia' testata nel progetto:
  *
- * - niente `disabled:pointer-events-none`: buttonInteractionStyles.test.ts
+ * - niente `disabled:pointer-events-none`: guards/button-interaction-styles.test.ts
  *   asserisce che un bottone disabilitato resti sensibile al mouse, altrimenti
  *   il cursore not-allowed non si vede mai;
  * - niente `disabled:opacity-*`: globals.css applica gia' filter: opacity(0.6)
  *   a ogni button:disabled, e le due si moltiplicherebbero;
  * - ogni hover e' scritto `[&:not(:disabled)]:hover:`, cosi' un bottone
  *   disabilitato non reagisce al passaggio del mouse. E' l'invariante che
- *   disabledButtonHoverStyles.test.ts sorveglia sui punti d'uso e che qui e'
+ *   guards/disabled-button-hover-styles.test.ts sorveglia sui punti d'uso e che qui e'
  *   garantito per costruzione. Non `enabled:hover:`: quella variante compila
  *   in `:enabled:hover`, e `:enabled` matcha solo i controlli di modulo
  *   (button, input, select, textarea, fieldset, optgroup) — su un `<a>`

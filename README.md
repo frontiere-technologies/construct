@@ -2,7 +2,7 @@
 
 Construct is a production-ready application template built with Next.js 16 and React 19. Authentication, live authorization checks, database-driven navigation, user profiles, internationalization, and theming are included.
 
-Read [CLAUDE.md](./CLAUDE.md) for repository-specific engineering rules.
+Read [AGENTS.md](./AGENTS.md) for repository-specific engineering rules. `CLAUDE.md` is a one-line import of it, so every AI coding CLI reads the same file.
 
 ## Included features
 
@@ -41,6 +41,12 @@ construct/
 ├── sources/devops/k8s/overlays/  # Development and production-example overlays
 └── sources/tests/e2e/           # Python/Playwright E2E suite
 ```
+
+## Commit AI-tooling folders to Git
+
+Folders that the Superpowers plugin creates under `docs/` (e.g. `docs/superpowers/`, containing plans and other workflow artifacts) must be committed to Git, not left untracked or gitignored. They are part of the project's traceable history of AI-assisted work.
+
+The same applies to the `agents/` and `skills/` folders inside `.claude/`, and to the equivalent folders inside any other AI coding CLI's config directory (`.github/`, `.codex/`, `.gemini/`, etc. — see the config-dir table in [vibe/README.md](vibe/README.md)). These contain the agent and skill definitions the project standardizes on and must be tracked so every contributor and every AI assistant gets the same setup.
 
 ## Authentication and authorization
 

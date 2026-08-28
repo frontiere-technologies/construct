@@ -16,16 +16,16 @@ interface I18nContextValue {
   code: string
   locale: string
   setLanguage: (code: string) => void
-  switching: boolean
+  isSwitching: boolean
 }
 
 const I18nContext = createContext<I18nContextValue | undefined>(undefined)
 
 export function I18nProvider({ bundle, children }: { bundle: I18nBundle; children: React.ReactNode }) {
   const router = useRouter()
-  const [switching, startTransition] = useTransition()
+  const [isSwitching, startTransition] = useTransition()
 
-  // Keyed on `bundle` alone. `switching` must NOT be a dependency here: it flips
+  // Keyed on `bundle` alone. `isSwitching` must NOT be a dependency here: it flips
   // twice per language switch, and rebuilding the translator would throw away
   // its missing-key dedup Set mid-switch and hand every child a fresh `t`/`fmt`
   // identity, invalidating their memos and effects for no reason.
@@ -56,7 +56,7 @@ export function I18nProvider({ bundle, children }: { bundle: I18nBundle; childre
     })
   }, [bundle.language.code, router, startTransition])
 
-  // Only this thin wrapper re-computes when `switching` flips.
+  // Only this thin wrapper re-computes when `isSwitching` flips.
   const value = useMemo<I18nContextValue>(() => ({
     ...dictionary,
     language: bundle.language,
@@ -64,8 +64,8 @@ export function I18nProvider({ bundle, children }: { bundle: I18nBundle; childre
     code: bundle.language.code,
     locale: bundle.language.locale,
     setLanguage,
-    switching,
-  }), [dictionary, bundle.language, bundle.languages, setLanguage, switching])
+    isSwitching,
+  }), [dictionary, bundle.language, bundle.languages, setLanguage, isSwitching])
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }

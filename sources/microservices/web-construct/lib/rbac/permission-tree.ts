@@ -63,7 +63,7 @@ export function applyToggle(
   trees: UserNavigationTreeDto[],
   map: Map<number, boolean>,
   itemId: number,
-  on: boolean,
+  enabled: boolean,
 ): Map<number, boolean> {
   const byId = indexTree(trees)
   const node = byId.get(itemId)
@@ -71,11 +71,11 @@ export function applyToggle(
   if (!node) return next
 
   if (node.type === 'CATEGORY') {
-    next.set(itemId, on)
-    for (const d of descendantIds(node)) next.set(d, on)
+    next.set(itemId, enabled)
+    for (const d of descendantIds(node)) next.set(d, enabled)
   } else {
-    next.set(itemId, on)
-    if (on) {
+    next.set(itemId, enabled)
+    if (enabled) {
       let p = node.parentId
       while (p != null && byId.has(p)) {
         next.set(p, true)

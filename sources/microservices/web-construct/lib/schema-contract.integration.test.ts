@@ -142,7 +142,7 @@ describeIntegration('database runtime boundary', () => {
     // sides as the same T the deployed rows — plain strings read from pg_class —
     // could never satisfy it. Widening here keeps the helper's guarantee that the
     // two sides have the same shape.
-    type ViewShape = { viewName: string; columns: { name: string; type: string }[] }
+    interface ViewShape { viewName: string; columns: { name: string; type: string }[] }
     const expectedViews: ViewShape[] = Object.values(drizzleSchema)
       .filter(value => is(value, PgView))
       .map(view => {

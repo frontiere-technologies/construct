@@ -120,17 +120,17 @@ export default function UsersTableClient(props: Props) {
     { colId: 'dateMod', label: t('users.list.updated_at') },
   ], [t])
 
-  const onFilterChanged = (event: FilterChangedEvent<UserDto>) => {
+  const handleFilterChanged = (event: FilterChangedEvent<UserDto>) => {
     const model = event.api.getFilterModel() as UsersGridFilterModel
     setParam(usersFilterModelToSearchParams(model))
   }
 
-  const onSortChanged = (event: SortChangedEvent<UserDto>) => {
+  const handleSortChanged = (event: SortChangedEvent<UserDto>) => {
     const active = event.api.getColumnState().find(c => c.sort)
     setParam({ sort: active?.colId ?? null, direction: active ? (active.sort === 'asc' ? 'ASC' : 'DESC') : null })
   }
 
-  const onGridReady = (event: GridReadyEvent<UserDto>) => {
+  const handleGridReady = (event: GridReadyEvent<UserDto>) => {
     gridApiRef.current = event.api
     setGridApi(event.api)
   }
@@ -148,9 +148,9 @@ export default function UsersTableClient(props: Props) {
         getRowId={u => u.id}
         initialFilterModel={usersUrlParamsToFilterModel(props) as Record<string, unknown>}
         initialSortModel={usersUrlParamsToSortModel(props)}
-        onFilterChanged={onFilterChanged}
-        onSortChanged={onSortChanged}
-        onGridReady={onGridReady}
+        onFilterChanged={handleFilterChanged}
+        onSortChanged={handleSortChanged}
+        onGridReady={handleGridReady}
       />
       {managing && (
         <ManageRolesModal

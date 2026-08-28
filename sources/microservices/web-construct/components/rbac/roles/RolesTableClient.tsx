@@ -103,26 +103,26 @@ export default function RolesTableClient(props: Props) {
     { colId: 'dateMod', label: t('roles.list.updated_at') },
   ], [t])
 
-  const onFilterChanged = (event: FilterChangedEvent<RolePageItemDto>) => {
+  const handleFilterChanged = (event: FilterChangedEvent<RolePageItemDto>) => {
     const model = event.api.getFilterModel() as RolesGridFilterModel
     setParam(rolesFilterModelToSearchParams(model))
   }
 
-  const onSortChanged = (event: SortChangedEvent<RolePageItemDto>) => {
+  const handleSortChanged = (event: SortChangedEvent<RolePageItemDto>) => {
     const active = event.api.getColumnState().find(c => c.sort)
     setParam({ sort: active?.colId ?? null, direction: active ? (active.sort === 'asc' ? 'ASC' : 'DESC') : null })
   }
 
-  const onGridReady = (event: GridReadyEvent<RolePageItemDto>) => {
+  const handleGridReady = (event: GridReadyEvent<RolePageItemDto>) => {
     gridApiRef.current = event.api
     setGridApi(event.api)
   }
 
-  const onClearFilters = () => resetGridFilters(gridApi, () => setParam(rolesFilterModelToSearchParams({})))
+  const handleClearFilters = () => resetGridFilters(gridApi, () => setParam(rolesFilterModelToSearchParams({})))
 
   return (
     <>
-      <GridToolbar gridApi={gridApi} columns={columnLabels} onClearFilters={onClearFilters}>
+      <GridToolbar gridApi={gridApi} columns={columnLabels} onClearFilters={handleClearFilters}>
         <Button size="sm" onClick={() => setShowCreate(true)}>{t('roles.actions.create')}</Button>
       </GridToolbar>
       <DataGrid<RolePageItemDto>
@@ -131,9 +131,9 @@ export default function RolesTableClient(props: Props) {
         getRowId={r => String(r.id)}
         initialFilterModel={rolesUrlParamsToFilterModel(props) as Record<string, unknown>}
         initialSortModel={rolesUrlParamsToSortModel(props)}
-        onFilterChanged={onFilterChanged}
-        onSortChanged={onSortChanged}
-        onGridReady={onGridReady}
+        onFilterChanged={handleFilterChanged}
+        onSortChanged={handleSortChanged}
+        onGridReady={handleGridReady}
       />
       {showCreate && <CreateRoleModal onClose={() => setShowCreate(false)} />}
       {renaming && <RenameRoleModal roleId={renaming.id} currentName={renaming.description} onClose={() => { setRenaming(null); gridApi?.refreshInfiniteCache() }} />}

@@ -54,6 +54,51 @@ export function isCamelCase(stem: string): boolean {
   return /^[a-z]/.test(stem) && /[A-Z]/.test(stem)
 }
 
+/**
+ * I nomi che il file dichiara, presi dall'AST e non da una regex: una stringa o
+ * un commento che contiene `function Foo` non e' una dichiarazione, e un guard
+ * che ci cascasse assolverebbe il file sbagliato.
+ *
+ * Conta la dichiarazione, non l'export: `context/UIContext.tsx` dichiara
+ * `const UIContext = createContext(...)` e lo tiene privato, esportando
+ * `UIProvider` e `useUI`. Il nome del file rispecchia comunque il simbolo che
+ * lo giustifica, ed e' quello che questa regola verifica.
+ */
+export function declaredNames(source: string): Set<string> {
+  const parsed = ts.createSourceFile('probe.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const names = new Set<string>()
+
+  const visit = (node: ts.Node): void => {
+    if (
+      (ts.isFunctionDeclaration(node)
+        || ts.isClassDeclaration(node)
+        || ts.isInterfaceDeclaration(node)
+        || ts.isTypeAliasDeclaration(node)
+        || ts.isEnumDeclaration(node))
+      && node.name
+    ) names.add(node.name.text)
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) names.add(node.name.text)
+    ts.forEachChild(node, visit)
+  }
+
+  visit(parsed)
+  return names
+}
+
+/** PascalCase: iniziale maiuscola. */
+export function isPascalCase(stem: string): boolean {
+  return /^[A-Z]/.test(stem)
+}
+
+/**
+ * Un barrel: `index.ts` o `index.tsx`. AGENTS.md li vieta insieme ai wrapper
+ * che non aggiungono un confine reale, e il divieto sta qui perche' un barrel e'
+ * prima di tutto un nome di file.
+ */
+export function isBarrel(file: string): boolean {
+  return stemOf(file) === 'index'
+}
+
 /** kebab-case, o una singola parola tutta minuscola. */
 export function isKebabCase(stem: string): boolean {
   return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(stem)
@@ -64,7 +109,7 @@ export function isKebabCase(stem: string): boolean {
  *
  * Il parser risolve da solo il caso che conta: il JSX usato come fixture di
  * test vive dentro un template literal, quindi per l'AST e' testo, non un
- * JsxElement. Percio' `iconOnlyButtonAccessibleName.test.ts` resta
+ * JsxElement. Percio' `icon-only-button-accessible-name.test.ts` resta
  * legittimamente un `.ts` pur contenendo `<Button ...>` in una stringa.
  */
 export function containsJsx(source: string): boolean {
@@ -116,6 +161,40 @@ describe('isKebabCase', () => {
   })
 })
 
+describe('declaredNames', () => {
+  it('collects functions, consts, classes, types, interfaces and enums', () => {
+    const names = declaredNames([
+      'export async function EmbeddedBlockedNotice() { return null }',
+      'const UIContext = createContext(undefined)',
+      'class Widget {}',
+      'type Alias = string',
+      'interface Shape { a: number }',
+      'enum Mode { On }',
+    ].join('\n'))
+
+    expect([...names].sort()).toEqual(['Alias', 'EmbeddedBlockedNotice', 'Mode', 'Shape', 'UIContext', 'Widget'])
+  })
+
+  it('does not mistake a declaration inside a string or a comment for one', () => {
+    const names = declaredNames([
+      '// function Ghost() {}',
+      'const sql = `create function Phantom()`',
+    ].join('\n'))
+
+    expect(names.has('Ghost')).toBe(false)
+    expect(names.has('Phantom')).toBe(false)
+  })
+})
+
+describe('isBarrel', () => {
+  it('flags index.ts and index.tsx, and nothing else', () => {
+    expect(isBarrel('lib/index.ts')).toBe(true)
+    expect(isBarrel('components/shared/index.tsx')).toBe(true)
+    expect(isBarrel('lib/nav-row-actions.ts')).toBe(false)
+    expect(isBarrel('components/Sidebar.tsx')).toBe(false)
+  })
+})
+
 describe('containsJsx', () => {
   it('finds a JSX element, a self-closing element and a fragment', () => {
     expect(containsJsx('export const a = <div>x</div>')).toBe(true)
@@ -154,6 +233,27 @@ describe('file naming conventions', () => {
       .filter(file => file.endsWith('.tsx'))
       .filter(file => !FRAMEWORK_RESERVED.has(stemOf(file)))
       .filter(file => !containsJsx(readFileSync(file, 'utf8')))
+
+    expect(offenders).toEqual([])
+  })
+
+  it('names every PascalCase file after something it actually declares', () => {
+    // La meta' mancante della regola sui nomi: il controllo sul camelCase
+    // rifiuta la forma sbagliata, questo pretende che la forma giusta abbia un
+    // motivo. Un `lib/ScratchProbe.ts` che esporta `scratchProbe` passava.
+    //
+    // I file di test sono esclusi: `Sidebar.accessibility.test.tsx` prende il
+    // nome dal componente che prova, non da cio' che dichiara.
+    const offenders = allSourceFiles()
+      .filter(file => !/\.test\.tsx?$/.test(file))
+      .filter(file => isPascalCase(stemOf(file)))
+      .filter(file => !declaredNames(readFileSync(file, 'utf8')).has(stemOf(file)))
+
+    expect(offenders).toEqual([])
+  })
+
+  it('has no barrel anywhere', () => {
+    const offenders = allSourceFiles().filter(isBarrel)
 
     expect(offenders).toEqual([])
   })

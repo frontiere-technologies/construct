@@ -80,7 +80,7 @@ describe('Button', () => {
     // uno solo.
     const hostHtml = renderToStaticMarkup(<Button variant="link">Salva</Button>)
     const asChildHtml = renderToStaticMarkup(
-      // eslint-disable-next-line @next/next/no-html-link-for-pages
+      // eslint-disable-next-line @next/next/no-html-link-for-pages -- ancora finta di fixture, non una rotta: qui si prova la composizione asChild/Slot
       <Button asChild variant="link"><a href="/roles">Ruoli</a></Button>
     )
     // renderToStaticMarkup HTML-escapes the `&` inside the class attribute.
@@ -105,7 +105,7 @@ describe('Button', () => {
 
   it('keeps a disabled button hit-testable so the not-allowed cursor is visible', () => {
     // La classe che shadcn spedisce di serie e' disabled:pointer-events-none, e
-    // contraddice l'asserzione che buttonInteractionStyles.test.ts fa gia' su
+    // contraddice l'asserzione che guards/button-interaction-styles.test.ts fa gia' su
     // globals.css: senza hit-testing il cursore not-allowed non si vede mai.
     const html = renderToStaticMarkup(<Button disabled>Salva</Button>)
     expect(html).not.toContain('pointer-events-none')
@@ -121,7 +121,7 @@ describe('Button', () => {
     // Verifica la composizione asChild/Slot, non una vera rotta: <Link> non
     // c'entra qui, il child e' un <a> qualsiasi passato dal chiamante.
     const html = renderToStaticMarkup(
-      // eslint-disable-next-line @next/next/no-html-link-for-pages
+      // eslint-disable-next-line @next/next/no-html-link-for-pages -- ancora finta di fixture, non una rotta: qui si prova la composizione asChild/Slot
       <Button asChild variant="link"><a href="/roles">Ruoli</a></Button>
     )
     expect(html).toMatch(/^<a /)
