@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildAuthTree, buildAuthMap, applyToggle, computeDeltas } from './permission-tree'
-import type { NavigationItemRow } from './types'
+import { buildNavTree } from './nav-tree-builder'
+import type { NavigationItemRow, UserNavigationTreeDto } from './types'
 
 const row = (id: number, parent: number | null, type: number, name: string): NavigationItemRow => ({
   id_item: id, name, id_item_type: type, id_functionality_type: type === 2 ? 3 : null,
@@ -26,6 +27,30 @@ describe('buildAuthTree', () => {
     expect(rbac.children.find(c => c.id === 3)!.authorization).toBe(true)
     expect(rbac.children.find(c => c.id === 4)!.authorization).toBe(false)
     expect(rbac.name).toBe('RBAC')
+  })
+
+  // The permissions tree and the functionalities tree render through the same
+  // NavigationTree, whose typeIcon() picks the per-kind icon from
+  // functionalityType alone. buildAuthTree used to omit the field, so every
+  // leaf on Roles & permissions fell to typeIcon's Circle fallback while the
+  // same row showed its real icon on Functionalities.
+  it('carries functionalityType so leaves keep their per-kind icon', () => {
+    const rbac = trees.find(t => t.id === 2)!
+    expect(rbac.children.find(c => c.id === 3)!.functionalityType).toBe('INTERNAL_FUNCTIONALITY')
+  })
+
+  it('agrees with buildNavTree on the icon-driving fields', () => {
+    const navTrees = buildNavTree(items, new Map(), 0)
+    const kindById = (ns: UserNavigationTreeDto[]): Record<number, string> => {
+      const out: Record<number, string> = {}
+      const walk = (list: UserNavigationTreeDto[]) => list.forEach(n => {
+        out[n.id] = `${n.type}/${n.functionalityType ?? 'none'}`
+        walk(n.children)
+      })
+      walk(ns)
+      return out
+    }
+    expect(kindById(trees)).toEqual(kindById(navTrees))
   })
 })
 
