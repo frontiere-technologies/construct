@@ -102,7 +102,7 @@ Then verification in the browser against the real catalogue.
 
 ## Tasks
 
-- [ ] ID=CMB-1, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=EditableCombobox component, Fix description=New `components/shared/EditableCombobox.tsx` implementing the behaviour and ARIA above, with its jsdom unit tests written first.
-- [ ] ID=CMB-2, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Wire the create dialog, Fix description=Pass `namespaces`/`modules` from `TranslationsTableClient` into `CreateTranslationKeyModal` and replace the two `Input`s.
-- [ ] ID=CMB-3, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Wire the edit drawer, Fix description=Same for `TranslationEditorDrawer`.
-- [ ] ID=CMB-4, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Browser verification, Fix description=Confirm against the real catalogue that the list opens, filters, scrolls, and that a new namespace survives saving and then appears among the suggestions.
+- [✅] ID=CMB-1, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=EditableCombobox component, Fix description=New `components/shared/EditableCombobox.tsx` implementing the behaviour and ARIA above, with its jsdom unit tests written first.
+- [✅] ID=CMB-2, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Wire the create dialog, Fix description=Pass `namespaces`/`modules` from `TranslationsTableClient` into `CreateTranslationKeyModal` and replace the two `Input`s.
+- [✅] ID=CMB-3, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Wire the edit drawer, Fix description=Same for `TranslationEditorDrawer`.
+- [✅] ID=CMB-4, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Browser verification, Fix description=Confirm against the real catalogue that the list opens, filters, scrolls, and that a new namespace survives saving and then appears among the suggestions.

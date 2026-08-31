@@ -46,7 +46,7 @@ Spec: `docs/superpowers/specs/2026-08-31-translation-namespace-module-combobox-d
   ```
   Tasks 2 and 3 import it as `import { EditableCombobox } from '@/components/shared/EditableCombobox'`.
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Create `components/shared/EditableCombobox.test.tsx`:
 
@@ -198,12 +198,12 @@ describe('EditableCombobox', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test and watch it fail**
+- [✅] **Step 2: Run the test and watch it fail**
 
 Run: `npx vitest run components/shared/EditableCombobox.test.tsx`
 Expected: FAIL — the module does not exist, so every test errors on the import.
 
-- [ ] **Step 3: Write the component**
+- [✅] **Step 3: Write the component**
 
 Create `components/shared/EditableCombobox.tsx`:
 
@@ -363,14 +363,14 @@ export function EditableCombobox({
 }
 ```
 
-- [ ] **Step 4: Run the test and watch it pass**
+- [✅] **Step 4: Run the test and watch it pass**
 
 Run: `npx vitest run components/shared/EditableCombobox.test.tsx`
 Expected: PASS, 10 tests.
 
 If `closes on Escape` fails on `document.activeElement`, the input lost focus because jsdom never gave it any: make sure `container` is attached to `document.body` before `render` (it is, in the harness above).
 
-- [ ] **Step 5: Check the whole suite, lint and types**
+- [✅] **Step 5: Check the whole suite, lint and types**
 
 Run:
 ```bash
@@ -378,7 +378,7 @@ npm test && npm run lint -- --max-warnings=0 && npm run typecheck
 ```
 Expected: all green.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/shared/EditableCombobox.tsx \
@@ -402,7 +402,7 @@ git commit -m "feat(i18n): combobox scrivibile con i valori gia' in uso"
   { onClose: (saved: boolean) => void; namespaces: string[]; modules: string[] }
   ```
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Create `components/i18n/translations/CreateTranslationKeyModal.test.tsx`:
 
@@ -460,12 +460,12 @@ describe('CreateTranslationKeyModal suggestions', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test and watch it fail**
+- [✅] **Step 2: Run the test and watch it fail**
 
 Run: `npx vitest run components/i18n/translations/CreateTranslationKeyModal.test.tsx`
 Expected: FAIL — TypeScript rejects the extra props, and `role` is `null` because the fields are still `Input`s.
 
-- [ ] **Step 3: Change the modal**
+- [✅] **Step 3: Change the modal**
 
 In `CreateTranslationKeyModal.tsx`, add the import:
 
@@ -517,7 +517,7 @@ Note `setNamespaceTouched(true)` is preserved: it is what stops the namespace fr
 
 If `Input` is now unused in the file, drop it from the import — lint fails on unused imports.
 
-- [ ] **Step 4: Pass the lists in from the table**
+- [✅] **Step 4: Pass the lists in from the table**
 
 In `TranslationsTableClient.tsx`, line 170:
 
@@ -529,12 +529,12 @@ In `TranslationsTableClient.tsx`, line 170:
         />
 ```
 
-- [ ] **Step 5: Run the tests and watch them pass**
+- [✅] **Step 5: Run the tests and watch them pass**
 
 Run: `npx vitest run components/i18n/translations/ && npm run typecheck`
 Expected: PASS, and no type error at the call site.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/i18n/translations/CreateTranslationKeyModal.tsx \
@@ -559,7 +559,7 @@ git commit -m "feat(i18n): suggerire namespace e modulo nella modale Nuova chiav
   { row: TranslationRowDto; onClose: (saved: boolean) => void; namespaces: string[]; modules: string[] }
   ```
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Create `components/i18n/translations/TranslationEditorDrawer.test.tsx`. Read the top of `TranslationEditorDrawer.tsx` first and mock every context it reads (it uses `useI18n` and the active-languages source); mirror the mocks already used by `TranslationsTableClient.test.tsx` in the same directory rather than inventing new ones.
 
@@ -613,12 +613,12 @@ describe('TranslationEditorDrawer suggestions', () => {
 
 Adjust the mock list in step 1 to whatever the file actually imports — if a mock is missing the test errors on import rather than failing, which is not the failure you want.
 
-- [ ] **Step 2: Run the test and watch it fail**
+- [✅] **Step 2: Run the test and watch it fail**
 
 Run: `npx vitest run components/i18n/translations/TranslationEditorDrawer.test.tsx`
 Expected: FAIL with `expected null to be 'combobox'`. If instead it fails on an unresolved import, add that module to the mocks and re-run until the failure is the assertion.
 
-- [ ] **Step 3: Change the drawer**
+- [✅] **Step 3: Change the drawer**
 
 Add the import:
 
@@ -655,7 +655,7 @@ Replace the two fields inside the `grid grid-cols-2` block:
 
 The dirty check on lines 49-50 compares `namespace`/`moduleName` against `row`, and keeps working unchanged — the combobox drives the same two state setters the `Input`s drove.
 
-- [ ] **Step 4: Pass the lists in from the table**
+- [✅] **Step 4: Pass the lists in from the table**
 
 In `TranslationsTableClient.tsx`, line 167:
 
@@ -668,7 +668,7 @@ In `TranslationsTableClient.tsx`, line 167:
         />
 ```
 
-- [ ] **Step 5: Full verification**
+- [✅] **Step 5: Full verification**
 
 Run:
 ```bash
@@ -676,7 +676,7 @@ npm test && npm run lint -- --max-warnings=0 && npm run typecheck && npm run bui
 ```
 Expected: all green.
 
-- [ ] **Step 6: Commit**
+- [✅] **Step 6: Commit**
 
 ```bash
 git add sources/microservices/web-construct/components/i18n/translations/TranslationEditorDrawer.tsx \
@@ -691,15 +691,15 @@ git commit -m "feat(i18n): suggerire namespace e modulo anche in modifica"
 
 **Files:** none — this task changes no code. If it finds a defect, fix it under `superpowers:systematic-debugging` and add the regression test to `EditableCombobox.test.tsx`.
 
-- [ ] **Step 1: Start the dev server**
+- [✅] **Step 1: Start the dev server**
 
 Use the Browser pane's `preview_start` with the `web-construct` configuration from `.claude/launch.json`. Never `npm run dev` through a shell tool.
 
-- [ ] **Step 2: Open the dialog**
+- [✅] **Step 2: Open the dialog**
 
 Navigate to `http://localhost:3000/admin/translations` and press "Nuova chiave".
 
-- [ ] **Step 3: Check the four behaviours**
+- [✅] **Step 3: Check the four behaviours**
 
 1. Click into `Namespace`: the list opens showing the real namespaces (`auth`, `common`, `nav`, …).
 2. Type `au`: the list narrows to the matches.
@@ -711,15 +711,15 @@ const l = document.querySelector('[role="listbox"]')
 ;({ altezza: l.getBoundingClientRect().height, scorre: l.scrollHeight > l.clientHeight })
 ```
 
-- [ ] **Step 4: Check the round trip**
+- [✅] **Step 4: Check the round trip**
 
 Save a key using a brand-new namespace, then reopen the dialog: the new namespace must appear among the suggestions. This exercises the `router.refresh()` path — if it does not appear, that is a real defect, not a caching quirk to wave away.
 
-- [ ] **Step 5: Repeat on the edit drawer**
+- [✅] **Step 5: Repeat on the edit drawer**
 
 Open an existing key from the row menu and confirm the same two fields behave identically and arrive pre-filled.
 
-- [ ] **Step 6: Commit if anything changed**
+- [✅] **Step 6: Commit if anything changed**
 
 Only if step 3, 4 or 5 forced a fix. Otherwise there is nothing to commit.
 
