@@ -602,7 +602,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               )}
             >
               <User size={16} className={pathname === '/profile' ? 'text-primary' : ''} />
-              {!userPanelPresentation.columnCollapsed && <span>{t('nav.profile')}</span>}
+              {!userPanelPresentation.columnCollapsed && <span className="min-w-0 truncate">{t('nav.profile')}</span>}
             </Link>
 
             {/* Theme Mode */}
@@ -621,7 +621,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
             ) : (
               <div className="flex items-center rounded-lg py-2 px-3 gap-3 text-sm text-sidebar-foreground">
                 {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-                <span className="flex-1">{t('nav.theme_mode')}</span>
+                <span className="flex-1 min-w-0 truncate">{t('nav.theme_mode')}</span>
                 <button
                   onClick={toggleTheme}
                   role="switch"
@@ -656,7 +656,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               className={userPanelItemCls}
             >
               <LogOut size={16} />
-              {!userPanelPresentation.columnCollapsed && <span>{t('nav.logout')}</span>}
+              {!userPanelPresentation.columnCollapsed && <span className="min-w-0 truncate">{t('nav.logout')}</span>}
             </button>
           </div>
         </aside>
