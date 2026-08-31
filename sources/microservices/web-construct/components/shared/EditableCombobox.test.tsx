@@ -26,6 +26,8 @@ function render(value: string, onChange = vi.fn()) {
 const listbox = () => container?.querySelector<HTMLElement>('[role="listbox"]') ?? null
 const optionTexts = () =>
   Array.from(container?.querySelectorAll('[role="option"]') ?? []).map(o => o.textContent)
+const highlightedTexts = () =>
+  Array.from(container?.querySelectorAll('[role="option"][aria-selected="true"]') ?? []).map(o => o.textContent)
 
 // React keeps a value tracker on the DOM node: assigning `input.value = x`
 // directly leaves the tracker thinking nothing changed, and onChange never
@@ -101,6 +103,9 @@ describe('EditableCombobox', () => {
   it('takes the highlighted option on Enter', () => {
     const { input, onChange } = render('')
     act(() => input.focus())
+    // Due frecce, non una: la prima evidenzia, e l'evidenziazione e' sempre
+    // qualcosa che l'amministratore ha chiesto, mai lo stato di partenza.
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
     act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
     act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
     expect(onChange).toHaveBeenLastCalledWith('common')
@@ -109,6 +114,8 @@ describe('EditableCombobox', () => {
   it('points aria-activedescendant at the highlighted option', () => {
     const { input } = render('')
     act(() => input.focus())
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
     const first = container!.querySelector('[role="option"]')!
     expect(input.getAttribute('aria-activedescendant')).toBe(first.id)
     act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
@@ -180,5 +187,97 @@ describe('EditableCombobox', () => {
     const input = container.querySelector<HTMLInputElement>('[data-testid="ns"]')!
     act(() => input.focus())
     expect(listbox()).toBeNull()
+    // Ne' il chevron ne' lo spazio che gli e' riservato: senza suggerimenti il
+    // campo e' l'Input che sostituisce, non un Input con un ornamento che
+    // promette una lista che non arrivera' mai.
+    expect(container.querySelector('svg')).toBeNull()
+    expect(input.classList.contains('pr-9')).toBe(false)
+  })
+
+  it('shows the chevron and reserves its room as soon as there is something to suggest', () => {
+    const { input } = render('')
+    expect(container!.querySelector('svg')).not.toBeNull()
+    expect(input.classList.contains('pr-9')).toBe(true)
+  })
+
+  it('closes when a click lands outside the field', () => {
+    const { input } = render('')
+    act(() => input.focus())
+    expect(listbox()).not.toBeNull()
+
+    act(() => document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })))
+
+    expect(listbox()).toBeNull()
+  })
+
+  // Da qui in giu': il suggerimento non e' mai una scelta gia' fatta.
+  // Con un'opzione gia' evidenziata all'apertura, un Invio -- il gesto con cui
+  // si conferma una form -- sostituiva `auth` con `authentication` senza che
+  // nessuno l'avesse chiesto.
+  it('highlights nothing when the list opens', () => {
+    const { input } = render('')
+    act(() => input.focus())
+
+    expect(optionTexts()).toEqual(OPTIONS)
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
+    expect(highlightedTexts()).toEqual([])
+  })
+
+  it('leaves the typed value alone when Enter arrives with nothing highlighted', () => {
+    const { input, onChange } = render('th')
+    act(() => input.focus())
+    expect(optionTexts()).toEqual(['auth', 'theme'])
+
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect(input.value).toBe('th')
+  })
+
+  it('establishes the highlight on the first option with ArrowDown', () => {
+    const { input } = render('')
+    act(() => input.focus())
+
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+
+    expect(highlightedTexts()).toEqual(['auth'])
+  })
+
+  it('establishes the highlight on the last option with ArrowUp', () => {
+    const { input } = render('')
+    act(() => input.focus())
+
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })))
+
+    expect(highlightedTexts()).toEqual(['translation'])
+  })
+
+  it('drops the highlight when the filter changes', () => {
+    const { input, onChange } = render('')
+    act(() => input.focus())
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+    expect(highlightedTexts()).toEqual(['auth'])
+
+    type(input, 'a', onChange)
+
+    expect(optionTexts().length).toBeGreaterThan(0)
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
+    expect(highlightedTexts()).toEqual([])
+  })
+
+  it('does not resurrect the previous highlight when the list reopens', () => {
+    const { input } = render('')
+    act(() => input.focus())
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+    expect(highlightedTexts()).toEqual(['common'])
+    act(() => document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })))
+    expect(listbox()).toBeNull()
+
+    act(() => input.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+
+    expect(listbox()).not.toBeNull()
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
+    expect(highlightedTexts()).toEqual([])
   })
 })
