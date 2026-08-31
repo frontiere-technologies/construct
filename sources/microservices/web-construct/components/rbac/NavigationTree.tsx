@@ -141,7 +141,11 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
           <span className="w-5" />
         )}
         {React.createElement(typeIcon(node), { size: 14, className: 'shrink-0 text-muted-foreground' })}
-        <span className={`flex-1 text-sm ${isCategory ? 'font-medium' : ''}`}>
+        {/* `min-w-0` prima di `truncate`: il nome del nodo lo scrive chi traduce,
+            e un figlio flex con `min-width: auto` si rifiuta di stringersi sotto
+            il proprio contenuto -- allargherebbe la riga e spingerebbe fuori le
+            azioni in coda invece di andare in puntini. */}
+        <span className={`flex-1 min-w-0 truncate text-sm ${isCategory ? 'font-medium' : ''}`}>
           {node.name}
         </span>
         {renderTrailing?.(node)}

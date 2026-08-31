@@ -81,19 +81,30 @@ afterEach(() => {
  * is what lets it shrink; only then does `truncate` ellipse. Real rendering is
  * covered by the e2e sidebar suite.
  */
+/**
+ * Una riga che non c'e' piu' -- rinominata, tolta, spostata fuori dal pannello --
+ * deve far fallire questo test dicendo quale, non farlo esplodere su un `null`
+ * tre righe piu' in basso, ne' passare perche' il ciclo che la esamina gira a
+ * vuoto. Il controllo sta qui, dove il selettore e' ancora leggibile accanto al
+ * nome della riga.
+ */
+function found(row: string, element: HTMLElement | null): HTMLElement {
+  expect(element, `la riga "${row}" non e' piu' nel pannello utente`).not.toBeNull()
+  return element!
+}
+
 describe('user panel truncation', () => {
   it('lets every row label shrink below its own text', () => {
     const panel = openUserPanel()
     // Every row of the panel, not only the two that were reported: they are all
     // the same flex row with a translator-authored label in it.
     const rows = [
-      panel.querySelector<HTMLElement>('a[href="/profile"]')!,
-      panel.querySelector<HTMLElement>('[role="switch"]')!.closest('div')!,
-      panel.querySelector<HTMLElement>('[data-testid="language-switcher"]')!,
-      panel.querySelector<HTMLElement>('.border-t button')!,
+      found('profilo', panel.querySelector<HTMLElement>('a[href="/profile"]')),
+      found('tema', panel.querySelector<HTMLElement>('[role="switch"]')?.closest('div') ?? null),
+      found('lingua', panel.querySelector<HTMLElement>('[data-testid="language-switcher"]')),
+      found('uscita', panel.querySelector<HTMLElement>('.border-t button')),
     ]
 
-    expect(rows.every(Boolean)).toBe(true)
     for (const row of rows) {
       const labels = Array.from(row.querySelectorAll('span')).filter(s => (s.textContent ?? '').trim().length > 0)
       expect(labels.length, 'riga senza etichetta di testo').toBeGreaterThan(0)

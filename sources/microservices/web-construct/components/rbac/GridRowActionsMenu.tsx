@@ -119,13 +119,20 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
         // ceiling on every menu. In a column flex the parent's max-content is
         // simply the widest item, and `align-items: stretch` still gives each
         // button the full width of the box.
+        // I bottoni non portano nessun `min-w-0`, e non e' una svista: la
+        // dimensione minima automatica vale sull'asse principale, che in un
+        // flex `column` e' quello verticale, quindi `min-width: auto` su queste
+        // voci non e' mai stato in gioco. A troncare sono la larghezza del
+        // contenitore qui sopra e lo `span` `min-w-0 truncate` la' sotto, che
+        // e' un figlio flex del Button (inline-flex, asse orizzontale) e li'
+        // invece la regola c'e' davvero.
         <div ref={menuRef} style={{ top: pos.top, left: pos.left }} className="fixed z-50 flex flex-col min-w-40 max-w-xs p-1 rounded-lg border border-border bg-popover shadow-lg">
           {items.map(item => (
             <Button
               key={item.label}
               variant="ghost"
               size="sm"
-              className="min-w-0 justify-start text-left"
+              className="justify-start text-left"
               disabled={item.disabled}
               onClick={() => { close(); item.onClick() }}
             >
