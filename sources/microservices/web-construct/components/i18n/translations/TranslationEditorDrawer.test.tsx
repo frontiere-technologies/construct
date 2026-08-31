@@ -23,6 +23,17 @@ const row = {
   description: null, values: {},
 } as unknown as TranslationRowDto
 
+// A stored module of `null` means the field starts empty, so focusing it shows
+// every option unfiltered — the assertion follows straight from the `modules`
+// fixture instead of being reverse-engineered from a narrowing match. Paired
+// with `namespaces`/`modules` holding disjoint values, a swap of the two props
+// (module field wired to `namespaces`) would show `['auth', 'nav']` here
+// instead of `['billing', 'docs']` and fail loudly.
+const rowWithNoModule = {
+  key: 'billing.invoice.title', namespace: 'nav', module: null,
+  description: null, values: {},
+} as unknown as TranslationRowDto
+
 let root: Root | undefined
 let container: HTMLDivElement | undefined
 
@@ -48,5 +59,22 @@ describe('TranslationEditorDrawer suggestions', () => {
     act(() => ns.focus())
     // 'auth' is already in the field, so the list is filtered down to it.
     expect(Array.from(document.querySelectorAll('[role="option"]')).map(o => o.textContent)).toEqual(['auth'])
+  })
+
+  it('offers the existing modules, not the namespaces, in the module field', () => {
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    act(() => root?.render(
+      <TranslationEditorDrawer
+        row={rowWithNoModule} onClose={vi.fn()}
+        namespaces={['auth', 'nav']} modules={['billing', 'docs']}
+      />,
+    ))
+    const mod = document.querySelector<HTMLInputElement>('#ed-mod')!
+    expect(mod.value).toBe('')
+    expect(mod.getAttribute('role')).toBe('combobox')
+    act(() => mod.focus())
+    expect(Array.from(document.querySelectorAll('[role="option"]')).map(o => o.textContent)).toEqual(['billing', 'docs'])
   })
 })
