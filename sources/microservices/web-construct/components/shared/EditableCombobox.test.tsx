@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import React, { act } from 'react'
+import React, { act, useLayoutEffect } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EditableCombobox } from './EditableCombobox'
@@ -44,6 +44,18 @@ function type(input: HTMLInputElement, next: string, onChange: ReturnType<typeof
   act(() => root?.render(
     <EditableCombobox id="ns" value={next} onChange={onChange} options={OPTIONS} data-testid="ns" />,
   ))
+}
+
+// The correction for a stale highlight used to run in a *passive* `useEffect`,
+// which lands its state update in a follow-up render — after the DOM for the
+// narrowing render is already live. A `useLayoutEffect` commits synchronously
+// in that same first render, before any passive effect gets a chance to run,
+// so this probe observes the exact intermediate DOM a browser (or a screen
+// reader) would: the one where `matches` has already narrowed but nothing has
+// corrected `active` yet.
+function ActiveDescendantProbe({ input, onSnapshot }: { input: HTMLInputElement; onSnapshot: (id: string | null) => void }) {
+  useLayoutEffect(() => { onSnapshot(input.getAttribute('aria-activedescendant')) })
+  return null
 }
 
 afterEach(() => {
@@ -102,6 +114,33 @@ describe('EditableCombobox', () => {
     act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
     const second = container!.querySelectorAll('[role="option"]')[1]
     expect(input.getAttribute('aria-activedescendant')).toBe(second.id)
+  })
+
+  it('keeps aria-activedescendant naming a rendered option through the render that narrows the list', () => {
+    const { input, onChange } = render('')
+    act(() => input.focus())
+    // Highlight the option at index 3 ('theme') while all 5 options show.
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+
+    // Narrow to fewer options than the highlighted index — 'th' matches only
+    // 'auth' and 'theme', so index 3 no longer exists in the rendered list —
+    // and snapshot aria-activedescendant from inside that very render via the
+    // probe's layout effect, before any passive effect can react to it.
+    let snapshot: string | null = null
+    act(() => root?.render(<>
+      <EditableCombobox id="ns" value="th" onChange={onChange} options={OPTIONS} data-testid="ns" />
+      <ActiveDescendantProbe input={input} onSnapshot={id => { snapshot = id }} />
+    </>))
+
+    expect(snapshot).not.toBeNull()
+    const option = Array.from(container!.querySelectorAll<HTMLElement>('[role="option"]'))
+      .find(o => o.id === snapshot)
+    // Assert against the rendered DOM, not an index: the id must resolve to
+    // an option that actually exists, and it must be the one marked selected.
+    expect(option).toBeDefined()
+    expect(option!.getAttribute('aria-selected')).toBe('true')
   })
 
   it('writes the clicked option into the field and closes', () => {

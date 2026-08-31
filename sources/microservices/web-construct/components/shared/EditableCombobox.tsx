@@ -47,7 +47,12 @@ export function EditableCombobox({
   // Showing an empty popup would just cover the form, so the list simply closes.
   const shown = open && matches.length > 0
 
-  useEffect(() => { setActive(0) }, [value])
+  // `active` can point past the end of `matches` for one render — e.g. it was
+  // 3 when all 5 options showed, then a keystroke narrowed the list to 2
+  // before this state could catch up. Clamping here, at render time, means
+  // aria-activedescendant never names an option that isn't in the DOM; no
+  // effect is needed to correct it after the fact.
+  const clampedActive = matches.length === 0 ? 0 : Math.max(0, Math.min(active, matches.length - 1))
 
   useEffect(() => {
     if (!shown) return
@@ -80,15 +85,15 @@ export function EditableCombobox({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault()
-        setActive(i => (i + 1) % matches.length)
+        setActive((clampedActive + 1) % matches.length)
         break
       case 'ArrowUp':
         e.preventDefault()
-        setActive(i => (i - 1 + matches.length) % matches.length)
+        setActive((clampedActive - 1 + matches.length) % matches.length)
         break
       case 'Enter':
         e.preventDefault()
-        choose(matches[active])
+        choose(matches[clampedActive])
         break
       default:
         break
@@ -104,7 +109,7 @@ export function EditableCombobox({
         aria-expanded={shown}
         aria-controls={shown ? listboxId : undefined}
         aria-autocomplete="list"
-        aria-activedescendant={shown ? optionId(active) : undefined}
+        aria-activedescendant={shown ? optionId(clampedActive) : undefined}
         autoComplete="off"
         value={value}
         placeholder={placeholder}
@@ -133,14 +138,15 @@ export function EditableCombobox({
               key={option}
               id={optionId(index)}
               role="option"
-              aria-selected={index === active}
+              aria-selected={index === clampedActive}
               onMouseEnter={() => setActive(index)}
-              // mousedown, not click: the field's blur would otherwise race the
-              // click and close the list before the choice registers.
+              // mousedown, not click: it fires before the input loses focus,
+              // which is what keeps focus on the field through the selection,
+              // per the ARIA combobox pattern.
               onMouseDown={e => { e.preventDefault(); choose(option) }}
               className={cn(
                 'cursor-pointer truncate rounded px-3 py-2 text-sm',
-                index === active ? 'bg-accent text-foreground' : 'text-foreground-secondary',
+                index === clampedActive ? 'bg-accent text-foreground' : 'text-foreground-secondary',
               )}
             >
               {option}
