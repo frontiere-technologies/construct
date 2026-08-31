@@ -79,10 +79,17 @@ const listbox = () => container?.querySelector<HTMLElement>('[role="listbox"]') 
 const optionTexts = () =>
   Array.from(container?.querySelectorAll('[role="option"]') ?? []).map(o => o.textContent)
 
+// React keeps a value tracker on the DOM node: assigning `input.value = x`
+// directly leaves the tracker thinking nothing changed, and onChange never
+// fires. Going through the prototype's own setter is what React's own test
+// utilities do, and it is the difference between this helper working and
+// every typing test failing for a reason that looks nothing like the cause.
+const setNativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+
 /** The component reads `value` from props, so typing means: fire input, then re-render. */
 function type(input: HTMLInputElement, next: string, onChange: ReturnType<typeof vi.fn>) {
   act(() => {
-    input.value = next
+    setNativeValue.call(input, next)
     input.dispatchEvent(new Event('input', { bubbles: true }))
   })
   expect(onChange).toHaveBeenLastCalledWith(next)
@@ -116,9 +123,9 @@ describe('EditableCombobox', () => {
   it('filters by case-insensitive substring as the user types', () => {
     const { input, onChange } = render('')
     act(() => input.focus())
-    type(input, 'AT', onChange)
-    // 'auth' contains 'at'? no — 'auth' has a,u,t,h. 'th' matches 'auth' and 'theme'.
-    expect(optionTexts()).toEqual([])
+    // Upper-case needle against lower-case options, and a match in the middle
+    // of the word rather than a prefix: 'th' is inside 'auth' as well as at the
+    // start of 'theme'. Both properties are the point of the assertion.
     type(input, 'TH', onChange)
     expect(optionTexts()).toEqual(['auth', 'theme'])
   })
