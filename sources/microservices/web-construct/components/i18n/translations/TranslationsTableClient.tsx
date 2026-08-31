@@ -167,7 +167,11 @@ export default function TranslationsTableClient(props: Props) {
         <TranslationEditorDrawer row={editing} onClose={saved => { setEditing(null); if (saved) refresh() }} />
       )}
       {creating && (
-        <CreateTranslationKeyModal onClose={saved => { setCreating(false); if (saved) refresh() }} />
+        <CreateTranslationKeyModal
+          onClose={saved => { setCreating(false); if (saved) refresh() }}
+          namespaces={props.namespaces}
+          modules={props.modules}
+        />
       )}
       {deleting && (
         <ConfirmModal
