@@ -16,6 +16,7 @@ Spec: `docs/superpowers/specs/2026-08-31-translation-namespace-module-combobox-d
 - Every key-shaped string literal in `app/`, `components/`, `lib/`, `context/` must be seeded by a migration. This plan introduces **no new translation key**; if you find yourself needing one, stop — the design chose the decorative chevron precisely to avoid it.
 - `components/ui/` is reserved for shadcn stock primitives. The new component goes in `components/shared/`.
 - Tests live beside the code as `*.test.ts(x)`; `npm test` collects every one of them (`test:collection` guards that).
+- Named exports only under `components/**`: `import-x/no-default-export` is an error there. The reason is not style — this project's quality gates (raw-color-ratchet, token-vocabulary, icon-only-button-accessible-name) read the source by symbol name, and a default export lets every import rename the symbol. The 27-file exception list in `eslint.config.mjs` is documented as "made to shrink, not to remain": do not add to it, and do not reach for an `eslint-disable`.
 - Buttons come from `@/components/ui/button`; text fields from `@/components/ui/input`. Note `inputBaseClasses` is exported from `components/ui/input.tsx` for cases that need the look without the element.
 - Run `npm run lint -- --max-warnings=0` and `npm run typecheck` before every commit. Both must be clean.
 - All commands run from `sources/microservices/web-construct/`.
@@ -41,9 +42,9 @@ Spec: `docs/superpowers/specs/2026-08-31-translation-namespace-module-combobox-d
     placeholder?: string
     'data-testid'?: string
   }
-  export default function EditableCombobox(props: EditableComboboxProps): React.ReactElement
+  export function EditableCombobox(props: EditableComboboxProps): React.ReactElement
   ```
-  Tasks 2 and 3 import it as `import EditableCombobox from '@/components/shared/EditableCombobox'`.
+  Tasks 2 and 3 import it as `import { EditableCombobox } from '@/components/shared/EditableCombobox'`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -55,7 +56,7 @@ Create `components/shared/EditableCombobox.test.tsx`:
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import EditableCombobox from './EditableCombobox'
+import { EditableCombobox } from './EditableCombobox'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -238,7 +239,7 @@ export interface EditableComboboxProps {
  * aria-controls, aria-autocomplete and aria-activedescendant — because the
  * keyboard navigation it advertises is actually implemented below.
  */
-export default function EditableCombobox({
+export function EditableCombobox({
   id, value, onChange, options, placeholder, 'data-testid': testId,
 }: EditableComboboxProps) {
   const [open, setOpen] = useState(false)
@@ -469,7 +470,7 @@ Expected: FAIL — TypeScript rejects the extra props, and `role` is `null` beca
 In `CreateTranslationKeyModal.tsx`, add the import:
 
 ```tsx
-import EditableCombobox from '@/components/shared/EditableCombobox'
+import { EditableCombobox } from '@/components/shared/EditableCombobox'
 ```
 
 Replace the signature on line 12:
@@ -622,7 +623,7 @@ Expected: FAIL with `expected null to be 'combobox'`. If instead it fails on an 
 Add the import:
 
 ```tsx
-import EditableCombobox from '@/components/shared/EditableCombobox'
+import { EditableCombobox } from '@/components/shared/EditableCombobox'
 ```
 
 Extend `Props` (line 13) with the two arrays and destructure them in the signature (line 23):
