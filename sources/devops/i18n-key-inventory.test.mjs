@@ -69,6 +69,20 @@ function seededKeys() {
       blocks++
       for (const key of block[1].matchAll(/"key"\s*:\s*"([^"]+)"/g)) keys.add(key[1])
     }
+    // A seed can be undone. 0012 deletes the seven `home.*` keys the landing
+    // page stopped reading when it became the bare logo, and a catalogue that
+    // still counted them would report all seven as "seeded but never
+    // referenced" for good — noise in the one list that is meant to be read.
+    //
+    // Applied in migration order, in the same pass as the seeds, so the file
+    // order decides: a delete after a seed removes the key, and a later seed
+    // puts it back. That also sharpens the hard direction of this guard --
+    // deleting a key the source still calls `t()` on now fails the
+    // referenced-but-not-seeded check instead of surfacing at runtime as a
+    // label degraded to its own key.
+    for (const block of sql.matchAll(/delete\s+from\s+translation_key\s+where\s+key\s+in\s*\(([^)]*)\)/gi)) {
+      for (const key of block[1].matchAll(/'([^']+)'/g)) keys.delete(key[1])
+    }
   }
   return { keys, blocks }
 }

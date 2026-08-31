@@ -1,47 +1,24 @@
-'use client'
-
 import React from 'react'
-import { usePathname } from 'next/navigation'
-import { PageContainer } from '@/components/shared/PageContainer'
-import { useI18n } from '@/context/I18nContext'
+import Image from 'next/image'
 
-const toTitle = (path: string, dashboardLabel: string): string =>
-  path === '/'
-    ? dashboardLabel
-    : path.substring(1).split('/').map(seg =>
-        seg.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-      ).join(' — ')
-
-export const Home: React.FC = () => {
-  const pathname = usePathname()
-  const { t } = useI18n()
-
-  return (
-    <PageContainer title={toTitle(pathname, t('home.dashboard'))}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="rounded-xl border border-border-subtle p-6">
-          <h3 className="text-muted-foreground text-sm font-medium mb-2">{t('home.total_users')}</h3>
-          <p className="text-3xl font-bold">12,450</p>
-        </div>
-        <div className="rounded-xl border border-border-subtle p-6">
-          <h3 className="text-muted-foreground text-sm font-medium mb-2">{t('home.active_sessions')}</h3>
-          <p className="text-3xl font-bold">1,234</p>
-        </div>
-        <div className="rounded-xl border border-border-subtle p-6">
-          <h3 className="text-muted-foreground text-sm font-medium mb-2">{t('home.revenue')}</h3>
-          <p className="text-3xl font-bold">$45,678</p>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-border-subtle p-8 min-h-[400px]">
-        <h2 className="text-xl font-semibold mb-4">{t('home.content_area')}</h2>
-        <p className="text-muted-foreground">
-          {t('home.placeholder_body', { path: pathname })}
-        </p>
-        <p className="text-muted-foreground mt-4">
-          {t('home.placeholder_admin_hint')}
-        </p>
-      </div>
-    </PageContainer>
-  )
-}
+/**
+ * The landing page for `/` and, through `[...slug]`, for every protected route
+ * that has no page of its own: just the Construct mark, centred.
+ *
+ * It carries no copy on purpose. The stat cards and placeholder paragraphs that
+ * used to live here were the only readers of the seven `home.*` translation
+ * keys, which migration 0012 removes from the catalogue — so nothing here needs
+ * `t()`, and nothing here is a client component any more.
+ *
+ * `alt` is the product name rather than a translated string, exactly as in
+ * Login.tsx: a brand name is not translated, and re-introducing copy here would
+ * re-introduce a key to seed.
+ */
+export const Home: React.FC = () => (
+  // h-full, not a vh fraction: <main> in Layout.tsx is a stretched flex item
+  // inside an h-screen row, so its height is definite and 100% of it centres the
+  // mark against the real content area -- padding included, sidebar excluded.
+  <div className="flex h-full items-center justify-center">
+    <Image src="/logo.svg" alt="Construct" width={220} height={220} priority />
+  </div>
+)
