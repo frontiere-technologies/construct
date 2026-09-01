@@ -1,3 +1,4 @@
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -54,6 +55,28 @@ def _filter_by_key(page, key):
     page.wait_for_url(f"**search={key}**", timeout=15_000)
 
 
+def _open_editor(page):
+    """Open the first filtered row's editor and wait for the form, not the network.
+
+    Waiting on `networkidle` would be waiting for the wrong thing: it reports
+    that the browser stopped fetching, not that the form is mounted and
+    populated. The editor's own test id is the real signal.
+    """
+    page.locator('[data-testid^="row-menu"]').first.click()
+    page.get_by_role("button", name="Modifica").or_(
+        page.get_by_role("button", name="Edit")).click()
+    page.wait_for_url(re.compile(r"/admin/translations/\d+/edit"), timeout=15_000)
+    editor = page.locator('[data-testid="translation-editor"]')
+    expect(editor).to_be_visible(timeout=15_000)
+    return editor
+
+
+def _expect_back_on_the_list(page, base_url):
+    """The save landed and returned. Asserting the URL, not the editor's absence:
+    an unmounted form proves nothing about whether the write succeeded."""
+    page.wait_for_url(re.compile(rf"{re.escape(base_url)}/admin/translations(\?.*)?$"), timeout=15_000)
+
+
 def _restore_save_translation(page, base_url) -> None:
     """Best-effort: put common.actions.save's English value back to "Save".
 
@@ -69,16 +92,14 @@ def _restore_save_translation(page, base_url) -> None:
     try:
         _open_translations(page, base_url)
         _filter_by_key(page, "common.actions.save")
-        _rows(page).first.locator('[data-testid^="row-menu"]').click()
-        edit_btn = page.get_by_role("button", name="Modifica").or_(
-            page.get_by_role("button", name="Edit"))
-        edit_btn.click()
-        editor = page.locator('[data-testid="translation-editor"]')
+        editor = _open_editor(page)
         editor.locator('[data-testid="translation-value-en"]').fill("Save")
-        save_btn = editor.get_by_role("button", name="Salva").or_(
-            editor.get_by_role("button", name="Save"))
+        # Salva/Annulla/Scarta are siblings of the `translation-editor` div in
+        # TranslationKeyForm, not children of it — scope to the page, not the editor.
+        save_btn = page.get_by_role("button", name="Salva").or_(
+            page.get_by_role("button", name="Save"))
         save_btn.click()
-        expect(editor).to_be_hidden(timeout=10_000)
+        _expect_back_on_the_list(page, base_url)
     except Exception as exc:  # pragma: no cover - best-effort cleanup
         print(f"[test_i18n cleanup] failed to restore common.actions.save: {exc}")
 
@@ -158,15 +179,11 @@ def test_admin_edits_a_translation_and_the_user_sees_it(logged_in_page, base_url
     try:
         _open_translations(page, base_url)
         _filter_by_key(page, "common.actions.save")
-        row = _rows(page).first
-        row.locator('[data-testid^="row-menu"]').click()
-        page.get_by_role("button", name="Modifica").click()
-
-        editor = page.locator('[data-testid="translation-editor"]')
-        expect(editor).to_be_visible()
+        editor = _open_editor(page)
         editor.locator('[data-testid="translation-value-en"]').fill(marker)
-        editor.get_by_role("button", name="Salva").click()
-        expect(editor).to_be_hidden(timeout=10_000)
+        # Salva is a sibling of the `translation-editor` div, not a child of it.
+        page.get_by_role("button", name="Salva").click()
+        _expect_back_on_the_list(page, base_url)
 
         # The new English value must be visible without a re-login.
         switch_language(page, "en")
@@ -207,19 +224,17 @@ def test_a_missing_english_translation_falls_back_to_italian(logged_in_page, bas
     try:
         _open_translations(page, base_url)
         page.get_by_role("button", name="Nuova chiave").click()
-        page.get_by_role("dialog").get_by_label("Chiave").fill(key)
-        page.get_by_label("Namespace").fill("zzz_e2e")
-        page.get_by_role("button", name="Salva").click()
-        page.wait_for_load_state("networkidle")
-
-        _filter_by_key(page, key)
-        _rows(page).first.locator('[data-testid^="row-menu"]').click()
-        page.get_by_role("button", name="Modifica").click()
-        editor = page.locator('[data-testid="translation-editor"]')
-        editor.locator('[data-testid="translation-value-it"]').fill("Valore italiano")
+        page.wait_for_url(re.compile(r"/admin/translations/create"), timeout=15_000)
+        form = page.locator('[data-testid="translation-editor"]')
+        expect(form).to_be_visible(timeout=15_000)
+        form.get_by_label("Chiave").fill(key)
+        # The namespace follows the key by convention; set it explicitly anyway,
+        # so the test does not silently depend on that behaviour.
+        form.get_by_label("Namespace").fill("zzz_e2e")
+        form.locator('[data-testid="translation-value-it"]').fill("Valore italiano")
         # English intentionally left empty.
-        editor.get_by_role("button", name="Salva").click()
-        expect(editor).to_be_hidden(timeout=10_000)
+        page.get_by_role("button", name="Salva").click()
+        _expect_back_on_the_list(page, base_url)
 
         # The grid marks it missing in English…
         _filter_by_key(page, key)
@@ -322,18 +337,18 @@ def test_concurrent_edits_are_detected_instead_of_overwritten(browser, base_url,
         for page in (page_a, page_b):
             _open_translations(page, base_url)
             _filter_by_key(page, "common.actions.save")
-            _rows(page).first.locator('[data-testid^="row-menu"]').click()
-            page.get_by_role("button", name="Modifica").click()
-            expect(page.locator('[data-testid="translation-editor"]')).to_be_visible()
+            _open_editor(page)
 
+        # Salva is a sibling of the `translation-editor` div, not a child of it,
+        # so it is clicked through the page, not through the editor locator.
         editor_a = page_a.locator('[data-testid="translation-editor"]')
         editor_a.locator('[data-testid="translation-value-en"]').fill(winner)
-        editor_a.get_by_role("button", name="Salva").click()
-        expect(editor_a).to_be_hidden(timeout=10_000)
+        page_a.get_by_role("button", name="Salva").click()
+        _expect_back_on_the_list(page_a, base_url)
 
         editor_b = page_b.locator('[data-testid="translation-editor"]')
         editor_b.locator('[data-testid="translation-value-en"]').fill("Loser")
-        editor_b.get_by_role("button", name="Salva").click()
+        page_b.get_by_role("button", name="Salva").click()
 
         expect(page_b.locator('[data-testid="translation-conflict"]')).to_be_visible(timeout=10_000)
         expect(page_b.locator('[data-testid="translation-conflict"]')).to_contain_text(winner)
