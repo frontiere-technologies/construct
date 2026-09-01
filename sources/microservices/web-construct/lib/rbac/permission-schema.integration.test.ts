@@ -114,12 +114,18 @@ describe('identità del permesso', () => {
       insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
       values ('GRANT', 'test-duplicato', 'CONSOLE', 'primo', 0, 0, 2)
     `)
-    await expect(
-      db.execute(sql`
-        insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
-        values ('GRANT', 'test-duplicato', 'CONSOLE', 'secondo', 0, 0, 2)
-      `),
-    ).rejects.toThrow()
-    await db.execute(sql`delete from public.permission where code = 'test-duplicato'`)
+    // finally, non l'ultima riga: se l'assert sopra fallisse, 'test-duplicato' resterebbe
+    // sul database e avvelenerebbe la riesecuzione di questo test e i task successivi della
+    // stessa fase, che condividono la stessa suite di integrazione.
+    try {
+      await expect(
+        db.execute(sql`
+          insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
+          values ('GRANT', 'test-duplicato', 'CONSOLE', 'secondo', 0, 0, 2)
+        `),
+      ).rejects.toThrow()
+    } finally {
+      await db.execute(sql`delete from public.permission where code = 'test-duplicato'`)
+    }
   })
 })
