@@ -290,7 +290,7 @@ esterna delle concessioni non si muove, perché la tabella che le riceve è la s
 4. `navigation_item_tag` → `menu_entry_tag`, con la chiave esterna ripuntata sulle voci create al passo 3.
 5. `alter table role_item rename to role_permission`, eliminazione delle righe con `authorized = false`, poi `drop column authorized`.
 6. Migrazione generata dal catalogo (§5): inserisce le 15 foglie e le 5 categorie, adottando eventuali codici già presenti.
-7. Riscrittura di `apply_role_permission_deltas`, `replace_user_roles_guarded` e `role_list_view` sui nomi nuovi.
+7. Riscrittura di `apply_role_permission_deltas`, `replace_item_tags` e `role_list_view` sui nomi nuovi — i corpi delle funzioni sono testo, non riferimenti per OID, quindi un rename le rompe in silenzio fino alla prima chiamata. `replace_user_roles_guarded` non è coinvolta: tocca solo `user_role`, che non cambia nome.
 8. Eliminazione di `no_permission_need_for_navigation` e `config_visibility` dopo che il passo 3 ne ha assorbito il significato.
 
 Il ramo `Operations` (id −1) e la radice (id 0) restano come categorie dell'albero dei permessi:
