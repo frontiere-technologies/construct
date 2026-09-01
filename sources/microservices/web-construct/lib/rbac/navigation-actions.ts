@@ -30,15 +30,21 @@ async function writeTags(database: NavigationDatabase, idItem: number, tagTransl
   }
 }
 
-/** Stessa normalizzazione della base che usa la migrazione 0015: minuscolo, non
- *  alfanumerici in trattini, trattini di bordo via, 'permesso' se non resta niente
- *  (un nome come "!!!" si riduce a stringa vuota). La forma del suffisso che risolve
- *  le collisioni NON è la stessa: qui è un contatore da reserveUniqueCode (sotto),
- *  la' è l'id_permission — perché a runtime l'id non esiste ancora quando il code va
- *  calcolato, prima dell'insert, e ottenerlo vorrebbe dire scrivere il code e poi
- *  correggerlo, l'abitudine che DEC-3 vieta per un code già assegnato. Le due forme
- *  restano uniche fra loro perché reserveUniqueCode legge lo stato reale della
- *  tabella prima di scegliere il proprio contatore. */
+/** Stessa normalizzazione della base delle migrazioni 0015/0016: minuscolo, non
+ *  alfanumerici in trattini, trattini di bordo via. Il ripiego 'permesso' nudo qui
+ *  sotto è invece solo di questa funzione — né la 0015 né la 0016 lo producono mai.
+ *  Per un nome vuoto o di soli spazi, la 0015 sostituisce 'permesso-' || id_permission
+ *  PRIMA di normalizzare: l'id è già dentro la sua base, non un ripiego applicato dopo
+ *  come qui. Per un nome non vuoto ma privo di caratteri alfanumerici (es. "!!!") la
+ *  0015 non aveva alcun ripiego e produceva stringa vuota; la 0016 ripara quel buco a
+ *  posteriori con lo stesso 'permesso-' || id_permission, mai col nudo 'permesso'.
+ *  La forma del suffisso che risolve le collisioni diverge allo stesso modo: qui è un
+ *  contatore da reserveUniqueCode (sotto), nelle migrazioni è l'id_permission — perché
+ *  a runtime l'id non esiste ancora quando il code va calcolato, prima dell'insert, e
+ *  ottenerlo vorrebbe dire scrivere il code e poi correggerlo, l'abitudine che DEC-3
+ *  vieta per un code già assegnato. Le forme restano uniche fra loro perché
+ *  reserveUniqueCode legge lo stato reale della tabella prima di scegliere il proprio
+ *  contatore. */
 export function toPermissionCode(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'permesso'
 }
