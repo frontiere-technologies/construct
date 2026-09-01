@@ -1,6 +1,6 @@
 import {
   type NavigationItemRow, type UserNavigationTreeDto, type PermissionDelta,
-  type Locale, DEFAULT_LOCALE, ITEM_TYPE_CATEGORY,
+  type Locale, DEFAULT_LOCALE, ITEM_TYPE_CATEGORY, FUNCTIONALITY_TYPE_BY_ID,
 } from './types'
 
 function labelFor(it: NavigationItemRow, locale: Locale): string {
@@ -29,6 +29,10 @@ export function buildAuthTree(
         type: it.id_item_type === ITEM_TYPE_CATEGORY ? 'CATEGORY' : 'FUNCTIONALITY',
         parentId: it.id_item_parent,
         authorization: authorizedIds.has(it.id_item),
+        // NavigationTree.typeIcon() picks the per-kind icon from this field alone:
+        // omitting it dropped every leaf onto typeIcon's Circle fallback here while
+        // the same row kept its real icon under buildNavTree (mapRowToDto).
+        functionalityType: it.id_functionality_type ? FUNCTIONALITY_TYPE_BY_ID[it.id_functionality_type] ?? null : null,
         children: build(it.id_item),
       }))
   return build(rootId)

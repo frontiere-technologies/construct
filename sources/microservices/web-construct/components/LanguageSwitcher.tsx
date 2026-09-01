@@ -150,8 +150,11 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
         <Globe size={16} className="flex-shrink-0" />
         {!collapsed && (
           <>
-            <span className="flex-1 text-left">{t('profile.language')}</span>
-            <span className="text-xs opacity-60">{current?.nativeName ?? code}</span>
+            <span className="flex-1 min-w-0 truncate text-left">{t('profile.language')}</span>
+            {/* max-w-[40%]: the label is flex-1, so its flex-basis is 0 and it takes
+                no share of the shrinking (shrink x basis = 0). Without a cap here a
+                long nativeName claims the whole row and the label disappears. */}
+            <span className="max-w-[40%] min-w-0 truncate text-xs opacity-60">{current?.nativeName ?? code}</span>
           </>
         )}
       </button>
@@ -188,7 +191,7 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
                   selected ? 'font-medium text-sidebar-accent-foreground' : 'text-sidebar-foreground',
                 )}
               >
-                <span className="flex-1">{language.nativeName}</span>
+                <span className="flex-1 min-w-0 truncate">{language.nativeName}</span>
                 {selected && <Check size={13} className="shrink-0 text-primary" />}
               </li>
             )

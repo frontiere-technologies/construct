@@ -104,17 +104,42 @@ export default function GridRowActionsMenu<T>(params: GridRowActionsMenuParams<T
         <MoreHorizontal size={16} />
       </Button>
       {open && pos && createPortal(
-        <div ref={menuRef} style={{ top: pos.top, left: pos.left }} className="fixed z-50 w-40 p-1 rounded-lg border border-border bg-popover shadow-lg">
+        // min-w-40 + max-w-xs, not the flat w-40 this used to be. Labels are
+        // authored in Admin -> Translations, so their length is a translator's
+        // choice, not ours: "Set as default" is "Imposta come predefinita" in
+        // Italian and can be longer elsewhere. A fixed box made every such label
+        // spill out of the popup, because buttonVariants puts `whitespace-nowrap`
+        // on every Button and nothing clipped the overflow. Now the popup keeps
+        // its old width as a floor, grows for a longer translation, and only past
+        // the ceiling does the label ellipse.
+        // flex-col, and the items no longer carry `w-full`. A percentage width on
+        // the children is treated as auto while the parent's intrinsic width is
+        // being resolved, which inflated the shrink-to-fit result: measured 336px
+        // of "natural" width for labels that need ~130px, so the box hit the
+        // ceiling on every menu. In a column flex the parent's max-content is
+        // simply the widest item, and `align-items: stretch` still gives each
+        // button the full width of the box.
+        // I bottoni non portano nessun `min-w-0`, e non e' una svista: la
+        // dimensione minima automatica vale sull'asse principale, che in un
+        // flex `column` e' quello verticale, quindi `min-width: auto` su queste
+        // voci non e' mai stato in gioco. A troncare sono la larghezza del
+        // contenitore qui sopra e lo `span` `min-w-0 truncate` la' sotto, che
+        // e' un figlio flex del Button (inline-flex, asse orizzontale) e li'
+        // invece la regola c'e' davvero.
+        <div ref={menuRef} style={{ top: pos.top, left: pos.left }} className="fixed z-50 flex flex-col min-w-40 max-w-xs p-1 rounded-lg border border-border bg-popover shadow-lg">
           {items.map(item => (
             <Button
               key={item.label}
               variant="ghost"
               size="sm"
-              className="w-full justify-start text-left"
+              className="justify-start text-left"
               disabled={item.disabled}
               onClick={() => { close(); item.onClick() }}
             >
-              {item.label}
+              {/* The label needs its own box: Button is `inline-flex`, so a bare
+                  text child becomes an anonymous flex item and text-overflow
+                  never applies to it — `truncate` on the Button would do nothing. */}
+              <span className="min-w-0 truncate">{item.label}</span>
             </Button>
           ))}
         </div>,

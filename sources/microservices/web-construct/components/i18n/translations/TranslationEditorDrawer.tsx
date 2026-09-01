@@ -6,13 +6,16 @@ import { useI18n } from '@/context/I18nContext'
 import { saveTranslations } from '@/lib/i18n/translation-actions'
 import { MAX_VALUE_LENGTH, type TranslationConflict, type TranslationRowDto } from '@/lib/i18n/types'
 import { AccessibleDialog } from '@/components/shared/AccessibleDialog'
+import { EditableCombobox } from '@/components/shared/EditableCombobox'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
 interface Props {
   row: TranslationRowDto
   onClose: (saved: boolean) => void
+  /** Namespaces already in use, for the suggestions. Never restricts what may be typed. */
+  namespaces: string[]
+  modules: string[]
 }
 
 /**
@@ -20,7 +23,7 @@ interface Props {
  * is already at its width budget, and §4.4 explicitly allows a drawer once it is.
  * All languages for the key are edited and saved together, in one transaction.
  */
-export default function TranslationEditorDrawer({ row, onClose }: Props) {
+export default function TranslationEditorDrawer({ row, onClose, namespaces, modules }: Props) {
   const { t, languages } = useI18n()
 
   // `Object.hasOwn` guards the lookup: `row.values` is keyed by DB-sourced
@@ -114,11 +117,11 @@ export default function TranslationEditorDrawer({ row, onClose }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="ed-ns">{t('translation.namespace')}</label>
-              <Input id="ed-ns" value={namespace} onChange={e => setNamespace(e.target.value)} />
+              <EditableCombobox id="ed-ns" value={namespace} onChange={setNamespace} options={namespaces} />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="ed-mod">{t('translation.module')}</label>
-              <Input id="ed-mod" value={moduleName} onChange={e => setModuleName(e.target.value)} />
+              <EditableCombobox id="ed-mod" value={moduleName} onChange={setModuleName} options={modules} />
             </div>
           </div>
         </div>

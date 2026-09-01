@@ -63,14 +63,40 @@ function translationKeyPattern() {
 function seededKeys() {
   const keys = new Set()
   let blocks = 0
+  let deletes = 0
   for (const name of readdirSync(migrationsDir).filter(n => n.endsWith('.sql')).sort()) {
     const sql = readFileSync(join(migrationsDir, name), 'utf8')
     for (const block of sql.matchAll(/apply_translation_seed\(\$seed\$([\s\S]*?)\$seed\$/g)) {
       blocks++
       for (const key of block[1].matchAll(/"key"\s*:\s*"([^"]+)"/g)) keys.add(key[1])
     }
+    // A seed can be undone. 0012 deletes the seven `home.*` keys the landing
+    // page stopped reading when it became the bare logo, and a catalogue that
+    // still counted them would report all seven as "seeded but never
+    // referenced" for good — noise in the one list that is meant to be read.
+    //
+    // The scope of "order decides" is per file, and only across files. Within
+    // one file it does not: this loop runs after the seed loop above has read
+    // the whole file, so a delete always wins over a seed in the same
+    // migration, wherever the two sit in it. A single migration that deleted a
+    // key and re-seeded it with new copy would therefore be reported here as
+    // unseeded. Across files the migration order is the real one, and a later
+    // file's seed does put a key deleted by an earlier file back.
+    //
+    // Either way this sharpens the hard direction of the guard: deleting a key
+    // the source still calls `t()` on fails the referenced-but-not-seeded check
+    // instead of surfacing at runtime as a label degraded to its own key.
+    //
+    // `deletes` counts the key literals this scan actually removed, and the
+    // visibility test below holds it above zero — see the reason there.
+    for (const block of sql.matchAll(/delete\s+from\s+translation_key\s+where\s+key\s+in\s*\(([^)]*)\)/gi)) {
+      for (const key of block[1].matchAll(/'([^']+)'/g)) {
+        keys.delete(key[1])
+        deletes++
+      }
+    }
   }
-  return { keys, blocks }
+  return { keys, blocks, deletes }
 }
 
 function sourceFiles(dir, found = []) {
@@ -166,10 +192,17 @@ test('the key format is the one declared in lib/i18n/key-format.ts', () => {
 test('both sides of the comparison are actually visible to the scan', () => {
   // Without this, a scan that silently stopped matching would leave the guard
   // below vacuously green instead of failing.
-  const { keys, blocks } = seededKeys()
+  const { keys, blocks, deletes } = seededKeys()
   const { production } = referencedKeys(translationKeyPattern())
   assert.ok(blocks >= 16, `expected the seed blocks to be found, got ${blocks}`)
   assert.ok(keys.size >= 300, `expected the seeded keys to be found, got ${keys.size}`)
+  // The delete side needs the same floor as the seed side, and for the same
+  // reason. It parses one SQL shape only -- `key in ('a', 'b')` -- so a
+  // migration written as `key like 'legacy.%'`, or a reformat of 0012 that the
+  // regex stops matching, would make the scan quietly find nothing: the deleted
+  // keys would keep counting as seeded, and the hard direction this guard now
+  // advertises would stop holding without a single test going red.
+  assert.ok(deletes >= 1, `expected the seed deletions to be found, got ${deletes}`)
   assert.ok(production.size >= 250, `expected the referenced keys to be found, got ${production.size}`)
 })
 

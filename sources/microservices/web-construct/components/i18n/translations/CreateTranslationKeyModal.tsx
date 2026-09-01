@@ -5,11 +5,19 @@ import { useI18n } from '@/context/I18nContext'
 import { createTranslationKey } from '@/lib/i18n/translation-actions'
 import { namespaceOf } from '@/lib/i18n/key-format'
 import { AccessibleDialog } from '@/components/shared/AccessibleDialog'
+import { EditableCombobox } from '@/components/shared/EditableCombobox'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
-export default function CreateTranslationKeyModal({ onClose }: { onClose: (saved: boolean) => void }) {
+interface Props {
+  onClose: (saved: boolean) => void
+  /** Namespaces already in use, for the suggestions. Never restricts what may be typed. */
+  namespaces: string[]
+  modules: string[]
+}
+
+export default function CreateTranslationKeyModal({ onClose, namespaces, modules }: Props) {
   const { t } = useI18n()
   const [key, setKey] = useState('')
   const [namespaceTouched, setNamespaceTouched] = useState(false)
@@ -52,13 +60,25 @@ export default function CreateTranslationKeyModal({ onClose }: { onClose: (saved
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="tk-ns">{t('translation.namespace')}</label>
-            <Input id="tk-ns" value={namespace} onChange={e => { setNamespaceTouched(true); setNamespace(e.target.value) }} placeholder="common" />
+            <EditableCombobox
+              id="tk-ns"
+              value={namespace}
+              onChange={next => { setNamespaceTouched(true); setNamespace(next) }}
+              options={namespaces}
+              placeholder="common"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="tk-mod">
               {t('translation.module')} <span className="font-normal text-foreground-faint">{t('common.labels.optional')}</span>
             </label>
-            <Input id="tk-mod" value={moduleName} onChange={e => setModuleName(e.target.value)} placeholder="core" />
+            <EditableCombobox
+              id="tk-mod"
+              value={moduleName}
+              onChange={setModuleName}
+              options={modules}
+              placeholder="core"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="tk-desc">{t('translation.description')}</label>
