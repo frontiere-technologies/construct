@@ -131,8 +131,11 @@ alter table public.permission rename column id_item to id_permission;
 alter table public.permission rename column id_item_parent to id_parent;
 
 alter table public.role_item rename to role_permission;
-alter table public.role_item_pkey rename to role_permission_pkey;
 alter table public.role_permission rename column id_item to id_permission;
+-- La chiave primaria e' un indice, non una tabella: ALTER TABLE ... RENAME non
+-- la raggiunge. Il rename dell'indice e' cosmetico ma tenerlo allineato evita
+-- che il prossimo che legge schema.sql cerchi una role_item che non c'e' piu'.
+alter index public.role_item_pkey rename to role_permission_pkey;
 
 alter sequence public.s_id_navigation_item rename to s_id_permission;
 
@@ -434,11 +437,19 @@ Aggiungere a `lib/rbac/permission-schema.integration.test.ts`:
 describe('travaso in menu_entry', () => {
   it('crea una voce per ogni riga che oggi comparirebbe nel menu', async () => {
     // Le righe sotto Operations (id -1) e quelle di tipo funzionalità PERMISSION (5)
-    // erano già invisibili: non devono generare voci.
+    // erano già invisibili: non devono generare voci. «Sotto Operations» è
+    // l'intero sottoalbero, non i soli figli diretti.
     const rows = await db.execute(sql`
-      with visibili as (
+      with recursive sotto_operations as (
+        select id_permission from public.permission where id_permission = -1
+        union all
+        select c.id_permission from public.permission c
+        join sotto_operations d on c.id_parent = d.id_permission
+      ),
+      visibili as (
         select id_permission from public.permission
         where id_permission not in (0, -1)
+          and id_permission not in (select id_permission from sotto_operations)
           and coalesce(id_functionality_type, 0) <> 5
           and config_visibility <> 1
       )
@@ -507,7 +518,12 @@ create sequence if not exists public.s_id_menu_entry;
 create table public.menu_entry (
   id_menu_entry bigint primary key default nextval('public.s_id_menu_entry'),
   id_permission bigint references public.permission(id_permission) on delete restrict,
-  id_parent bigint references public.menu_entry(id_menu_entry) on delete cascade,
+  -- Deferrable perche' il travaso qui sotto e' un INSERT ... SELECT solo: dentro
+  -- una sola istruzione Postgres non garantisce che un genitore sia inserito
+  -- prima dei suoi figli, e con un vincolo immediato la migrazione fallirebbe a
+  -- seconda dell'ordine in cui il pianificatore restituisce le righe.
+  id_parent bigint references public.menu_entry(id_menu_entry) on delete cascade
+    deferrable initially deferred,
   name text,
   order_position integer not null default 0,
   navbar_position text check (navbar_position in ('TOP', 'BOTTOM')),
@@ -557,6 +573,19 @@ select
   p.is_immutable
 from public.permission p
 where p.id_permission not in (0, -1)
+  -- L'intero sottoalbero di Operations, non la sola radice: una riga il cui
+  -- genitore e' -1 genererebbe una voce che punta a un menu_entry(-1)
+  -- inesistente, e la chiave esterna fallirebbe. Quelle righe erano gia'
+  -- invisibili nel menu, quindi non c'e' niente da travasare.
+  and not exists (
+    with recursive discendenti as (
+      select id_permission from public.permission where id_permission = -1
+      union all
+      select c.id_permission from public.permission c
+      join discendenti d on c.id_parent = d.id_permission
+    )
+    select 1 from discendenti where discendenti.id_permission = p.id_permission
+  )
   and coalesce(p.id_functionality_type, 0) <> 5
   and p.config_visibility <> 1;
 
