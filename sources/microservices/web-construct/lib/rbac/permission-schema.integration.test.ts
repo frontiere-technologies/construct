@@ -156,19 +156,41 @@ describe('travaso in menu_entry', () => {
     expect(rows[0].create).toBe(rows[0].attese)
   })
 
-  it('lascia id_permission nullo sulle voci pubbliche e sulle categorie', async () => {
-    // Il join dev'essere su id_menu_entry, che riusa l'id del permesso originale (0017) ed è
-    // sempre valorizzato — non su id_permission, che è nullo per costruzione proprio sulle righe
-    // che questo test vuole controllare: un inner join su quella colonna le scarterebbe tutte
-    // prima ancora di guardarle, e il ramo «voce pubblica» del titolo non entrerebbe mai nel
-    // risultato. La condizione va scritta esplicitamente per entrambi i casi (categoria, o GRANT
-    // con no_permission_need_for_navigation = 1): un filtro sul solo kind = 'CATEGORY' non
-    // intercetterebbe mai una voce pubblica difettosa, perché quelle righe sono kind = 'GRANT'.
+  it('non genera mai una voce con id_permission puntato a una categoria', async () => {
+    // Join su id_menu_entry (riusa l'id del permesso originale, sempre valorizzato), non su
+    // id_permission: quella colonna è nulla per costruzione sulle categorie, e un inner join su di
+    // lei scarterebbe le righe da controllare prima ancora di guardarle. Sul dataset di test
+    // esistono due categorie reali (Home, Admin, entrambe con id_permission nullo in menu_entry):
+    // questo controllo è eseguito su dati veri, non a vuoto.
     const rows = await db.execute(sql`
       select count(*)::int as sbagliate
       from public.menu_entry me
       join public.permission p on p.id_permission = me.id_menu_entry
-      where (p.kind = 'CATEGORY' or (p.kind = 'GRANT' and p.no_permission_need_for_navigation = 1))
+      where p.kind = 'CATEGORY' and me.id_permission is not null
+    `)
+    expect(rows[0].sbagliate).toBe(0)
+  })
+
+  /* «Voce pubblica» (no_permission_need_for_navigation = 1) è un ramo del case when della 0017
+   * verificato per lettura del testo della migrazione, non per esecuzione: sul dataset di test
+   * nessun permesso ha no_permission_need_for_navigation = 1 (query separata, sotto), quindi
+   * questa asserzione oggi è vera a vuoto — nessuna riga candidata esiste da far fallire il
+   * controllo. Non inserisco una riga apposta per esercitarlo: il travaso è già avvenuto dentro
+   * una migrazione già applicata, un insert qui fabbricherebbe un dato che nessuna logica ha
+   * prodotto e il test verificherebbe sé stesso, non la migrazione. L'asserzione resta come
+   * postcondizione valida su qualunque dataset — diventa portante quando queste migrazioni
+   * gireranno su un database che quei permessi li ha (il database di sviluppo). */
+  it('non genera id_permission valorizzato per un permesso pubblico (nessun candidato sul dataset di test)', async () => {
+    const candidates = await db.execute(sql`
+      select count(*)::int as c from public.permission where no_permission_need_for_navigation = 1
+    `)
+    expect(candidates[0].c).toBe(0)
+
+    const rows = await db.execute(sql`
+      select count(*)::int as sbagliate
+      from public.menu_entry me
+      join public.permission p on p.id_permission = me.id_menu_entry
+      where p.kind = 'GRANT' and p.no_permission_need_for_navigation = 1
         and me.id_permission is not null
     `)
     expect(rows[0].sbagliate).toBe(0)
