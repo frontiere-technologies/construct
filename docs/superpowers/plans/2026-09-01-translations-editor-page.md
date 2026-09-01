@@ -524,10 +524,23 @@ Run: `npm run test:migrations && npm run test:i18n-keys`
 Expected: both PASS. The inventory guard will list the two keys as "seeded but
 never referenced" — that is a report line, not a failure, and Task 4 resolves it.
 
-- [ ] **Step 4: Apply the migration to your database and confirm the labels exist**
+- [ ] **Step 4: Hand the migration to the operator — you cannot apply it**
 
-Run: `node ../../devops/db/db.mjs migrate` from `sources/microservices/web-construct/`, then `npm run schema:check`
-Expected: migration 0013 applied; schema check clean.
+The subcommand is `apply`, not `migrate`, and it needs `MIGRATION_DATABASE_URL`,
+which is deliberately absent from the repository and from every `.env*` file:
+per the README it is operator-side only, exported by hand. Do not go looking for
+it, do not write it into an env file, and do not run SQL against the database by
+hand. Report that this step is the operator's:
+
+```bash
+export MIGRATION_DATABASE_URL='postgresql://...operator-only...'
+node sources/devops/db/db.mjs apply
+```
+
+Nothing in the automated gates depends on this having run —
+`test:i18n-keys` compares source against the migration *files*, not the
+database. Only the browser checks in Tasks 5 and 6 do: until the migration is
+applied, the two new headings render as their raw keys.
 
 - [ ] **Step 5: Commit**
 
