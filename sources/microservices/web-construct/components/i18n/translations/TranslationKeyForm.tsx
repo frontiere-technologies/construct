@@ -217,8 +217,14 @@ export function TranslationKeyForm(props: TranslationKeyFormProps) {
       {/* Wraps the field grid, the conflict panel and the footer together —
           not just the grid — so a locator scoped to this test id can still
           reach the Ripristina/Annulla/Salva buttons and the conflict panel,
-          both of which are siblings of the grid rather than descendants. */}
-      <div data-testid="translation-editor">
+          both of which are siblings of the grid rather than descendants.
+          `space-y-8` is required, not cosmetic: PageContainer puts its own
+          `space-y-8` on the div directly wrapping `children`, which only
+          reaches direct children — with this wrapper now the sole child,
+          the 2rem gap between the grid, the conflict panel and the footer
+          has to be repeated here or it collapses to whatever the footer's
+          own `border-t ... pt-4` gives. */}
+      <div data-testid="translation-editor" className="space-y-8">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="space-y-4 rounded-xl border border-border-subtle p-4">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">

@@ -94,8 +94,9 @@ def _restore_save_translation(page, base_url) -> None:
         _filter_by_key(page, "common.actions.save")
         editor = _open_editor(page)
         editor.locator('[data-testid="translation-value-en"]').fill("Save")
-        # Salva/Annulla/Scarta are siblings of the `translation-editor` div in
-        # TranslationKeyForm, not children of it — scope to the page, not the editor.
+        # Salva/Annulla/Scarta are inside the `translation-editor` div in
+        # TranslationKeyForm now, but the click still goes through the page —
+        # simpler and unambiguous, not required by where the button lives.
         save_btn = page.get_by_role("button", name="Salva").or_(
             page.get_by_role("button", name="Save"))
         save_btn.click()
@@ -181,7 +182,8 @@ def test_admin_edits_a_translation_and_the_user_sees_it(logged_in_page, base_url
         _filter_by_key(page, "common.actions.save")
         editor = _open_editor(page)
         editor.locator('[data-testid="translation-value-en"]').fill(marker)
-        # Salva is a sibling of the `translation-editor` div, not a child of it.
+        # Salva lives inside the `translation-editor` div now, but is clicked
+        # through the page anyway — simpler and unambiguous either way.
         page.get_by_role("button", name="Salva").click()
         _expect_back_on_the_list(page, base_url)
 
@@ -339,8 +341,9 @@ def test_concurrent_edits_are_detected_instead_of_overwritten(browser, base_url,
             _filter_by_key(page, "common.actions.save")
             _open_editor(page)
 
-        # Salva is a sibling of the `translation-editor` div, not a child of it,
-        # so it is clicked through the page, not through the editor locator.
+        # Salva lives inside the `translation-editor` div now, but is clicked
+        # through the page rather than through the editor locator anyway —
+        # simpler and unambiguous, not required by where the button lives.
         editor_a = page_a.locator('[data-testid="translation-editor"]')
         editor_a.locator('[data-testid="translation-value-en"]').fill(winner)
         page_a.get_by_role("button", name="Salva").click()
