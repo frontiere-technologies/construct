@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { getTranslationKeyRow, listModules, listNamespaces } from '@/lib/i18n/translation-service'
+import { getTranslationKeyRow, listModules, listNamespaces, toSerialisableTranslationRow } from '@/lib/i18n/translation-service'
 import { TranslationKeyForm } from '@/components/i18n/translations/TranslationKeyForm'
 
 export default async function EditTranslationKeyPage(
@@ -20,7 +20,7 @@ export default async function EditTranslationKeyPage(
 
   return (
     <TranslationKeyForm
-      mode="edit" row={row} namespaces={namespaces} modules={modules} from={sp.from ?? ''}
+      mode="edit" row={toSerialisableTranslationRow(row)} namespaces={namespaces} modules={modules} from={sp.from ?? ''}
     />
   )
 }

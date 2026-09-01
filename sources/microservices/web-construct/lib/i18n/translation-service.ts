@@ -172,6 +172,29 @@ export function buildTranslationRows(
   })
 }
 
+/**
+ * The same row, in a shape that can cross the server→client boundary.
+ *
+ * `buildTranslationRows` gives `values` a null prototype deliberately, so a
+ * DB-sourced language code like `__proto__` reads as data rather than as an
+ * inherited `Object.prototype` member. React Server Components refuse to
+ * serialise a null-prototype object, so a row handed straight to a client
+ * component throws "Only plain objects ... can be passed to Client Components".
+ *
+ * Object spread is what makes this conversion safe, and it is not
+ * interchangeable with a loop: spread *defines* own properties, so a
+ * `__proto__` key becomes an own property holding its value. A
+ * `plain[code] = value` assignment would instead reach the `__proto__` setter
+ * and silently drop that language's entry. Never rewrite this as assignment.
+ *
+ * Consumers must keep reading `values` with `Object.hasOwn`, as
+ * `TranslationKeyForm` does — on a plain object a bare `values[code]` lookup is
+ * unsafe again for a code that names an `Object.prototype` member.
+ */
+export function toSerialisableTranslationRow(row: TranslationRowDto): TranslationRowDto {
+  return { ...row, values: { ...row.values } }
+}
+
 export async function listTranslations(query: TranslationsQuery): Promise<TranslationsPage> {
   const languages = await listActiveLanguages()
   const scoped = query.languageCode
