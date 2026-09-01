@@ -91,7 +91,7 @@ const config = [
   {
     // Lista fatta per accorciarsi, non per restare.
     //
-    // Questi 27 file avevano un export default prima che la regola esistesse, e
+    // Questi 24 file avevano un export default prima che la regola esistesse, e
     // convertirli tutti in una volta avrebbe gonfiato un diff che sposta gia' 36
     // file. I sei che si sono spostati in components/grid/ e components/shared/
     // sono gia' convertiti, perche' i loro import si toccavano comunque.
@@ -104,10 +104,7 @@ const config = [
       'components/ProfileForm.tsx',
       'components/i18n/languages/LanguageFormModal.tsx',
       'components/i18n/languages/LanguagesTableClient.tsx',
-      'components/i18n/translations/CreateTranslationKeyModal.tsx',
-      'components/i18n/translations/TranslationEditorDrawer.tsx',
       'components/i18n/translations/TranslationValueCell.tsx',
-      'components/i18n/translations/TranslationsTableClient.tsx',
       'components/rbac/CustomSelect.tsx',
       'components/rbac/FilterDrawer.tsx',
       'components/rbac/GridRowActionsMenu.tsx',

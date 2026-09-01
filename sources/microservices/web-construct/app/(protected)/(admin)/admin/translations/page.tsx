@@ -5,7 +5,7 @@ import { getI18n } from '@/lib/i18n/server'
 import { listModules, listNamespaces } from '@/lib/i18n/translation-service'
 import { listActiveLanguages } from '@/lib/i18n/language-service'
 import { parseTranslationsGridUrlParams } from '@/lib/i18n/translations-grid-query'
-import TranslationsTableClient from '@/components/i18n/translations/TranslationsTableClient'
+import { TranslationsTableClient } from '@/components/i18n/translations/TranslationsTableClient'
 
 export default async function TranslationsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const session = await auth()
