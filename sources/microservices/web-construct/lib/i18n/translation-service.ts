@@ -266,6 +266,11 @@ export const listModules = cache(async (): Promise<string[]> => {
  * Not wrapped in `cache()` like `listNamespaces`/`listModules`: this is the
  * exact row the optimistic-locking check compares versions against, and a
  * request-scoped cache is one more place a stale `version` could come from.
+ *
+ * Like `listTranslations`'s rows, the returned row's `values` has a null
+ * prototype (see `buildTranslationRows`). A caller handing this row to a
+ * client component must first wrap it in `toSerialisableTranslationRow`, or
+ * React Server Components refuses to serialise it across the boundary.
  */
 export async function getTranslationKeyRow(id: number): Promise<TranslationRowDto | null> {
   if (!Number.isInteger(id) || id <= 0) return null

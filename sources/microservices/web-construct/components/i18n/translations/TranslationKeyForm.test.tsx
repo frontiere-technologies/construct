@@ -303,6 +303,37 @@ describe('TranslationKeyForm in create mode', () => {
     expect(pushed.hrefs).toEqual(['/admin/translations'])
   })
 
+  it('reaches saveValues on a retry after clearing the value and fixing the description instead, rather than navigating away with that edit silently dropped', async () => {
+    vi.mocked(createTranslationKey).mockResolvedValue({ error: null, id: 99 })
+    vi.mocked(saveTranslations).mockResolvedValueOnce({ ok: false, error: 'boom' })
+    render(<TranslationKeyForm mode="create" namespaces={['auth']} modules={['core']} from="" />)
+
+    type(field<HTMLInputElement>('#tk-key'), 'billing.invoice.title')
+    type(field<HTMLTextAreaElement>('[data-testid="translation-value-it"]'), 'Fattura')
+    await act(async () => { button('common.actions.save').click() })
+
+    expect(vi.mocked(saveTranslations)).toHaveBeenCalledTimes(1)
+
+    // The key now exists (`createdId` is set from the call above). Clearing
+    // the value back to blank and fixing the description instead must still
+    // reach `saveValues` — the "nothing typed" shortcut is only correct
+    // before the key exists, when `createTranslationKey` alone has already
+    // persisted the metadata. On this retry it hasn't: `saveTranslations` is
+    // what would persist the new description, and it failed last time.
+    type(field<HTMLTextAreaElement>('[data-testid="translation-value-it"]'), '')
+    type(field<HTMLTextAreaElement>('#tk-desc'), 'Fattura elettronica')
+
+    vi.mocked(saveTranslations).mockResolvedValueOnce({ ok: true })
+    await act(async () => { button('common.actions.save').click() })
+
+    expect(vi.mocked(createTranslationKey)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(saveTranslations)).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(saveTranslations).mock.calls[1][0]).toMatchObject({
+      keyId: 99, description: 'Fattura elettronica',
+    })
+    expect(pushed.hrefs).toEqual(['/admin/translations'])
+  })
+
   it('locks the key once it has been created, so a retry cannot rename it out from under the row', async () => {
     vi.mocked(createTranslationKey).mockResolvedValue({ error: null, id: 99 })
     vi.mocked(saveTranslations).mockResolvedValue({ ok: false, error: 'boom' })

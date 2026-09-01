@@ -152,6 +152,15 @@ become navigations; the `editing` and `creating` state, and the two components
 they mounted, go away. Deletion keeps its `ConfirmModal` — it is a short
 secondary action, which is what dialogs are for here.
 
+`from` restores filters and sort, but deliberately not scroll position. The
+grid uses AG Grid's infinite row model, and its datasource is remounted on
+navigation back to the list, which has no cheap way to seek back to a given
+scroll offset — unlike filters and sort, which are just the query string
+replayed into props. The old side panel never lost scroll because it never
+left the list; a page necessarily can. Editing a row far down a filtered,
+sorted grid and saving returns to the top of that same grid, not to a blank
+one. That is a known, accepted gap, not an oversight to "fix" later.
+
 ## Saving from the create page
 
 `createTranslationKey` accepts metadata only. The create page therefore calls it

@@ -154,6 +154,10 @@ export function TranslationKeyForm(props: TranslationKeyFormProps) {
         return
       }
 
+      // Captured before `keyId` is reassigned below: the shortcut a few lines
+      // down is only safe on the branch that just now created the key, not on
+      // a retry against a key that already existed when `save` was called.
+      const isNewlyCreated = createdId == null
       let keyId = createdId
       if (keyId == null) {
         const created = await createTranslationKey({ key: key.trim(), ...metadata })
@@ -170,8 +174,16 @@ export function TranslationKeyForm(props: TranslationKeyFormProps) {
         setCreatedMetadata({ namespace: metadata.namespace, module: moduleName.trim(), description: description.trim() })
       }
       // Nothing typed: the key alone is a complete result, and this is exactly
-      // what the dialog this form replaced produced every time.
-      if (!languages.some(l => (values[l.code] ?? '').trim())) { router.push(listHref); return }
+      // what the dialog this form replaced produced every time. Gated on
+      // `isNewlyCreated`, not just on "no value typed" — once the key already
+      // exists, `createTranslationKey` is no longer what would persist a
+      // changed namespace/module/description, `saveValues` is. Skipping it on
+      // a retry (typed value cleared again, but the description or namespace
+      // fixed instead) would navigate away and silently drop those edits.
+      if (isNewlyCreated && !languages.some(l => (values[l.code] ?? '').trim())) {
+        router.push(listHref)
+        return
+      }
       // A brand-new key is at `version` 1 (`not null default 1` in schema.sql).
       await saveValues(keyId, 1)
     } catch (err) {
@@ -202,133 +214,139 @@ export function TranslationKeyForm(props: TranslationKeyFormProps) {
 
   return (
     <PageContainer title={title} subtitle={t('translation.editor.title')}>
-      <div data-testid="translation-editor" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="space-y-4 rounded-xl border border-border-subtle p-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {t('translation.form.general_info')}
-          </h2>
+      {/* Wraps the field grid, the conflict panel and the footer together —
+          not just the grid — so a locator scoped to this test id can still
+          reach the Ripristina/Annulla/Salva buttons and the conflict panel,
+          both of which are siblings of the grid rather than descendants. */}
+      <div data-testid="translation-editor">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="space-y-4 rounded-xl border border-border-subtle p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t('translation.form.general_info')}
+            </h2>
 
-          {/* `htmlFor` only where there is a field to point at: in edit mode the
-              key is static text, and a label referencing a missing id is a
-              dangling accessible name. */}
-          {mode === 'create' ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="tk-key">
-                {t('translation.key')}
-              </label>
-              <Input
-                id="tk-key" value={key} onChange={e => handleKeyChange(e.target.value)}
-                placeholder="common.actions.save"
-                // Once the key exists server-side there is no rename path —
-                // `SaveTranslationsInput` carries no key — so editing it here
-                // any further would only diverge what's shown from what a
-                // retry actually persists under `createdId`.
-                disabled={createdId != null}
-              />
-            </div>
-          ) : (
-            <div>
-              <p className="mb-1 text-sm font-medium text-foreground-secondary">{t('translation.key')}</p>
-              {/* Read-only text, not a disabled input: the save path carries no
-                  key, so renaming is not something the form could offer. */}
-              <p className="font-mono text-sm break-all">{row?.key}</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="tk-ns">
-                {t('translation.namespace')}
-              </label>
-              <EditableCombobox
-                id="tk-ns" value={namespace} options={namespaces} placeholder="common"
-                onChange={next => { setNamespaceTouched(true); setNamespace(next) }}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="tk-mod">
-                {t('translation.module')} <span className="font-normal text-foreground-faint">{t('common.labels.optional')}</span>
-              </label>
-              <EditableCombobox id="tk-mod" value={moduleName} onChange={setModuleName} options={modules} placeholder="core" />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="tk-desc">
-              {t('translation.description')}
-            </label>
-            <Textarea
-              id="tk-desc" value={description} onChange={e => setDescription(e.target.value)}
-              rows={2} className="min-h-[76px]"
-            />
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border-subtle p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {t('translation.value')}
-          </h2>
-          {/* An open list, not an accordion: a translation has one field per
-              language, and collapsing would hide the "missing" chip, which is
-              the one thing a translator is scanning for. */}
-          <div className="space-y-3">
-            {languages.map(language => (
-              <div key={language.code}>
-                <label
-                  className="mb-1 flex items-center gap-2 text-sm font-medium text-foreground-secondary"
-                  htmlFor={`tk-v-${language.code}`}
-                >
-                  {language.nativeName}
-                  {!values[language.code] && (
-                    <span className="rounded-full bg-warning-muted px-2 py-0.5 text-xs text-warning-muted-foreground">
-                      {t('translation.missing')}
-                    </span>
-                  )}
+            {/* `htmlFor` only where there is a field to point at: in edit mode the
+                key is static text, and a label referencing a missing id is a
+                dangling accessible name. */}
+            {mode === 'create' ? (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="tk-key">
+                  {t('translation.key')}
                 </label>
-                <Textarea
-                  id={`tk-v-${language.code}`}
-                  data-testid={`translation-value-${language.code}`}
-                  value={values[language.code] ?? ''}
-                  onChange={e => setValues(v => ({ ...v, [language.code]: e.target.value }))}
-                  rows={2} maxLength={MAX_VALUE_LENGTH} className="min-h-[64px]"
+                <Input
+                  id="tk-key" value={key} onChange={e => handleKeyChange(e.target.value)}
+                  placeholder="common.actions.save"
+                  // Once the key exists server-side there is no rename path —
+                  // `SaveTranslationsInput` carries no key — so editing it here
+                  // any further would only diverge what's shown from what a
+                  // retry actually persists under `createdId`.
+                  disabled={createdId != null}
                 />
               </div>
-            ))}
+            ) : (
+              <div>
+                <p className="mb-1 text-sm font-medium text-foreground-secondary">{t('translation.key')}</p>
+                {/* Read-only text, not a disabled input: the save path carries no
+                    key, so renaming is not something the form could offer. */}
+                <p className="font-mono text-sm break-all">{row?.key}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="tk-ns">
+                  {t('translation.namespace')}
+                </label>
+                <EditableCombobox
+                  id="tk-ns" value={namespace} options={namespaces} placeholder="common"
+                  onChange={next => { setNamespaceTouched(true); setNamespace(next) }}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="tk-mod">
+                  {t('translation.module')} <span className="font-normal text-foreground-faint">{t('common.labels.optional')}</span>
+                </label>
+                <EditableCombobox id="tk-mod" value={moduleName} onChange={setModuleName} options={modules} placeholder="core" />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground-secondary" htmlFor="tk-desc">
+                {t('translation.description')}
+              </label>
+              <Textarea
+                id="tk-desc" value={description} onChange={e => setDescription(e.target.value)}
+                rows={2} className="min-h-[76px]"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border-subtle p-4">
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t('translation.value')}
+            </h2>
+            {/* An open list, not an accordion: a translation has one field per
+                language, and collapsing would hide the "missing" chip, which is
+                the one thing a translator is scanning for. */}
+            <div className="space-y-3">
+              {languages.map(language => (
+                <div key={language.code}>
+                  <label
+                    className="mb-1 flex items-center gap-2 text-sm font-medium text-foreground-secondary"
+                    htmlFor={`tk-v-${language.code}`}
+                  >
+                    {language.nativeName}
+                    {!values[language.code] && (
+                      <span className="rounded-full bg-warning-muted px-2 py-0.5 text-xs text-warning-muted-foreground">
+                        {t('translation.missing')}
+                      </span>
+                    )}
+                  </label>
+                  <Textarea
+                    id={`tk-v-${language.code}`}
+                    data-testid={`translation-value-${language.code}`}
+                    value={values[language.code] ?? ''}
+                    onChange={e => setValues(v => ({ ...v, [language.code]: e.target.value }))}
+                    rows={2} maxLength={MAX_VALUE_LENGTH} className="min-h-[64px]"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
 
-      {conflicts && (
-        <div role="alert" data-testid="translation-conflict" className="rounded-lg border border-warning-border bg-warning-muted p-4 text-sm">
-          <p className="mb-2 font-semibold">{t('translation.conflict.title')}</p>
-          <p className="mb-3 text-foreground-secondary">{t('translation.conflict.explanation')}</p>
-          <ul className="space-y-2">
-            {conflicts.map(conflict => (
-              <li key={conflict.languageCode}>
-                <p className="font-medium">{conflict.languageCode}</p>
-                <p><span className="text-muted-foreground">{t('translation.conflict.current')}:</span> {conflict.currentValue || '—'}</p>
-                <p><span className="text-muted-foreground">{t('translation.conflict.yours')}:</span> {conflict.attemptedValue || '—'}</p>
-              </li>
-            ))}
-          </ul>
-          <Button variant="outline" onClick={() => router.push(listHref)} className="mt-3">
-            {t('translation.conflict.reload')}
-          </Button>
-        </div>
-      )}
+        {conflicts && (
+          <div role="alert" data-testid="translation-conflict" className="rounded-lg border border-warning-border bg-warning-muted p-4 text-sm">
+            <p className="mb-2 font-semibold">{t('translation.conflict.title')}</p>
+            <p className="mb-3 text-foreground-secondary">{t('translation.conflict.explanation')}</p>
+            <ul className="space-y-2">
+              {conflicts.map(conflict => (
+                <li key={conflict.languageCode}>
+                  <p className="font-medium">{conflict.languageCode}</p>
+                  <p><span className="text-muted-foreground">{t('translation.conflict.current')}:</span> {conflict.currentValue || '—'}</p>
+                  <p><span className="text-muted-foreground">{t('translation.conflict.yours')}:</span> {conflict.attemptedValue || '—'}</p>
+                </li>
+              ))}
+            </ul>
+            <Button variant="outline" onClick={() => router.push(listHref)} className="mt-3">
+              {t('translation.conflict.reload')}
+            </Button>
+          </div>
+        )}
 
-      <div className="flex items-center justify-between border-t border-border pt-4">
-        <div>{error && <p role="alert" className="text-sm text-destructive-muted-foreground">{error}</p>}</div>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={discard} disabled={!dirty || saving}>
-            {t('translation.actions.discard')}
-          </Button>
-          <Button variant="outline" onClick={() => router.push(listHref)} disabled={saving}>
-            {t('common.actions.cancel')}
-          </Button>
-          <Button onClick={save} disabled={!canSave || saving}>
-            {saving ? t('common.states.saving') : t('common.actions.save')}
-          </Button>
+        <div className="flex items-center justify-between border-t border-border pt-4">
+          <div>{error && <p role="alert" className="text-sm text-destructive-muted-foreground">{error}</p>}</div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={discard} disabled={!dirty || saving}>
+              {t('translation.actions.discard')}
+            </Button>
+            <Button variant="outline" onClick={() => router.push(listHref)} disabled={saving}>
+              {t('common.actions.cancel')}
+            </Button>
+            <Button onClick={save} disabled={!canSave || saving}>
+              {saving ? t('common.states.saving') : t('common.actions.save')}
+            </Button>
+          </div>
         </div>
       </div>
     </PageContainer>

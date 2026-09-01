@@ -40,6 +40,27 @@ describe('translationsListHref', () => {
     const back = new URLSearchParams(restored.split('?')[1])
     expect(back.get('value_it')).toBe('https://www.lescienze.it/')
   })
+
+  // `from` is typed `string | null | undefined`, but nothing at runtime stops
+  // a caller from handing this function some other JS value that fails to
+  // narrow first — which is exactly the shape of bug the create/edit pages
+  // used to have (see translations-return-url.ts's own doc comment: "anything
+  // unusable yields the unfiltered list"). `@ts-expect-error` is what lets the
+  // test compile under `strict` while still exercising a value the declared
+  // signature forbids.
+  //
+  // This does not cover every non-string shape: `new URLSearchParams` throws
+  // for a populated `string[]` (the shape Next.js hands a page for a
+  // duplicated parameter, e.g. `?from=a&from=b`), and that is deliberately
+  // guarded at the page boundary instead — both `create/page.tsx` and
+  // `[keyId]/edit/page.tsx` narrow `searchParams.from` to a string before it
+  // ever reaches `translationsListHref`, rather than this function learning
+  // to understand arrays itself.
+  it('degrades gracefully instead of throwing for a non-string, non-array input', () => {
+    // @ts-expect-error — exercising a value the type forbids but the runtime can receive
+    const restored: string = translationsListHref({})
+    expect(restored).toBe('/admin/translations')
+  })
 })
 
 describe('the hrefs the grid navigates to', () => {
