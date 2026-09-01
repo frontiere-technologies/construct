@@ -258,11 +258,11 @@ describeIntegration('database runtime boundary', () => {
     const indexes = await db.execute<{ indexname: string }>(sql`
       select indexname from pg_indexes
       where schemaname = 'public'
-        and indexname in ('user_role_id_role_user_id_idx', 'navigation_item_parent_order_idx')
+        and indexname in ('user_role_id_role_user_id_idx', 'permission_parent_order_idx')
       order by indexname
     `)
     expect(indexes.map(row => row.indexname)).toEqual([
-      'navigation_item_parent_order_idx',
+      'permission_parent_order_idx',
       'user_role_id_role_user_id_idx',
     ])
   })

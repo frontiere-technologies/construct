@@ -148,7 +148,7 @@ export const permission = pgTable('permission', {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (t) => [
-  index('navigation_item_parent_order_idx').on(t.idParent, t.orderPosition),
+  index('permission_parent_order_idx').on(t.idParent, t.orderPosition),
 ])
 
 export const navigationItemTag = pgTable('navigation_item_tag', {

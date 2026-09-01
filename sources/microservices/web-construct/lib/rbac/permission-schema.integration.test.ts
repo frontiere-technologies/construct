@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
+import { permission, role, roleListView, rolePermission } from '@/lib/db/schema'
+import { ITEM_TYPE_CATEGORY } from './types'
 
 /** Il rename è riuscito solo se i nomi vecchi sono spariti: una vista o una
  *  funzione lasciata indietro punterebbe ancora là e fallirebbe a runtime, non qui. */
@@ -45,5 +47,32 @@ describe('rename delle tabelle RBAC', () => {
       select 1 from pg_proc where proname = 'apply_role_permission_deltas'
     `)
     expect(rows.length).toBe(1)
+  })
+
+  /** has_permissions e' "esiste una riga qualunque", non "esiste una riga autorizzata": una
+   *  bozza precedente della migrazione aveva aggiunto `and rp.authorized`, che avrebbe cambiato
+   *  questa semantica in silenzio. Il rename da solo non deve toccarla. */
+  it('has_permissions resta vero anche quando l\'unica riga di role_permission non è autorizzata', async () => {
+    const [createdRole] = await db.insert(role)
+      .values({ description: 'zzz_rbac_rename_test_role' })
+      .returning({ idRole: role.idRole })
+    const [createdPermission] = await db.insert(permission)
+      .values({ name: 'zzz_rbac_rename_test_permission', idItemType: ITEM_TYPE_CATEGORY })
+      .returning({ idPermission: permission.idPermission })
+    try {
+      await db.insert(rolePermission).values({
+        idRole: createdRole.idRole,
+        idPermission: createdPermission.idPermission,
+        authorized: false,
+      })
+      const [row] = await db.select({ hasPermissions: roleListView.hasPermissions })
+        .from(roleListView)
+        .where(eq(roleListView.id, createdRole.idRole))
+      expect(row?.hasPermissions).toBe(true)
+    } finally {
+      await db.delete(rolePermission).where(eq(rolePermission.idRole, createdRole.idRole))
+      await db.delete(permission).where(eq(permission.idPermission, createdPermission.idPermission))
+      await db.delete(role).where(eq(role.idRole, createdRole.idRole))
+    }
   })
 })
