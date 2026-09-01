@@ -161,9 +161,16 @@ no new plumbing: the action already returns the new key's id
 and where the redirect goes. Values are saved with a `null` per-language
 version, the same shape the edit form sends for a language that has no row yet.
 
-If the second call fails, the key exists with no values and the administrator
-lands on its edit page with the error shown. That is not a corrupt state: a key
-with no values is exactly what today's create dialog produces every time. The
+If the second call fails, the key exists with no values. The form stays where it
+is and shows the error, rather than navigating — a redirect would throw the
+message away at exactly the moment it matters. It also remembers the new key's
+id, so pressing Salva again saves only the values instead of trying to create
+the same key a second time and colliding with the unique constraint on `key`,
+which would report "Esiste già una chiave con questo nome" for what is really a
+half-finished save.
+
+That intermediate state is not corrupt: a key with no values is exactly what
+today's create dialog produces every time. The
 alternative — extending `createTranslationKey` to write values in one
 transaction — is cleaner on paper but enters the write path guarded by the
 optimistic-locking and concurrency integration tests, for a failure mode that is
