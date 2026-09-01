@@ -207,6 +207,22 @@ describe('TranslationKeyForm in edit mode', () => {
     expect(vi.mocked(saveTranslations)).not.toHaveBeenCalled()
     expect(pushed.hrefs).toEqual(['/admin/translations?sort=key'])
   })
+
+  it('surfaces a rejected save instead of quietly re-enabling Salva with nothing to show for it', async () => {
+    // `requireAdmin()` (lib/rbac/auth-guard.ts) throws rather than returning
+    // an error — this simulates an expired session or a downgraded admin,
+    // which a bare try/finally with no catch used to swallow silently.
+    vi.mocked(saveTranslations).mockRejectedValue(new Error('Sessione scaduta.'))
+    render(<TranslationKeyForm mode="edit" row={row} namespaces={['auth']} modules={['core']} from="" />)
+
+    type(field<HTMLTextAreaElement>('[data-testid="translation-value-en"]'), 'Sign in')
+    await act(async () => { button('common.actions.save').click() })
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Sessione scaduta.')
+    expect(pushed.hrefs).toEqual([])
+    // Saving stopped rather than staying stuck forever, so the admin can try again.
+    expect(button('common.actions.save').textContent).toBe('common.actions.save')
+  })
 })
 
 describe('TranslationKeyForm in create mode', () => {
@@ -287,6 +303,64 @@ describe('TranslationKeyForm in create mode', () => {
     expect(pushed.hrefs).toEqual(['/admin/translations'])
   })
 
+  it('locks the key once it has been created, so a retry cannot rename it out from under the row', async () => {
+    vi.mocked(createTranslationKey).mockResolvedValue({ error: null, id: 99 })
+    vi.mocked(saveTranslations).mockResolvedValue({ ok: false, error: 'boom' })
+    render(<TranslationKeyForm mode="create" namespaces={['auth']} modules={['core']} from="" />)
+
+    type(field<HTMLInputElement>('#tk-key'), 'billing.invoice.title')
+    type(field<HTMLTextAreaElement>('[data-testid="translation-value-it"]'), 'Fattura')
+    await act(async () => { button('common.actions.save').click() })
+
+    // Nothing in SaveTranslationsInput carries a key, so once created there is
+    // no rename path — editing it further here would only diverge what's
+    // shown from what a retry actually persists under the id it already has.
+    expect(field<HTMLInputElement>('#tk-key').disabled).toBe(true)
+
+    vi.mocked(saveTranslations).mockResolvedValue({ ok: true })
+    await act(async () => { button('common.actions.save').click() })
+
+    expect(vi.mocked(createTranslationKey)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(saveTranslations).mock.calls[1][0]).toMatchObject({ keyId: 99, keyVersion: 1 })
+  })
+
+  it('does not let Ripristina blank the namespace of a key that has already been created', async () => {
+    vi.mocked(createTranslationKey).mockResolvedValue({ error: null, id: 99 })
+    vi.mocked(saveTranslations).mockResolvedValue({ ok: false, error: 'boom' })
+    render(<TranslationKeyForm mode="create" namespaces={['auth']} modules={['core']} from="" />)
+
+    type(field<HTMLInputElement>('#tk-key'), 'billing.invoice.title')
+    type(field<HTMLTextAreaElement>('[data-testid="translation-value-it"]'), 'Fattura')
+    await act(async () => { button('common.actions.save').click() })
+
+    expect(field<HTMLInputElement>('#tk-ns').value).toBe('billing')
+
+    act(() => button('translation.actions.discard').click())
+
+    // Not '': create mode has no `row` to fall back on, but the key was
+    // already created with namespace 'billing' — reverting to blank would
+    // silently rewrite it to something that no longer matches the key.
+    expect(field<HTMLInputElement>('#tk-ns').value).toBe('billing')
+  })
+
+  it('keeps Salva enabled in create mode even once nothing is left to be dirty', async () => {
+    // Would fail if create mode were gated on dirtiness the way edit mode is:
+    // after Ripristina below, the form is back to exactly what was created —
+    // dirty is false — and Salva still has to be able to retry the save.
+    vi.mocked(createTranslationKey).mockResolvedValue({ error: null, id: 99 })
+    vi.mocked(saveTranslations).mockResolvedValue({ ok: false, error: 'boom' })
+    render(<TranslationKeyForm mode="create" namespaces={['auth']} modules={['core']} from="" />)
+
+    type(field<HTMLInputElement>('#tk-key'), 'billing.invoice.title')
+    type(field<HTMLTextAreaElement>('[data-testid="translation-value-it"]'), 'Fattura')
+    await act(async () => { button('common.actions.save').click() })
+
+    act(() => button('translation.actions.discard').click())
+
+    expect(button('translation.actions.discard').disabled).toBe(true)
+    expect(button('common.actions.save').disabled).toBe(false)
+  })
+
   it('reports a refused create and calls nothing else', async () => {
     vi.mocked(createTranslationKey).mockResolvedValue({ error: 'Esiste già una chiave con questo nome.' })
     render(<TranslationKeyForm mode="create" namespaces={['auth']} modules={['core']} from="" />)
@@ -297,5 +371,18 @@ describe('TranslationKeyForm in create mode', () => {
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('Esiste già')
     expect(vi.mocked(saveTranslations)).not.toHaveBeenCalled()
     expect(pushed.hrefs).toEqual([])
+  })
+
+  it('surfaces a rejected create instead of quietly re-enabling Salva with nothing to show for it', async () => {
+    vi.mocked(createTranslationKey).mockRejectedValue(new Error('Sessione scaduta.'))
+    render(<TranslationKeyForm mode="create" namespaces={['auth']} modules={['core']} from="" />)
+
+    type(field<HTMLInputElement>('#tk-key'), 'billing.invoice.title')
+    await act(async () => { button('common.actions.save').click() })
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Sessione scaduta.')
+    expect(vi.mocked(saveTranslations)).not.toHaveBeenCalled()
+    expect(pushed.hrefs).toEqual([])
+    expect(button('common.actions.save').textContent).toBe('common.actions.save')
   })
 })

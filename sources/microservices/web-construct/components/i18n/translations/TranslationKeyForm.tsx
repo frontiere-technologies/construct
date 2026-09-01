@@ -13,16 +13,28 @@ import { isValidNamespace, isValidTranslationKey, namespaceOf } from '@/lib/i18n
 import { MAX_VALUE_LENGTH, type TranslationConflict, type TranslationRowDto } from '@/lib/i18n/types'
 import { translationsListHref } from '@/lib/i18n/translations-return-url'
 
-export interface TranslationKeyFormProps {
-  mode: 'create' | 'edit'
-  /** Edit mode only. Loaded server-side; carries the versions the save path compares against. */
-  row?: TranslationRowDto
+interface TranslationKeyFormSharedProps {
   /** Namespaces already in use, for the suggestions. Never restricts what may be typed. */
   namespaces: string[]
   modules: string[]
   /** The list's query string, restored on Annulla and after Salva. */
   from: string
 }
+
+/**
+ * A discriminated union, not `row?: TranslationRowDto` on a single shape: the
+ * edit page always has a row (it answers `notFound()` upstream when the key
+ * doesn't exist), and create mode never does. Encoding that in the type makes
+ * the one invalid combination unrepresentable, instead of leaving it to a
+ * runtime invariant a caller could still trigger by construction.
+ */
+export type TranslationKeyFormProps =
+  | ({
+      mode: 'edit'
+      /** Loaded server-side; carries the versions the save path compares against. */
+      row: TranslationRowDto
+    } & TranslationKeyFormSharedProps)
+  | ({ mode: 'create'; row?: never } & TranslationKeyFormSharedProps)
 
 /**
  * Creating and editing a translation key, as a page rather than a panel — the
@@ -34,7 +46,8 @@ export interface TranslationKeyFormProps {
  * each carrying the version it was loaded with so a concurrent edit is refused
  * rather than overwritten.
  */
-export function TranslationKeyForm({ mode, row, namespaces, modules, from }: TranslationKeyFormProps) {
+export function TranslationKeyForm(props: TranslationKeyFormProps) {
+  const { mode, row, namespaces, modules, from } = props
   const { t, languages } = useI18n()
   const router = useRouter()
 
@@ -62,13 +75,25 @@ export function TranslationKeyForm({ mode, row, namespaces, modules, from }: Tra
   // Create mode only. Set once the key exists, so a retry after a failed value
   // save does not try to create it again and collide on the unique constraint.
   const [createdId, setCreatedId] = useState<number | null>(null)
+  // Create mode only. The metadata actually sent to `createTranslationKey` —
+  // not the pre-creation blank state. Once the key exists, that's what
+  // "unchanged" and Ripristina both mean: `row` has no equivalent to fall
+  // back on here, and reverting to blank would blank a namespace that
+  // already matches something real on the server.
+  const [createdMetadata, setCreatedMetadata] = useState<
+    { namespace: string; module: string; description: string } | null
+  >(null)
 
   const listHref = translationsListHref(from)
 
+  const namespaceBaseline = createdMetadata?.namespace ?? row?.namespace ?? ''
+  const moduleBaseline = createdMetadata?.module ?? row?.module ?? ''
+  const descriptionBaseline = createdMetadata?.description ?? row?.description ?? ''
+
   const dirty =
-    description !== (row?.description ?? '') ||
-    namespace !== (row?.namespace ?? '') ||
-    moduleName !== (row?.module ?? '') ||
+    description !== descriptionBaseline ||
+    namespace !== namespaceBaseline ||
+    moduleName !== moduleBaseline ||
     languages.some(l => values[l.code] !== initialValues[l.code])
 
   // Mirrors `validateKeyInput` in translation-actions.ts, so the button is
@@ -78,9 +103,13 @@ export function TranslationKeyForm({ mode, row, namespaces, modules, from }: Tra
     (!moduleName.trim() || isValidNamespace(moduleName.trim())) &&
     (mode === 'edit' || isValidTranslationKey(key.trim()))
 
-  // The one place the two modes genuinely diverge: there is nothing for a new
-  // key to be dirty against, while resaving an untouched key only burns a version.
-  const canSave = metadataValid && (mode === 'create' || dirty)
+  // Edit mode: resaving an untouched key would only burn a version, so Salva
+  // stays gated on dirtiness. Create mode has nothing to gate on that way —
+  // `metadataValid` already implies a change from the blank starting state
+  // (a valid namespace can't be empty) — and after a created key is
+  // discarded back to its own baseline, the key still exists and still needs
+  // to be retriable even though nothing is left to be dirty.
+  const canSave = mode === 'edit' ? metadataValid && dirty : metadataValid
 
   // The namespace follows the key by convention until the admin overrides it.
   const handleKeyChange = (next: string) => {
@@ -103,6 +132,11 @@ export function TranslationKeyForm({ mode, row, namespaces, modules, from }: Tra
   const saveValues = async (keyId: number, keyVersion: number) => {
     const result = await saveTranslations({ keyId, keyVersion, ...metadata, values: valuePayload() })
     if (result.ok) { router.push(listHref); return }
+    // Only the failure paths clear `saving`: on the success path above the
+    // form is about to be replaced by navigation, and re-enabling Salva in
+    // that window let a second click during a slow navigation send a
+    // now-stale `keyVersion` and paint a conflict over a page on its way out.
+    setSaving(false)
     if ('conflicts' in result) setConflicts(result.conflicts)
     else setError(result.error)
   }
@@ -113,42 +147,51 @@ export function TranslationKeyForm({ mode, row, namespaces, modules, from }: Tra
     setError(null)
     setConflicts(null)
     try {
-      if (mode === 'edit') {
-        // The edit page always passes a row — it answers `notFound()` when the
-        // key does not exist. A thrown invariant rather than a message on
-        // screen: this is a wiring bug, not something an admin can act on, and
-        // user-facing copy here would need a translation key of its own.
-        if (!row) throw new Error('TranslationKeyForm: mode="edit" requires a row')
-        await saveValues(row.id, row.version)
+      if (props.mode === 'edit') {
+        // Narrowed by the discriminated union above: this branch cannot be
+        // reached without `props.row`, so there is nothing left to invariant.
+        await saveValues(props.row.id, props.row.version)
         return
       }
 
       let keyId = createdId
       if (keyId == null) {
         const created = await createTranslationKey({ key: key.trim(), ...metadata })
-        if (created.error != null) { setError(created.error); return }
+        if (created.error != null) { setError(created.error); setSaving(false); return }
         // `KeyActionResult` is `{ error: string | null; id?: number }`, and the
         // action returns an id whenever `error` is null. Narrowed by an
-        // invariant, for the same reason as above.
+        // invariant, caught below like any other unexpected rejection: this is
+        // a contract violation, not something the admin can act on.
         if (created.id == null) throw new Error('createTranslationKey returned neither an error nor an id')
         keyId = created.id
         setCreatedId(keyId)
+        // The values actually persisted, not the blank pre-creation state —
+        // see the comment on `createdMetadata` above.
+        setCreatedMetadata({ namespace: metadata.namespace, module: moduleName.trim(), description: description.trim() })
       }
       // Nothing typed: the key alone is a complete result, and this is exactly
       // what the dialog this form replaced produced every time.
       if (!languages.some(l => (values[l.code] ?? '').trim())) { router.push(listHref); return }
       // A brand-new key is at `version` 1 (`not null default 1` in schema.sql).
       await saveValues(keyId, 1)
-    } finally {
+    } catch (err) {
+      // Every server action here starts with `requireAdmin()`
+      // (lib/rbac/auth-guard.ts), which throws rather than returning an
+      // error — an expired session or a downgraded admin rejects the promise,
+      // same as the invariant above. Same raw-server-string treatment as
+      // `created.error` and `result.error`: this needs no translation key of
+      // its own, and without this catch the rejection was silently swallowed,
+      // clearing `saving` with no message and no navigation.
+      setError(err instanceof Error ? err.message : String(err))
       setSaving(false)
     }
   }
 
   const discard = () => {
     setValues(initialValues)
-    setDescription(row?.description ?? '')
-    setNamespace(row?.namespace ?? '')
-    setModuleName(row?.module ?? '')
+    setDescription(descriptionBaseline)
+    setNamespace(namespaceBaseline)
+    setModuleName(moduleBaseline)
     setError(null)
     setConflicts(null)
   }
@@ -176,6 +219,11 @@ export function TranslationKeyForm({ mode, row, namespaces, modules, from }: Tra
               <Input
                 id="tk-key" value={key} onChange={e => handleKeyChange(e.target.value)}
                 placeholder="common.actions.save"
+                // Once the key exists server-side there is no rename path —
+                // `SaveTranslationsInput` carries no key — so editing it here
+                // any further would only diverge what's shown from what a
+                // retry actually persists under `createdId`.
+                disabled={createdId != null}
               />
             </div>
           ) : (
