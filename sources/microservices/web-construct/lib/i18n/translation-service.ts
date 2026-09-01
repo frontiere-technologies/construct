@@ -104,6 +104,74 @@ export function applyTranslationFilters(query: TranslationsQuery, languages: Lan
   return conditions
 }
 
+/**
+ * Structural row shapes rather than Drizzle's inferred types, so the builder can
+ * be unit-tested without a database. A Drizzle select row is assignable to them.
+ */
+export interface TranslationKeyRowInput {
+  idTranslationKey: number | string
+  key: string
+  description: string | null
+  namespace: string
+  module: string | null
+  version: number
+  updatedAt?: string | null
+}
+
+export interface TranslationValueRowInput {
+  id: number | string
+  keyId: number | string
+  code: string
+  value: string
+  version: number
+}
+
+/**
+ * Shape key rows plus their value rows into DTOs. Shared by `listTranslations`
+ * and `getTranslationKeyRow` rather than copied into each: the prototype
+ * hygiene below is exactly the kind of detail a second copy loses.
+ *
+ * Every bucket is created with `Object.create(null)`, not a `{}` literal:
+ * `row.code` is DB-sourced, so a bare object would let a code like `__proto__`
+ * or `constructor` resolve to an inherited `Object.prototype` member instead of
+ * being treated as a missing/present language entry.
+ */
+export function buildTranslationRows(
+  keyRows: TranslationKeyRowInput[],
+  valueRows: TranslationValueRowInput[],
+  languages: { code: string }[],
+): TranslationRowDto[] {
+  const byKey = new Map<number, Record<string, TranslationValueDto>>()
+  for (const row of valueRows) {
+    const keyId = Number(row.keyId)
+    let bucket = byKey.get(keyId)
+    if (!bucket) {
+      bucket = Object.create(null) as Record<string, TranslationValueDto>
+      byKey.set(keyId, bucket)
+    }
+    bucket[row.code] = { id: Number(row.id), value: row.value, version: row.version }
+  }
+
+  return keyRows.map(row => {
+    const id = Number(row.idTranslationKey)
+    // Same rationale as the populated buckets above: a prototype-ful `{}`
+    // fallback would let a code like `constructor` resolve to
+    // Object.prototype instead of "missing" when `missingCodes` indexes it.
+    const values = byKey.get(id) ?? (Object.create(null) as Record<string, TranslationValueDto>)
+    return {
+      id,
+      key: row.key,
+      description: row.description,
+      namespace: row.namespace,
+      module: row.module,
+      version: row.version,
+      updatedAt: row.updatedAt ?? null,
+      values,
+      missingCodes: languages.filter(l => !values[l.code]?.value).map(l => l.code),
+    }
+  })
+}
+
 export async function listTranslations(query: TranslationsQuery): Promise<TranslationsPage> {
   const languages = await listActiveLanguages()
   const scoped = query.languageCode
@@ -151,40 +219,7 @@ export async function listTranslations(query: TranslationsQuery): Promise<Transl
     .innerJoin(appLanguage, eq(appLanguage.idLanguage, translationValue.idLanguage))
     .where(inArray(translationValue.idTranslationKey, keyIds))
 
-  // Each bucket is created with `Object.create(null)`, not a `{}` literal:
-  // `row.code` is DB-sourced, so a bare object would let a code like
-  // `__proto__` resolve to Object.prototype instead of being treated as a
-  // missing/present language entry.
-  const byKey = new Map<number, Record<string, TranslationValueDto>>()
-  for (const row of valueRows) {
-    const keyId = Number(row.keyId)
-    let bucket = byKey.get(keyId)
-    if (!bucket) {
-      bucket = Object.create(null) as Record<string, TranslationValueDto>
-      byKey.set(keyId, bucket)
-    }
-    bucket[row.code] = { id: Number(row.id), value: row.value, version: row.version }
-  }
-
-  const elements: TranslationRowDto[] = keyRows.map(row => {
-    const id = Number(row.idTranslationKey)
-    // Same rationale as the populated buckets above: a prototype-ful `{}`
-    // fallback would let a code like `constructor` resolve to
-    // Object.prototype instead of "missing" when `missingCodes` indexes it.
-    const values = byKey.get(id) ?? (Object.create(null) as Record<string, TranslationValueDto>)
-    return {
-      id,
-      key: row.key,
-      description: row.description,
-      namespace: row.namespace,
-      module: row.module,
-      version: row.version,
-      updatedAt: row.updatedAt ?? null,
-      values,
-      missingCodes: languages.filter(l => !values[l.code]?.value).map(l => l.code),
-    }
-  })
-  return { total, elements }
+  return { total, elements: buildTranslationRows(keyRows, valueRows, languages) }
 }
 
 export const listNamespaces = cache(async (): Promise<string[]> => {
@@ -200,3 +235,34 @@ export const listModules = cache(async (): Promise<string[]> => {
   // to match rather than re-filtering behaviour the query already guarantees.
   return rows.map(r => r.module).filter((m): m is string => m !== null)
 })
+
+/**
+ * One key with every language's value, for the edit page. Returns `null` for an
+ * unknown id so the caller can answer `notFound()` rather than throwing.
+ *
+ * Not wrapped in `cache()` like `listNamespaces`/`listModules`: this is the
+ * exact row the optimistic-locking check compares versions against, and a
+ * request-scoped cache is one more place a stale `version` could come from.
+ */
+export async function getTranslationKeyRow(id: number): Promise<TranslationRowDto | null> {
+  if (!Number.isInteger(id) || id <= 0) return null
+  const languages = await listActiveLanguages()
+
+  const [keyRow] = await db.select().from(translationKey)
+    .where(eq(translationKey.idTranslationKey, id)).limit(1)
+  if (!keyRow) return null
+
+  const valueRows = await db
+    .select({
+      id: translationValue.idTranslationValue,
+      keyId: translationValue.idTranslationKey,
+      code: appLanguage.code,
+      value: translationValue.value,
+      version: translationValue.version,
+    })
+    .from(translationValue)
+    .innerJoin(appLanguage, eq(appLanguage.idLanguage, translationValue.idLanguage))
+    .where(eq(translationValue.idTranslationKey, id))
+
+  return buildTranslationRows([keyRow], valueRows, languages)[0] ?? null
+}

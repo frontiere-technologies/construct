@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PgDialect } from 'drizzle-orm/pg-core'
-import { applyTranslationFilters, translationOrderBy } from './translation-service'
+import { applyTranslationFilters, buildTranslationRows, translationOrderBy } from './translation-service'
 import type { LanguageDto } from './types'
 
 const dialect = new PgDialect()
@@ -200,5 +200,71 @@ describe('applyTranslationFilters', () => {
       '"translation_key"."updated_at" desc',
       '"translation_key"."id_translation_key" asc',
     ])
+  })
+})
+
+const key = {
+  idTranslationKey: 7, key: 'auth.login.title', description: 'Login card title',
+  namespace: 'auth', module: 'core', version: 3, updatedAt: '2026-09-01T10:00:00Z',
+}
+
+describe('buildTranslationRows', () => {
+  it('groups each key with its own values and reports the untranslated languages', () => {
+    const [row] = buildTranslationRows(
+      [key],
+      [
+        { id: 11, keyId: 7, code: 'it', value: 'Accedi', version: 2 },
+        // A value belonging to another key must not leak into this row.
+        { id: 12, keyId: 8, code: 'en', value: 'Sign in', version: 1 },
+      ],
+      [{ code: 'it' }, { code: 'en' }],
+    )
+
+    expect(row.id).toBe(7)
+    expect(row.key).toBe('auth.login.title')
+    expect(row.version).toBe(3)
+    expect(row.values.it).toEqual({ id: 11, value: 'Accedi', version: 2 })
+    expect(row.values.en).toBeUndefined()
+    expect(row.missingCodes).toEqual(['en'])
+  })
+
+  it('counts a present-but-empty value as missing', () => {
+    const [row] = buildTranslationRows(
+      [key],
+      [{ id: 11, keyId: 7, code: 'it', value: '', version: 2 }],
+      [{ code: 'it' }],
+    )
+    expect(row.missingCodes).toEqual(['it'])
+  })
+
+  // The reason the buckets are Object.create(null) rather than {}. Language
+  // codes come from the database, so a code named after an Object.prototype
+  // member must read as "no translation", not as an inherited function.
+  it('treats a prototype-shaped language code as untranslated, not as an inherited member', () => {
+    const [row] = buildTranslationRows([key], [], [{ code: 'constructor' }, { code: '__proto__' }])
+
+    expect(row.missingCodes).toEqual(['constructor', '__proto__'])
+    expect(Object.hasOwn(row.values, 'constructor')).toBe(false)
+    expect(row.values.constructor as unknown).toBeUndefined()
+  })
+
+  it('keeps a prototype-shaped code that really has a value', () => {
+    const [row] = buildTranslationRows(
+      [key],
+      [{ id: 11, keyId: 7, code: 'constructor', value: 'Costruttore', version: 1 }],
+      [{ code: 'constructor' }],
+    )
+    expect(row.values.constructor).toEqual({ id: 11, value: 'Costruttore', version: 1 })
+    expect(row.missingCodes).toEqual([])
+  })
+
+  it('accepts the string ids the postgres driver returns for bigint columns', () => {
+    const [row] = buildTranslationRows(
+      [{ ...key, idTranslationKey: '7' }],
+      [{ id: '11', keyId: '7', code: 'it', value: 'Accedi', version: 2 }],
+      [{ code: 'it' }],
+    )
+    expect(row.id).toBe(7)
+    expect(row.values.it.id).toBe(11)
   })
 })
