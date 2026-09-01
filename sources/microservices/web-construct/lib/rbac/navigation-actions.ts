@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { eq, sql } from 'drizzle-orm'
+import { eq, like, or, sql } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { permission } from '@/lib/db/schema'
@@ -30,16 +30,39 @@ async function writeTags(database: NavigationDatabase, idItem: number, tagTransl
   }
 }
 
+/** Stessa normalizzazione della migrazione 0015: minuscolo, non alfanumerici in
+ *  trattini, trattini di bordo via. Il suffisso numerico risolve le collisioni. */
+export function toPermissionCode(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'permesso'
+}
+
+async function reserveUniqueCode(database: NavigationDatabase, base: string): Promise<string> {
+  const taken = await database
+    .select({ code: permission.code })
+    .from(permission)
+    .where(or(eq(permission.code, base), like(permission.code, `${base}-%`)))
+  if (!taken.some(r => r.code === base)) return base
+  let n = 2
+  while (taken.some(r => r.code === `${base}-${n}`)) n += 1
+  return `${base}-${n}`
+}
+
 export async function createNavigationItem(input: CreateNavItemInput): Promise<{ id: number }> {
   await requireAdmin()
   if (!input.name.trim()) throw new Error('Name is required')
   const parent = input.idItemParent ?? input.idRootParent ?? ROOT_ID
+  // kind è NOT NULL da 0015: stessa mappatura del backfill della migrazione
+  // (id_item_type 1 = CATEGORY, altrimenti GRANT). code serve solo ai GRANT
+  // (permission_code_matches_kind lo impone) e nasce con la stessa normalizzazione
+  // usata dal backfill, reso univoco qui invece che con un suffisso sull'id.
+  const kind = input.idItemType === 1 ? 'CATEGORY' : 'GRANT'
 
   try {
     const created = await db.transaction(async tx => {
       await lockNavigationWrites(tx)
       const siblings = await tx.select({ orderPosition: permission.orderPosition }).from(permission).where(eq(permission.idParent, parent))
       const nextOrder = siblings.reduce((m, r) => Math.max(m, r.orderPosition + 1), 0)
+      const code = kind === 'GRANT' ? await reserveUniqueCode(tx, toPermissionCode(input.name.trim())) : null
       const [row] = await tx
         .insert(permission)
         .values({
@@ -56,6 +79,8 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
           isImmutable: 0,
           configVisibility: 0,
           noPermissionNeedForNavigation: 0,
+          kind,
+          code,
         })
         .returning({ idItem: permission.idPermission })
       await writeTags(tx, row.idItem, input.tagTranslations)

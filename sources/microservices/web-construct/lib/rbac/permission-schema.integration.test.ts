@@ -57,7 +57,9 @@ describe('rename delle tabelle RBAC', () => {
       .values({ description: 'zzz_rbac_rename_test_role' })
       .returning({ idRole: role.idRole })
     const [createdPermission] = await db.insert(permission)
-      .values({ name: 'zzz_rbac_rename_test_permission', idItemType: ITEM_TYPE_CATEGORY })
+      // kind è NOT NULL da 0015 e senza default: questa riga crea una categoria
+      // (idItemType: ITEM_TYPE_CATEGORY), quindi kind è 'CATEGORY' e code resta nullo.
+      .values({ name: 'zzz_rbac_rename_test_permission', idItemType: ITEM_TYPE_CATEGORY, kind: 'CATEGORY' })
       .returning({ idPermission: permission.idPermission })
     try {
       await db.insert(rolePermission).values({
@@ -74,5 +76,50 @@ describe('rename delle tabelle RBAC', () => {
       await db.delete(permission).where(eq(permission.idPermission, createdPermission.idPermission))
       await db.delete(role).where(eq(role.idRole, createdRole.idRole))
     }
+  })
+})
+
+describe('identità del permesso', () => {
+  it('assegna kind a ogni riga esistente', async () => {
+    const rows = await db.execute(sql`
+      select count(*)::int as orfane from public.permission
+      where kind not in ('CATEGORY', 'GRANT')
+    `)
+    expect(rows[0].orfane).toBe(0)
+  })
+
+  it('dà un code a ogni GRANT e a nessuna CATEGORY', async () => {
+    const rows = await db.execute(sql`
+      select count(*)::int as violazioni from public.permission
+      where (kind = 'GRANT' and code is null) or (kind = 'CATEGORY' and code is not null)
+    `)
+    expect(rows[0].violazioni).toBe(0)
+  })
+
+  /* id_item_type resta NOT NULL fino al Task 7: gli insert grezzi qui sotto lo valorizzano
+   * (2 = FUNCTIONALITY, coerente con kind = 'GRANT') solo per soddisfare quel vincolo, non
+   * perché il test riguardi id_item_type — il brief lo ometteva e l'insert falliva prima
+   * ancora di arrivare al vincolo che il test vuole verificare. */
+  it('rifiuta un GRANT senza code', async () => {
+    await expect(
+      db.execute(sql`
+        insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
+        values ('GRANT', null, 'CONSOLE', 'senza codice', 0, 0, 2)
+      `),
+    ).rejects.toThrow()
+  })
+
+  it('rifiuta due permessi con lo stesso code', async () => {
+    await db.execute(sql`
+      insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
+      values ('GRANT', 'test-duplicato', 'CONSOLE', 'primo', 0, 0, 2)
+    `)
+    await expect(
+      db.execute(sql`
+        insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
+        values ('GRANT', 'test-duplicato', 'CONSOLE', 'secondo', 0, 0, 2)
+      `),
+    ).rejects.toThrow()
+    await db.execute(sql`delete from public.permission where code = 'test-duplicato'`)
   })
 })

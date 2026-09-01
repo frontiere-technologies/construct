@@ -147,8 +147,13 @@ export const permission = pgTable('permission', {
   clickCount: bigint('click_count', { mode: 'number' }).default(0),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
+  kind: text('kind', { enum: ['CATEGORY', 'GRANT'] }).notNull(),
+  code: varchar('code', { length: 80 }),
+  origin: text('origin', { enum: ['SOURCE', 'CONSOLE'] }).notNull().default('CONSOLE'),
+  deprecatedAt: timestamp('deprecated_at', { withTimezone: true, mode: 'string' }),
 }, (t) => [
   index('permission_parent_order_idx').on(t.idParent, t.orderPosition),
+  uniqueIndex('permission_code_unique').on(t.code).where(sql`${t.code} is not null`),
 ])
 
 export const navigationItemTag = pgTable('navigation_item_tag', {
