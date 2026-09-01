@@ -129,3 +129,59 @@ describe('identità del permesso', () => {
     }
   })
 })
+
+describe('travaso in menu_entry', () => {
+  it('crea una voce per ogni riga che oggi comparirebbe nel menu', async () => {
+    // Le righe sotto Operations (id -1) e quelle di tipo funzionalità PERMISSION (5)
+    // erano già invisibili: non devono generare voci. «Sotto Operations» è
+    // l'intero sottoalbero, non i soli figli diretti.
+    const rows = await db.execute(sql`
+      with recursive sotto_operations as (
+        select id_permission from public.permission where id_permission = -1
+        union all
+        select c.id_permission from public.permission c
+        join sotto_operations d on c.id_parent = d.id_permission
+      ),
+      visibili as (
+        select id_permission from public.permission
+        where id_permission not in (0, -1)
+          and id_permission not in (select id_permission from sotto_operations)
+          and coalesce(id_functionality_type, 0) <> 5
+          and config_visibility <> 1
+      )
+      select
+        (select count(*)::int from visibili) as attese,
+        (select count(*)::int from public.menu_entry) as create
+    `)
+    expect(rows[0].create).toBe(rows[0].attese)
+  })
+
+  it('lascia id_permission nullo sulle voci pubbliche e sulle categorie', async () => {
+    const rows = await db.execute(sql`
+      select count(*)::int as sbagliate
+      from public.menu_entry me
+      join public.permission p on p.id_permission = me.id_permission
+      where p.kind = 'CATEGORY'
+    `)
+    expect(rows[0].sbagliate).toBe(0)
+  })
+
+  it('concede la tabella nuova al ruolo di runtime', async () => {
+    const rows = await db.execute(sql`
+      select count(*)::int as concesse from information_schema.role_table_grants
+      where table_schema = 'public' and grantee = 'construct_runtime'
+        and table_name in ('menu_entry', 'menu_entry_tag')
+        and privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+    `)
+    expect(rows[0].concesse).toBe(8)
+  })
+
+  it('rifiuta di cancellare un permesso a cui una voce punta', async () => {
+    const [voce] = await db.execute(sql`
+      select id_permission from public.menu_entry where id_permission is not null limit 1
+    `)
+    await expect(
+      db.execute(sql`delete from public.permission where id_permission = ${voce.id_permission}`),
+    ).rejects.toThrow()
+  })
+})

@@ -169,6 +169,33 @@ export const rolePermission = pgTable('role_permission', {
   authorized: boolean('authorized').notNull().default(false),
 }, (t) => [primaryKey({ columns: [t.idRole, t.idPermission] })])
 
+export const menuEntry = pgTable('menu_entry', {
+  idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_menu_entry')`),
+  idPermission: bigint('id_permission', { mode: 'number' }).references(() => permission.idPermission, { onDelete: 'restrict' }),
+  idParent: bigint('id_parent', { mode: 'number' }).references((): AnyPgColumn => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
+  name: text('name'),
+  orderPosition: integer('order_position').notNull().default(0),
+  navbarPosition: text('navbar_position', { enum: ['TOP', 'BOTTOM'] }),
+  iconPath: text('icon_path'),
+  idFunctionalityType: bigint('id_functionality_type', { mode: 'number' }).references(() => functionalityType.idFunctionalityType),
+  functionalityLink: text('functionality_link'),
+  openInNewTab: smallint('open_in_new_tab').notNull().default(1),
+  itemTranslation: jsonb('item_translation'),
+  isImmutable: smallint('is_immutable').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
+}, (t) => [
+  index('menu_entry_parent_order_idx').on(t.idParent, t.orderPosition),
+  index('menu_entry_permission_idx').on(t.idPermission),
+])
+
+export const menuEntryTag = pgTable('menu_entry_tag', {
+  idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).notNull().references(() => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
+  tagLan: varchar('tag_lan', { length: 5 }).notNull(),
+  tag: varchar('tag', { length: 50 }).notNull(),
+  dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.idMenuEntry, t.tagLan, t.tag] })])
+
 export const userInfo = pgTable('user_info', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   attributeType: varchar('attribute_type', { length: 30 }).notNull(),
