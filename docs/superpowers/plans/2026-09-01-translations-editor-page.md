@@ -524,7 +524,7 @@ Run: `npm run test:migrations && npm run test:i18n-keys`
 Expected: both PASS. The inventory guard will list the two keys as "seeded but
 never referenced" — that is a report line, not a failure, and Task 4 resolves it.
 
-- [✅] **Step 4: Hand the migration to the operator — you cannot apply it**
+- [ ] **Step 4: Hand the migration to the operator — you cannot apply it**  ← OUTSTANDING: the operator must run it
 
 The subcommand is `apply`, not `migrate`, and it needs `MIGRATION_DATABASE_URL`,
 which is deliberately absent from the repository and from every `.env*` file:
