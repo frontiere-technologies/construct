@@ -1226,7 +1226,7 @@ the reader to wonder which one is load-bearing.
 - Consumes: `getTranslationKeyRow`, `listNamespaces`, `listModules` from `@/lib/i18n/translation-service` (Task 1); `TranslationKeyForm` from `@/components/i18n/translations/TranslationKeyForm` (Task 4); `notFound` from `next/navigation`.
 - Produces: the routes `/admin/translations/create` and `/admin/translations/[keyId]/edit`, both reading `?from=`.
 
-- [ ] **Step 1: Write the create page**
+- [✅] **Step 1: Write the create page**
 
 ```tsx
 import { listModules, listNamespaces } from '@/lib/i18n/translation-service'
@@ -1240,7 +1240,7 @@ export default async function CreateTranslationKeyPage(
 }
 ```
 
-- [ ] **Step 2: Write the edit page**
+- [✅] **Step 2: Write the edit page**
 
 ```tsx
 import { notFound } from 'next/navigation'
@@ -1271,7 +1271,7 @@ export default async function EditTranslationKeyPage(
 }
 ```
 
-- [ ] **Step 3: Check the routes render against a real database**
+- [✅] **Step 3: Check the routes render against a real database**
 
 Do not use Bash to start a server. Open the preview with the Browser pane
 (`preview_start` with the `web-construct` configuration), then navigate to
@@ -1282,7 +1282,7 @@ Expected: both render the two-column form; the edit page shows the stored
 values; `/admin/translations/999999/edit` renders the not-found page.
 Check `read_console_messages` and `preview_logs` for errors before moving on.
 
-- [ ] **Step 4: Lint, types, commit**
+- [✅] **Step 4: Lint, types, commit**
 
 ```bash
 npm run lint -- --max-warnings=0 && npm run typecheck && npm test
@@ -1321,7 +1321,7 @@ is what dialogs are for here.
 - Consumes: `translationCreateHref`, `translationEditHref` from `@/lib/i18n/translations-return-url` (Task 2).
 - Produces: `export function TranslationsTableClient(props: Props)` — a named export where a default one used to be.
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Add to `components/i18n/translations/TranslationsTableClient.test.tsx`. Note the
 `next/navigation` mock at the top of the file must gain a `push` spy, and the
@@ -1369,13 +1369,13 @@ describe('TranslationsTableClient row actions', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [✅] **Step 2: Run the test and confirm it fails**
 
 Run: `npm test -- components/i18n/translations/TranslationsTableClient.test.tsx`
 Expected: FAIL — the import of `{ TranslationsTableClient }` is undefined, and
 Modifica still sets state instead of navigating.
 
-- [ ] **Step 3: Rewire the grid**
+- [✅] **Step 3: Rewire the grid**
 
 In `TranslationsTableClient.tsx`:
 
@@ -1416,7 +1416,7 @@ In `TranslationsTableClient.tsx`:
 If `useState` or `TranslationRowDto` become unused, remove them from the
 imports — `npm run lint -- --max-warnings=0` will say so.
 
-- [ ] **Step 4: Update the page's import**
+- [✅] **Step 4: Update the page's import**
 
 In `app/(protected)/(admin)/admin/translations/page.tsx`:
 
@@ -1424,7 +1424,7 @@ In `app/(protected)/(admin)/admin/translations/page.tsx`:
 import { TranslationsTableClient } from '@/components/i18n/translations/TranslationsTableClient'
 ```
 
-- [ ] **Step 5: Delete the two shells and their tests**
+- [✅] **Step 5: Delete the two shells and their tests**
 
 ```bash
 git rm sources/microservices/web-construct/components/i18n/translations/TranslationEditorDrawer.tsx \
@@ -1433,7 +1433,7 @@ git rm sources/microservices/web-construct/components/i18n/translations/Translat
        sources/microservices/web-construct/components/i18n/translations/CreateTranslationKeyModal.test.tsx
 ```
 
-- [ ] **Step 6: Shrink the ESLint exception list by three lines**
+- [✅] **Step 6: Shrink the ESLint exception list by three lines**
 
 In `eslint.config.mjs`, delete these three entries from the `files` array of the
 `'import-x/no-default-export': 'off'` block:
@@ -1447,13 +1447,13 @@ In `eslint.config.mjs`, delete these three entries from the `files` array of the
 Also update the block's leading comment, which says "Questi 27 file": it is now
 24. Leaving a stale count is how a comment stops being read.
 
-- [ ] **Step 7: Confirm the whole suite, the lint and the types**
+- [✅] **Step 7: Confirm the whole suite, the lint and the types**
 
 Run: `npm test && npm run lint -- --max-warnings=0 && npm run typecheck && npm run test:collection && npm run test:i18n-keys`
 Expected: all clean. The i18n inventory guard should no longer report
 `translation.form.general_info` or `translation.form.create_label` as unreferenced.
 
-- [ ] **Step 8: Verify in the browser before claiming it works**
+- [✅] **Step 8: Verify in the browser before claiming it works**
 
 With the Browser pane: from `/admin/translations`, apply a namespace filter and
 a sort, open a key with Modifica, change one language, press Salva. The grid must
@@ -1461,7 +1461,7 @@ come back **with the filter and sort still applied**. Then press "Nuova chiave",
 confirm it navigates rather than opening a dialog. Take a screenshot of the
 restored, still-filtered grid as the evidence.
 
-- [ ] **Step 9: Commit**
+- [✅] **Step 9: Commit**
 
 ```bash
 git add -A sources/microservices/web-construct
@@ -1491,7 +1491,7 @@ is observed. Two of them also need more care:
 - Consumes: the existing helpers `_open_translations`, `_filter_by_key`, `_rows`, `nav`, and the `logged_in_page` / `admin_storage_state` fixtures.
 - Produces: no new helper is exported; one new local helper `_open_editor(page)` is used by the tests in this file.
 
-- [ ] **Step 1: Add a helper that opens the editor and waits for the real signal**
+- [✅] **Step 1: Add a helper that opens the editor and waits for the real signal**
 
 Add near the other helpers in `test_i18n.py`:
 
@@ -1520,7 +1520,7 @@ def _expect_back_on_the_list(page, base_url):
 
 Add `import re` at the top of the file if it is not already imported.
 
-- [ ] **Step 2: Rewrite the six call sites**
+- [✅] **Step 2: Rewrite the six call sites**
 
 In `_restore_save_translation`, replace the block from
 `_rows(page).first.locator(...)` through `expect(editor).to_be_hidden(...)` with:
@@ -1594,21 +1594,21 @@ load the row — and therefore its `version` — before A saves, so B's save car
 a stale version and must be refused. Page B stays on its edit page and renders
 the conflict panel.
 
-- [ ] **Step 3: Run the i18n end-to-end group**
+- [✅] **Step 3: Run the i18n end-to-end group**
 
 Run: `uv run pytest sources/tests/e2e/test_i18n.py -v` from the repository root.
 Expected: every test passes. If a test leaves `common.actions.save` holding a
 marker value, the module-level safety net restores it — but a failure there
 cascades into unrelated groups, so re-run the full suite before committing.
 
-- [ ] **Step 4: Run the whole end-to-end suite**
+- [✅] **Step 4: Run the whole end-to-end suite**
 
 Run: `uv run pytest`
 Expected: no regressions. `test_functionalities.py` also matches on
 "translations" and must be unaffected; if it fails, read it before changing
 anything — it may be asserting on the navigation tree, not on this form.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/tests/e2e/test_i18n.py
@@ -1630,7 +1630,7 @@ next reader finds a spec contradicting the code and has to guess which is true.
 - Consumes: nothing.
 - Produces: nothing. Documentation only.
 
-- [ ] **Step 1: Rewrite DEC-5**
+- [✅] **Step 1: Rewrite DEC-5**
 
 Replace the DEC-5 section — its heading, `**Decision:**` and `**Why...**`
 paragraphs — with:
@@ -1668,7 +1668,7 @@ Salva.
 Full design: `docs/superpowers/specs/2026-09-01-translations-editor-page-design.md`.
 ```
 
-- [ ] **Step 2: Confirm the docs contract still holds**
+- [✅] **Step 2: Confirm the docs contract still holds**
 
 `sources/devops/docs-contract.test.mjs` reads this same file and asserts on
 DEC-7's wording — `best-effort diagnostic`, `retention`, `redact`, and the
@@ -1677,13 +1677,13 @@ absence of "audit trail". DEC-7 must not be touched.
 Run: `npm run test:docs-contract`
 Expected: PASS.
 
-- [ ] **Step 3: Tick this plan's own boxes and the spec's**
+- [✅] **Step 3: Tick this plan's own boxes and the spec's**
 
 Per `AGENTS.md`: as each task above completed, its checkboxes should already have
 been marked `- [✅]`. Confirm none were missed before committing — an unticked
 plan is indistinguishable from an unstarted one.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-28-i18n-system-design.md docs/superpowers/plans/2026-09-01-translations-editor-page.md
