@@ -19,9 +19,8 @@ import {
   translationsUrlParamsToSortModel, type TranslationsGridFilterModel, type TranslationsUrlParams,
 } from '@/lib/i18n/translations-grid-query'
 import type { TranslationRowDto } from '@/lib/i18n/types'
+import { translationCreateHref, translationEditHref } from '@/lib/i18n/translations-return-url'
 import { createTranslationsDatasource } from './translations-datasource'
-import TranslationEditorDrawer from './TranslationEditorDrawer'
-import CreateTranslationKeyModal from './CreateTranslationKeyModal'
 import TranslationValueCell from './TranslationValueCell'
 import { translationStatusFilterOptions } from './translation-status-filter'
 
@@ -39,14 +38,12 @@ const textFilter = {
 
 const TRANSLATION_DATE_FILTER = DATE_FILTER as Pick<ColDef<TranslationRowDto>, 'filter' | 'filterParams'>
 
-export default function TranslationsTableClient(props: Props) {
+export function TranslationsTableClient(props: Props) {
   const { t, fmt, languages } = useI18n()
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
 
-  const [editing, setEditing] = useState<TranslationRowDto | null>(null)
-  const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<TranslationRowDto | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [gridApi, setGridApi] = useState<GridApi<TranslationRowDto> | null>(null)
@@ -57,7 +54,7 @@ export default function TranslationsTableClient(props: Props) {
 
   const columnDefs = useMemo<ColDef<TranslationRowDto>[]>(() => [
     actionsColumnDef<TranslationRowDto>(row => [
-      { label: t('common.actions.edit'), onClick: () => setEditing(row) },
+      { label: t('common.actions.edit'), onClick: () => router.push(translationEditHref(row.id, sp.toString())) },
       { label: t('common.actions.delete'), onClick: () => setDeleting(row) },
     ]),
     {
@@ -106,7 +103,7 @@ export default function TranslationsTableClient(props: Props) {
       colId: 'updatedAt', headerName: t('translation.updated_at'), sortable: true, ...TRANSLATION_DATE_FILTER, width: 160,
       valueGetter: p => p.data ? fmt.dateTime(p.data.updatedAt) : '',
     },
-  ], [t, fmt, languages, props.namespaces, props.modules])
+  ], [t, fmt, languages, props.namespaces, props.modules, router, sp])
 
   const columnLabels = useMemo(() => [
     { colId: 'key', label: t('translation.key') },
@@ -138,7 +135,7 @@ export default function TranslationsTableClient(props: Props) {
           () => setParam(translationsFilterModelToSearchParams({}, languages.map(language => language.code))),
         )}
       >
-        <Button size="sm" onClick={() => setCreating(true)}>
+        <Button size="sm" onClick={() => router.push(translationCreateHref(sp.toString()))}>
           {t('translation.actions.create')}
         </Button>
       </GridToolbar>
@@ -163,21 +160,6 @@ export default function TranslationsTableClient(props: Props) {
         onGridReady={(e: GridReadyEvent<TranslationRowDto>) => { gridApiRef.current = e.api; setGridApi(e.api) }}
       />
 
-      {editing && (
-        <TranslationEditorDrawer
-          row={editing}
-          onClose={saved => { setEditing(null); if (saved) refresh() }}
-          namespaces={props.namespaces}
-          modules={props.modules}
-        />
-      )}
-      {creating && (
-        <CreateTranslationKeyModal
-          onClose={saved => { setCreating(false); if (saved) refresh() }}
-          namespaces={props.namespaces}
-          modules={props.modules}
-        />
-      )}
       {deleting && (
         <ConfirmModal
           title={t('translation.confirm.delete_title')}

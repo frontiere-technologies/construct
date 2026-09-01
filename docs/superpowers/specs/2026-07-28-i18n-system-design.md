@@ -70,11 +70,36 @@ A second mapping table (UI language code → content locale) was deliberately no
 
 **Known over-invalidation nuance:** the statement-level key trigger bumps *every* language's version on *any* key mutation, including ones that don't touch translated text at all — renaming a key's `namespace` for organizational purposes, or updating only its `description` (an admin-facing hint, never rendered to end users), still invalidates every cached dictionary for every language. This trades a small amount of unnecessary cache-reload work (a full dictionary reload is one indexed query over a few hundred rows) for one trigger function instead of column-level change detection inside the trigger body. Given how infrequently keys are edited (compared to how often `t()` runs), this is a deliberate simplicity-over-precision choice, not an oversight.
 
-## DEC-5 — Drawer-based translations editor
+## DEC-5 — Superseded: the translations editor is a page, not a drawer
 
-**Decision:** `/admin/translations` renders one AG Grid row per key with a value column per active language, but editing opens a side drawer (`TranslationEditorDrawer.tsx`) rather than making the grid cells directly editable in place.
+**Decision (2026-09-01):** `/admin/translations` still renders one AG Grid row
+per key with a value column per active language, but editing and creating a key
+are two routes — `/admin/translations/[keyId]/edit` and
+`/admin/translations/create` — rendering one `TranslationKeyForm`. The
+`TranslationEditorDrawer` side panel and the `CreateTranslationKeyModal` dialog
+are gone.
 
-**Why (documented — code comment, `components/i18n/translations/TranslationEditorDrawer.tsx` design note referenced in the plan at `docs/superpowers/plans/2026-07-28-i18n-system.md:4120`):** "is already at its width budget, and §4.4 explicitly allows a drawer once it is." The grid already carries Chiave/Descrizione/Namespace/Modulo/Stato/Ultima modifica plus one column per active language — adding every language as an inline-editable multi-line text cell does not fit a data-grid row's height or width, especially as more languages are added (the grid must scale to an arbitrary number of active languages, not just the two seeded ones). A drawer gives every language's value its own full-height textarea, room for the conflict-resolution UI (DEC-6), and the key's metadata fields (namespace, module, description) in one coherent form, without constraining any of that to a grid cell's dimensions.
+**Why the original decision was reversed:** the drawer's argument was about
+width — the grid carries Chiave, Descrizione, Namespace, Modulo, Stato and
+Ultima modifica plus one column per language, so it is at its budget, and a
+drawer gave every language a full-height textarea. That reasoning was sound
+*against editing inside grid cells*, which nobody proposed instead. It was never
+an argument for a panel over a page: a page gives each language more room than a
+`max-w-xl` drawer, and more room for the conflict UI of DEC-6 as well.
+
+What the drawer actually cost was consistency. Every other primary editor in
+this application is a page — Funzionalità at `functionalities/[funcId]/edit`,
+Ruoli & permessi at `roles-permissions/[roleId]` — and dialogs here are reserved
+for short secondary actions: create role, rename role, manage a user's roles,
+the language form, confirming a delete. The translations editor was the only
+main-entity editor in a panel, which is what made it feel wrong to use.
+
+The one thing the panel did better, it now does explicitly: it never left the
+list, so the grid's filters and sort were never lost. The form carries the
+list's query string in a `from` parameter and restores it on Annulla and after
+Salva.
+
+Full design: `docs/superpowers/specs/2026-09-01-translations-editor-page-design.md`.
 
 ## DEC-6 — Optimistic locking on both key and value
 

@@ -221,7 +221,7 @@ export function UserAvatar({ name, src }: { name: string; src?: string }) {
   simbolo. L'export default permette a ogni import di rinominare il simbolo a piacere e
   costringe quei controlli ad arrampicarsi sugli alias.
 
-  La regola vale per il codice nuovo; sul codice esistente è un debito dichiarato. **27 file
+  La regola vale per il codice nuovo; sul codice esistente è un debito dichiarato. **24 file
   sotto `components/` usano ancora `export default`** e sono elencati per nome in
   `eslint.config.mjs`, dove `import-x/no-default-export` è spento apposta per loro. Quella lista
   è fatta per accorciarsi: quando ne converti uno, cancella la sua riga, e aggiorna questo
