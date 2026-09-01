@@ -35,7 +35,7 @@ inherited `Object.prototype` member. A copy is where that care goes to die.
 
 **Files:**
 - Modify: `sources/microservices/web-construct/lib/i18n/translation-service.ts` (extract from `listTranslations`, lines 107-189; add the new reader)
-- Test: `sources/microservices/web-construct/lib/i18n/translation-service.test.ts` (create)
+- Test: `sources/microservices/web-construct/lib/i18n/translation-service.test.ts` (modify — it already holds 14 tests for `applyTranslationFilters` and `translationOrderBy`; append, never overwrite)
 
 **Interfaces:**
 - Consumes: `db`, `translationKey`, `translationValue`, `appLanguage` (already imported in the file); `listActiveLanguages` from `./language-service`; `TranslationRowDto`, `TranslationValueDto` from `./types`.
@@ -69,7 +69,7 @@ inherited `Object.prototype` member. A copy is where that care goes to die.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `sources/microservices/web-construct/lib/i18n/translation-service.test.ts`:
+Append to the existing `sources/microservices/web-construct/lib/i18n/translation-service.test.ts` — it already contains two describe blocks that must survive untouched:
 
 ```ts
 import { describe, expect, it } from 'vitest'
