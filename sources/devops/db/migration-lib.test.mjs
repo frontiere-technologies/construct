@@ -139,6 +139,20 @@ test('allows correcting an incomplete migration whose checksum changed, but stil
   )
 })
 
+// Il salto per completed_at nullo deve scartare solo il confronto del checksum, non l'intero
+// corpo del ciclo: applyPendingMigrations itera sui file letti da disco, non sulla cronologia, e
+// se una riga di cronologia (completata o no) non trova piu' un file corrispondente su disco,
+// quella migrazione non verrebbe mai piu' ne' ritentata ne' segnalata — sparirebbe in silenzio.
+// L'esistenza del file va verificata per ogni riga, prima di guardare se e' completata.
+test('still reports a missing migration file for an incomplete history row', () => {
+  assert.throws(
+    () => assertAppliedMigrationChecksums([], [
+      { version: '0001', checksum: 'a'.repeat(64), completedAt: null },
+    ]),
+    /applied migration 0001 is missing from the repository/i,
+  )
+})
+
 test('applies only pending or incomplete migrations in order', async () => {
   const migrations = [
     { version: '0001', name: 'first', filename: '0001_first.sql', sql: 'select 1;', checksum: 'a'.repeat(64) },

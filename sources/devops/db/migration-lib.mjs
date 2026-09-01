@@ -38,6 +38,15 @@ export function renderSchemaSnapshot(migrations) {
 export function assertAppliedMigrationChecksums(migrations, historyRows) {
   const migrationByVersion = new Map(migrations.map(migration => [migration.version, migration]))
   for (const row of historyRows) {
+    // Il controllo di esistenza vale per ogni riga di cronologia, completata o no: se il file
+    // sparisse dal repository, applyPendingMigrations (sotto) itera sui file letti da disco, non
+    // sulla cronologia, quindi una riga senza file corrispondente non verrebbe mai più né
+    // ritentata né segnalata — sparirebbe in silenzio. Questo vale anche per un tentativo mai
+    // completato: non aver mai applicato lo schema non è una ragione per smettere di sapere che
+    // quella migrazione esiste.
+    const migration = migrationByVersion.get(row.version)
+    if (!migration) throw new Error(`Applied migration ${row.version} is missing from the repository`)
+
     // completed_at nullo significa "tentata e fallita": la transazione della migrazione è stata
     // annullata, nessuno schema porta il segno di quel tentativo. db.mjs (markStarted) registra
     // l'inizio con un upsert che sovrascrive proprio checksum e completed_at ad ogni tentativo —
@@ -46,10 +55,9 @@ export function assertAppliedMigrationChecksums(migrations, historyRows) {
     // fallita un blocco permanente, perché il tentativo successivo — con il file corretto — non
     // potrebbe mai più superare questo controllo. Una riga con completed_at valorizzato è tutt'altra
     // cosa: quella è una migrazione che ha davvero cambiato lo schema, ed è lì che l'immutabilità va
-    // fatta rispettare senza eccezioni.
+    // fatta rispettare senza eccezioni. Solo *questo* confronto va limitato alle righe completate —
+    // non il controllo di esistenza sopra, che resta incondizionato.
     if (!row.completedAt) continue
-    const migration = migrationByVersion.get(row.version)
-    if (!migration) throw new Error(`Applied migration ${row.version} is missing from the repository`)
     if (migration.checksum !== row.checksum) {
       throw new Error(`Checksum mismatch for applied migration ${migration.version}_${migration.name}`)
     }
