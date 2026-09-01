@@ -157,11 +157,19 @@ describe('travaso in menu_entry', () => {
   })
 
   it('lascia id_permission nullo sulle voci pubbliche e sulle categorie', async () => {
+    // Il join dev'essere su id_menu_entry, che riusa l'id del permesso originale (0017) ed è
+    // sempre valorizzato — non su id_permission, che è nullo per costruzione proprio sulle righe
+    // che questo test vuole controllare: un inner join su quella colonna le scarterebbe tutte
+    // prima ancora di guardarle, e il ramo «voce pubblica» del titolo non entrerebbe mai nel
+    // risultato. La condizione va scritta esplicitamente per entrambi i casi (categoria, o GRANT
+    // con no_permission_need_for_navigation = 1): un filtro sul solo kind = 'CATEGORY' non
+    // intercetterebbe mai una voce pubblica difettosa, perché quelle righe sono kind = 'GRANT'.
     const rows = await db.execute(sql`
       select count(*)::int as sbagliate
       from public.menu_entry me
-      join public.permission p on p.id_permission = me.id_permission
-      where p.kind = 'CATEGORY'
+      join public.permission p on p.id_permission = me.id_menu_entry
+      where (p.kind = 'CATEGORY' or (p.kind = 'GRANT' and p.no_permission_need_for_navigation = 1))
+        and me.id_permission is not null
     `)
     expect(rows[0].sbagliate).toBe(0)
   })
