@@ -591,7 +591,7 @@ Where they differ, and why:
   export function TranslationKeyForm(props: TranslationKeyFormProps): React.JSX.Element
   ```
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Create `sources/microservices/web-construct/components/i18n/translations/TranslationKeyForm.test.tsx`:
 
@@ -889,12 +889,12 @@ describe('TranslationKeyForm in create mode', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [✅] **Step 2: Run the test and confirm it fails**
 
 Run: `npm test -- components/i18n/translations/TranslationKeyForm.test.tsx`
 Expected: FAIL — `./TranslationKeyForm` does not exist.
 
-- [ ] **Step 3: Write the component**
+- [✅] **Step 3: Write the component**
 
 Create `sources/microservices/web-construct/components/i18n/translations/TranslationKeyForm.tsx`:
 
@@ -1189,7 +1189,7 @@ export function TranslationKeyForm({ mode, row, namespaces, modules, from }: Tra
 }
 ```
 
-- [ ] **Step 4: Run the test and confirm it passes**
+- [✅] **Step 4: Run the test and confirm it passes**
 
 Run: `npm test -- components/i18n/translations/TranslationKeyForm.test.tsx`
 Expected: PASS, 15 tests.
@@ -1202,7 +1202,7 @@ placeholder, anything — stop: it needs a migration, and the two thrown
 invariants above exist precisely so that no unreachable branch drags a
 translation key into the catalogue behind you.
 
-- [ ] **Step 5: Lint, types, full suite, commit**
+- [✅] **Step 5: Lint, types, full suite, commit**
 
 ```bash
 npm run lint -- --max-warnings=0 && npm run typecheck && npm test && npm run test:i18n-keys
