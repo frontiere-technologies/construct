@@ -127,14 +127,14 @@ export const userRole = pgTable('user_role', {
   index('user_role_id_role_user_id_idx').on(t.idRole, t.userId),
 ])
 
-export const navigationItem = pgTable('navigation_item', {
-  idItem: bigint('id_item', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_navigation_item')`),
+export const permission = pgTable('permission', {
+  idPermission: bigint('id_permission', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_permission')`),
   name: text('name'),
   idItemType: bigint('id_item_type', { mode: 'number' }).notNull().references(() => navigationItemType.idItemType),
   idFunctionalityType: bigint('id_functionality_type', { mode: 'number' }).references(() => functionalityType.idFunctionalityType),
   functionalityLink: text('functionality_link'),
   iconPath: text('icon_path'),
-  idItemParent: bigint('id_item_parent', { mode: 'number' }).references((): AnyPgColumn => navigationItem.idItem, { onDelete: 'cascade' }),
+  idParent: bigint('id_parent', { mode: 'number' }).references((): AnyPgColumn => permission.idPermission, { onDelete: 'cascade' }),
   orderPosition: integer('order_position').notNull().default(0),
   description: text('description'),
   navbarPosition: text('navbar_position', { enum: ['TOP', 'BOTTOM'] }),
@@ -148,21 +148,21 @@ export const navigationItem = pgTable('navigation_item', {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (t) => [
-  index('navigation_item_parent_order_idx').on(t.idItemParent, t.orderPosition),
+  index('navigation_item_parent_order_idx').on(t.idParent, t.orderPosition),
 ])
 
 export const navigationItemTag = pgTable('navigation_item_tag', {
-  idItem: bigint('id_item', { mode: 'number' }).notNull().references(() => navigationItem.idItem, { onDelete: 'cascade' }),
+  idItem: bigint('id_item', { mode: 'number' }).notNull().references(() => permission.idPermission, { onDelete: 'cascade' }),
   tagLan: varchar('tag_lan', { length: 5 }).notNull(),
   tag: varchar('tag', { length: 50 }).notNull(),
   dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.idItem, t.tagLan, t.tag] })])
 
-export const roleItem = pgTable('role_item', {
+export const rolePermission = pgTable('role_permission', {
   idRole: bigint('id_role', { mode: 'number' }).notNull().references(() => role.idRole, { onDelete: 'cascade' }),
-  idItem: bigint('id_item', { mode: 'number' }).notNull().references(() => navigationItem.idItem, { onDelete: 'cascade' }),
+  idPermission: bigint('id_permission', { mode: 'number' }).notNull().references(() => permission.idPermission, { onDelete: 'cascade' }),
   authorized: boolean('authorized').notNull().default(false),
-}, (t) => [primaryKey({ columns: [t.idRole, t.idItem] })])
+}, (t) => [primaryKey({ columns: [t.idRole, t.idPermission] })])
 
 export const userInfo = pgTable('user_info', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

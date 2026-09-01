@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
-import { navigationItem } from '@/lib/db/schema'
+import { permission } from '@/lib/db/schema'
 import { toNavigationItemRow } from './nav-row-mapper'
 import { sanitizeSvg } from './svg-sanitize'
 import { canDeleteSubtree, isDescendant } from './nav-tree-builder'
@@ -38,10 +38,10 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   try {
     const created = await db.transaction(async tx => {
       await lockNavigationWrites(tx)
-      const siblings = await tx.select({ orderPosition: navigationItem.orderPosition }).from(navigationItem).where(eq(navigationItem.idItemParent, parent))
+      const siblings = await tx.select({ orderPosition: permission.orderPosition }).from(permission).where(eq(permission.idParent, parent))
       const nextOrder = siblings.reduce((m, r) => Math.max(m, r.orderPosition + 1), 0)
       const [row] = await tx
-        .insert(navigationItem)
+        .insert(permission)
         .values({
           name: input.name.trim(),
           idItemType: input.idItemType,
@@ -49,7 +49,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
           functionalityLink: input.idItemType === 2 ? input.functionalityLink : null,
           iconPath: sanitizeSvg(input.iconPath),
           openInNewTab: input.openInNewTab === false ? 0 : 1,
-          idItemParent: parent,
+          idParent: parent,
           orderPosition: nextOrder,
           description: input.description,
           itemTranslation: input.itemTranslation,
@@ -57,7 +57,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
           configVisibility: 0,
           noPermissionNeedForNavigation: 0,
         })
-        .returning({ idItem: navigationItem.idItem })
+        .returning({ idItem: permission.idPermission })
       await writeTags(tx, row.idItem, input.tagTranslations)
       return row
     })
@@ -70,7 +70,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
 
 async function loadItems(database: NavigationDatabase = db): Promise<NavigationItemRow[]> {
   try {
-    const rows = await database.select().from(navigationItem)
+    const rows = await database.select().from(permission)
     return rows.map(toNavigationItemRow)
   } catch (err) {
     throw new Error(`Failed to load items: ${err instanceof Error ? err.message : String(err)}`)
@@ -80,7 +80,7 @@ async function loadItems(database: NavigationDatabase = db): Promise<NavigationI
 async function assertMutable(id: number, database: NavigationDatabase = db) {
   let row: { isImmutable: number } | undefined
   try {
-    ;[row] = await database.select({ isImmutable: navigationItem.isImmutable }).from(navigationItem).where(eq(navigationItem.idItem, id)).limit(1)
+    ;[row] = await database.select({ isImmutable: permission.isImmutable }).from(permission).where(eq(permission.idPermission, id)).limit(1)
   } catch (err) {
     throw new Error(`Item not found: ${err instanceof Error ? err.message : String(err)}`)
   }
@@ -112,7 +112,7 @@ async function reparent(database: NavigationDatabase, items: NavigationItemRow[]
   dest.splice(idx, 0, id)
   for (let pos = 0; pos < dest.length; pos++) {
     try {
-      await database.update(navigationItem).set({ idItemParent: targetParentId, orderPosition: pos }).where(eq(navigationItem.idItem, dest[pos]))
+      await database.update(permission).set({ idParent: targetParentId, orderPosition: pos }).where(eq(permission.idPermission, dest[pos]))
     } catch (err) {
       throw new Error(`Failed to move item: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -135,7 +135,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
         }
       }
       await tx
-        .update(navigationItem)
+        .update(permission)
         .set({
           name: input.name.trim(),
           idItemType: input.idItemType,
@@ -146,7 +146,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
           description: input.description,
           itemTranslation: input.itemTranslation,
         })
-        .where(eq(navigationItem.idItem, id))
+        .where(eq(permission.idPermission, id))
       await writeTags(tx, id, input.tagTranslations)
     })
   } catch (err) {
@@ -174,7 +174,7 @@ export async function deleteNavigationItem(id: number): Promise<void> {
       await lockNavigationWrites(tx)
       const items = await loadItems(tx)
       if (!canDeleteSubtree(items, id)) throw new Error('This item (or a descendant) is immutable and cannot be deleted')
-      await tx.delete(navigationItem).where(eq(navigationItem.idItem, id))
+      await tx.delete(permission).where(eq(permission.idPermission, id))
     })
   } catch (err) {
     throw new Error(`Failed to delete item: ${err instanceof Error ? err.message : String(err)}`)

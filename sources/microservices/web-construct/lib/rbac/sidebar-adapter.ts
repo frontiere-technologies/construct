@@ -58,8 +58,8 @@ function isRenderable(it: NavigationItemRow, byId: Map<number, NavigationItemRow
  * A category has no route of its own — it's a container, so it must show whenever it holds
  * something the user may open, grant or no grant. Categories are only ever granted implicitly
  * (Roles & Permissions walks up the ancestors of a functionality when it's toggled on), so a
- * section that an already-authorized item was later *moved* into carries no role_item row at
- * all; without this walk that section, and everything inside it, silently vanished.
+ * section that an already-authorized item was later *moved* into carries no role_permission row
+ * at all; without this walk that section, and everything inside it, silently vanished.
  */
 function resolveVisibleIds(items: NavigationItemRow[], authorizedIds: Set<number>, byId: Map<number, NavigationItemRow>): Set<number> {
   const visible = new Set<number>()

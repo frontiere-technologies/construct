@@ -1,7 +1,7 @@
 import { cache } from 'react'
 import { and, asc, count, desc, eq, gte, ilike, inArray, lt, lte, or, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { navigationItem, roleItem, roleListView } from '@/lib/db/schema'
+import { permission, rolePermission, roleListView } from '@/lib/db/schema'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { toNavigationItemRow } from './nav-row-mapper'
 import { buildAuthTree } from './permission-tree'
@@ -133,12 +133,12 @@ export const getRole = cache(async (roleId: number): Promise<RoleInformationDto>
 
 export const getRoleAuthorizationTree = cache(
   async (roleId: number, rootName: 'ROOT' | 'OPERATIONS'): Promise<UserNavigationTreeDto[]> => {
-    let navRows: (typeof navigationItem.$inferSelect)[]
+    let navRows: (typeof permission.$inferSelect)[]
     let riRows: { idItem: number; authorized: boolean }[]
     try {
       ;[navRows, riRows] = await Promise.all([
-        db.select().from(navigationItem).orderBy(asc(navigationItem.orderPosition)),
-        db.select({ idItem: roleItem.idItem, authorized: roleItem.authorized }).from(roleItem).where(eq(roleItem.idRole, roleId)),
+        db.select().from(permission).orderBy(asc(permission.orderPosition)),
+        db.select({ idItem: rolePermission.idPermission, authorized: rolePermission.authorized }).from(rolePermission).where(eq(rolePermission.idRole, roleId)),
       ])
     } catch (err) {
       throw new Error(`Failed to load navigation: ${err instanceof Error ? err.message : String(err)}`)

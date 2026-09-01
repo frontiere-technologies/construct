@@ -1,14 +1,14 @@
 import { cache } from 'react'
 import { asc } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { navigationItem, navigationItemTag } from '@/lib/db/schema'
+import { permission, navigationItemTag } from '@/lib/db/schema'
 import { toNavigationItemRow } from './nav-row-mapper'
 import { buildNavTree, mapRowToDto, selectableParents } from './nav-tree-builder'
 import { type UserNavigationTreeDto, type ParentOption, ROOT_ID, OPERATIONS_ID } from './types'
 
 async function loadNavAndTags() {
   const [navRows, tagRows] = await Promise.all([
-    db.select().from(navigationItem).orderBy(asc(navigationItem.orderPosition)),
+    db.select().from(permission).orderBy(asc(permission.orderPosition)),
     db.select().from(navigationItemTag),
   ])
   const tagsByItem = new Map<number, { tag_lan: string; tag: string }[]>()
