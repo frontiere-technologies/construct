@@ -67,7 +67,7 @@ inherited `Object.prototype` member. A copy is where that care goes to die.
   export async function getTranslationKeyRow(id: number): Promise<TranslationRowDto | null>
   ```
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Append to the existing `sources/microservices/web-construct/lib/i18n/translation-service.test.ts` — it already contains two describe blocks that must survive untouched:
 
@@ -142,12 +142,12 @@ describe('buildTranslationRows', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [✅] **Step 2: Run the test and confirm it fails**
 
 Run: `npm test -- lib/i18n/translation-service.test.ts`
 Expected: FAIL — `buildTranslationRows` is not exported from `./translation-service`.
 
-- [ ] **Step 3: Extract the builder**
+- [✅] **Step 3: Extract the builder**
 
 In `lib/i18n/translation-service.ts`, add the two input interfaces and the
 builder above `listTranslations`:
@@ -232,12 +232,12 @@ down to `return { total, elements }` — with:
 Note `TranslationValueDto` must be in the file's import from `./types`; add it
 if it is not already there.
 
-- [ ] **Step 4: Run the test and confirm it passes**
+- [✅] **Step 4: Run the test and confirm it passes**
 
 Run: `npm test -- lib/i18n/translation-service.test.ts`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Add the single-key reader**
+- [✅] **Step 5: Add the single-key reader**
 
 Append to `lib/i18n/translation-service.ts`:
 
@@ -274,13 +274,13 @@ export async function getTranslationKeyRow(id: number): Promise<TranslationRowDt
 }
 ```
 
-- [ ] **Step 6: Verify the suite, the lint and the types**
+- [✅] **Step 6: Verify the suite, the lint and the types**
 
 Run: `npm test && npm run lint -- --max-warnings=0 && npm run typecheck`
 Expected: all clean. `listTranslations`'s existing integration tests must still
 pass — the extraction is behaviour-preserving.
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/i18n/translation-service.ts sources/microservices/web-construct/lib/i18n/translation-service.test.ts
@@ -312,7 +312,7 @@ sanitise when the path is not taken from input.
   export function translationCreateHref(listSearch: string): string
   ```
 
-- [ ] **Step 1: Write the failing test**
+- [✅] **Step 1: Write the failing test**
 
 Create `sources/microservices/web-construct/lib/i18n/translations-return-url.test.ts`:
 
@@ -384,12 +384,12 @@ describe('the hrefs the grid navigates to', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [✅] **Step 2: Run the test and confirm it fails**
 
 Run: `npm test -- lib/i18n/translations-return-url.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Write the module**
+- [✅] **Step 3: Write the module**
 
 Create `sources/microservices/web-construct/lib/i18n/translations-return-url.ts`:
 
@@ -432,12 +432,12 @@ export function translationCreateHref(listSearch: string): string {
 }
 ```
 
-- [ ] **Step 4: Run the test and confirm it passes**
+- [✅] **Step 4: Run the test and confirm it passes**
 
 Run: `npm test -- lib/i18n/translations-return-url.test.ts`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 5: Lint, types, commit**
+- [✅] **Step 5: Lint, types, commit**
 
 ```bash
 npm run lint -- --max-warnings=0 && npm run typecheck
@@ -464,7 +464,7 @@ failure.
 - Consumes: `public.apply_translation_seed(jsonb)`, already defined in the baseline.
 - Produces: the keys `translation.form.general_info` and `translation.form.create_label`, both `namespace: translation`, `module: i18n`, matching every other `translation.*` key.
 
-- [ ] **Step 1: Write the migration**
+- [✅] **Step 1: Write the migration**
 
 Create `sources/devops/db/migrations/0013_translation_form_page_labels.sql`:
 
@@ -494,7 +494,7 @@ begin
 end $$;
 ```
 
-- [ ] **Step 2: Append the same block to the consolidated schema**
+- [✅] **Step 2: Append the same block to the consolidated schema**
 
 Append to the end of `sources/devops/db/schema.sql`, preserving the convention
 of naming the migration in the header comment:
@@ -518,13 +518,13 @@ begin
 end $$;
 ```
 
-- [ ] **Step 3: Run the migration guards**
+- [✅] **Step 3: Run the migration guards**
 
 Run: `npm run test:migrations && npm run test:i18n-keys`
 Expected: both PASS. The inventory guard will list the two keys as "seeded but
 never referenced" — that is a report line, not a failure, and Task 4 resolves it.
 
-- [ ] **Step 4: Hand the migration to the operator — you cannot apply it**
+- [✅] **Step 4: Hand the migration to the operator — you cannot apply it**
 
 The subcommand is `apply`, not `migrate`, and it needs `MIGRATION_DATABASE_URL`,
 which is deliberately absent from the repository and from every `.env*` file:
@@ -542,7 +542,7 @@ Nothing in the automated gates depends on this having run —
 database. Only the browser checks in Tasks 5 and 6 do: until the migration is
 applied, the two new headings render as their raw keys.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/devops/db/migrations/0013_translation_form_page_labels.sql sources/devops/db/schema.sql
