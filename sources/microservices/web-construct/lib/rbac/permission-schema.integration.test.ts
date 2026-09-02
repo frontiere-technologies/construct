@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { permission, role, roleListView, rolePermission } from '@/lib/db/schema'
-import { ITEM_TYPE_CATEGORY } from './types'
 
 /** Il rename è riuscito solo se i nomi vecchi sono spariti: una vista o una
  *  funzione lasciata indietro punterebbe ancora là e fallirebbe a runtime, non qui. */
@@ -49,23 +48,21 @@ describe('rename delle tabelle RBAC', () => {
     expect(rows.length).toBe(1)
   })
 
-  /** has_permissions e' "esiste una riga qualunque", non "esiste una riga autorizzata": una
-   *  bozza precedente della migrazione aveva aggiunto `and rp.authorized`, che avrebbe cambiato
-   *  questa semantica in silenzio. Il rename da solo non deve toccarla. */
-  it('has_permissions resta vero anche quando l\'unica riga di role_permission non è autorizzata', async () => {
+  /** has_permissions e' "esiste una riga qualunque", non "esiste una riga autorizzata": dal
+   *  Task 7 role_permission non porta neppure più la colonna `authorized` (presenza della riga
+   *  = concessione, DEC-7), quindi non c'e' più un valore da far scivolare nella condizione —
+   *  ma la vista non deve comunque aggiungere un filtro che quella colonna non porta più. */
+  it('has_permissions resta vero per qualunque riga di role_permission, indipendentemente da come è nata', async () => {
     const [createdRole] = await db.insert(role)
       .values({ description: 'zzz_rbac_rename_test_role' })
       .returning({ idRole: role.idRole })
     const [createdPermission] = await db.insert(permission)
-      // kind è NOT NULL da 0015 e senza default: questa riga crea una categoria
-      // (idItemType: ITEM_TYPE_CATEGORY), quindi kind è 'CATEGORY' e code resta nullo.
-      .values({ name: 'zzz_rbac_rename_test_permission', idItemType: ITEM_TYPE_CATEGORY, kind: 'CATEGORY' })
+      .values({ name: 'zzz_rbac_rename_test_permission', kind: 'CATEGORY' })
       .returning({ idPermission: permission.idPermission })
     try {
       await db.insert(rolePermission).values({
         idRole: createdRole.idRole,
         idPermission: createdPermission.idPermission,
-        authorized: false,
       })
       const [row] = await db.select({ hasPermissions: roleListView.hasPermissions })
         .from(roleListView)
@@ -99,15 +96,11 @@ describe('identità del permesso', () => {
     expect(rows[0].violazioni).toBe(0)
   })
 
-  /* id_item_type resta NOT NULL fino al Task 7: gli insert grezzi qui sotto lo valorizzano
-   * (2 = FUNCTIONALITY, coerente con kind = 'GRANT') solo per soddisfare quel vincolo, non
-   * perché il test riguardi id_item_type — il brief lo ometteva e l'insert falliva prima
-   * ancora di arrivare al vincolo che il test vuole verificare. */
   it('rifiuta un GRANT di origine SOURCE senza code', async () => {
     await expect(
       db.execute(sql`
-        insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
-        values ('GRANT', null, 'SOURCE', 'senza codice', 0, 0, 2)
+        insert into public.permission (kind, code, origin, description, id_parent, order_position)
+        values ('GRANT', null, 'SOURCE', 'senza codice', 0, 0)
       `),
     ).rejects.toThrow()
   })
@@ -117,8 +110,8 @@ describe('identità del permesso', () => {
   it('rifiuta un GRANT di origine CONSOLE con un code', async () => {
     await expect(
       db.execute(sql`
-        insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
-        values ('GRANT', 'non-dovrebbe-esistere', 'CONSOLE', 'con codice', 0, 0, 2)
+        insert into public.permission (kind, code, origin, description, id_parent, order_position)
+        values ('GRANT', 'non-dovrebbe-esistere', 'CONSOLE', 'con codice', 0, 0)
       `),
     ).rejects.toThrow()
   })
@@ -136,8 +129,8 @@ describe('identità del permesso', () => {
     try {
       await expect(
         db.execute(sql`
-          insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
-          values ('CATEGORY', 'test-categoria-source-con-code', 'SOURCE', 'categoria con codice', 0, 0, 1)
+          insert into public.permission (kind, code, origin, description, id_parent, order_position)
+          values ('CATEGORY', 'test-categoria-source-con-code', 'SOURCE', 'categoria con codice', 0, 0)
         `),
       ).rejects.toThrow()
     } finally {
@@ -152,8 +145,8 @@ describe('identità del permesso', () => {
     // verificati solo sulla direzione CONSOLE, mai su quella per cui il code esiste
     // davvero.
     await db.execute(sql`
-      insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
-      values ('GRANT', 'test-duplicato', 'SOURCE', 'primo', 0, 0, 2)
+      insert into public.permission (kind, code, origin, description, id_parent, order_position)
+      values ('GRANT', 'test-duplicato', 'SOURCE', 'primo', 0, 0)
     `)
     // finally, non l'ultima riga: se l'assert sotto fallisse, 'test-duplicato' resterebbe
     // sul database e avvelenerebbe la riesecuzione di questo test e i task successivi della
@@ -161,8 +154,8 @@ describe('identità del permesso', () => {
     try {
       await expect(
         db.execute(sql`
-          insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
-          values ('GRANT', 'test-duplicato', 'SOURCE', 'secondo', 0, 0, 2)
+          insert into public.permission (kind, code, origin, description, id_parent, order_position)
+          values ('GRANT', 'test-duplicato', 'SOURCE', 'secondo', 0, 0)
         `),
       ).rejects.toThrow()
     } finally {
@@ -172,30 +165,14 @@ describe('identità del permesso', () => {
 })
 
 describe('travaso in menu_entry', () => {
-  it('crea una voce per ogni riga che oggi comparirebbe nel menu', async () => {
-    // Le righe sotto Operations (id -1) e quelle di tipo funzionalità PERMISSION (5)
-    // erano già invisibili: non devono generare voci. «Sotto Operations» è
-    // l'intero sottoalbero, non i soli figli diretti.
-    const rows = await db.execute(sql`
-      with recursive sotto_operations as (
-        select id_permission from public.permission where id_permission = -1
-        union all
-        select c.id_permission from public.permission c
-        join sotto_operations d on c.id_parent = d.id_permission
-      ),
-      visibili as (
-        select id_permission from public.permission
-        where id_permission not in (0, -1)
-          and id_permission not in (select id_permission from sotto_operations)
-          and coalesce(id_functionality_type, 0) <> 5
-          and config_visibility <> 1
-      )
-      select
-        (select count(*)::int from visibili) as attese,
-        (select count(*)::int from public.menu_entry) as create
-    `)
-    expect(rows[0].create).toBe(rows[0].attese)
-  })
+  // Le due prove che «ogni riga visibile secondo la vecchia forma di permission genera una
+  // voce» e «un permesso pubblico non genera id_permission valorizzato» leggevano
+  // id_functionality_type, config_visibility e no_permission_need_for_navigation da
+  // `permission` — colonne che il Task 7 toglie perché il travaso (0017/0018) è già
+  // un fatto scritto e concluso, non un contratto che si riverifica a ogni run. Non sono
+  // riscritte su menu_entry: verificherebbero solo che menu_entry non contraddice se stesso,
+  // non che il travaso sia stato corretto. Restano invece i due test sotto, che non
+  // dipendono da colonne tolte.
 
   it('non genera mai una voce con id_permission puntato a una categoria', async () => {
     // Join su id_menu_entry (riusa l'id del permesso originale, sempre valorizzato), non su
@@ -208,31 +185,6 @@ describe('travaso in menu_entry', () => {
       from public.menu_entry me
       join public.permission p on p.id_permission = me.id_menu_entry
       where p.kind = 'CATEGORY' and me.id_permission is not null
-    `)
-    expect(rows[0].sbagliate).toBe(0)
-  })
-
-  /* «Voce pubblica» (no_permission_need_for_navigation = 1) è un ramo del case when della 0017
-   * verificato per lettura del testo della migrazione, non per esecuzione: sul dataset di test
-   * nessun permesso ha no_permission_need_for_navigation = 1 (query separata, sotto), quindi
-   * questa asserzione oggi è vera a vuoto — nessuna riga candidata esiste da far fallire il
-   * controllo. Non inserisco una riga apposta per esercitarlo: il travaso è già avvenuto dentro
-   * una migrazione già applicata, un insert qui fabbricherebbe un dato che nessuna logica ha
-   * prodotto e il test verificherebbe sé stesso, non la migrazione. L'asserzione resta come
-   * postcondizione valida su qualunque dataset — diventa portante quando queste migrazioni
-   * gireranno su un database che quei permessi li ha (il database di sviluppo). */
-  it('non genera id_permission valorizzato per un permesso pubblico (nessun candidato sul dataset di test)', async () => {
-    const candidates = await db.execute(sql`
-      select count(*)::int as c from public.permission where no_permission_need_for_navigation = 1
-    `)
-    expect(candidates[0].c).toBe(0)
-
-    const rows = await db.execute(sql`
-      select count(*)::int as sbagliate
-      from public.menu_entry me
-      join public.permission p on p.id_permission = me.id_menu_entry
-      where p.kind = 'GRANT' and p.no_permission_need_for_navigation = 1
-        and me.id_permission is not null
     `)
     expect(rows[0].sbagliate).toBe(0)
   })
@@ -254,5 +206,41 @@ describe('travaso in menu_entry', () => {
     await expect(
       db.execute(sql`delete from public.permission where id_permission = ${voce.id_permission}`),
     ).rejects.toThrow()
+  })
+})
+
+describe('pulizia colonne e tabelle assorbite (Task 7)', () => {
+  it('lascia su permission le sole colonne del modello', async () => {
+    const rows = await db.execute(sql`
+      select column_name from information_schema.columns
+      where table_schema = 'public' and table_name = 'permission' order by column_name
+    `)
+    // Lista letta dalle colonne effettive del database prima di scriverla (non quella
+    // ipotizzata dal brief, che includeva date_ins/date_mod: permission non li ha mai
+    // avuti, portava created_at/updated_at, e questa migrazione toglie anche quelli).
+    expect(rows.map(r => r.column_name)).toEqual([
+      'code', 'deprecated_at', 'description', 'id_parent', 'id_permission',
+      'is_immutable', 'item_translation', 'kind', 'name', 'order_position', 'origin',
+    ])
+  })
+
+  it('toglie authorized da role_permission', async () => {
+    const rows = await db.execute(sql`
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'role_permission' and column_name = 'authorized'
+    `)
+    expect(rows.length).toBe(0)
+  })
+
+  it('elimina navigation_item_tag e navigation_item_type', async () => {
+    expect(await tableExists('navigation_item_tag')).toBe(false)
+    expect(await tableExists('navigation_item_type')).toBe(false)
+  })
+
+  it('elimina replace_item_tags insieme alla tabella che citava', async () => {
+    const rows = await db.execute(sql`
+      select 1 from pg_proc where proname = 'replace_item_tags'
+    `)
+    expect(rows.length).toBe(0)
   })
 })

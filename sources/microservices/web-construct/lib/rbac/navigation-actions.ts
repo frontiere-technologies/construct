@@ -108,8 +108,6 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
             // Un permesso creato dalla console non ha controparte in requirePermission('...').
             origin: 'CONSOLE',
             name: input.name.trim(),
-            // NOT NULL senza default finché il Task 7 non la rimuove.
-            idItemType: input.idItemType,
             description: input.description,
             itemTranslation: input.itemTranslation,
             idParent: null,

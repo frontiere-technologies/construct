@@ -21,7 +21,7 @@ async function makeServiceRole(): Promise<number> {
 async function makePermission(kind: 'CATEGORY' | 'GRANT'): Promise<number> {
   const [created] = await db
     .insert(permission)
-    .values({ name: name(), kind, idItemType: kind === 'CATEGORY' ? 1 : 2, origin: 'CONSOLE' })
+    .values({ name: name(), kind, origin: 'CONSOLE' })
     .returning({ idPermission: permission.idPermission })
   return created.idPermission
 }

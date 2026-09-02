@@ -15,7 +15,6 @@ export const ITEM_TYPE_CATEGORY = 1
 export const ITEM_TYPE_FUNCTIONALITY = 2
 export const FUNCTYPE_EMBEDDED_PAGE = 1
 export const FUNCTYPE_EXTERNAL_LINK = 2
-export const FUNCTYPE_PERMISSION = 5
 
 export interface ItemTranslation {
   name?: string
@@ -35,12 +34,6 @@ export interface PermissionRow {
   item_translation: Record<string, ItemTranslation> | null
   description: string | null
   deprecated_at: string | null
-}
-
-export interface RoleItemRow {
-  id_role: number
-  id_item: number
-  authorized: boolean
 }
 
 /** A menu_entry row (Task 3): a voice reuses its origin permission's id, but the tree it
@@ -164,9 +157,6 @@ export interface CreateNavItemInput {
   /** External links only: open the URL in a new tab. Defaults to true when omitted. */
   openInNewTab?: boolean
   idItemParent: number | null
-  /** Vestigial (Task 5): the menu root is now the absence of a parent, so createNavigationItem
-   * no longer consults this to place a null idItemParent. Removed in the Task 7 cleanup. */
-  idRootParent?: number | null
   description: string
   itemTranslation: Record<string, { name?: string; description?: string }>
   tagTranslations: Record<string, string[]>

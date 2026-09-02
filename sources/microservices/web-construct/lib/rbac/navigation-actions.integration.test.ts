@@ -89,7 +89,6 @@ describeIntegration('navigation mutations against the database', () => {
       origin: 'SOURCE',
       code,
       name,
-      idItemType: 2,
       description: '',
       itemTranslation: { EN: { name } },
       idParent: null,
