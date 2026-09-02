@@ -1,6 +1,6 @@
 import re
 from playwright.sync_api import expect
-from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows
+from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows, confirm_modal
 
 
 def test_users_list_loads(logged_in_page, base_url):
@@ -134,10 +134,7 @@ def test_status_toggle_updates_grid_in_place(logged_in_page, base_url):
         # click targets the currently-visible one — same idiom as
         # test_roles.py's _delete_role.
         page.get_by_role("button", name=expected_menu_label).click()  # menu item -> ConfirmModal
-        dialog = page.get_by_role("dialog")
-        expect(dialog).to_be_visible()
-        dialog.get_by_role("button", name=expected_menu_label).click()  # confirm
-        expect(dialog).to_have_count(0)
+        confirm_modal(page, expected_menu_label)
 
     _toggle_via_menu("Disattiva" if original_text == "Attivo" else "Attiva")
     expect(row_by_id.locator('[data-testid="status-badge"]')).to_have_text(flipped_text)

@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 from playwright.sync_api import expect
 
-from helpers import nav, l1_btn, ensure_l1_expanded, grid_rows, open_column_filter, do_test_login
+from helpers import nav, l1_btn, ensure_l1_expanded, grid_rows, open_column_filter, do_test_login, confirm_modal
 
 # Public endpoint with no frame-blocking response headers, needed because the
 # embeddability check rejects private and loopback hosts to prevent SSRF.
@@ -132,13 +132,7 @@ def _delete_functionality(page, base_url, name):
     page.get_by_text(name, exact=True).first.scroll_into_view_if_needed()
     row = page.locator("div").filter(has_text=name).filter(has=page.locator('[data-testid="nav-delete"]')).last
     row.locator('[data-testid="nav-delete"]').click()
-    # Deletion goes through this project's ConfirmModal, not a native dialog.
-    # Scoped to the dialog: the row's own delete trigger carries the same
-    # "Elimina" label and stays in the DOM behind the modal.
-    dialog = page.get_by_role("dialog")
-    expect(dialog).to_be_visible()
-    dialog.get_by_role("button", name="Elimina", exact=True).click()
-    expect(dialog).to_have_count(0)
+    confirm_modal(page, "Elimina")
     page.reload()
     page.wait_for_load_state("networkidle")
     expect(page.get_by_text(name, exact=True)).to_have_count(0)

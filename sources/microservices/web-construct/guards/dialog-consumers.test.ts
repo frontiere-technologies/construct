@@ -50,9 +50,17 @@ export function hasFullScreenBackdrop(source: string): boolean {
  * stessa, e i due file che raccontano perche' l'`alert` nativo e' stato tolto,
  * citano `alert(` nel testo: un divieto che scatta su una spiegazione invece
  * che su una chiamata insegna soltanto a non spiegare.
+ *
+ * Non e' un tokenizzatore e non finge di esserlo. La ri-revisione ha fatto
+ * notare che una `//` dentro una stringa veniva mangiata insieme al resto della
+ * riga — `xmlns="http://..."` troncava Login.tsx a meta' — e che l'effetto e'
+ * SEMPRE nascondere, mai inventare: al massimo si perde una chiamata scritta
+ * dopo un URL sulla stessa riga. Il lookbehind sui due punti copre il caso vero
+ * (gli URL); il residuo e' dichiarato qui invece di essere risolto con un
+ * parser, che per una guardia di questo peso sarebbe sproporzionato.
  */
 export function withoutComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/.*$/gm, '')
 }
 
 /**
@@ -62,11 +70,31 @@ export function withoutComments(source: string): string {
  * la trappola del focus che `AccessibleDialog` garantisce. Sostituirla non
  * bastava a impedirne il ritorno — la guardia sui consumatori di dialog
  * verifica chi *promette* un modale, e un `confirm()` nativo non promette
- * niente, quindi le passava sotto il naso. `window.confirm(...)` e' incluso di
- * proposito: e' la stessa chiamata scritta per esteso.
+ * niente, quindi le passava sotto il naso.
+ *
+ * Tre forme, non una, perche' la ri-revisione ha provato a batterla e ci e'
+ * riuscita:
+ *  - la chiamata, nuda o preceduta da `window.` / `globalThis.` / `self.`,
+ *    con o senza `?.`;
+ *  - l'accesso a parentesi quadre, `window["confirm"](...)`;
+ *  - il solo RIFERIMENTO al membro, `const ask = window.confirm`, che e' la
+ *    sorgente di ogni alias e si prende senza inseguire la variabile.
+ * Resta fuori il caso `const { confirm } = window` seguito da `confirm(...)`,
+ * che la prima forma prende comunque sulla chiamata. Una destrutturazione
+ * rinominata sfuggirebbe: e' scritto qui perche' si sappia, non perche' vada
+ * bene.
  */
 export function callsNativeDialog(source: string): boolean {
-  return /(?:^|[^.\w]|window\.)(?:alert|confirm|prompt)\s*\(/.test(withoutComments(source))
+  const clean = withoutComments(source)
+  const native = 'alert|confirm|prompt'
+  return (
+    // chiamata nuda o su window/globalThis/self
+    new RegExp(`(?:^|[^.\\w]|(?:window|globalThis|self)\\??\\.)(?:${native})\\s*\\(`).test(clean)
+    // accesso a parentesi quadre, poi chiamato
+    || new RegExp(`\\[\\s*['"](?:${native})['"]\\s*\\]\\s*\\(`).test(clean)
+    // riferimento al membro senza chiamarlo: la sorgente degli alias
+    || new RegExp(`(?:window|globalThis|self)\\??\\.\\s*(?:${native})\\b`).test(clean)
+  )
 }
 
 export function importsAccessibleDialog(source: string): boolean {
@@ -78,12 +106,12 @@ export function passesBusyState(source: string): boolean {
   return /busy=/.test(source)
 }
 
-function sourceFiles(root: string): string[] {
+function sourceFiles(root: string, extensions: string[] = ['.tsx']): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap(entry => {
     const path = join(root, entry.name)
-    if (entry.isDirectory()) return sourceFiles(path)
+    if (entry.isDirectory()) return sourceFiles(path, extensions)
     if (!entry.isFile()) return []
-    return path.endsWith('.tsx') ? [path] : []
+    return extensions.some(extension => path.endsWith(extension)) ? [path] : []
   })
 }
 
@@ -94,13 +122,38 @@ function sourceFiles(root: string): string[] {
  */
 function allComponents(): string[] {
   return SOURCE_ROOTS
-    .flatMap(sourceFiles)
+    // `flatMap(sourceFiles)` passerebbe anche l'indice, che da quando sourceFiles
+    // accetta un elenco di estensioni finirebbe la' dentro come numero.
+    .flatMap(root => sourceFiles(root))
     .map(path => relative(process.cwd(), path))
     .filter(path => !path.includes('.test.'))
     .sort()
 }
 
 const components = allComponents().map(file => ({ file, source: readFileSync(file, 'utf8') }))
+
+/**
+ * Il divieto sui dialoghi nativi guarda PIU' LARGO dei controlli sui modali.
+ *
+ * Quelli si limitano a `app/` e `components/` in `.tsx` a ragione: un modale
+ * scritto a mano vive nel JSX. Un `confirm()` no — sta bene in un `.ts` di
+ * supporto lato client (`components/grid/grid-reset.ts`,
+ * `components/rbac/users/users-datasource.ts`) o in un modulo di `lib/`, e la
+ * ri-revisione ha fatto notare che quei file passavano indenni proprio davanti
+ * alla guardia scritta per impedire un ritorno. Una guardia che copre solo dove
+ * il difetto e' stato la volta scorsa non e' una guardia, e' un ricordo.
+ */
+const NATIVE_DIALOG_ROOTS = ['app', 'components', 'context', 'lib']
+
+function everyModule(): string[] {
+  return NATIVE_DIALOG_ROOTS
+    .flatMap(root => sourceFiles(root, ['.ts', '.tsx']))
+    .map(path => relative(process.cwd(), path))
+    .filter(path => !path.includes('.test.'))
+    .sort()
+}
+
+const modules = everyModule().map(file => ({ file, source: readFileSync(file, 'utf8') }))
 const consumers = components.filter(({ file, source }) => file !== DIALOG_COMPONENT && importsAccessibleDialog(source))
 
 describe('claimsToBeAModal', () => {
@@ -179,6 +232,23 @@ describe('callsNativeDialog', () => {
     expect(callsNativeDialog('window.alert("x")')).toBe(true)
   })
 
+  it('catches the forms the re-review used to defeat it', () => {
+    expect(callsNativeDialog('globalThis.confirm(message)')).toBe(true)
+    expect(callsNativeDialog('self.alert("x")')).toBe(true)
+    expect(callsNativeDialog('window?.confirm(message)')).toBe(true)
+    expect(callsNativeDialog('window["confirm"](message)')).toBe(true)
+    expect(callsNativeDialog("window['prompt']('who?')")).toBe(true)
+    // L'alias si prende alla SORGENTE: il riferimento al membro, non la chiamata.
+    expect(callsNativeDialog('const ask = window.confirm')).toBe(true)
+    expect(callsNativeDialog('const { confirm } = window; if (confirm(x)) go()')).toBe(true)
+  })
+
+  it('does not lose a call written after a URL on the same line', () => {
+    // La sottrazione dei commenti mangiava dalla prima `//` a fine riga, URL
+    // compresi: `xmlns="http://..."` troncava il resto e con esso una chiamata.
+    expect(callsNativeDialog('const u = "http://x/y"; alert(u)')).toBe(true)
+  })
+
   it('does not fire on a comment that merely mentions one', () => {
     expect(callsNativeDialog('// prima era alert() nativo')).toBe(false)
     expect(callsNativeDialog('/* sostituisce confirm() con ConfirmModal */')).toBe(false)
@@ -192,8 +262,16 @@ describe('callsNativeDialog', () => {
 })
 
 describe('nobody reaches for a native browser dialog', () => {
-  it('has no component calling confirm, alert or prompt', () => {
-    const offenders = components
+  it('sweeps every module, not just the .tsx of two roots', () => {
+    // Stessa ragione della riga gemella sui consumatori di dialog: se la
+    // camminata si rompesse, il controllo sotto riuscirebbe sull'insieme vuoto.
+    expect(modules.length).toBeGreaterThan(components.length)
+    expect(modules.some(({ file }) => file.startsWith('lib/'))).toBe(true)
+    expect(modules.some(({ file }) => file.endsWith('.ts'))).toBe(true)
+  })
+
+  it('has no module calling confirm, alert or prompt', () => {
+    const offenders = modules
       .filter(({ source }) => callsNativeDialog(source))
       .map(({ file }) => file)
 

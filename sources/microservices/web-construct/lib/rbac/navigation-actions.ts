@@ -110,7 +110,16 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   // dipendere da quale modulo la chiama. Un vincolo sul database sarebbe sbagliato — la
   // specifica §3.2 elenca «voce con id_permission nullo» fra i casi legittimi del modello
   // — quindi il posto giusto è qui, dove si conosce l'intenzione.
-  if (isCategory !== (input.idFunctionalityType === null)) {
+  //
+  // `== null` e non `=== null`, ed e' l'unico posto di questo file dove l'uguaglianza larga
+  // e' quella giusta: qui «assente» e «nullo» devono dire la stessa cosa. Con il confronto
+  // stretto una funzionalita' col campo OMESSO passava l'invariante, il permesso nasceva, e
+  // Drizzle scriveva `default` sulla colonna — che non ha default, quindi NULL: un permesso
+  // che governa un contenitore, il verso che questo commento dichiarava di rifiutare. E una
+  // categoria legittima col campo omesso veniva rifiutata a torto. Trovato dalla
+  // ri-revisione con una tabella di verita' sulle forme dell'input, non da un test: i due
+  // test che ora lo coprono sono nati dopo la diagnosi.
+  if (isCategory !== (input.idFunctionalityType == null)) {
     throw new Error(
       'Inconsistent item type: a category must have no functionality type, and a functionality must have one.',
     )

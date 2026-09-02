@@ -38,6 +38,19 @@ const functionalityInput = (name: string, tag = 'safe'): CreateNavItemInput => (
   tagTranslations: { EN: [tag] },
 })
 
+/**
+ * L'input col campo `idFunctionalityType` davvero ASSENTE, non messo a undefined: una
+ * server action e' un endpoint HTTP e un payload puo' semplicemente non portarlo. Il tipo
+ * lo dichiara obbligatorio, quindi la cancellazione passa da un cast — e il cast e' il
+ * punto del test: verifica cosa fa il server con una forma che il tipo non ammette ma la
+ * rete si.
+ */
+function omitFunctionalityType(input: CreateNavItemInput): CreateNavItemInput {
+  const copy: Record<string, unknown> = { ...input }
+  delete copy.idFunctionalityType
+  return copy as unknown as CreateNavItemInput
+}
+
 describeIntegration('navigation mutations against the database', () => {
   afterEach(async () => {
     // menu_entry -> permission è on delete restrict: la voce se ne va prima del permesso.
@@ -153,7 +166,7 @@ describeIntegration('navigation mutations against the database', () => {
     const name = `${PREFIX}${sequence++}`
     const { id } = await createNavigationItem(categoryInput(name))
 
-    await expect(updateNavigationItem(id, functionalityInput(name))).rejects.toThrow()
+    await expect(updateNavigationItem(id, functionalityInput(name))).rejects.toThrow(/Cannot change item type/)
 
     const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
     expect(row.idFunctionalityType).toBeNull()
@@ -167,7 +180,7 @@ describeIntegration('navigation mutations against the database', () => {
     expect(before.idFunctionalityType).not.toBeNull()
     expect(before.idPermission).not.toBeNull()
 
-    await expect(updateNavigationItem(id, categoryInput(name))).rejects.toThrow()
+    await expect(updateNavigationItem(id, categoryInput(name))).rejects.toThrow(/Cannot change item type/)
 
     const [after] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
     expect(after.idFunctionalityType).toBe(before.idFunctionalityType)
@@ -184,7 +197,7 @@ describeIntegration('navigation mutations against the database', () => {
 
     await expect(
       createNavigationItem({ ...categoryInput(name), idFunctionalityType: 3 }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(/Inconsistent item type/)
 
     // La coppia incoerente sarebbe stata la voce pubblica e ingovernabile: nessuna delle
     // due righe deve esistere, nemmeno il permesso da solo.
@@ -197,10 +210,40 @@ describeIntegration('navigation mutations against the database', () => {
 
     await expect(
       createNavigationItem({ ...functionalityInput(name), idFunctionalityType: null }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(/Inconsistent item type/)
 
     expect(await db.select().from(menuEntry).where(eq(menuEntry.name, name))).toHaveLength(0)
     expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
+  })
+
+  // La ri-revisione ha smontato l'invariante con una tabella di verita' e ha trovato la
+  // falla: `=== null` non copre il campo OMESSO. Su una funzionalita' senza
+  // idFunctionalityType l'invariante passava, il permesso nasceva, e Drizzle scriveva
+  // `default` sulla colonna — che non ha default, quindi NULL. Risultato: un permesso che
+  // governa un CONTENITORE, il verso che il commento dell'invariante dichiarava di
+  // rifiutare e che DEC-13 dice non debba esistere. Il verso simmetrico era l'immagine
+  // speculare: una categoria legittima col campo omesso veniva rifiutata a torto.
+  it('rifiuta una funzionalità con il tipo OMESSO, non solo esplicitamente nullo', async () => {
+    const name = `${PREFIX}${sequence++}`
+    const senzaTipo = omitFunctionalityType(functionalityInput(name))
+
+    await expect(
+      createNavigationItem(senzaTipo),
+    ).rejects.toThrow(/Inconsistent item type/)
+
+    expect(await db.select().from(menuEntry).where(eq(menuEntry.name, name))).toHaveLength(0)
+    expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
+  })
+
+  it('accetta una categoria con il tipo OMESSO: assenza e nullo dicono la stessa cosa', async () => {
+    const name = `${PREFIX}${sequence++}`
+    const senzaTipo = omitFunctionalityType(categoryInput(name))
+
+    const { id } = await createNavigationItem(senzaTipo)
+
+    const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    expect(row.idFunctionalityType).toBeNull()
+    expect(row.idPermission).toBeNull()
   })
 
   it('rolls back field and parent changes when an update tag write fails', async () => {

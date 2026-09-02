@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from playwright.sync_api import expect
-from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows
+from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows, confirm_modal
 
 
 def _search(page, base_url, name):
@@ -29,10 +29,12 @@ def _create_role(page, base_url, name):
 def _delete_role(page, base_url, name):
     """Delete a role via the column filter + row menu + confirm modal, then assert it's gone.
 
-    Deletion is confirmed via a custom ConfirmModal (not a native browser dialog),
-    whose confirm button is also labelled "Elimina" — the two never coexist in the
-    DOM (the row menu closes as the modal opens), so re-querying by role/name after
-    each click unambiguously targets the currently-visible one.
+    Deletion is confirmed via a custom ConfirmModal (not a native browser dialog).
+    This used to re-query "Elimina" by role/name twice, which worked here because
+    the row menu closes as the modal opens so the two never coexist. It now goes
+    through helpers.confirm_modal, which scopes the query to the dialog: the same
+    idiom is needed on the functionalities tree, where the row's delete trigger
+    carries the same label AND stays in the DOM behind the modal.
     """
     _search(page, base_url, name)
     row = _rows(page).filter(has_text=name)
@@ -40,7 +42,7 @@ def _delete_role(page, base_url, name):
     row_menu = row.locator('[data-testid^="row-menu"]')
     row_menu.click()
     page.get_by_role("button", name="Elimina").click()  # row-menu item -> opens ConfirmModal
-    page.get_by_role("button", name="Elimina").click()  # ConfirmModal's confirm button
+    confirm_modal(page, "Elimina")
     _search(page, base_url, name)
     expect(_rows(page).filter(has_text=name)).to_have_count(0)
 

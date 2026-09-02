@@ -209,23 +209,28 @@ describe('identità del permesso', () => {
     // finally, altrimenti il vincolo nuovo (e permission_code_unique) resterebbero
     // verificati solo sulla direzione CONSOLE, mai su quella per cui il code esiste
     // davvero.
-    await db.execute(sql`
-      insert into public.permission (kind, code, origin, description, id_parent, order_position)
-      values ('GRANT', 'test-duplicato', 'SOURCE', 'primo', 0, 0)
-    `)
-    // finally, non l'ultima riga: se l'assert sotto fallisse, 'test-duplicato' resterebbe
-    // sul database e avvelenerebbe la riesecuzione di questo test e i task successivi della
-    // stessa fase, che condividono la stessa suite di integrazione.
+    // Il code si DERIVA, non e' una costante, e il primo insert sta DENTRO il try. Erano
+    // due difetti dello stesso tipo di quello che ha bloccato la suite i18n il 2026-09-02:
+    // permission.code e' unico (permission_code_unique, parziale su code not null), quindi
+    // una riga sopravvissuta a un'interruzione dura si prendeva 'test-duplicato' e questo
+    // test non poteva PIU' girare — e la pulizia non c'era nemmeno, perche' il primo
+    // insert cadeva fuori dal try. Randomizzare basta a rendere la riesecuzione possibile;
+    // il try la rende pulita.
+    const code = `test-dup-${unique()}`
     try {
+      await db.execute(sql`
+        insert into public.permission (kind, code, origin, description, id_parent, order_position)
+        values ('GRANT', ${code}, 'SOURCE', 'primo', 0, 0)
+      `)
       await expectRejectedByConstraint(
         () => db.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
-          values ('GRANT', 'test-duplicato', 'SOURCE', 'secondo', 0, 0)
+          values ('GRANT', ${code}, 'SOURCE', 'secondo', 0, 0)
         `),
         'permission_code_unique',
       )
     } finally {
-      await db.execute(sql`delete from public.permission where code = 'test-duplicato'`)
+      await db.execute(sql`delete from public.permission where code = ${code}`)
     }
   })
 })
