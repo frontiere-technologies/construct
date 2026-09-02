@@ -1,9 +1,9 @@
 'use server'
 
-import { eq, sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
-import { role, roleType } from '@/lib/db/schema'
+import { permission, role, roleType } from '@/lib/db/schema'
 import type { PermissionDelta, RoleType as RoleTypeStr } from './types'
 
 const ROLE_TYPE_SERVICE = 2
@@ -53,6 +53,34 @@ export async function renameRole(roleId: number, roleName: string): Promise<void
 export async function updateRolePermissions(roleId: number, deltas: PermissionDelta[]): Promise<void> {
   await requireAdmin()
   if ((await getRoleType(roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
+
+  // Spec 3.3 / HOLE-5: la concessione sta sulle foglie, una categoria non riceve mai una riga in
+  // role_permission. Quell'invariante viveva solo in buildAuthMap/applyToggle
+  // (lib/rbac/permission-tree.ts) — due funzioni pure lato client, senza alcun presidio server o
+  // database: è esattamente la classe di errore che ha prodotto HOLE-5 (una regola affidata alla
+  // buona educazione del chiamante, che regge finché tutti i chiamanti sono quelli che conosci).
+  // La migrazione 0020 ha ripulito il residuo già scritto; qui si chiude il varco che lo scrive.
+  //
+  // Politica severa, non tollerante: un delta verso una categoria rifiuta l'INTERA chiamata,
+  // non viene scartato in silenzio. Scartarlo in silenzio renderebbe l'interfaccia difficile da
+  // usare male oggi, ma nasconderebbe di nuovo un chiamante difettoso di domani — lo stesso
+  // silenzio che in applyToggle ha prodotto HOLE-5, spostato di un livello. Un chiamante che
+  // genera un delta simile ha un difetto da far emergere subito, non da assorbire.
+  if (deltas.length) {
+    let targeted: { idPermission: number; kind: string }[]
+    try {
+      targeted = await db
+        .select({ idPermission: permission.idPermission, kind: permission.kind })
+        .from(permission)
+        .where(inArray(permission.idPermission, deltas.map(d => d.idItem)))
+    } catch (err) {
+      throw new Error(`Failed to update permissions: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    const categoryIds = targeted.filter(p => p.kind === 'CATEGORY').map(p => p.idPermission)
+    if (categoryIds.length) {
+      throw new Error(`Cannot grant or revoke category permission(s): ${categoryIds.join(', ')}`)
+    }
+  }
 
   const grantIds = deltas.filter(d => d.authorization).map(d => d.idItem)
   const revokeIds = deltas.filter(d => !d.authorization).map(d => d.idItem)
