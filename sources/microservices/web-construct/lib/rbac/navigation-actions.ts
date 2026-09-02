@@ -159,7 +159,28 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
 
       const items = await loadMenuItems(tx)
       const current = items.find(i => i.id_menu_entry === id)
-      if (current && current.id_parent !== input.idItemParent) {
+      if (!current) throw new Error(`Menu entry ${id} not found`)
+
+      // Una voce è una categoria quando non ha un tipo di funzionalità (deduzione dai
+      // dati, non dall'input): cambiarla in funzionalità o viceversa non è
+      // un'operazione che questa funzione sa fare in sicurezza. Una categoria diventata
+      // funzionalità porterebbe un id_functionality_type senza mai guadagnare un
+      // id_permission (perché qui sotto il permesso si aggiorna solo se
+      // entry.idPermission non è già nullo) — e id_permission nullo, in
+      // sidebar-adapter.ts, significa voce pubblica: visibile a chiunque sia
+      // autenticato, senza controllo e senza comparire in Ruoli & Permessi da nessuna
+      // parte. Rifiutare l'intera chiamata, non scartare in silenzio il campo: è la
+      // stessa politica di updateRolePermissions (roles-actions.ts) e per lo stesso
+      // motivo — il silenzio nasconderebbe un chiamante difettoso.
+      const wasCategory = current.id_functionality_type === null
+      const willBeCategory = input.idFunctionalityType === null
+      if (wasCategory !== willBeCategory) {
+        throw new Error(
+          'Cannot change item type between category and functionality: delete this item and create a new one of the desired type instead.',
+        )
+      }
+
+      if (current.id_parent !== input.idItemParent) {
         const siblings = items.filter(i => i.id_parent === input.idItemParent && i.id_menu_entry !== id).length
         await reparent(tx, items, id, input.idItemParent, siblings)
       }

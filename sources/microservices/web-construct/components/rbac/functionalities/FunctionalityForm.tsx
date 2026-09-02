@@ -45,6 +45,13 @@ export default function FunctionalityForm(
   const [error, setError] = useState<string | null>(null)
   const set = <K extends keyof Initial>(k: K, v: Initial[K]) => setF(prev => ({ ...prev, [k]: v }))
 
+  // Il server (updateNavigationItem) rifiuta un cambio di tipologia categoria <-> funzionalità:
+  // un id_functionality_type senza id_permission diventerebbe una voce pubblica e ingovernabile
+  // (vedi il commento in navigation-actions.ts). La tendina si blocca qui per lo stesso motivo,
+  // non solo perché il server la rifiuterebbe: un campo che accetta una scelta e poi la rifiuta
+  // al salvataggio è peggio di uno che non l'accetta affatto.
+  const typeLocked = mode === 'edit'
+
   // null while no tipologia has been picked yet — the dropdown then shows its placeholder
   // instead of a type the item doesn't actually have, and the Link field stays hidden.
   const selectedType = resolveItemType(f.idItemType, f.idFunctionalityType)
@@ -140,6 +147,8 @@ export default function FunctionalityForm(
               }}
               options={ITEM_TYPES.map(opt => ({ value: opt.key, label: itemTypeLabels[opt.key] ?? opt.label }))}
               placeholder={t('functionalities.form.type_placeholder')}
+              disabled={typeLocked}
+              title={typeLocked ? t('functionalities.form.type_locked_edit_hint') : undefined}
             />
             {isFunc && (
               <Input value={f.functionalityLink} onChange={e => set('functionalityLink', e.target.value)} placeholder={t('functionalities.form.link_placeholder')}

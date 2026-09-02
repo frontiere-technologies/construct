@@ -149,6 +149,31 @@ describeIntegration('navigation mutations against the database', () => {
     expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
   })
 
+  it('rifiuta la conversione di una categoria in funzionalità: id_functionality_type e id_permission restano nulli', async () => {
+    const name = `${PREFIX}${sequence++}`
+    const { id } = await createNavigationItem(categoryInput(name))
+
+    await expect(updateNavigationItem(id, functionalityInput(name))).rejects.toThrow()
+
+    const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    expect(row.idFunctionalityType).toBeNull()
+    expect(row.idPermission).toBeNull()
+  })
+
+  it('rifiuta la conversione di una funzionalità in categoria: id_functionality_type e id_permission restano quelli di prima', async () => {
+    const name = `${PREFIX}${sequence++}`
+    const { id } = await createNavigationItem(functionalityInput(name))
+    const [before] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    expect(before.idFunctionalityType).not.toBeNull()
+    expect(before.idPermission).not.toBeNull()
+
+    await expect(updateNavigationItem(id, categoryInput(name))).rejects.toThrow()
+
+    const [after] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    expect(after.idFunctionalityType).toBe(before.idFunctionalityType)
+    expect(after.idPermission).toBe(before.idPermission)
+  })
+
   it('rolls back field and parent changes when an update tag write fails', async () => {
     const original = `${PREFIX}${sequence++}`
     const { id } = await createNavigationItem(functionalityInput(original))
