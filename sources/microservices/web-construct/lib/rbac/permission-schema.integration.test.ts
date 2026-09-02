@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { permission, role, roleListView, rolePermission } from '@/lib/db/schema'
+import { appLanguage, permission, role, roleListView, rolePermission, translationKey, translationValue, users } from '@/lib/db/schema'
+import { unique } from '@/lib/i18n/test-support/db-fixtures'
 
 /** Il rename è riuscito solo se i nomi vecchi sono spariti: una vista o una
  *  funzione lasciata indietro punterebbe ancora là e fallirebbe a runtime, non qui. */
@@ -265,6 +266,114 @@ describe('trigger permission_updated_at (Task 9)', () => {
       ).resolves.not.toThrow()
     } finally {
       await db.delete(permission).where(eq(permission.idPermission, created.idPermission))
+    }
+  })
+})
+
+/* Task 9, giro 2 di revisione: il test sopra protegge solo permission, ma set_updated_at() è
+ * condivisa da altre quattro tabelle (app_language, translation_key, translation_value, users) —
+ * esposte allo stesso identico rischio se una futura migrazione toglie updated_at da una di loro
+ * senza toccare il trigger. La lista delle tabelle da esercitare qui sotto non è scritta a mano:
+ * è letta dal catalogo di Postgres ad ogni run, cosi' come l'elenco scritto a mano di colonne da
+ * controllare non ha fermato la 0021 dal lasciare permission_updated_at orfano, un secondo elenco
+ * scritto a mano qui invecchierebbe allo stesso modo. Se il catalogo restituisce una tabella per
+ * cui `exerciseByTable` non ha ancora una prova, il test sotto fallisce rumorosamente invece di
+ * saltarla in silenzio — permission non compare più nella lista attesa proprio perché questa
+ * migrazione le ha tolto il trigger: sparire da qui è il segno che il difetto è chiuso, non un
+ * buco di copertura. */
+describe('trigger set_updated_at, su ogni tabella che lo esegue (Task 9, giro 2)', () => {
+  async function tablesWithSetUpdatedAtTrigger(): Promise<string[]> {
+    const rows = await db.execute(sql`
+      select distinct c.relname as table_name
+      from pg_trigger t
+      join pg_class c on c.oid = t.tgrelid
+      join pg_proc p on p.oid = t.tgfoid
+      join pg_namespace n on n.oid = c.relnamespace
+      where not t.tgisinternal and n.nspname = 'public' and p.proname = 'set_updated_at'
+      order by 1
+    `)
+    return rows.map(row => row.table_name as string)
+  }
+
+  // Una riga di prova propria per ciascuna tabella, con la propria pulizia in un finally — mai
+  // una riga esistente da toccare e poi ripristinare: per queste quattro tabelle inserire una
+  // riga propria è sempre praticabile, quindi non serve la via di ripiego.
+  const exerciseByTable: Record<string, () => Promise<void>> = {
+    async users() {
+      const [created] = await db.insert(users)
+        .values({ email: `zzz_rbac_trigger_test_${unique()}@example.com` })
+        .returning({ id: users.id })
+      try {
+        await expect(
+          db.update(users).set({ name: 'aggiornato dal test' }).where(eq(users.id, created.id)),
+        ).resolves.not.toThrow()
+      } finally {
+        await db.delete(users).where(eq(users.id, created.id))
+      }
+    },
+    async app_language() {
+      // code e locale sono sotto vincoli check (solo lettere, e 'xx-XX'): la stessa piega
+      // usata in language-actions.integration.test.ts per restare dentro al formato pur
+      // restando collision-free.
+      const code = unique().slice(-3).replace(/[0-9]/g, digit => String.fromCharCode(97 + Number(digit)))
+      const [created] = await db.insert(appLanguage)
+        .values({
+          code, locale: 'zz-ZZ', isDefault: false,
+          name: `zzz_rbac_trigger_test_${code}`, nativeName: `zzz_rbac_trigger_test_${code}`,
+        })
+        .returning({ idLanguage: appLanguage.idLanguage })
+      try {
+        await expect(
+          db.update(appLanguage).set({ name: 'aggiornata dal test' }).where(eq(appLanguage.idLanguage, created.idLanguage)),
+        ).resolves.not.toThrow()
+      } finally {
+        await db.delete(appLanguage).where(eq(appLanguage.idLanguage, created.idLanguage))
+      }
+    },
+    async translation_key() {
+      const [created] = await db.insert(translationKey)
+        .values({ key: `zzz_rbac_trigger_test_${unique()}.label`, namespace: 'zzz_rbac_trigger_test' })
+        .returning({ idTranslationKey: translationKey.idTranslationKey })
+      try {
+        await expect(
+          db.update(translationKey).set({ description: 'aggiornata dal test' })
+            .where(eq(translationKey.idTranslationKey, created.idTranslationKey)),
+        ).resolves.not.toThrow()
+      } finally {
+        await db.delete(translationKey).where(eq(translationKey.idTranslationKey, created.idTranslationKey))
+      }
+    },
+    async translation_value() {
+      // id_translation_key non è nullable: serve una riga propria di translation_key da
+      // referenziare. id_language invece è solo letto da una lingua che già esiste (mai
+      // scritto, mai modificato) — non serve una lingua di prova propria per questa riga.
+      const [key] = await db.insert(translationKey)
+        .values({ key: `zzz_rbac_trigger_test_${unique()}.label`, namespace: 'zzz_rbac_trigger_test' })
+        .returning({ idTranslationKey: translationKey.idTranslationKey })
+      try {
+        const [language] = await db.select({ idLanguage: appLanguage.idLanguage }).from(appLanguage).limit(1)
+        const [created] = await db.insert(translationValue)
+          .values({ idTranslationKey: key.idTranslationKey, idLanguage: language.idLanguage, value: 'valore di prova' })
+          .returning({ idTranslationValue: translationValue.idTranslationValue })
+        await expect(
+          db.update(translationValue).set({ value: 'valore aggiornato dal test' })
+            .where(eq(translationValue.idTranslationValue, created.idTranslationValue)),
+        ).resolves.not.toThrow()
+        // Niente delete qui: il delete della chiave subito sotto (finally esterno) cancella
+        // anche questa riga per ON DELETE CASCADE (translation_value → translation_key).
+      } finally {
+        await db.delete(translationKey).where(eq(translationKey.idTranslationKey, key.idTranslationKey))
+      }
+    },
+  }
+
+  it('copre ogni tabella che il catalogo restituisce, senza lasciarne scoperta nessuna', async () => {
+    const tables = await tablesWithSetUpdatedAtTrigger()
+    expect(tables.length).toBeGreaterThan(0)
+    const uncovered = tables.filter(table => !(table in exerciseByTable))
+    expect(uncovered).toEqual([])
+    for (const table of tables) {
+      await exerciseByTable[table]()
     }
   })
 })
