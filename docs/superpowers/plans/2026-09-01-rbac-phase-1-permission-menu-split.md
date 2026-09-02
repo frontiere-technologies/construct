@@ -1499,6 +1499,6 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ## Cosa questa fase deliberatamente non fa
 
 - **Non introduce `requirePermission`.** `requireAdmin()` resta esattamente dov'è, e continua a controllare il possesso del ruolo 1. I sette punti che si fidano del token restano tali fino alla Fase 2.
-- **Non crea nessun permesso del catalogo.** I 15 codici di §4.2 della specifica arrivano con la sincronizzazione, in Fase 2. Qui i permessi esistenti si limitano a ricevere un `code` generato dal nome.
+- **Non crea nessun permesso del catalogo.** I 15 codici di §4.2 della specifica arrivano con la sincronizzazione, in Fase 2. Qui i permessi esistenti ricevono un `code` generato dal nome, che la migrazione `0019` azzera subito dopo: per DEC-14 il codice appartiene solo ai permessi dichiarati dal sorgente.
 - **Non cambia l'interfaccia.** `/functionalities` resta dov'è e come si chiama; la pagina Ruoli & Permessi perde il secondo albero perché non ha più niente da mostrarci, ma non cambia forma.
 - **Non tocca il token.** `roleIds` e `isAdmin` continuano a viaggiarci dentro fino alla Fase 2.

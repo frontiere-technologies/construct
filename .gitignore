@@ -61,3 +61,7 @@ tmp/
 
 # Kubernetes secrets (valori reali — mai committare)
 sources/devops/k8s/*/secret.env
+
+# Dump di database creati come backup prima delle migrazioni: contengono utenti,
+# email, hash delle password e token. Non devono mai entrare nella storia di git.
+*.dump

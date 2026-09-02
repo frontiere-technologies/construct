@@ -68,8 +68,9 @@ conseguenze osservabili nel codice:
 - [x] ✅ ID=DEC-9, Title=Sincronizzazione via migrazione generata — il catalogo vive in `lib/rbac/permission-catalog.ts` e un comando genera la migrazione ordinata in `sources/devops/db/migrations/`. Niente sincronizzazione all'avvio: su più istanze è una corsa fra processi e in ambiente serverless non ha un momento affidabile in cui girare.
 - [x] ✅ ID=DEC-10, Title=Il «sempre» è meccanizzato, non strutturale — in Next.js nessun punto di intercettazione copre le azioni server. Una guardia AST in `guards/` impone la chiamata a `requirePermission` o un'esenzione dichiarata.
 - [x] ✅ ID=DEC-11, Title=Nessuna cache fra richieste — solo deduplica dentro la richiesta con `cache()` di React. Una cache a scadenza romperebbe la revoca immediata promessa da DEC-4, per risparmiare una interrogazione indicizzata che l'applicazione già paga oggi in `requireAdmin`. Si riconsidera su misura, non su sospetto.
+- [x] ✅ ID=DEC-15, Title=Un permesso creato dalla console nasce alla radice dell'albero — seconda deviazione dichiarata dal criterio «non cambia niente», emersa nella revisione finale del 2026-09-02. Prima, una funzionalità creata sotto «Link utili» compariva in Ruoli & Permessi *dentro* «Link utili». Ora `createNavigationItem` scrive `id_parent = null` e il permesso compare come nodo di primo livello. È quasi obbligato da DEC-2: una categoria di **menu** non porta un permesso, quindi non esiste un nodo padre dell'albero dei **permessi** a cui agganciare il nuovo. Conseguenza da tenere presente: **fino alla Fase 3 non esiste alcun modo di spostare un permesso nell'albero** — l'editor `/permissions` arriva là. Fino ad allora la radice si riempie e nessuno può fare ordine.
 - [x] ✅ ID=DEC-14, Title=Il `code` appartiene solo ai permessi che il sorgente dichiara — correzione del 2026-09-02, sollevata dal proprietario del progetto guardando i codici nati dai dati reali. `origin = 'SOURCE'` porta un `code` obbligatorio, `origin = 'CONSOLE'` lo lascia **nullo**. Motivo: il `code` è il patto con `requirePermission('...')` nel sorgente, e un permesso creato dalla console non ha controparte nel sorgente — quel patto sarebbe con nessuno. La voce di menu si collega al proprio permesso per **identificativo**, mai per codice, quindi niente lo richiede. La prova che la versione precedente era sbagliata sta nel sorgente: gli unici due punti che leggevano `permission.code` erano dentro `reserveUniqueCode`, che li consultava solo per rendere unici i codici che stava generando — un anello chiuso, senza consumatori. Ne discende che DEC-3 (codice piatto, opaco, immutabile) vale **solo** per i codici del catalogo.
-- [x] ✅ ID=DEC-13, Title=Una categoria vuota non si mostra più — conseguenza voluta di DEC-7 e DEC-2, decisa il 2026-09-02 con il caso concreto sotto gli occhi. Nel modello vecchio una categoria presente fra le concessioni compariva nella barra laterale **anche senza discendenti visibili**, perché categoria e permesso erano la stessa riga. Nel modello nuovo un contenitore di menu non porta mai un permesso proprio — il travaso azzera `id_permission` su ogni riga di tipo categoria — quindi si mostra solo se contiene qualcosa di visibile. Sul database di sviluppo questo fa sparire la categoria «Home», concessa a due ruoli e priva di discendenti concessi. È il vestigio che la ristrutturazione elimina, non una regressione da riparare: la Fase 1 accetta qui una deviazione dichiarata dal proprio criterio «non cambia niente», ed è l'unica.
+- [x] ✅ ID=DEC-13, Title=Una categoria vuota non si mostra più — conseguenza voluta di DEC-7 e DEC-2, decisa il 2026-09-02 con il caso concreto sotto gli occhi. Nel modello vecchio una categoria presente fra le concessioni compariva nella barra laterale **anche senza discendenti visibili**, perché categoria e permesso erano la stessa riga. Nel modello nuovo un contenitore di menu non porta mai un permesso proprio — il travaso azzera `id_permission` su ogni riga di tipo categoria — quindi si mostra solo se contiene qualcosa di visibile. Sul database di sviluppo questo fa sparire la categoria «Home», concessa a due ruoli e priva di discendenti concessi. È il vestigio che la ristrutturazione elimina, non una regressione da riparare: la Fase 1 accetta qui una deviazione dichiarata dal proprio criterio «non cambia niente». Ne esiste una seconda, DEC-15.
 - [x] ✅ ID=DEC-12, Title=Profilo e tema restano servizi personali — `saveProfile` e `saveThemeConfig` scrivono sulla riga dell'utente collegato. Nessun permesso: l'unico controllo sensato è «sei autenticato e stai modificando te stesso».
 
 ## 3. Modello dati
@@ -99,8 +100,11 @@ check ((origin = 'SOURCE' and kind = 'GRANT') = (code is not null))
 ```
 
 Le righe `origin = 'SOURCE'` hanno `code` immutabile e non sono cancellabili dalla console. Il
-divieto è verificato sia nell'azione server sia da un trigger, perché è un'invariante del dato e non
-solo dell'interfaccia.
+divieto è oggi verificato **nella sola azione server** (`deleteNavigationItem`), con il proprio test.
+Un presidio sul database — un trigger, dato che un `check` non può leggere un'altra tabella — resta
+desiderabile ma **non è programmato in nessun task**: oggi è inerte, perché righe `SOURCE` non ne
+esistono ancora, e va programmato in Fase 2 insieme alla sincronizzazione del catalogo, che è ciò
+che le farà nascere. Segnalato nella revisione finale del 2026-09-02.
 
 ### 3.2 `menu_entry` (nuova)
 
@@ -309,6 +313,32 @@ esterna delle concessioni non si muove, perché la tabella che le riceve è la s
 
 Il ramo `Operations` (id −1) e la radice (id 0) restano come categorie dell'albero dei permessi:
 smettono di essere espedienti di rendering e diventano nodi normali.
+
+### 8.1 Prima di applicare a un database nuovo — verifica obbligatoria
+
+La revisione finale del 2026-09-02 ha accertato che la migrazione `0018`, scritta per riparare il
+caso «nodo nascosto con figli visibili», **non può ripararlo**: sono due migrazioni distinte, quindi
+due transazioni distinte, e la `0017` si annulla al `COMMIT` per violazione della chiave esterna
+differita prima che la `0018` giri. Se la `0017` passa, vuol dire che quel caso non c'era.
+
+Le migrazioni applicate sono immutabili, quindi la `0017` non si corregge. La conseguenza operativa
+è che **su ogni database che riceverà questa serie — produzione compresa — la verifica va fatta
+prima, in sola lettura**:
+
+```sql
+select p.id_item, p.name, count(c.id_item) as figli_visibili
+from public.navigation_item p
+join public.navigation_item c on c.id_item_parent = p.id_item
+where p.id_item not in (0, -1)
+  and (p.config_visibility = 1 or p.id_functionality_type = 5)
+  and c.config_visibility <> 1
+  and coalesce(c.id_functionality_type, 0) <> 5
+group by p.id_item, p.name;
+```
+
+Nessuna riga → si applica. Anche una sola riga → **non applicare**: la `0017` fallirebbe, la
+sequenza resterebbe a metà, e la riparazione va progettata prima. Sul database di sviluppo la query
+è tornata vuota e la serie è passata; non è una garanzia per gli altri.
 
 ## 9. Verifiche
 
