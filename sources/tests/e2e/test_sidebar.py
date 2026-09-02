@@ -24,11 +24,15 @@ def test_l1_expands(logged_in_page):
 
 
 def test_l1_shows_menu_labels(logged_in_page):
+    # DEC-13 (2026-09-01 RBAC permission/menu split): a menu category with no
+    # granted descendants no longer renders. "Home" is an empty container on
+    # this fixture (no child menu entries at all), so it must NOT appear here
+    # -- this replaces a pre-Phase-1 assertion that expected it to be visible.
     page = logged_in_page
     l1 = page.locator("aside").first
     ensure_l1_expanded(page, l1)
-    assert l1_btn(l1, "Home").is_visible()
     assert l1_btn(l1, "Admin").is_visible()
+    assert l1_btn(l1, "Home").count() == 0
 
 
 def test_sidebar_persists_after_navigation(logged_in_page):
