@@ -35,6 +35,7 @@ def confirm_modal(page, label: str) -> None:
     dialog.get_by_role("button", name=label, exact=True).click()
     expect(dialog).to_have_count(0)
 
+
 def open_column_filter(page, col_id: str):
     """Click the funnel icon on an AG Grid column header to open its filter popup.
 

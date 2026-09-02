@@ -111,8 +111,10 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   // specifica §3.2 elenca «voce con id_permission nullo» fra i casi legittimi del modello
   // — quindi il posto giusto è qui, dove si conosce l'intenzione.
   //
-  // `== null` e non `=== null`, ed e' l'unico posto di questo file dove l'uguaglianza larga
-  // e' quella giusta: qui «assente» e «nullo» devono dire la stessa cosa. Con il confronto
+  // `== null` e non `=== null`: su un campo che arriva dall'INPUT «assente» e «nullo»
+  // devono dire la stessa cosa. Vale anche per `willBeCategory` in
+  // updateNavigationItem, che ha la stessa origine; non vale per `wasCategory`, che viene
+  // dai dati salvati, dove una colonna e' nulla o valorizzata e assente non esiste. Con il confronto
   // stretto una funzionalita' col campo OMESSO passava l'invariante, il permesso nasceva, e
   // Drizzle scriveva `default` sulla colonna — che non ha default, quindi NULL: un permesso
   // che governa un contenitore, il verso che questo commento dichiarava di rifiutare. E una
@@ -209,8 +211,17 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
       // parte. Rifiutare l'intera chiamata, non scartare in silenzio il campo: è la
       // stessa politica di updateRolePermissions (roles-actions.ts) e per lo stesso
       // motivo — il silenzio nasconderebbe un chiamante difettoso.
+      // `wasCategory` viene dai dati salvati, dove la colonna e' nulla o valorizzata e
+      // «assente» non esiste: `=== null` e' esatto. `willBeCategory` viene dall'INPUT, e
+      // la' assente e nullo devono dire la stessa cosa, come nell'invariante di
+      // createNavigationItem — altrimenti aggiornare una categoria col campo omesso viene
+      // rifiutato con «Cannot change item type», che e' l'errore sbagliato per un
+      // chiamante che non stava convertendo niente. Qui il verso pericoloso non c'era
+      // comunque: `mapUpdateSet` di Drizzle scarta gli undefined dal .set(), quindi un
+      // campo omesso su una funzionalita' lasciava la colonna intatta invece di
+      // azzerarla. Il difetto era il messaggio, non la riga scritta.
       const wasCategory = current.id_functionality_type === null
-      const willBeCategory = input.idFunctionalityType === null
+      const willBeCategory = input.idFunctionalityType == null
       if (wasCategory !== willBeCategory) {
         throw new Error(
           'Cannot change item type between category and functionality: delete this item and create a new one of the desired type instead.',

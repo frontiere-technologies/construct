@@ -157,7 +157,7 @@ describeIntegration('navigation mutations against the database', () => {
 
   it('rolls back the permission + entry pair when tag replacement fails', async () => {
     const name = `${PREFIX}${sequence++}`
-    await expect(createNavigationItem(functionalityInput(name, 'x'.repeat(51)))).rejects.toThrow()
+    await expect(createNavigationItem(functionalityInput(name, 'x'.repeat(51)))).rejects.toThrow(/Failed to create item/)
     expect(await db.select().from(menuEntry).where(eq(menuEntry.name, name))).toHaveLength(0)
     expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
   })
@@ -246,10 +246,30 @@ describeIntegration('navigation mutations against the database', () => {
     expect(row.idPermission).toBeNull()
   })
 
+  // La terza ri-revisione ha trovato la stessa asimmetria sul percorso di AGGIORNAMENTO:
+  // `willBeCategory` veniva dall'input con `=== null`, quindi aggiornare una categoria col
+  // campo omesso dava «Cannot change item type» — l'errore sbagliato per un chiamante che
+  // non stava convertendo niente. Il verso pericoloso non c'era (mapUpdateSet di Drizzle
+  // scarta gli undefined dal .set(), quindi la colonna restava intatta): il difetto era il
+  // messaggio, e un messaggio che accusa di una conversione mai chiesta manda a cercare
+  // nel posto sbagliato.
+  it('aggiorna una categoria col tipo OMESSO senza accusarla di una conversione', async () => {
+    const name = `${PREFIX}${sequence++}`
+    const { id } = await createNavigationItem(categoryInput(name))
+    const rinominata = `${name}_r`
+
+    await updateNavigationItem(id, omitFunctionalityType(categoryInput(rinominata)))
+
+    const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    expect(row.name).toBe(rinominata)
+    expect(row.idFunctionalityType).toBeNull()
+    expect(row.idPermission).toBeNull()
+  })
+
   it('rolls back field and parent changes when an update tag write fails', async () => {
     const original = `${PREFIX}${sequence++}`
     const { id } = await createNavigationItem(functionalityInput(original))
-    await expect(updateNavigationItem(id, functionalityInput(`${PREFIX}changed`, 'x'.repeat(51)))).rejects.toThrow()
+    await expect(updateNavigationItem(id, functionalityInput(`${PREFIX}changed`, 'x'.repeat(51)))).rejects.toThrow(/Failed to update item/)
     const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
     expect(row.name).toBe(original)
     expect(row.idParent).toBeNull()

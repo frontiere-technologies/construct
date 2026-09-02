@@ -51,16 +51,24 @@ export function hasFullScreenBackdrop(source: string): boolean {
  * citano `alert(` nel testo: un divieto che scatta su una spiegazione invece
  * che su una chiamata insegna soltanto a non spiegare.
  *
- * Non e' un tokenizzatore e non finge di esserlo. La ri-revisione ha fatto
- * notare che una `//` dentro una stringa veniva mangiata insieme al resto della
- * riga — `xmlns="http://..."` troncava Login.tsx a meta' — e che l'effetto e'
- * SEMPRE nascondere, mai inventare: al massimo si perde una chiamata scritta
- * dopo un URL sulla stessa riga. Il lookbehind sui due punti copre il caso vero
- * (gli URL); il residuo e' dichiarato qui invece di essere risolto con un
- * parser, che per una guardia di questo peso sarebbe sproporzionato.
+ * Non e' un tokenizzatore e non finge di esserlo. La seconda ri-revisione ha
+ * fatto notare che una `//` dentro una stringa veniva mangiata insieme al resto
+ * della riga — `xmlns="http://..."` troncava Login.tsx a meta' — e che
+ * l'effetto e' SEMPRE nascondere, mai inventare. La terza ha fatto notare che il
+ * lookbehind sui soli due punti non bastava: un URL senza schema
+ * (`"//cdn.example.com/x"`) e qualunque stringa che contenga `//` restavano
+ * troncati. Ora il lookbehind esclude anche apice, virgoletta e backtick, che
+ * coprono l'inizio di un letterale di stringa.
+ *
+ * RESTA FUORI, dichiarato invece di essere inseguito: un `//` in mezzo a una
+ * stringa preceduto da un carattere qualunque (`"a//b"`), e un letterale di
+ * espressione regolare che contenga `//`. In entrambi i casi si perde il resto
+ * di QUELLA riga, quindi al massimo sfugge una chiamata scritta dopo, sulla
+ * stessa riga. Risolverlo per davvero vuole un parser, sproporzionato per una
+ * guardia di questo peso.
  */
 export function withoutComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/.*$/gm, '')
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<![:"'`])\/\/.*$/gm, '')
 }
 
 /**
@@ -74,26 +82,35 @@ export function withoutComments(source: string): string {
  *
  * Tre forme, non una, perche' la ri-revisione ha provato a batterla e ci e'
  * riuscita:
- *  - la chiamata, nuda o preceduta da `window.` / `globalThis.` / `self.`,
- *    con o senza `?.`;
+ *  - la chiamata, nuda o preceduta da `window.` / `globalThis.` / `self.` /
+ *    `top.` / `parent.` / `frames.`, con o senza `?.` davanti al nome E con o
+ *    senza `?.` davanti alla parentesi — la terza ri-revisione ha fatto notare
+ *    che `window?.confirm(x)` era fissato come preso mentre `confirm?.(x)`
+ *    nudo sfuggiva, un'incoerenza fra cio' che il test dichiarava e cio' che la
+ *    regex faceva;
  *  - l'accesso a parentesi quadre, `window["confirm"](...)`;
  *  - il solo RIFERIMENTO al membro, `const ask = window.confirm`, che e' la
  *    sorgente di ogni alias e si prende senza inseguire la variabile.
- * Resta fuori il caso `const { confirm } = window` seguito da `confirm(...)`,
- * che la prima forma prende comunque sulla chiamata. Una destrutturazione
- * rinominata sfuggirebbe: e' scritto qui perche' si sappia, non perche' vada
- * bene.
+ * RESTA FUORI, dichiarato: una destrutturazione RINOMINATA
+ * (`const { confirm: ask } = window`), `Reflect.get(window, 'confirm')`,
+ * `document.defaultView.confirm`, e un nome COMPOSTO a runtime
+ * (`window['con' + 'firm']`). Nessuna di queste e' una scrittura che capita per
+ * distrazione, ed e' quello che questa guardia serve a impedire: il ritorno
+ * involontario di un `confirm()` nativo, non l'aggiramento deliberato di chi ha
+ * letto la guardia e ha deciso di girarci intorno.
  */
 export function callsNativeDialog(source: string): boolean {
   const clean = withoutComments(source)
   const native = 'alert|confirm|prompt'
+  const host = 'window|globalThis|self|top|parent|frames'
   return (
-    // chiamata nuda o su window/globalThis/self
-    new RegExp(`(?:^|[^.\\w]|(?:window|globalThis|self)\\??\\.)(?:${native})\\s*\\(`).test(clean)
+    // chiamata nuda o su un alias della finestra, con `?.` ammesso su entrambi i lati
+    new RegExp(`(?:^|[^.\\w]|(?:${host})\\??\\.)(?:${native})\\s*(?:\\?\\.)?\\s*\\(`).test(clean)
     // accesso a parentesi quadre, poi chiamato
-    || new RegExp(`\\[\\s*['"](?:${native})['"]\\s*\\]\\s*\\(`).test(clean)
-    // riferimento al membro senza chiamarlo: la sorgente degli alias
-    || new RegExp(`(?:window|globalThis|self)\\??\\.\\s*(?:${native})\\b`).test(clean)
+    || new RegExp(`\\[\\s*['"](?:${native})['"]\\s*\\]\\s*(?:\\?\\.)?\\s*\\(`).test(clean)
+    // riferimento al membro senza chiamarlo: la sorgente degli alias, anche a parentesi quadre
+    || new RegExp(`(?:${host})\\??\\.\\s*(?:${native})\\b`).test(clean)
+    || new RegExp(`(?:${host})\\s*\\[\\s*['"](?:${native})['"]\\s*\\]`).test(clean)
   )
 }
 
@@ -232,7 +249,23 @@ describe('callsNativeDialog', () => {
     expect(callsNativeDialog('window.alert("x")')).toBe(true)
   })
 
-  it('catches the forms the re-review used to defeat it', () => {
+  it('catches the forms the third re-review used to defeat it', () => {
+    expect(callsNativeDialog('confirm?.("x")')).toBe(true)
+    expect(callsNativeDialog('top.confirm(message)')).toBe(true)
+    expect(callsNativeDialog('parent.alert("x")')).toBe(true)
+    expect(callsNativeDialog('frames.prompt("who?")')).toBe(true)
+    expect(callsNativeDialog("const ask = window['confirm']")).toBe(true)
+    expect(callsNativeDialog('window["confirm"]?.("x")')).toBe(true)
+  })
+
+  it('does not lose a call written after a schemeless URL or any string holding //', () => {
+    // Il lookbehind sui soli due punti non copriva questi: una stringa che
+    // comincia con `//` non ha lo schema davanti.
+    expect(callsNativeDialog('const cdn = "//cdn.example.com/x"; confirm("x")')).toBe(true)
+    expect(callsNativeDialog("const cdn = '//cdn/x'; alert(cdn)")).toBe(true)
+  })
+
+  it('catches the forms the second re-review used to defeat it', () => {
     expect(callsNativeDialog('globalThis.confirm(message)')).toBe(true)
     expect(callsNativeDialog('self.alert("x")')).toBe(true)
     expect(callsNativeDialog('window?.confirm(message)')).toBe(true)
@@ -262,12 +295,22 @@ describe('callsNativeDialog', () => {
 })
 
 describe('nobody reaches for a native browser dialog', () => {
-  it('sweeps every module, not just the .tsx of two roots', () => {
+  it('sweeps every root and both extensions, not one aggregate count', () => {
     // Stessa ragione della riga gemella sui consumatori di dialog: se la
     // camminata si rompesse, il controllo sotto riuscirebbe sull'insieme vuoto.
+    //
+    // Per RADICE e per ESTENSIONE, non con una disuguaglianza sola: la terza
+    // ri-revisione ha fatto notare che `modules.length > components.length`
+    // restava vera anche se `.tsx` fosse sparito dall'elenco delle estensioni
+    // (102 > 75), e che una radice piccola come `context/` (3 file) poteva
+    // cadere senza che nessuno se ne accorgesse. Un'asserzione che regge
+    // mentre metà del perimetro svanisce e' un falso verde travestito.
+    for (const root of NATIVE_DIALOG_ROOTS) {
+      expect(modules.some(({ file }) => file.startsWith(`${root}/`)), `nessun file sotto ${root}/`).toBe(true)
+    }
+    expect(modules.some(({ file }) => file.endsWith('.ts') && !file.endsWith('.tsx'))).toBe(true)
+    expect(modules.some(({ file }) => file.endsWith('.tsx'))).toBe(true)
     expect(modules.length).toBeGreaterThan(components.length)
-    expect(modules.some(({ file }) => file.startsWith('lib/'))).toBe(true)
-    expect(modules.some(({ file }) => file.endsWith('.ts'))).toBe(true)
   })
 
   it('has no module calling confirm, alert or prompt', () => {
