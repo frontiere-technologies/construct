@@ -87,6 +87,15 @@ export function mapMenuToSidebar(
       system: entry.is_immutable === 1,
     })
   }
-  const emitted = new Set(out.map(m => m.id))
-  return out.filter(m => m.parentId === null || emitted.has(m.parentId))
+  // Non serve più filtrare per genitore emesso: `resolveVisibleIds` aggiunge sempre l'intera
+  // catena di antenati di ogni voce visibile (il while sopra), e ogni antenato così aggiunto
+  // è per costruzione un'entry che compare in `entries` (ci arriva da `byId`, costruita su
+  // `entries` stessa) — quindi anche lui passa il primo `if` di questo ciclo e finisce in
+  // `out`. L'unico modo perché un genitore restasse fuori da `out` sarebbe un id_parent che
+  // non referenzia nessuna riga di `entries`, ma menu_entry.id_parent ha una FK verso
+  // menu_entry.id_menu_entry (schema.ts) e l'unico chiamante reale (getSidebarMenu, in
+  // navigation-service.ts) legge la tabella per intero, senza filtri — quindi quel caso non
+  // si presenta mai sui dati veri. Un filtro che verificato così non scarta mai nulla era
+  // rumore, non difesa.
+  return out
 }
