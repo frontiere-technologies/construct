@@ -10,7 +10,6 @@ export const USER_STATUS_DEACTIVATED = 1
 export const USER_STATUS_ACTIVE = 2
 
 export const ROOT_ID = 0
-export const OPERATIONS_ID = -1
 
 export const ITEM_TYPE_CATEGORY = 1
 export const ITEM_TYPE_FUNCTIONALITY = 2
@@ -23,22 +22,19 @@ export interface ItemTranslation {
   description?: string
 }
 
-export interface NavigationItemRow {
-  id_item: number
+/** A `permission` row (Task 6): the authorization tree on Roles & Permissions builds from
+ * this alone — no presentation columns (icon, link, functionality type). Those live on
+ * `menu_entry` (Task 3/5) and describe the menu, not what a role may do. */
+export interface PermissionRow {
+  id_permission: number
+  kind: 'CATEGORY' | 'GRANT'
+  code: string | null
   name: string | null
-  id_item_type: number
-  id_functionality_type: number | null
-  functionality_link: string | null
-  icon_path: string | null
-  id_item_parent: number | null
+  id_parent: number | null
   order_position: number
-  navbar_position: 'TOP' | 'BOTTOM' | null
   item_translation: Record<string, ItemTranslation> | null
-  is_immutable: number
-  config_visibility: number
-  no_permission_need_for_navigation: number
-  /** 1 = open in a new tab. Only consulted for EXTERNAL_LINK items. */
-  open_in_new_tab: number
+  description: string | null
+  deprecated_at: string | null
 }
 
 export interface RoleItemRow {

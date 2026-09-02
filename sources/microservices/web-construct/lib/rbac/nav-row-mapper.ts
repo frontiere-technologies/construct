@@ -1,22 +1,17 @@
 import type { permission, menuEntry } from '@/lib/db/schema'
-import type { MenuEntryRow, NavigationItemRow } from './types'
+import type { MenuEntryRow, PermissionRow } from './types'
 
-export function toNavigationItemRow(r: typeof permission.$inferSelect): NavigationItemRow {
+export function toPermissionRow(r: typeof permission.$inferSelect): PermissionRow {
   return {
-    id_item: r.idPermission,
+    id_permission: r.idPermission,
+    kind: r.kind,
+    code: r.code,
     name: r.name,
-    id_item_type: r.idItemType,
-    id_functionality_type: r.idFunctionalityType,
-    functionality_link: r.functionalityLink,
-    icon_path: r.iconPath,
-    id_item_parent: r.idParent,
+    id_parent: r.idParent,
     order_position: r.orderPosition,
-    navbar_position: r.navbarPosition as 'TOP' | 'BOTTOM' | null,
-    item_translation: r.itemTranslation as NavigationItemRow['item_translation'],
-    is_immutable: r.isImmutable,
-    config_visibility: r.configVisibility,
-    no_permission_need_for_navigation: r.noPermissionNeedForNavigation,
-    open_in_new_tab: r.openInNewTab,
+    item_translation: r.itemTranslation as PermissionRow['item_translation'],
+    description: r.description,
+    deprecated_at: r.deprecatedAt,
   }
 }
 

@@ -1,56 +1,88 @@
 import { describe, it, expect } from 'vitest'
 import { buildAuthTree, buildAuthMap, applyToggle, computeDeltas } from './permission-tree'
-import type { NavigationItemRow } from './types'
+import type { PermissionRow } from './types'
 
-const row = (id: number, parent: number | null, type: number, name: string): NavigationItemRow => ({
-  id_item: id, name, id_item_type: type, id_functionality_type: type === 2 ? 3 : null,
-  functionality_link: null, icon_path: null, id_item_parent: parent, order_position: id,
-  navbar_position: null, item_translation: { EN: { name } }, is_immutable: 0,
-  config_visibility: 0, no_permission_need_for_navigation: 0, open_in_new_tab: 1,
+const perm = (over: Partial<PermissionRow> & { id_permission: number }): PermissionRow => ({
+  kind: 'GRANT', code: `code-${over.id_permission}`, id_parent: null, order_position: 0,
+  item_translation: null, description: null, deprecated_at: null, name: null, ...over,
 })
-
-// root(0) > RBAC(2,cat) > Users(3,leaf), Funcs(4,leaf);  root(0) > Home(1,cat)
-const items: NavigationItemRow[] = [
-  row(0, null, 1, 'root'), row(1, 0, 1, 'Home'),
-  row(2, 0, 1, 'RBAC'), row(3, 2, 2, 'Users'), row(4, 2, 2, 'Funcs'),
-]
 
 describe('buildAuthTree', () => {
-  const trees = buildAuthTree(items, new Set([2, 3]), 0)
-  it('builds children of the root, ordered, with authorization + label', () => {
-    expect(trees.map(t => t.id)).toEqual([1, 2])
-    const rbac = trees.find(t => t.id === 2)!
-    expect(rbac.type).toBe('CATEGORY')
-    expect(rbac.authorization).toBe(true)
-    expect(rbac.children.map(c => c.id)).toEqual([3, 4])
-    expect(rbac.children.find(c => c.id === 3)!.authorization).toBe(true)
-    expect(rbac.children.find(c => c.id === 4)!.authorization).toBe(false)
-    expect(rbac.name).toBe('RBAC')
+  it('costruisce un albero solo, senza radici speciali', () => {
+    const tree = buildAuthTree([
+      perm({ id_permission: 1, kind: 'CATEGORY', code: null }),
+      perm({ id_permission: 2, id_parent: 1 }),
+    ], new Set([2]))
+    expect(tree).toHaveLength(1)
+    expect(tree[0].children.map(c => c.id)).toEqual([2])
+    expect(tree[0].children[0].authorization).toBe(true)
   })
 
-  // The permissions tree and the functionalities tree render through the same
-  // NavigationTree, whose typeIcon() picks the per-kind icon from
-  // functionalityType alone. buildAuthTree used to omit the field, so every
-  // leaf on Roles & permissions fell to typeIcon's Circle fallback while the
-  // same row showed its real icon on Functionalities.
-  it('carries functionalityType so leaves keep their per-kind icon', () => {
-    const rbac = trees.find(t => t.id === 2)!
-    expect(rbac.children.find(c => c.id === 3)!.functionalityType).toBe('INTERNAL_FUNCTIONALITY')
+  it('non concede mai una categoria: la concessione sta sulle foglie', () => {
+    const tree = buildAuthTree([
+      perm({ id_permission: 1, kind: 'CATEGORY', code: null }),
+      perm({ id_permission: 2, id_parent: 1 }),
+    ], new Set([2]))
+    expect(tree[0].authorization).toBe(false)
   })
 
-  // Fino al Task 5 questo test confrontava buildAuthTree con buildNavTree sulla STESSA
-  // fixture NavigationItemRow[], perché le due funzioni leggevano la stessa tabella. Da qui
-  // in poi buildNavTree costruisce dall'albero del menu (MenuEntryRow[], Task 5): i due
-  // alberi sono indipendenti, con forme diverse, e non c'è più una fixture unica su cui
-  // "concordare". La garanzia sull'icona resta nel test sopra (functionalityType propagato)
-  // e nei test propri di nav-tree-builder.test.ts sul lato menu_entry.
+  // La stessa regola vale anche se il database porta ancora una riga residua in
+  // role_permission per la categoria (HOLE-5, prima della migrazione 0020, o su un dataset
+  // non ancora ripulito): grantedIds la contiene, ma l'albero la ignora comunque per kind.
+  it('ignora una concessione residua sulla categoria, anche se presente fra gli id concessi', () => {
+    const tree = buildAuthTree([
+      perm({ id_permission: 1, kind: 'CATEGORY', code: null }),
+      perm({ id_permission: 2, id_parent: 1 }),
+    ], new Set([1, 2]))
+    expect(tree[0].authorization).toBe(false)
+    expect(tree[0].children[0].authorization).toBe(true)
+  })
+
+  it('esclude i permessi deprecati', () => {
+    const tree = buildAuthTree([
+      perm({ id_permission: 1, deprecated_at: '2026-01-01T00:00:00Z' }),
+      perm({ id_permission: 2 }),
+    ], new Set())
+    expect(tree.map(n => n.id)).toEqual([2])
+  })
+
+  it('costruisce più radici quando più righe hanno id_parent nullo (root e operations restano due nodi dello stesso albero)', () => {
+    const tree = buildAuthTree([
+      perm({ id_permission: -1, kind: 'CATEGORY', code: null, name: 'operations' }),
+      perm({ id_permission: 0, kind: 'CATEGORY', code: null, name: 'root' }),
+      perm({ id_permission: 1, id_parent: 0 }),
+      perm({ id_permission: 100, id_parent: -1 }),
+    ], new Set([1, 100]))
+    expect(tree.map(n => n.id).sort((a, b) => a - b)).toEqual([-1, 0])
+    expect(tree.find(n => n.id === 0)!.children.map(c => c.id)).toEqual([1])
+    expect(tree.find(n => n.id === -1)!.children.map(c => c.id)).toEqual([100])
+  })
+
+  it('ordina per order_position e usa la traduzione della locale, con ripiego su name', () => {
+    const tree = buildAuthTree([
+      perm({ id_permission: 1, order_position: 2, name: 'fallback' }),
+      perm({ id_permission: 2, order_position: 1, item_translation: { IT: { name: 'Secondo' } } }),
+    ], new Set(), 'IT')
+    expect(tree.map(n => n.id)).toEqual([2, 1])
+    expect(tree.find(n => n.id === 2)!.name).toBe('Secondo')
+    expect(tree.find(n => n.id === 1)!.name).toBe('fallback')
+  })
 })
+
+// root(0) > RBAC(2, categoria) > Users(3, foglia), Funcs(4, foglia);  root(0) > Home(1, categoria)
+const items: PermissionRow[] = [
+  perm({ id_permission: 0, kind: 'CATEGORY', code: null, name: 'root' }),
+  perm({ id_permission: 1, kind: 'CATEGORY', code: null, name: 'Home', id_parent: 0 }),
+  perm({ id_permission: 2, kind: 'CATEGORY', code: null, name: 'RBAC', id_parent: 0 }),
+  perm({ id_permission: 3, name: 'Users', id_parent: 2 }),
+  perm({ id_permission: 4, name: 'Funcs', id_parent: 2 }),
+]
 
 describe('buildAuthMap', () => {
   it('flattens authorization across all nodes', () => {
-    const trees = buildAuthTree(items, new Set([2, 3]), 0)
-    const map = buildAuthMap(trees)
-    expect(map.get(2)).toBe(true)
+    const tree = buildAuthTree(items, new Set([3]))
+    const map = buildAuthMap(tree)
+    expect(map.get(2)).toBe(false) // categoria: mai concessa, nemmeno con figli concessi
     expect(map.get(3)).toBe(true)
     expect(map.get(4)).toBe(false)
     expect(map.get(1)).toBe(false)
@@ -58,37 +90,41 @@ describe('buildAuthMap', () => {
 })
 
 describe('applyToggle', () => {
-  const trees = buildAuthTree(items, new Set(), 0)
-  const base = buildAuthMap(trees)
+  const tree = buildAuthTree(items, new Set())
+  const base = buildAuthMap(tree)
 
-  it('category ON sets it and all descendants', () => {
-    const next = applyToggle(trees, base, 2, true)
-    expect(next.get(2)).toBe(true)
+  it('category ON accende solo le foglie GRANT del sottoalbero, mai la categoria stessa', () => {
+    const next = applyToggle(tree, base, 2, true)
     expect(next.get(3)).toBe(true)
     expect(next.get(4)).toBe(true)
+    expect(next.get(2)).toBe(false) // la categoria non riceve mai una concessione (spec 3.3)
   })
-  it('category OFF clears it and all descendants', () => {
-    const on = applyToggle(trees, base, 2, true)
-    const off = applyToggle(trees, on, 2, false)
-    expect(off.get(2)).toBe(false)
+
+  it('category OFF spegne tutte le foglie GRANT del sottoalbero', () => {
+    const on = applyToggle(tree, base, 2, true)
+    const off = applyToggle(tree, on, 2, false)
     expect(off.get(3)).toBe(false)
     expect(off.get(4)).toBe(false)
+    expect(off.get(2)).toBe(false)
   })
-  it('leaf ON auto-authorizes ancestor categories', () => {
-    const next = applyToggle(trees, base, 3, true)
+
+  it('leaf ON accende solo se stessa: nessun antenato viene marcato concesso (HOLE-5)', () => {
+    const next = applyToggle(tree, base, 3, true)
     expect(next.get(3)).toBe(true)
-    expect(next.get(2)).toBe(true)   // ancestor
-    expect(next.get(4)).toBe(false)  // sibling untouched
+    expect(next.get(2)).toBe(false) // antenato: MAI più risalito
+    expect(next.get(4)).toBe(false) // fratello non toccato
   })
-  it('leaf OFF leaves ancestors untouched', () => {
-    const on = applyToggle(trees, base, 3, true)   // 3 true, 2 true
-    const off = applyToggle(trees, on, 3, false)
+
+  it('leaf OFF non ha antenati da revocare: non ce n\'erano da propagare all\'accensione', () => {
+    const on = applyToggle(tree, base, 3, true)
+    const off = applyToggle(tree, on, 3, false)
     expect(off.get(3)).toBe(false)
-    expect(off.get(2)).toBe(true)    // ancestor stays
+    expect(off.get(2)).toBe(false)
   })
-  it('does not set the (out-of-tree) root id when walking ancestors', () => {
-    const next = applyToggle(trees, base, 3, true)
-    expect(next.has(0)).toBe(false)
+
+  it('leaf ON does not touch the tree root either, not just its direct category parent', () => {
+    const next = applyToggle(tree, base, 3, true)
+    expect(next.get(0)).toBe(false)
   })
 })
 

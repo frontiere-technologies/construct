@@ -15,17 +15,14 @@ import RenameRoleModal from './RenameRoleModal'
 
 interface Props {
   role: RoleInformationDto
-  sezioniTree: UserNavigationTreeDto[]
-  operazioniTree: UserNavigationTreeDto[]
+  tree: UserNavigationTreeDto[]
 }
 
-export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: Props) {
+export default function RoleDetailClient({ role, tree }: Props) {
   const { t } = useI18n()
   const router = useRouter()
-  const allTrees = useMemo(() => [...sezioniTree, ...operazioniTree], [sezioniTree, operazioniTree])
-  const loaded = useMemo(() => buildAuthMap(allTrees), [allTrees])
+  const loaded = useMemo(() => buildAuthMap(tree), [tree])
 
-  const [tab, setTab] = useState<'sezioni' | 'operazioni'>('sezioni')
   const [map, setMap] = useState<Map<number, boolean>>(loaded)
   const [renaming, setRenaming] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -42,8 +39,6 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
       router.refresh()
     } finally { setBusy(false) }
   }
-
-  const trees = tab === 'sezioni' ? sezioniTree : operazioniTree
 
   return (
     <PageContainer
@@ -68,17 +63,7 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
       }
       subtitle={`${role.associatedUsersCount} ${t('roles.list.associated_users')}`}
     >
-      <div className="flex gap-6 border-b border-border-subtle">
-        {(['sezioni', 'operazioni'] as const).map(tabKey => (
-          <button
-            key={tabKey}
-            onClick={() => setTab(tabKey)}
-            className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === tabKey ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground'}`}
-          >{tabKey === 'sezioni' ? t('roles.detail.tab_sections') : t('roles.detail.tab_operations')}</button>
-        ))}
-      </div>
-
-      <PermissionsTree trees={trees} map={map} onChange={setMap} editable={!isSystem} />
+      <PermissionsTree trees={tree} map={map} onChange={setMap} editable={!isSystem} />
 
       <div className="pt-4 border-t border-border flex items-center justify-end gap-3">
         <Button variant="outline" onClick={cancel}>{t('common.actions.cancel')}</Button>

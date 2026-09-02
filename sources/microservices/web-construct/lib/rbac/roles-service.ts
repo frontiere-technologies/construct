@@ -1,14 +1,13 @@
 import { cache } from 'react'
-import { and, asc, count, desc, eq, gte, ilike, inArray, lt, lte, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { permission, rolePermission, roleListView } from '@/lib/db/schema'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
-import { toNavigationItemRow } from './nav-row-mapper'
+import { toPermissionRow } from './nav-row-mapper'
 import { buildAuthTree } from './permission-tree'
 import {
   type RolesQuery, type RolesPage, type RolePageItemDto, type RoleInformationDto,
   type RoleType, type UserNavigationTreeDto,
-  ROOT_ID, OPERATIONS_ID,
 } from './types'
 import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
 
@@ -132,19 +131,18 @@ export const getRole = cache(async (roleId: number): Promise<RoleInformationDto>
 })
 
 export const getRoleAuthorizationTree = cache(
-  async (roleId: number, rootName: 'ROOT' | 'OPERATIONS'): Promise<UserNavigationTreeDto[]> => {
-    let navRows: (typeof permission.$inferSelect)[]
-    let riRows: { idItem: number; authorized: boolean }[]
+  async (roleId: number): Promise<UserNavigationTreeDto[]> => {
+    let permRows: (typeof permission.$inferSelect)[]
+    let grantRows: { idPermission: number }[]
     try {
-      ;[navRows, riRows] = await Promise.all([
-        db.select().from(permission).orderBy(asc(permission.orderPosition)),
-        db.select({ idItem: rolePermission.idPermission, authorized: rolePermission.authorized }).from(rolePermission).where(eq(rolePermission.idRole, roleId)),
+      ;[permRows, grantRows] = await Promise.all([
+        db.select().from(permission).where(isNull(permission.deprecatedAt)).orderBy(asc(permission.orderPosition)),
+        db.select({ idPermission: rolePermission.idPermission }).from(rolePermission).where(eq(rolePermission.idRole, roleId)),
       ])
     } catch (err) {
       throw new Error(`Failed to load navigation: ${err instanceof Error ? err.message : String(err)}`)
     }
-    const authorized = new Set<number>(riRows.filter(r => r.authorized).map(r => r.idItem))
-    const rootId = rootName === 'ROOT' ? ROOT_ID : OPERATIONS_ID
-    return buildAuthTree(navRows.map(toNavigationItemRow), authorized, rootId)
+    const grantedIds = new Set<number>(grantRows.map(r => r.idPermission))
+    return buildAuthTree(permRows.map(toPermissionRow), grantedIds)
   }
 )
