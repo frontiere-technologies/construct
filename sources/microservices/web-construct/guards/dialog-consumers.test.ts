@@ -45,6 +45,30 @@ export function hasFullScreenBackdrop(source: string): boolean {
   return /fixed inset-0/.test(source)
 }
 
+/**
+ * Il commento va via prima del controllo sui dialoghi nativi. Questa guardia
+ * stessa, e i due file che raccontano perche' l'`alert` nativo e' stato tolto,
+ * citano `alert(` nel testo: un divieto che scatta su una spiegazione invece
+ * che su una chiamata insegna soltanto a non spiegare.
+ */
+export function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+}
+
+/**
+ * Le tre finestre del browser che questo progetto non usa piu'. Fino al
+ * 2026-09-02 la conferma di eliminazione passava da `confirm()` nativo: non
+ * esercitabile da un test end-to-end senza aggiramenti, fuori dal tema, e senza
+ * la trappola del focus che `AccessibleDialog` garantisce. Sostituirla non
+ * bastava a impedirne il ritorno — la guardia sui consumatori di dialog
+ * verifica chi *promette* un modale, e un `confirm()` nativo non promette
+ * niente, quindi le passava sotto il naso. `window.confirm(...)` e' incluso di
+ * proposito: e' la stessa chiamata scritta per esteso.
+ */
+export function callsNativeDialog(source: string): boolean {
+  return /(?:^|[^.\w]|window\.)(?:alert|confirm|prompt)\s*\(/.test(withoutComments(source))
+}
+
 export function importsAccessibleDialog(source: string): boolean {
   return /import \{ AccessibleDialog \} from ['"]@\/components\/shared\/AccessibleDialog['"]/.test(source)
 }
@@ -140,6 +164,37 @@ describe('nobody hand-rolls a modal', () => {
     const offenders = components
       .filter(({ file }) => file !== DIALOG_COMPONENT && !exempt.has(file))
       .filter(({ source }) => hasFullScreenBackdrop(source))
+      .map(({ file }) => file)
+
+    expect(offenders).toEqual([])
+  })
+})
+
+describe('callsNativeDialog', () => {
+  it('finds the three native dialogs, spelled bare or on window', () => {
+    expect(callsNativeDialog('if (confirm(message)) remove()')).toBe(true)
+    expect(callsNativeDialog('alert(e.message)')).toBe(true)
+    expect(callsNativeDialog('const name = prompt("who?")')).toBe(true)
+    expect(callsNativeDialog('if (window.confirm(message)) remove()')).toBe(true)
+    expect(callsNativeDialog('window.alert("x")')).toBe(true)
+  })
+
+  it('does not fire on a comment that merely mentions one', () => {
+    expect(callsNativeDialog('// prima era alert() nativo')).toBe(false)
+    expect(callsNativeDialog('/* sostituisce confirm() con ConfirmModal */')).toBe(false)
+  })
+
+  it('leaves this project\'s own confirm vocabulary alone', () => {
+    expect(callsNativeDialog('<ConfirmModal onConfirm={() => remove()} />')).toBe(false)
+    expect(callsNativeDialog('confirmToggleStatus(user)')).toBe(false)
+    expect(callsNativeDialog('const [confirming, setConfirming] = useState(null)')).toBe(false)
+  })
+})
+
+describe('nobody reaches for a native browser dialog', () => {
+  it('has no component calling confirm, alert or prompt', () => {
+    const offenders = components
+      .filter(({ source }) => callsNativeDialog(source))
       .map(({ file }) => file)
 
     expect(offenders).toEqual([])

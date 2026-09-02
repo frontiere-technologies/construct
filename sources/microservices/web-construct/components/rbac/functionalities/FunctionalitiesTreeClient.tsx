@@ -23,6 +23,11 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
   const [searchDraft, setSearchDraft] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [deleting, setDeleting] = useState<UserNavigationTreeDto | null>(null)
+  // Lo stesso canale d'errore in linea di LanguagesTableClient e TranslationsTableClient.
+  // Prima era alert() nativo: un dialogo del browser, che e' esattamente quello che il
+  // passaggio a ConfirmModal ha tolto dalla conferma — non aveva senso lasciarlo
+  // sull'esito.
+  const [error, setError] = useState<string | null>(null)
 
   const filterTree = (nodes: UserNavigationTreeDto[]): UserNavigationTreeDto[] => {
     if (!search.trim()) return nodes
@@ -34,8 +39,9 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
   }
 
   const handleMove = async (id: number, targetParentId: number | null, orderPosition: number) => {
+    setError(null)
     try { await moveNavigationItem(id, { targetParentId, orderPosition }); router.refresh() }
-    catch (e) { alert(e instanceof Error ? e.message : t('functionalities.tree.move_failed')) }
+    catch (e) { setError(e instanceof Error ? e.message : t('functionalities.tree.move_failed')) }
   }
 
   const clearFilters = () => { setSearchDraft(''); setSearch('') }
@@ -118,6 +124,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
           </div>
         </div>
       </FilterDrawer>
+      {error && <p role="alert" className="mb-3 text-sm text-destructive-muted-foreground">{error}</p>}
       <NavigationTree
         nodes={filterTree(tree)}
         renderTrailing={trailing}
@@ -130,8 +137,9 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
           confirmLabel={t('common.actions.delete')}
           onCancel={() => setDeleting(null)}
           onConfirm={async () => {
+            setError(null)
             try { await deleteNavigationItem(deleting.id); router.refresh() }
-            catch (e) { alert(e instanceof Error ? e.message : t('functionalities.tree.delete_failed')) }
+            catch (e) { setError(e instanceof Error ? e.message : t('functionalities.tree.delete_failed')) }
             finally { setDeleting(null) }
           }}
         />

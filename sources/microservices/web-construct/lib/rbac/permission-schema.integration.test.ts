@@ -13,6 +13,31 @@ async function tableExists(name: string): Promise<boolean> {
   return rows.length > 0
 }
 
+/**
+ * Che la query venga rifiutata DA QUEL vincolo, non genericamente.
+ *
+ * Serve perché questi insert passano `id_parent = 0`, e id_parent porta una chiave esterna
+ * su se stessa: un `rejects.toThrow()` nudo resterebbe verde anche se il vincolo in prova
+ * sparisse e a rifiutare fosse la chiave esterna — basterebbe che la riga radice `0` venisse
+ * a mancare. Un test che passa per il motivo sbagliato è peggio di un test che manca.
+ *
+ * Il nome NON si può cercare nel messaggio in cima: Drizzle riavvolge l'errore del driver e
+ * quello che si vede là è sempre «Failed query: ...». Il rifiuto vero, con
+ * `constraint_name` e il codice SQLSTATE, sta in `cause` (verificato sul driver prima di
+ * scrivere questo helper: `postgres` mette il nome sia in `constraint_name` sia nel testo).
+ */
+async function expectRejectedByConstraint(run: () => Promise<unknown>, constraint: string): Promise<void> {
+  let caught: unknown
+  try {
+    await run()
+  } catch (err) {
+    caught = err
+  }
+  expect(caught, `la query è stata accettata invece di violare ${constraint}`).toBeDefined()
+  const cause = (caught as { cause?: { constraint_name?: string } }).cause
+  expect(cause?.constraint_name).toBe(constraint)
+}
+
 describe('rename delle tabelle RBAC', () => {
   it('espone permission e role_permission, e non più i nomi vecchi', async () => {
     expect(await tableExists('permission')).toBe(true)
@@ -100,15 +125,19 @@ describe('identità del permesso', () => {
   /* permission_kind_valid ('CATEGORY', 'GRANT') non era esercitato da nessun test: ogni test
    * qui sopra inserisce righe con un kind ammesso, non uno vietato. Sullo stampo dei test già
    * presenti per permission_code_matches_kind — insert diretto, rejects.toThrow, pulizia in
-   * finally per lo stesso motivo (una riga rimasta avvelenerebbe la riesecuzione). */
+   * finally per lo stesso motivo (una riga rimasta avvelenerebbe la riesecuzione).
+   *
+   * Il rifiuto passa da expectRejectedByConstraint, non da un toThrow nudo: vedi la ragione
+   * accanto a quell'helper, trovata dalla ri-revisione del 2026-09-02. */
   it('rifiuta un kind non ammesso', async () => {
     try {
-      await expect(
-        db.execute(sql`
+      await expectRejectedByConstraint(
+        () => db.execute(sql`
           insert into public.permission (kind, origin, description, id_parent, order_position)
           values ('BOGUS', 'CONSOLE', 'kind non valido', 0, 0)
         `),
-      ).rejects.toThrow()
+        'permission_kind_valid',
+      )
     } finally {
       await db.execute(sql`delete from public.permission where description = 'kind non valido'`)
     }
@@ -117,35 +146,38 @@ describe('identità del permesso', () => {
   /* Stessa lacuna, sull'altro vincolo: permission_origin_valid ('SOURCE', 'CONSOLE'). */
   it('rifiuta un origin non ammesso', async () => {
     try {
-      await expect(
-        db.execute(sql`
+      await expectRejectedByConstraint(
+        () => db.execute(sql`
           insert into public.permission (kind, origin, description, id_parent, order_position)
           values ('GRANT', 'BOGUS', 'origin non valido', 0, 0)
         `),
-      ).rejects.toThrow()
+        'permission_origin_valid',
+      )
     } finally {
       await db.execute(sql`delete from public.permission where description = 'origin non valido'`)
     }
   })
 
   it('rifiuta un GRANT di origine SOURCE senza code', async () => {
-    await expect(
-      db.execute(sql`
+    await expectRejectedByConstraint(
+      () => db.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', null, 'SOURCE', 'senza codice', 0, 0)
       `),
-    ).rejects.toThrow()
+      'permission_code_matches_kind',
+    )
   })
 
   /* Direzione simmetrica della precedente: un code presente su una riga CONSOLE è
    * altrettanto una violazione del vincolo nuovo, non solo la sua assenza su una SOURCE. */
   it('rifiuta un GRANT di origine CONSOLE con un code', async () => {
-    await expect(
-      db.execute(sql`
+    await expectRejectedByConstraint(
+      () => db.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', 'non-dovrebbe-esistere', 'CONSOLE', 'con codice', 0, 0)
       `),
-    ).rejects.toThrow()
+      'permission_code_matches_kind',
+    )
   })
 
   /* GAP-1 (giro 1 di revisione): i quattro test sopra esercitano origin e "code presente
@@ -159,12 +191,13 @@ describe('identità del permesso', () => {
    * rifiutato, con la versione semplificata sarebbe accettato. */
   it('rifiuta una CATEGORY di origine SOURCE con un code', async () => {
     try {
-      await expect(
-        db.execute(sql`
+      await expectRejectedByConstraint(
+        () => db.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
           values ('CATEGORY', 'test-categoria-source-con-code', 'SOURCE', 'categoria con codice', 0, 0)
         `),
-      ).rejects.toThrow()
+        'permission_code_matches_kind',
+      )
     } finally {
       await db.execute(sql`delete from public.permission where code = 'test-categoria-source-con-code'`)
     }
@@ -184,12 +217,13 @@ describe('identità del permesso', () => {
     // sul database e avvelenerebbe la riesecuzione di questo test e i task successivi della
     // stessa fase, che condividono la stessa suite di integrazione.
     try {
-      await expect(
-        db.execute(sql`
+      await expectRejectedByConstraint(
+        () => db.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
           values ('GRANT', 'test-duplicato', 'SOURCE', 'secondo', 0, 0)
         `),
-      ).rejects.toThrow()
+        'permission_code_unique',
+      )
     } finally {
       await db.execute(sql`delete from public.permission where code = 'test-duplicato'`)
     }

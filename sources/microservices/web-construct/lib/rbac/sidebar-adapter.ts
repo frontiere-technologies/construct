@@ -51,6 +51,17 @@ function resolveVisibleIds(entries: MenuEntryRow[], grantedIds: Set<number>): Se
   return visible
 }
 
+/**
+ * `entries` deve essere la tabella menu_entry INTERA, non una pagina né un
+ * sottoinsieme filtrato.
+ *
+ * Non è una preferenza: il filtro finale che scartava le voci senza genitore emesso è
+ * stato rimosso perché la catena degli antenati è sempre risolvibile dentro `entries`
+ * (la spiegazione completa è in fondo alla funzione). Su un insieme parziale quella
+ * garanzia cade, e la funzione emetterebbe in silenzio voci orfane invece di scartarle.
+ * L'unico chiamante di oggi, `getSidebarMenu` in navigation-service.ts, legge la tabella
+ * senza where; chi ne aggiunge un altro deve fare lo stesso o rimettere il filtro.
+ */
 export function mapMenuToSidebar(
   entries: MenuEntryRow[],
   grantedIds: Set<number>,
