@@ -49,7 +49,7 @@ Task puramente meccanico e ad alto volume: nessuna colonna cambia, nessun compor
 - Consumes: niente — è il primo task.
 - Produces: gli identificatori Drizzle `permission` (era `navigationItem`) e `rolePermission` (era `roleItem`); la colonna `permission.idPermission` (era `navigationItem.idItem`) e `rolePermission.idPermission` (era `roleItem.idItem`). Tutti i task successivi usano questi nomi.
 
-- [ ] **Step 1: Scrivere il test di integrazione che fallisce**
+- [✅] **Step 1: Scrivere il test di integrazione che fallisce**
 
 Create `lib/rbac/permission-schema.integration.test.ts`:
 
@@ -105,7 +105,7 @@ describe('rename delle tabelle RBAC', () => {
 })
 ```
 
-- [ ] **Step 2: Eseguirlo e verificare che fallisca**
+- [✅] **Step 2: Eseguirlo e verificare che fallisca**
 
 ```bash
 npm run test:integration -- lib/rbac/permission-schema.integration.test.ts
@@ -113,7 +113,7 @@ npm run test:integration -- lib/rbac/permission-schema.integration.test.ts
 
 Atteso: FAIL — `expected false to be true`, perché `permission` non esiste ancora.
 
-- [ ] **Step 3: Scrivere la migrazione**
+- [✅] **Step 3: Scrivere la migrazione**
 
 Create `sources/devops/db/migrations/0014_permission_rename.sql`:
 
@@ -192,7 +192,7 @@ grant select on table public.role_list_view to construct_runtime;
 
 > **Prima di scrivere il blocco `create view`**: rileggere la definizione reale in `sources/devops/db/schema.sql` (`grep -A20 'role_list_view' sources/devops/db/schema.sql`) e riprodurla identica cambiando solo `role_item`→`role_permission` e `id_item`→`id_permission`. La versione qui sopra è la forma attesa, non necessariamente l'ultima parola: se il file diverge, vince il file.
 
-- [ ] **Step 4: Applicare la migrazione ai due database**
+- [✅] **Step 4: Applicare la migrazione ai due database**
 
 ```bash
 node ../../devops/db/db.mjs test-apply
@@ -204,13 +204,13 @@ Poi, con `MIGRATION_DATABASE_URL` esportata, quello di sviluppo:
 node ../../devops/db/db.mjs apply
 ```
 
-- [ ] **Step 5: Rinominare gli identificatori nel modello Drizzle**
+- [✅] **Step 5: Rinominare gli identificatori nel modello Drizzle**
 
 In `lib/db/schema.ts`: `navigationItem` → `permission`, `roleItem` → `rolePermission`, `pgTable('navigation_item')` → `pgTable('permission')`, `pgTable('role_item')` → `pgTable('role_permission')`, `idItem: bigint('id_item')` → `idPermission: bigint('id_permission')`, `idItemParent: bigint('id_item_parent')` → `idParent: bigint('id_parent')`, e `nextval('s_id_navigation_item')` → `nextval('s_id_permission')`.
 
 `navigationItemType` e `navigationItemTag` **non** si toccano in questo task: la prima sparisce nel Task 7, la seconda diventa `menu_entry_tag` nel Task 3.
 
-- [ ] **Step 6: Propagare il rename al resto del sorgente**
+- [✅] **Step 6: Propagare il rename al resto del sorgente**
 
 Il compilatore è la lista dei posti da toccare:
 
@@ -220,7 +220,7 @@ npm run typecheck
 
 Correggere finché è pulito. I sedici file coinvolti sono quelli che citano `navigationItem` o `roleItem`; i campi interni dei DTO (`id_item` dentro `NavigationItemRow`, `idItem` dentro `PermissionDelta`) **restano invariati in questo task** — rinominare anche quelli allargherebbe il diff senza aggiungere niente, e il Task 5 li tocca comunque.
 
-- [ ] **Step 7: Rigenerare lo snapshot e far girare tutto**
+- [✅] **Step 7: Rigenerare lo snapshot e far girare tutto**
 
 ```bash
 node ../../devops/db/db.mjs schema-write
@@ -230,7 +230,7 @@ npm run test:integration
 
 Atteso: tutto verde, compreso il nuovo `permission-schema.integration.test.ts`.
 
-- [ ] **Step 8: Commit**
+- [✅] **Step 8: Commit**
 
 ```bash
 git add sources/devops/db/migrations/0014_permission_rename.sql sources/devops/db/schema.sql sources/microservices/web-construct/
@@ -261,7 +261,7 @@ Aggiunge le colonne che la Fase 2 userà, con il popolamento dai dati esistenti.
 - Consumes: `permission` con `idPermission`, `idParent` (Task 1).
 - Produces: `permission.kind` (`'CATEGORY' | 'GRANT'`), `permission.code` (`string | null`), `permission.origin` (`'SOURCE' | 'CONSOLE'`), `permission.deprecatedAt` (`string | null`). Il Task 6 legge `kind`; la Fase 2 legge `code` e `origin`.
 
-- [ ] **Step 1: Scrivere i test che falliscono**
+- [✅] **Step 1: Scrivere i test che falliscono**
 
 Aggiungere a `lib/rbac/permission-schema.integration.test.ts`:
 
@@ -308,7 +308,7 @@ describe('identità del permesso', () => {
 })
 ```
 
-- [ ] **Step 2: Eseguirli e verificare che falliscano**
+- [✅] **Step 2: Eseguirli e verificare che falliscano**
 
 ```bash
 npm run test:integration -- lib/rbac/permission-schema.integration.test.ts
@@ -316,7 +316,7 @@ npm run test:integration -- lib/rbac/permission-schema.integration.test.ts
 
 Atteso: FAIL — `column "kind" does not exist`.
 
-- [ ] **Step 3: Scrivere la migrazione**
+- [✅] **Step 3: Scrivere la migrazione**
 
 Create `sources/devops/db/migrations/0015_permission_identity.sql`:
 
@@ -368,7 +368,7 @@ alter table public.permission
 create unique index permission_code_unique on public.permission (code) where code is not null;
 ```
 
-- [ ] **Step 4: Applicare e verificare**
+- [✅] **Step 4: Applicare e verificare**
 
 ```bash
 node ../../devops/db/db.mjs test-apply && node ../../devops/db/db.mjs apply
@@ -377,7 +377,7 @@ npm run test:integration -- lib/rbac/permission-schema.integration.test.ts
 
 Atteso: PASS.
 
-- [ ] **Step 5: Ispezionare i codici generati**
+- [✅] **Step 5: Ispezionare i codici generati**
 
 ```bash
 node ../../devops/db/db.mjs query "select id_permission, code from public.permission where kind = 'GRANT' order by id_permission"
@@ -385,7 +385,7 @@ node ../../devops/db/db.mjs query "select id_permission, code from public.permis
 
 Leggerli davvero. DEC-3 stabilisce che un `code` non cambia mai più: se la generazione automatica ha prodotto nomi illeggibili, questo è l'ultimo momento comodo per correggerli, con una `update` dentro una migrazione `0015b` scritta apposta.
 
-- [ ] **Step 6: Allineare il modello Drizzle**
+- [✅] **Step 6: Allineare il modello Drizzle**
 
 In `lib/db/schema.ts`, dentro `permission`:
 
@@ -396,14 +396,14 @@ origin: text('origin', { enum: ['SOURCE', 'CONSOLE'] }).notNull().default('CONSO
 deprecatedAt: timestamp('deprecated_at', { withTimezone: true, mode: 'string' }),
 ```
 
-- [ ] **Step 7: Rigenerare lo snapshot e far girare tutto**
+- [✅] **Step 7: Rigenerare lo snapshot e far girare tutto**
 
 ```bash
 node ../../devops/db/db.mjs schema-write
 npm run schema:check && npm run typecheck && npm run test && npm run test:integration
 ```
 
-- [ ] **Step 8: Commit**
+- [✅] **Step 8: Commit**
 
 ```bash
 git add sources/devops/db/ sources/microservices/web-construct/lib/
@@ -431,7 +431,7 @@ Crea le tabelle e travasa i dati. Nessun codice le legge ancora: il percorso di 
 - Consumes: `permission` con `kind` (Task 2).
 - Produces: la tabella Drizzle `menuEntry` con `idMenuEntry`, `idPermission` (annullabile), `idParent`, `orderPosition`, `navbarPosition`, `iconPath`, `functionalityLink`, `openInNewTab`, `idFunctionalityType`, `itemTranslation`, `name`, `isImmutable`; e `menuEntryTag` con `idMenuEntry`, `tagLan`, `tag`. Il Task 4 legge `menuEntry`, il Task 5 ci scrive.
 
-- [ ] **Step 1: Scrivere i test che falliscono**
+- [✅] **Step 1: Scrivere i test che falliscono**
 
 Aggiungere a `lib/rbac/permission-schema.integration.test.ts`:
 
@@ -493,7 +493,7 @@ describe('travaso in menu_entry', () => {
 })
 ```
 
-- [ ] **Step 2: Eseguirli e verificare che falliscano**
+- [✅] **Step 2: Eseguirli e verificare che falliscano**
 
 ```bash
 npm run test:integration -- lib/rbac/permission-schema.integration.test.ts
@@ -501,7 +501,7 @@ npm run test:integration -- lib/rbac/permission-schema.integration.test.ts
 
 Atteso: FAIL — `relation "public.menu_entry" does not exist`.
 
-- [ ] **Step 3: Scrivere la migrazione**
+- [✅] **Step 3: Scrivere la migrazione**
 
 Create `sources/devops/db/migrations/0016_menu_entry.sql`:
 
@@ -625,7 +625,7 @@ end $$;
 grant execute on function public.replace_menu_entry_tags(bigint, jsonb) to construct_runtime;
 ```
 
-- [ ] **Step 4: Applicare e verificare**
+- [✅] **Step 4: Applicare e verificare**
 
 ```bash
 node ../../devops/db/db.mjs test-apply && node ../../devops/db/db.mjs apply
@@ -634,7 +634,7 @@ npm run test:integration -- lib/rbac/permission-schema.integration.test.ts
 
 Atteso: PASS su tutti e quattro i nuovi test.
 
-- [ ] **Step 5: Aggiungere le tabelle al modello Drizzle**
+- [✅] **Step 5: Aggiungere le tabelle al modello Drizzle**
 
 In `lib/db/schema.ts`:
 
@@ -667,7 +667,7 @@ export const menuEntryTag = pgTable('menu_entry_tag', {
 }, (t) => [primaryKey({ columns: [t.idMenuEntry, t.tagLan, t.tag] })])
 ```
 
-- [ ] **Step 6: Rigenerare lo snapshot e far girare tutto**
+- [✅] **Step 6: Rigenerare lo snapshot e far girare tutto**
 
 ```bash
 node ../../devops/db/db.mjs schema-write
@@ -676,7 +676,7 @@ npm run schema:check && npm run typecheck && npm run test && npm run test:integr
 
 `lib/schema-contract.integration.test.ts` va aggiornato con le due tabelle nuove: è il test che verifica che il catalogo distribuito coincida col modello Drizzle, e due tabelle in più sono esattamente ciò che deve notare.
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add sources/devops/db/ sources/microservices/web-construct/lib/
@@ -712,7 +712,7 @@ Primo task che cambia un percorso di lettura. Il criterio è che la barra latera
   - `mapMenuToSidebar(entries: MenuEntryRow[], grantedIds: Set<number>, locale?: Locale, fallbackLocale?: Locale): MenuItem[]`
   - `getSidebarMenu(roleIds: number[], locale?: Locale, fallbackLocale?: Locale): Promise<MenuItem[]>` — firma invariata.
 
-- [ ] **Step 1: Scrivere il test che fallisce**
+- [✅] **Step 1: Scrivere il test che fallisce**
 
 In `lib/rbac/sidebar-adapter.test.ts`, sostituire i casi che costruivano `NavigationItemRow` con:
 
@@ -777,7 +777,7 @@ describe('resolveGrantedPermissionIds', () => {
 })
 ```
 
-- [ ] **Step 2: Eseguirlo e verificare che fallisca**
+- [✅] **Step 2: Eseguirlo e verificare che fallisca**
 
 ```bash
 npm run test -- lib/rbac/sidebar-adapter.test.ts
@@ -785,7 +785,7 @@ npm run test -- lib/rbac/sidebar-adapter.test.ts
 
 Atteso: FAIL — `mapMenuToSidebar is not a function`.
 
-- [ ] **Step 3: Riscrivere `sidebar-adapter.ts`**
+- [✅] **Step 3: Riscrivere `sidebar-adapter.ts`**
 
 `resolveAuthorizedItemIds`, `isRenderable`, `isUnderOperations` e `resolveVisibleIds` spariscono. Al loro posto:
 
@@ -880,7 +880,7 @@ export function mapMenuToSidebar(
 
 Aggiungere `MenuEntryRow` a `lib/rbac/types.ts` con la forma indicata nel blocco **Interfaces**.
 
-- [ ] **Step 4: Aggiornare `navigation-service.ts`**
+- [✅] **Step 4: Aggiornare `navigation-service.ts`**
 
 ```ts
 export const getSidebarMenu = cache(async (
@@ -905,14 +905,14 @@ export const getSidebarMenu = cache(async (
 
 `toMenuEntryRow` è il gemello di `toNavigationItemRow`: aggiungerlo a `lib/rbac/nav-row-mapper.ts` mappando ogni campo Drizzle sul corrispondente `snake_case` di `MenuEntryRow`.
 
-- [ ] **Step 5: Eseguire i test e verificare che passino**
+- [✅] **Step 5: Eseguire i test e verificare che passino**
 
 ```bash
 npm run test -- lib/rbac/sidebar-adapter.test.ts
 npm run typecheck && npm run test
 ```
 
-- [ ] **Step 6: Verificare nel browser che la barra laterale sia identica**
+- [✅] **Step 6: Verificare nel browser che la barra laterale sia identica**
 
 Il build che compila non dimostra niente sul rendering. Avviare l'anteprima e confrontare a occhio con la barra laterale di prima:
 
@@ -922,7 +922,7 @@ npm run dev
 
 Aprire l'applicazione, entrare come amministratore, e verificare: le voci sono le stesse, nello stesso ordine, con le stesse icone; le categorie si aprono e si chiudono; un link esterno apre ancora nella scheda giusta; una pagina incorporata si apre ancora su `/embedded/{id}` con lo stesso id di prima.
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/
@@ -956,7 +956,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: `menuEntry`, `menuEntryTag`, `replace_menu_entry_tags` (Task 3); `MenuEntryRow`, `toMenuEntryRow` (Task 4).
 - Produces: `createNavigationItem`, `updateNavigationItem`, `moveNavigationItem`, `deleteNavigationItem` con firme invariate, che scrivono la coppia permesso+voce.
 
-- [ ] **Step 1: Scrivere il test di integrazione che fallisce**
+- [✅] **Step 1: Scrivere il test di integrazione che fallisce**
 
 In `lib/rbac/navigation-actions.integration.test.ts`:
 
@@ -1003,7 +1003,7 @@ it('eliminare una funzionalità elimina anche il permesso che aveva creato', asy
 })
 ```
 
-- [ ] **Step 2: Eseguirlo e verificare che fallisca**
+- [✅] **Step 2: Eseguirlo e verificare che fallisca**
 
 ```bash
 npm run test:integration -- lib/rbac/navigation-actions.integration.test.ts
@@ -1011,7 +1011,7 @@ npm run test:integration -- lib/rbac/navigation-actions.integration.test.ts
 
 Atteso: FAIL — `voce.idPermission` è `undefined`, la voce non viene creata.
 
-- [ ] **Step 3: Riscrivere le quattro azioni**
+- [✅] **Step 3: Riscrivere le quattro azioni**
 
 > **Corretto il 2026-09-02 (DEC-14).** Una versione precedente di questo piano faceva generare qui un `code` dal nome della voce. È sbagliato: il `code` è il patto con `requirePermission('...')` nel sorgente, e un permesso creato dalla console non ha controparte nel sorgente. **Un permesso di origine `CONSOLE` nasce con `code` nullo**, e `toPermissionCode`/`reserveUniqueCode` non esistono più — le rimuove il task di riparazione che precede questo. Se le trovi ancora in `lib/rbac/navigation-actions.ts`, fermati e segnalalo: vuol dire che quel task non è stato completato.
 
@@ -1135,7 +1135,7 @@ export async function deleteNavigationItem(id: number): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Aggiornare `functionalities-service.ts` e `nav-tree-builder.ts`**
+- [✅] **Step 4: Aggiornare `functionalities-service.ts` e `nav-tree-builder.ts`**
 
 L'albero mostrato dalla pagina Funzionalità è l'albero **del menu**: `loadNavAndTags` legge `menuEntry` e `menuEntryTag`; `buildNavTree` costruisce da `MenuEntryRow`; `mapRowToDto` mappa `id_menu_entry` su `id` e ricava `type` da `id_functionality_type === null ? 'CATEGORY' : 'FUNCTIONALITY'` invece che da `id_item_type`.
 
@@ -1143,14 +1143,14 @@ L'albero mostrato dalla pagina Funzionalità è l'albero **del menu**: `loadNavA
 
 Il filtro `config_visibility === 1` in `buildNavTree` sparisce: quelle righe non hanno generato voci.
 
-- [ ] **Step 5: Eseguire i test e verificare che passino**
+- [✅] **Step 5: Eseguire i test e verificare che passino**
 
 ```bash
 npm run test:integration -- lib/rbac/navigation-actions.integration.test.ts
 npm run typecheck && npm run test
 ```
 
-- [ ] **Step 6: Verificare nel browser il ciclo completo**
+- [✅] **Step 6: Verificare nel browser il ciclo completo**
 
 ```bash
 npm run dev
@@ -1158,7 +1158,7 @@ npm run dev
 
 Su `/functionalities`: creare una categoria, creare dentro una funzionalità, trascinarla per riordinarla, modificarne il nome e i tag, eliminarla. Dopo ogni passo verificare che la barra laterale rifletta il cambiamento. Il trascinamento è il punto delicato — `onDragMove` e l'indicatore hanno una storia di corse fra rendering.
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/ sources/microservices/web-construct/app/
@@ -1204,7 +1204,7 @@ export interface PermissionRow {
 }
 ```
 
-- [ ] **Step 1: Scrivere il test che fallisce**
+- [✅] **Step 1: Scrivere il test che fallisce**
 
 In `lib/rbac/permission-tree.test.ts`:
 
@@ -1241,7 +1241,7 @@ it('esclude i permessi deprecati', () => {
 })
 ```
 
-- [ ] **Step 2: Eseguirlo e verificare che fallisca**
+- [✅] **Step 2: Eseguirlo e verificare che fallisca**
 
 ```bash
 npm run test -- lib/rbac/permission-tree.test.ts
@@ -1249,13 +1249,13 @@ npm run test -- lib/rbac/permission-tree.test.ts
 
 Atteso: FAIL — `buildAuthTree` riceve ancora `rootId` come terzo parametro.
 
-- [ ] **Step 3: Riscrivere `buildAuthTree`**
+- [✅] **Step 3: Riscrivere `buildAuthTree`**
 
 Costruire da `id_parent`, partendo dai nodi con `id_parent` nullo invece che da un `rootId`; `type` deriva da `kind` (`'CATEGORY'` → `'CATEGORY'`, `'GRANT'` → `'FUNCTIONALITY'`); `authorization` è `grantedIds.has(id_permission)` e resta `false` per le categorie; le righe con `deprecated_at` non nullo si scartano prima di costruire.
 
 `applyToggle` resta com'è nella sostanza — accendere una categoria accende i discendenti — ma la propagazione va limitata alle foglie `GRANT`: una categoria non riceve mai una riga in `role_permission`.
 
-- [ ] **Step 4: Aggiornare `roles-service.ts` e la pagina**
+- [✅] **Step 4: Aggiornare `roles-service.ts` e la pagina**
 
 `getRoleAuthorizationTree` perde il parametro `rootName` e legge:
 
@@ -1268,14 +1268,14 @@ const [permRows, grantRows] = await Promise.all([
 
 In `roles-permissions/[roleId]/page.tsx`, le due chiamate (`'ROOT'` e `'OPERATIONS'`) diventano una sola, e il componente che mostrava i due alberi affiancati ne mostra uno.
 
-- [ ] **Step 5: Eseguire i test e verificare che passino**
+- [✅] **Step 5: Eseguire i test e verificare che passino**
 
 ```bash
 npm run test -- lib/rbac/permission-tree.test.ts
 npm run typecheck && npm run test && npm run test:integration
 ```
 
-- [ ] **Step 6: Verificare nel browser**
+- [✅] **Step 6: Verificare nel browser**
 
 ```bash
 npm run dev
@@ -1283,7 +1283,7 @@ npm run dev
 
 Su `/roles-permissions`: aprire un ruolo di servizio, accendere una categoria e verificare che si accendano le foglie sotto, salvare, ricaricare e verificare che le concessioni siano quelle. Poi entrare con un utente che ha quel ruolo e controllare che la barra laterale mostri esattamente le voci concesse.
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/ sources/microservices/web-construct/app/
@@ -1315,7 +1315,7 @@ Ultima migrazione della fase. Va per ultima perché fino a qui il codice vecchio
 - Consumes: tutti i percorsi di lettura e scrittura migrati (Task 4, 5, 6).
 - Produces: `permission` ridotta alle colonne di §3.1 della specifica; `role_permission` senza `authorized`.
 
-- [ ] **Step 1: Scrivere il test che fallisce**
+- [✅] **Step 1: Scrivere il test che fallisce**
 
 ```ts
 it('lascia su permission le sole colonne del modello', async () => {
@@ -1346,13 +1346,13 @@ it('elimina navigation_item_tag e navigation_item_type', async () => {
 
 > Prima di fissare la lista attesa allo Step 1, leggere le colonne effettive (`node ../../devops/db/db.mjs query "select column_name from information_schema.columns where table_name = 'permission' order by column_name"`) e sottrarre quelle che la migrazione elimina. La lista qui sopra è la forma attesa; se `permission` porta colonne che questo piano non ha incontrato, vanno tenute e aggiunte all'elenco, non eliminate di soppiatto.
 
-- [ ] **Step 2: Eseguirlo e verificare che fallisca**
+- [✅] **Step 2: Eseguirlo e verificare che fallisca**
 
 ```bash
 npm run test:integration -- lib/rbac/permission-schema.integration.test.ts
 ```
 
-- [ ] **Step 3: Scrivere la migrazione**
+- [✅] **Step 3: Scrivere la migrazione**
 
 ```sql
 -- Le colonne di presentazione sono su menu_entry dal 0016 e nessuno le legge
@@ -1414,25 +1414,25 @@ drop table if exists public.navigation_item_type;
 
 > `external_id`, `click_count`, `created_at` e `updated_at` sono nell'elenco perché non hanno lettori nel sorgente. Verificarlo prima di eseguire (`grep -rn "externalId\|clickCount" --include="*.ts" --include="*.tsx" .`): se un lettore esiste, la colonna resta e si toglie dalla lista.
 
-- [ ] **Step 4: Applicare e verificare**
+- [✅] **Step 4: Applicare e verificare**
 
 ```bash
 node ../../devops/db/db.mjs test-apply && node ../../devops/db/db.mjs apply
 npm run test:integration
 ```
 
-- [ ] **Step 5: Ripulire il modello Drizzle e i tipi**
+- [✅] **Step 5: Ripulire il modello Drizzle e i tipi**
 
 Togliere le colonne eliminate da `permission` e `rolePermission` in `lib/db/schema.ts`, rimuovere `navigationItemTag` e `navigationItemType`. In `lib/rbac/types.ts` eliminare `NavigationItemRow`, `RoleItemRow`, `ITEM_TYPE_CATEGORY`, `ITEM_TYPE_FUNCTIONALITY`, `FUNCTYPE_PERMISSION`, `ROOT_ID`, `OPERATIONS_ID` e ogni altro simbolo rimasto senza consumatori. Il compilatore li elenca.
 
-- [ ] **Step 6: Far girare tutto**
+- [✅] **Step 6: Far girare tutto**
 
 ```bash
 node ../../devops/db/db.mjs schema-write
 npm run schema:check && npm run lint && npm run typecheck && npm run test && npm run test:integration
 ```
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add sources/devops/db/ sources/microservices/web-construct/
@@ -1459,7 +1459,7 @@ Il criterio di successo di questa fase è negativo, e va dimostrato, non afferma
 **Interfaces:**
 - Consumes: tutto il lavoro dei Task 1–7.
 
-- [ ] **Step 1: Migrare il database E2E e far girare la suite**
+- [✅] **Step 1: Migrare il database E2E e far girare la suite**
 
 ```bash
 node sources/devops/db/db.mjs test-apply
@@ -1468,7 +1468,7 @@ uv run pytest
 
 Atteso: verde. I fallimenti attesi sono quelli dei test che si appoggiano ai nomi vecchi o al parametro `root=operations` della pagina Funzionalità — vanno aggiornati, non disattivati.
 
-- [ ] **Step 2: Verificare i tre percorsi che la fase ha toccato**
+- [✅] **Step 2: Verificare i tre percorsi che la fase ha toccato**
 
 ```bash
 uv run pytest sources/tests/e2e/test_sidebar.py
@@ -1476,15 +1476,15 @@ uv run pytest sources/tests/e2e/test_sidebar.py
 
 Poi, a mano nel browser con `npm run dev`, con **due utenti diversi**: un amministratore e un utente con un ruolo di servizio limitato. Per ciascuno confrontare la barra laterale con quella di prima della fase (`git stash` su un ramo pulito è il modo più rapido di avere il termine di paragone). Verificare in particolare che una pagina incorporata si apra ancora sul **suo id di prima** — è l'invariante che la migrazione 0016 protegge riusando l'id.
 
-- [ ] **Step 3: Verificare che la sessione di test non sia quella di sviluppo**
+- [✅] **Step 3: Verificare che la sessione di test non sia quella di sviluppo**
 
 Il database E2E e quello di sviluppo sono diversi, e l'account del database di test non è amministratore. Se la verifica manuale al passo 2 mostra una barra laterale vuota dove ne attendevi una piena, controllare a quale database punta l'anteprima prima di cercare un errore nel codice.
 
-- [ ] **Step 4: Rileggere la specifica e spuntare ciò che questa fase ha chiuso**
+- [✅] **Step 4: Rileggere la specifica e spuntare ciò che questa fase ha chiuso**
 
 Aprire [la specifica](../specs/2026-09-01-rbac-permission-model-design.md) e marcare `- [✅]` gli elementi di §6.4 effettivamente chiusi. HOLE-3 (la pagina incorporata che usa la presenza nel menu come controllo di sicurezza) **non** è chiuso da questa fase: `requirePermission` arriva in Fase 2. Non spuntarlo.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/tests/e2e/ docs/
