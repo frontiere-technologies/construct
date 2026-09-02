@@ -37,7 +37,9 @@ describeIntegration('language actions against the database', () => {
   })
 
   const input = (over: Partial<{ code: string; locale: string; isActive: boolean }> = {}) => ({
-    code, locale: 'zz-ZZ', name: `zzz_i18n_test_${code}`, nativeName: `zzz_i18n_test_${code}`,
+    // Il locale deriva dal code invece di essere fisso: locale e' UNIQUE, e una riga
+    // sopravvissuta a un run interrotto se lo prende e blocca ogni esecuzione futura.
+    code, locale: `${code}-ZZ`, name: `zzz_i18n_test_${code}`, nativeName: `zzz_i18n_test_${code}`,
     isActive: true, ...over,
   })
 
@@ -50,7 +52,9 @@ describeIntegration('language actions against the database', () => {
 
   it('rejects a duplicate code', async () => {
     await createLanguage(input())
-    const second = await createLanguage(input({ locale: 'zy-ZY' }))
+    // Stesso code, locale DIVERSO ma comunque derivato: il rifiuto deve arrivare dal
+    // code duplicato, e un 'zy-ZY' fisso potrebbe farlo arrivare dal locale.
+    const second = await createLanguage(input({ locale: `${code}-ZY` }))
     expect(second.error).toMatch(/codice/i)
   })
 

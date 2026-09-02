@@ -380,10 +380,18 @@ describe('trigger set_updated_at, su ogni tabella che lo esegue (Task 9, giro 2)
       // code e locale sono sotto vincoli check (solo lettere, e 'xx-XX'): la stessa piega
       // usata in language-actions.integration.test.ts per restare dentro al formato pur
       // restando collision-free.
+      //
+      // Il locale si DERIVA dal code, non e' fisso: app_language.locale e' UNIQUE, e un
+      // 'zz-ZZ' scritto a mano rende il test non ripetibile per sempre appena un run muore
+      // prima del finally — la riga rimasta si prende il locale e ogni esecuzione
+      // successiva fallisce sull'insert. Costato un'intera suite il 2026-09-02: i timeout
+      // del DB remoto hanno interrotto un run, e da li' in poi cadevano nove test di
+      // i18n che non c'entravano niente. Randomizzare il solo code non basta a essere
+      // collision-free se un altro campo unico resta costante.
       const code = unique().slice(-3).replace(/[0-9]/g, digit => String.fromCharCode(97 + Number(digit)))
       const [created] = await db.insert(appLanguage)
         .values({
-          code, locale: 'zz-ZZ', isDefault: false,
+          code, locale: `${code}-ZZ`, isDefault: false,
           name: `zzz_rbac_trigger_test_${code}`, nativeName: `zzz_rbac_trigger_test_${code}`,
         })
         .returning({ idLanguage: appLanguage.idLanguage })
