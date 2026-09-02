@@ -6,6 +6,7 @@ import { Plus, Pencil, Trash2, SlidersHorizontal, Search, X } from 'lucide-react
 import NavigationTree from '@/components/rbac/NavigationTree'
 import FilterDrawer from '@/components/rbac/FilterDrawer'
 import { PageContainer } from '@/components/shared/PageContainer'
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { moveNavigationItem, deleteNavigationItem } from '@/lib/rbac/navigation-actions'
@@ -21,6 +22,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
   const [search, setSearch] = useState('')
   const [searchDraft, setSearchDraft] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const [deleting, setDeleting] = useState<UserNavigationTreeDto | null>(null)
 
   const filterTree = (nodes: UserNavigationTreeDto[]): UserNavigationTreeDto[] => {
     if (!search.trim()) return nodes
@@ -62,12 +64,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
             variant="ghost" size="icon"
             className="enabled:hover:text-destructive"
             data-testid="nav-delete" title={t('common.actions.delete')} aria-label={t('common.actions.delete')}
-            onClick={async () => {
-              if (confirm(t('functionalities.tree.confirm_delete', { name: node.name }))) {
-                try { await deleteNavigationItem(node.id); router.refresh() }
-                catch (e) { alert(e instanceof Error ? e.message : t('functionalities.tree.delete_failed')) }
-              }
-            }}
+            onClick={() => setDeleting(node)}
           ><Trash2 size={15} /></Button>
         )}
       </div>
@@ -126,6 +123,19 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
         renderTrailing={trailing}
         dnd={search.trim() ? undefined : { canDrag: n => !n.isImmutable, onMove: handleMove }}
       />
+      {deleting && (
+        <ConfirmModal
+          title={t('common.actions.delete')}
+          message={t('functionalities.tree.confirm_delete', { name: deleting.name })}
+          confirmLabel={t('common.actions.delete')}
+          onCancel={() => setDeleting(null)}
+          onConfirm={async () => {
+            try { await deleteNavigationItem(deleting.id); router.refresh() }
+            catch (e) { alert(e instanceof Error ? e.message : t('functionalities.tree.delete_failed')) }
+            finally { setDeleting(null) }
+          }}
+        />
+      )}
     </PageContainer>
   )
 }
