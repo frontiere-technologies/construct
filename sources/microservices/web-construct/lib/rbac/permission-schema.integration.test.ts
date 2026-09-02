@@ -88,10 +88,13 @@ describe('identità del permesso', () => {
     expect(rows[0].orfane).toBe(0)
   })
 
-  it('dà un code a ogni GRANT e a nessuna CATEGORY', async () => {
+  /* DEC-14: il code non segue più il solo kind, ma "origin = 'SOURCE' e kind = 'GRANT'".
+   * Sui dati di oggi ogni riga è origin = 'CONSOLE' (0015): l'unica cosa vera da verificare
+   * qui è che nessuna di loro porti ancora un code — la migrazione 0019 li ha azzerati. */
+  it('non lascia un code su nessuna riga CONSOLE', async () => {
     const rows = await db.execute(sql`
       select count(*)::int as violazioni from public.permission
-      where (kind = 'GRANT' and code is null) or (kind = 'CATEGORY' and code is not null)
+      where origin = 'CONSOLE' and code is not null
     `)
     expect(rows[0].violazioni).toBe(0)
   })
@@ -100,28 +103,44 @@ describe('identità del permesso', () => {
    * (2 = FUNCTIONALITY, coerente con kind = 'GRANT') solo per soddisfare quel vincolo, non
    * perché il test riguardi id_item_type — il brief lo ometteva e l'insert falliva prima
    * ancora di arrivare al vincolo che il test vuole verificare. */
-  it('rifiuta un GRANT senza code', async () => {
+  it('rifiuta un GRANT di origine SOURCE senza code', async () => {
     await expect(
       db.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
-        values ('GRANT', null, 'CONSOLE', 'senza codice', 0, 0, 2)
+        values ('GRANT', null, 'SOURCE', 'senza codice', 0, 0, 2)
       `),
     ).rejects.toThrow()
   })
 
-  it('rifiuta due permessi con lo stesso code', async () => {
+  /* Direzione simmetrica della precedente: un code presente su una riga CONSOLE è
+   * altrettanto una violazione del vincolo nuovo, non solo la sua assenza su una SOURCE. */
+  it('rifiuta un code su un permesso di origine CONSOLE', async () => {
+    await expect(
+      db.execute(sql`
+        insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
+        values ('GRANT', 'non-dovrebbe-esistere', 'CONSOLE', 'con codice', 0, 0, 2)
+      `),
+    ).rejects.toThrow()
+  })
+
+  it('rifiuta due permessi SOURCE con lo stesso code', async () => {
+    // Sui dati attuali non esiste ancora nessuna riga origin = 'SOURCE' (la Fase 2
+    // introduce la prima): questo test ne inserisce una di prova e la ripulisce nel
+    // finally, altrimenti il vincolo nuovo (e permission_code_unique) resterebbero
+    // verificati solo sulla direzione CONSOLE, mai su quella per cui il code esiste
+    // davvero.
     await db.execute(sql`
       insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
-      values ('GRANT', 'test-duplicato', 'CONSOLE', 'primo', 0, 0, 2)
+      values ('GRANT', 'test-duplicato', 'SOURCE', 'primo', 0, 0, 2)
     `)
-    // finally, non l'ultima riga: se l'assert sopra fallisse, 'test-duplicato' resterebbe
+    // finally, non l'ultima riga: se l'assert sotto fallisse, 'test-duplicato' resterebbe
     // sul database e avvelenerebbe la riesecuzione di questo test e i task successivi della
     // stessa fase, che condividono la stessa suite di integrazione.
     try {
       await expect(
         db.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
-          values ('GRANT', 'test-duplicato', 'CONSOLE', 'secondo', 0, 0, 2)
+          values ('GRANT', 'test-duplicato', 'SOURCE', 'secondo', 0, 0, 2)
         `),
       ).rejects.toThrow()
     } finally {

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { eq, like, or, sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { permission } from '@/lib/db/schema'
@@ -30,44 +30,15 @@ async function writeTags(database: NavigationDatabase, idItem: number, tagTransl
   }
 }
 
-/** Stessa normalizzazione della base delle migrazioni 0015/0016: minuscolo, non
- *  alfanumerici in trattini, trattini di bordo via. Il ripiego 'permesso' nudo qui
- *  sotto è invece solo di questa funzione — né la 0015 né la 0016 lo producono mai.
- *  Per un nome vuoto o di soli spazi, la 0015 sostituisce 'permesso-' || id_permission
- *  PRIMA di normalizzare: l'id è già dentro la sua base, non un ripiego applicato dopo
- *  come qui. Per un nome non vuoto ma privo di caratteri alfanumerici (es. "!!!") la
- *  0015 non aveva alcun ripiego e produceva stringa vuota; la 0016 ripara quel buco a
- *  posteriori con lo stesso 'permesso-' || id_permission, mai col nudo 'permesso'.
- *  La forma del suffisso che risolve le collisioni diverge allo stesso modo: qui è un
- *  contatore da reserveUniqueCode (sotto), nelle migrazioni è l'id_permission — perché
- *  a runtime l'id non esiste ancora quando il code va calcolato, prima dell'insert, e
- *  ottenerlo vorrebbe dire scrivere il code e poi correggerlo, l'abitudine che DEC-3
- *  vieta per un code già assegnato. Le forme restano uniche fra loro perché
- *  reserveUniqueCode legge lo stato reale della tabella prima di scegliere il proprio
- *  contatore. */
-export function toPermissionCode(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'permesso'
-}
-
-async function reserveUniqueCode(database: NavigationDatabase, base: string): Promise<string> {
-  const taken = await database
-    .select({ code: permission.code })
-    .from(permission)
-    .where(or(eq(permission.code, base), like(permission.code, `${base}-%`)))
-  if (!taken.some(r => r.code === base)) return base
-  let n = 2
-  while (taken.some(r => r.code === `${base}-${n}`)) n += 1
-  return `${base}-${n}`
-}
-
 export async function createNavigationItem(input: CreateNavItemInput): Promise<{ id: number }> {
   await requireAdmin()
   if (!input.name.trim()) throw new Error('Name is required')
   const parent = input.idItemParent ?? input.idRootParent ?? ROOT_ID
   // kind è NOT NULL da 0015: stessa mappatura del backfill della migrazione
-  // (id_item_type 1 = CATEGORY, altrimenti GRANT). code serve solo ai GRANT
-  // (permission_code_matches_kind lo impone) e nasce con la stessa normalizzazione
-  // usata dal backfill, reso univoco qui invece che con un suffisso sull'id.
+  // (id_item_type 1 = CATEGORY, altrimenti GRANT). Un permesso creato dalla
+  // console nasce con origin = 'CONSOLE' (default della colonna) e code
+  // nullo: permission_code_matches_kind lo impone solo per origin = 'SOURCE'
+  // (DEC-14) — non c'e' nessun code da generare qui.
   const kind = input.idItemType === 1 ? 'CATEGORY' : 'GRANT'
 
   try {
@@ -75,7 +46,6 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
       await lockNavigationWrites(tx)
       const siblings = await tx.select({ orderPosition: permission.orderPosition }).from(permission).where(eq(permission.idParent, parent))
       const nextOrder = siblings.reduce((m, r) => Math.max(m, r.orderPosition + 1), 0)
-      const code = kind === 'GRANT' ? await reserveUniqueCode(tx, toPermissionCode(input.name.trim())) : null
       const [row] = await tx
         .insert(permission)
         .values({
@@ -93,7 +63,6 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
           configVisibility: 0,
           noPermissionNeedForNavigation: 0,
           kind,
-          code,
         })
         .returning({ idItem: permission.idPermission })
       await writeTags(tx, row.idItem, input.tagTranslations)
