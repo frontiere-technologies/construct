@@ -1,31 +1,29 @@
 import { cache } from 'react'
 import { asc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { permission, rolePermission } from '@/lib/db/schema'
+import { menuEntry, permission, rolePermission } from '@/lib/db/schema'
 import type { MenuItem } from '@/types/menu'
-import { toNavigationItemRow } from './nav-row-mapper'
-import { resolveAuthorizedItemIds, mapNavigationToSidebar } from './sidebar-adapter'
-import { DEFAULT_LOCALE, type Locale, type NavigationItemRow, type RoleItemRow } from './types'
+import { toMenuEntryRow, toNavigationItemRow } from './nav-row-mapper'
+import { resolveGrantedPermissionIds, mapMenuToSidebar } from './sidebar-adapter'
+import { DEFAULT_LOCALE, type Locale, type NavigationItemRow } from './types'
 
 export const getSidebarMenu = cache(async (
   roleIds: number[],
   locale: Locale = DEFAULT_LOCALE,
   fallbackLocale: Locale = DEFAULT_LOCALE,
 ): Promise<MenuItem[]> => {
-  const [navRows, roleRows] = await Promise.all([
-    db.select().from(permission).orderBy(asc(permission.orderPosition)),
+  const [entryRows, grantRows] = await Promise.all([
+    db.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition)),
     roleIds.length
       ? db
-          .select({ id_role: rolePermission.idRole, id_item: rolePermission.idPermission, authorized: rolePermission.authorized })
+          .select({ id_role: rolePermission.idRole, id_permission: rolePermission.idPermission })
           .from(rolePermission)
           .where(inArray(rolePermission.idRole, roleIds))
       : Promise.resolve([]),
   ])
-
-  const items = navRows.map(toNavigationItemRow)
-  const roleItems = roleRows as RoleItemRow[]
-  const authorized = resolveAuthorizedItemIds(items, roleItems, roleIds)
-  return mapNavigationToSidebar(items, authorized, locale, fallbackLocale)
+  const entries = entryRows.map(toMenuEntryRow)
+  const granted = resolveGrantedPermissionIds(grantRows, roleIds)
+  return mapMenuToSidebar(entries, granted, locale, fallbackLocale)
 })
 
 export async function getNavigationItemById(idItem: number): Promise<NavigationItemRow | null> {

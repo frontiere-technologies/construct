@@ -47,6 +47,24 @@ export interface RoleItemRow {
   authorized: boolean
 }
 
+/** A menu_entry row (Task 3): a voice reuses its origin permission's id, but the tree it
+ * describes is structural, not authorization — id_permission null means a public voice,
+ * and a container (id_functionality_type null) carries no permission of its own at all. */
+export interface MenuEntryRow {
+  id_menu_entry: number
+  id_permission: number | null
+  id_parent: number | null
+  name: string | null
+  order_position: number
+  navbar_position: 'TOP' | 'BOTTOM' | null
+  icon_path: string | null
+  id_functionality_type: number | null
+  functionality_link: string | null
+  open_in_new_tab: number
+  item_translation: Record<string, ItemTranslation> | null
+  is_immutable: number
+}
+
 export type RoleType = 'SYSTEM' | 'SERVICE' | 'SYNCED'
 
 export interface RolePageItemDto {
