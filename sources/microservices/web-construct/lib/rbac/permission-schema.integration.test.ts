@@ -97,6 +97,37 @@ describe('identità del permesso', () => {
     expect(rows[0].violazioni).toBe(0)
   })
 
+  /* permission_kind_valid ('CATEGORY', 'GRANT') non era esercitato da nessun test: ogni test
+   * qui sopra inserisce righe con un kind ammesso, non uno vietato. Sullo stampo dei test già
+   * presenti per permission_code_matches_kind — insert diretto, rejects.toThrow, pulizia in
+   * finally per lo stesso motivo (una riga rimasta avvelenerebbe la riesecuzione). */
+  it('rifiuta un kind non ammesso', async () => {
+    try {
+      await expect(
+        db.execute(sql`
+          insert into public.permission (kind, origin, description, id_parent, order_position)
+          values ('BOGUS', 'CONSOLE', 'kind non valido', 0, 0)
+        `),
+      ).rejects.toThrow()
+    } finally {
+      await db.execute(sql`delete from public.permission where description = 'kind non valido'`)
+    }
+  })
+
+  /* Stessa lacuna, sull'altro vincolo: permission_origin_valid ('SOURCE', 'CONSOLE'). */
+  it('rifiuta un origin non ammesso', async () => {
+    try {
+      await expect(
+        db.execute(sql`
+          insert into public.permission (kind, origin, description, id_parent, order_position)
+          values ('GRANT', 'BOGUS', 'origin non valido', 0, 0)
+        `),
+      ).rejects.toThrow()
+    } finally {
+      await db.execute(sql`delete from public.permission where description = 'origin non valido'`)
+    }
+  })
+
   it('rifiuta un GRANT di origine SOURCE senza code', async () => {
     await expect(
       db.execute(sql`
