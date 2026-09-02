@@ -175,7 +175,8 @@ export interface CreateNavItemInput {
   tagTranslations: Record<string, string[]>
 }
 export type UpdateNavItemInput = CreateNavItemInput
-export interface MoveInput { targetParentId: number; orderPosition: number }
+/** targetParentId null means the menu root — there is no item that stands for it (Task 5). */
+export interface MoveInput { targetParentId: number | null; orderPosition: number }
 
 export type UserStatusId = 1 | 2 // 1 Deactivated, 2 Active
 

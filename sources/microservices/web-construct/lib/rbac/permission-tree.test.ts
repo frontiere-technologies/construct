@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildAuthTree, buildAuthMap, applyToggle, computeDeltas } from './permission-tree'
-import { buildNavTree } from './nav-tree-builder'
-import type { NavigationItemRow, UserNavigationTreeDto } from './types'
+import type { NavigationItemRow } from './types'
 
 const row = (id: number, parent: number | null, type: number, name: string): NavigationItemRow => ({
   id_item: id, name, id_item_type: type, id_functionality_type: type === 2 ? 3 : null,
@@ -39,19 +38,12 @@ describe('buildAuthTree', () => {
     expect(rbac.children.find(c => c.id === 3)!.functionalityType).toBe('INTERNAL_FUNCTIONALITY')
   })
 
-  it('agrees with buildNavTree on the icon-driving fields', () => {
-    const navTrees = buildNavTree(items, new Map(), 0)
-    const kindById = (ns: UserNavigationTreeDto[]): Record<number, string> => {
-      const out: Record<number, string> = {}
-      const walk = (list: UserNavigationTreeDto[]) => list.forEach(n => {
-        out[n.id] = `${n.type}/${n.functionalityType ?? 'none'}`
-        walk(n.children)
-      })
-      walk(ns)
-      return out
-    }
-    expect(kindById(trees)).toEqual(kindById(navTrees))
-  })
+  // Fino al Task 5 questo test confrontava buildAuthTree con buildNavTree sulla STESSA
+  // fixture NavigationItemRow[], perché le due funzioni leggevano la stessa tabella. Da qui
+  // in poi buildNavTree costruisce dall'albero del menu (MenuEntryRow[], Task 5): i due
+  // alberi sono indipendenti, con forme diverse, e non c'è più una fixture unica su cui
+  // "concordare". La garanzia sull'icona resta nel test sopra (functionalityType propagato)
+  // e nei test propri di nav-tree-builder.test.ts sul lato menu_entry.
 })
 
 describe('buildAuthMap', () => {

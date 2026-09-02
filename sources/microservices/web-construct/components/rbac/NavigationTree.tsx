@@ -16,7 +16,7 @@ interface Indicator { id: number; pos: DropPos }
 
 interface DndConfig {
   canDrag: (node: UserNavigationTreeDto) => boolean
-  onMove: (id: number, targetParentId: number, orderPosition: number) => void
+  onMove: (id: number, targetParentId: number | null, orderPosition: number) => void
 }
 interface NavigationTreeProps {
   nodes: UserNavigationTreeDto[]
@@ -236,9 +236,11 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
       dnd.onMove(activeNum, overNode.id, childCount)
       return
     }
-    // before/after: reorder among the hovered row's siblings.
-    const targetParent = overNode.parentId ?? 0
-    const siblings = (index.has(targetParent) ? index.get(targetParent)!.children : nodes)
+    // before/after: reorder among the hovered row's siblings. A null parentId IS the menu
+    // root (Task 5) — not the old ROOT_ID sentinel — so it's passed through as-is, and the
+    // siblings are the top-level `nodes` rather than some indexed item's children.
+    const targetParent = overNode.parentId
+    const siblings = (targetParent !== null && index.has(targetParent) ? index.get(targetParent)!.children : nodes)
       .filter(n => n.id !== activeNum)
     const overIdx = siblings.findIndex(n => n.id === ind.id)
     if (overIdx < 0) { dnd.onMove(activeNum, targetParent, siblings.length); return }

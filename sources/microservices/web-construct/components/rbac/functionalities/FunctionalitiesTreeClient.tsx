@@ -31,7 +31,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
     return walk(nodes)
   }
 
-  const handleMove = async (id: number, targetParentId: number, orderPosition: number) => {
+  const handleMove = async (id: number, targetParentId: number | null, orderPosition: number) => {
     try { await moveNavigationItem(id, { targetParentId, orderPosition }); router.refresh() }
     catch (e) { alert(e instanceof Error ? e.message : t('functionalities.tree.move_failed')) }
   }

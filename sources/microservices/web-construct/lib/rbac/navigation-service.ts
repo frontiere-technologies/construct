@@ -1,11 +1,11 @@
 import { cache } from 'react'
 import { asc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { menuEntry, permission, rolePermission } from '@/lib/db/schema'
+import { menuEntry, rolePermission } from '@/lib/db/schema'
 import type { MenuItem } from '@/types/menu'
-import { toMenuEntryRow, toNavigationItemRow } from './nav-row-mapper'
+import { toMenuEntryRow } from './nav-row-mapper'
 import { resolveGrantedPermissionIds, mapMenuToSidebar } from './sidebar-adapter'
-import { DEFAULT_LOCALE, type Locale, type NavigationItemRow } from './types'
+import { DEFAULT_LOCALE, type Locale, type MenuEntryRow } from './types'
 
 export const getSidebarMenu = cache(async (
   roleIds: number[],
@@ -26,7 +26,11 @@ export const getSidebarMenu = cache(async (
   return mapMenuToSidebar(entries, granted, locale, fallbackLocale)
 })
 
-export async function getNavigationItemById(idItem: number): Promise<NavigationItemRow | null> {
-  const [row] = await db.select().from(permission).where(eq(permission.idPermission, idItem)).limit(1)
-  return row ? toNavigationItemRow(row) : null
+// La rotta /embedded/{id} usa l'identificativo della VOCE di menu (sidebar-adapter la
+// costruisce da entry.id_menu_entry), non quello del permesso: da quando i due alberi hanno
+// sequenze separate (Task 5), i due numeri non coincidono più per le voci create dopo la
+// migrazione. Leggere qui da `permission` risolverebbe l'id sbagliato — o nessuno.
+export async function getNavigationItemById(idMenuEntry: number): Promise<MenuEntryRow | null> {
+  const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, idMenuEntry)).limit(1)
+  return row ? toMenuEntryRow(row) : null
 }

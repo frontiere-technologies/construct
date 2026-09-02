@@ -1,25 +1,27 @@
 import { describe, it, expect } from 'vitest'
 import { buildNavTree, canDeleteSubtree, isDescendant, selectableParents } from './nav-tree-builder'
-import type { NavigationItemRow } from './types'
+import type { MenuEntryRow } from './types'
 
-const row = (id: number, parent: number | null, type: number, name: string, extra: Partial<NavigationItemRow> = {}): NavigationItemRow => ({
-  id_item: id, name, id_item_type: type, id_functionality_type: type === 2 ? 3 : null,
-  functionality_link: type === 2 ? 'link-' + id : null, icon_path: null, id_item_parent: parent,
-  order_position: id, navbar_position: null, item_translation: { EN: { name, description: 'd' + id } },
-  is_immutable: 0, config_visibility: 0, no_permission_need_for_navigation: 0, open_in_new_tab: 1, ...extra,
+const row = (id: number, parent: number | null, isCategory: boolean, name: string, extra: Partial<MenuEntryRow> = {}): MenuEntryRow => ({
+  id_menu_entry: id, id_permission: isCategory ? null : id, id_parent: parent, name,
+  order_position: id, navbar_position: null, icon_path: null,
+  id_functionality_type: isCategory ? null : 3,
+  functionality_link: isCategory ? null : 'link-' + id,
+  open_in_new_tab: 1, item_translation: { EN: { name, description: 'd' + id } }, is_immutable: 0, ...extra,
 })
 
-// root(0) > A(2,cat,immutable) > A1(3,leaf); root(0) > B(4,cat) > B1(5,leaf); hidden(6,leaf,config_visibility=1)
-const items: NavigationItemRow[] = [
-  row(0, null, 1, 'root'), row(2, 0, 1, 'A', { is_immutable: 1 }), row(3, 2, 2, 'A1'),
-  row(4, 0, 1, 'B'), row(5, 4, 2, 'B1'), row(6, 0, 2, 'hidden', { config_visibility: 1 }),
+// A(2,cat,immutable) > A1(3,leaf); B(4,cat) > B1(5,leaf) — both A and B are top-level
+// (id_parent nullo): there is no virtual root row to seed the tree from any more.
+const items: MenuEntryRow[] = [
+  row(2, null, true, 'A', { is_immutable: 1 }), row(3, 2, false, 'A1'),
+  row(4, null, true, 'B'), row(5, 4, false, 'B1'),
 ]
 const tags = new Map<number, { tag_lan: string; tag: string }[]>([[5, [{ tag_lan: 'EN', tag: 'x' }, { tag_lan: 'EN', tag: 'y' }]]])
 
 describe('buildNavTree', () => {
-  const trees = buildNavTree(items, tags, 0)
-  it('builds children of root, ordered, excluding config_visibility', () => {
-    expect(trees.map(t => t.id)).toEqual([2, 4]) // 6 hidden
+  const trees = buildNavTree(items, tags)
+  it('builds the children of the menu root (id_parent nullo), ordered', () => {
+    expect(trees.map(t => t.id)).toEqual([2, 4])
   })
   it('populates extended fields incl. functionalityType + tagTranslations', () => {
     const b1 = trees.find(t => t.id === 4)!.children.find(c => c.id === 5)!
@@ -33,20 +35,19 @@ describe('buildNavTree', () => {
   it('marks immutable nodes', () => {
     expect(trees.find(t => t.id === 2)!.isImmutable).toBe(true)
   })
+  it('derives CATEGORY from a null id_functionality_type, not from an item-type column', () => {
+    expect(trees.find(t => t.id === 2)!.type).toBe('CATEGORY')
+  })
 })
 
 describe('canDeleteSubtree', () => {
   it('blocks an immutable target', () => { expect(canDeleteSubtree(items, 2)).toBe(false) })
   it('blocks when a descendant is immutable', () => {
-    // make A1 immutable, A mutable
-    const mod = items.map(i => i.id_item === 2 ? { ...i, is_immutable: 0 } : i.id_item === 3 ? { ...i, is_immutable: 1 } : i)
+    // make A mutable, A1 immutable
+    const mod = items.map(i => i.id_menu_entry === 2 ? { ...i, is_immutable: 0 } : i.id_menu_entry === 3 ? { ...i, is_immutable: 1 } : i)
     expect(canDeleteSubtree(mod, 2)).toBe(false)
   })
   it('allows a fully-deletable subtree', () => { expect(canDeleteSubtree(items, 4)).toBe(true) })
-  it('blocks the virtual roots', () => {
-    expect(canDeleteSubtree(items, 0)).toBe(false)
-    expect(canDeleteSubtree(items, -1)).toBe(false)
-  })
 })
 
 describe('isDescendant', () => {
@@ -55,11 +56,11 @@ describe('isDescendant', () => {
   it('treats the node itself as a descendant (cycle into self)', () => { expect(isDescendant(items, 2, 2)).toBe(true) })
 })
 
-// roots(0,-1); Reports(10) > Weekly(11) > Deep(12); Home(13,immutable cat); Leaf(14,functionality)
-const catItems: NavigationItemRow[] = [
-  row(0, null, 1, 'root'), row(-1, null, 1, 'operations'),
-  row(10, 0, 1, 'Reports'), row(11, 10, 1, 'Weekly'), row(12, 11, 1, 'Deep'),
-  row(13, 0, 1, 'Home', { is_immutable: 1, navbar_position: 'TOP' }), row(14, 0, 2, 'Leaf'),
+// Reports(10) > Weekly(11) > Deep(12); Home(13,immutable cat); Leaf(14,functionality) — all
+// top-level nodes have id_parent nullo, Reports/Home/Leaf included.
+const catItems: MenuEntryRow[] = [
+  row(10, null, true, 'Reports'), row(11, 10, true, 'Weekly'), row(12, 11, true, 'Deep'),
+  row(13, null, true, 'Home', { is_immutable: 1, navbar_position: 'TOP' }), row(14, null, false, 'Leaf'),
 ]
 // selectableParents also reports navbar_position, which is what orders the Genitore dropdown
 const allCats = [
@@ -73,16 +74,9 @@ describe('selectableParents', () => {
     expect(selectableParents(catItems)).toEqual(allCats)
   })
 
-  it('leaves out the virtual roots and functionalities', () => {
+  it('leaves out functionalities — there is no virtual root row to leave out any more', () => {
     const ids = selectableParents(catItems).map(p => p.id)
-    expect(ids).not.toContain(0)
-    expect(ids).not.toContain(-1)
     expect(ids).not.toContain(14)
-  })
-
-  it('leaves out categories hidden from the config UI', () => {
-    const hidden = [...catItems, row(15, 0, 1, 'Technical', { config_visibility: 1 })]
-    expect(selectableParents(hidden).map(p => p.id)).not.toContain(15)
   })
 
   it('excludes the item itself and its whole subtree, so a category cannot be nested in itself', () => {
@@ -97,7 +91,7 @@ describe('selectableParents', () => {
   })
 
   it('falls back to the raw name when the default locale has no translation', () => {
-    const untranslated = [row(20, 0, 1, 'Raw', { item_translation: null })]
+    const untranslated = [row(20, null, true, 'Raw', { item_translation: null })]
     expect(selectableParents(untranslated)).toEqual([{ id: 20, name: 'Raw', navbarPosition: null }])
   })
 })

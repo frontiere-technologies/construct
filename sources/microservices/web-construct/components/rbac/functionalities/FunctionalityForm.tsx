@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { createNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'
-import { isGenitoreLocked, buildGenitoreOptions, genitoreValue } from '@/lib/rbac/genitore-lock'
+import { isGenitoreLocked, buildGenitoreOptions, genitoreValue, parseGenitoreSelection } from '@/lib/rbac/genitore-lock'
 import { ITEM_TYPES, resolveItemType } from '@/lib/rbac/item-type-options'
 import { ITEM_TYPE_FUNCTIONALITY } from '@/lib/rbac/types'
 import { useI18n } from '@/context/I18nContext'
@@ -108,7 +108,7 @@ export default function FunctionalityForm(
                 data-testid="select-genitore"
                 ariaLabel={t('functionalities.form.parent_placeholder')}
                 value={genitoreValue(f.idItemParent)}
-                onChange={v => set('idItemParent', Number(v))}
+                onChange={v => set('idItemParent', parseGenitoreSelection(Number(v)))}
                 options={buildGenitoreOptions(parents)}
                 placeholder={t('functionalities.form.parent_placeholder')}
                 disabled={genitoreLocked}

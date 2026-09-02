@@ -28,6 +28,16 @@ export function genitoreValue(idItemParent: number | null): number {
   return idItemParent ?? ROOT_ID
 }
 
+/**
+ * Inverse of genitoreValue: a raw dropdown selection maps back to `null` only for the Root
+ * sentinel. Needed because the menu root is the absence of a parent (Task 5), not a real
+ * item — writing the ROOT_ID placeholder itself into id_parent would reference a menu_entry
+ * row that doesn't exist.
+ */
+export function parseGenitoreSelection(value: number): number | null {
+  return value === ROOT_ID ? null : value
+}
+
 // The Genitore field is locked (disabled, showing Root) only when there's no real choice to
 // make: no mutable category exists to nest under (just the immutable Home/Admin sections are
 // seeded), so Root is the single option. Otherwise it stays editable in both modes — moving
