@@ -2281,3 +2281,32 @@ $$;
 drop function if exists public.replace_item_tags(bigint, jsonb);
 drop table if exists public.navigation_item_tag;
 drop table if exists public.navigation_item_type;
+
+-- Migration: 0022_permission_updated_at_trigger_orphan.sql
+-- Il trigger permission_updated_at (rinominato da navigation_item_updated_at nel Task 1,
+-- vedi 0014_permission_rename.sql) esegue la funzione condivisa public.set_updated_at(), che
+-- fa `new.updated_at = now()`. Il Task 7 (0021_permission_cleanup.sql) ha tolto la colonna
+-- updated_at da permission perche' nessun lettore del sorgente la citava piu' -- ma non ha
+-- toccato il trigger che ancora la scriveva: nessuno ha collegato le due cose. Da quella
+-- migrazione in poi qualunque UPDATE su permission fallisce (`record "new" has no field
+-- "updated_at"`), e in produzione modificare una funzionalita' con un permesso associato da'
+-- errore 500. Verificato di persona sul database di sviluppo prima di scrivere questa
+-- migrazione: il trigger c'e' ancora, e il corpo di set_updated_at() cita updated_at.
+--
+-- E' il tipo di difetto che si ripete perche' il legame tra una colonna e il trigger che la
+-- scrive vive solo nel testo del corpo della funzione trigger, non in un vincolo che Postgres
+-- controlli al momento del DROP COLUMN -- a differenza di una foreign key o di una vista, che
+-- il DROP avrebbe rifiutato subito. Chi toglie una colonna deve cercare a mano i trigger
+-- BEFORE UPDATE sulla stessa tabella (pg_trigger), non fidarsi che l'assenza di un errore alla
+-- migrazione significhi assenza di un difetto: qui il DROP COLUMN e' passato senza una riga di
+-- avviso, e il sintomo si è visto solo al primo UPDATE successivo, sull'applicazione.
+--
+-- set_updated_at() e' condivisa da app_language, permission, translation_key,
+-- translation_value e users (verificato con una query su pg_trigger prima di scrivere questa
+-- migrazione). Delle cinque, permission e' l'unica ad aver perso la colonna che la funzione
+-- scrive: questa migrazione tocca solo il suo trigger. La funzione condivisa non si tocca, e
+-- nemmeno i trigger delle altre quattro tabelle -- restano cosi' come sono, con updated_at
+-- ancora al suo posto. menu_entry non c'entra: ha una propria colonna updated_at ma non ha mai
+-- avuto un trigger set_updated_at (verificato: nessuna riga per lei in pg_trigger con quella
+-- funzione), quindi non e' toccata ne' da questa migrazione ne' dal difetto che corregge.
+drop trigger permission_updated_at on public.permission;

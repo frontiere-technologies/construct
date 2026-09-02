@@ -244,3 +244,27 @@ describe('pulizia colonne e tabelle assorbite (Task 7)', () => {
     expect(rows.length).toBe(0)
   })
 })
+
+/* Task 9: il Task 7 ha tolto updated_at da permission senza toccare il trigger
+ * permission_updated_at, che esegue la funzione condivisa set_updated_at() —
+ * `new.updated_at = now()`. Nessun test, prima di questo, faceva mai un UPDATE reale su una
+ * riga di permission: i test di travaso e di identità sopra leggono e inseriscono, ma non
+ * modificano una riga esistente, quindi nessuno ha mai eseguito il trigger dal 0021 in poi. Un
+ * UPDATE che passa qui è l'unica prova che conta — un controllo su pg_trigger si limiterebbe a
+ * verificare che il trigger sia sparito, non che l'operazione che falliva ora funzioni. */
+describe('trigger permission_updated_at (Task 9)', () => {
+  it('accetta un UPDATE su una riga di permission', async () => {
+    const [created] = await db.insert(permission)
+      .values({ name: 'zzz_rbac_trigger_orphan_test', kind: 'CATEGORY' })
+      .returning({ idPermission: permission.idPermission })
+    try {
+      await expect(
+        db.update(permission)
+          .set({ description: 'aggiornata dal test' })
+          .where(eq(permission.idPermission, created.idPermission)),
+      ).resolves.not.toThrow()
+    } finally {
+      await db.delete(permission).where(eq(permission.idPermission, created.idPermission))
+    }
+  })
+})
