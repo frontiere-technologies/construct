@@ -68,6 +68,7 @@ conseguenze osservabili nel codice:
 - [x] ✅ ID=DEC-9, Title=Sincronizzazione via migrazione generata — il catalogo vive in `lib/rbac/permission-catalog.ts` e un comando genera la migrazione ordinata in `sources/devops/db/migrations/`. Niente sincronizzazione all'avvio: su più istanze è una corsa fra processi e in ambiente serverless non ha un momento affidabile in cui girare.
 - [x] ✅ ID=DEC-10, Title=Il «sempre» è meccanizzato, non strutturale — in Next.js nessun punto di intercettazione copre le azioni server. Una guardia AST in `guards/` impone la chiamata a `requirePermission` o un'esenzione dichiarata.
 - [x] ✅ ID=DEC-11, Title=Nessuna cache fra richieste — solo deduplica dentro la richiesta con `cache()` di React. Una cache a scadenza romperebbe la revoca immediata promessa da DEC-4, per risparmiare una interrogazione indicizzata che l'applicazione già paga oggi in `requireAdmin`. Si riconsidera su misura, non su sospetto.
+- [x] ✅ ID=DEC-14, Title=Il `code` appartiene solo ai permessi che il sorgente dichiara — correzione del 2026-09-02, sollevata dal proprietario del progetto guardando i codici nati dai dati reali. `origin = 'SOURCE'` porta un `code` obbligatorio, `origin = 'CONSOLE'` lo lascia **nullo**. Motivo: il `code` è il patto con `requirePermission('...')` nel sorgente, e un permesso creato dalla console non ha controparte nel sorgente — quel patto sarebbe con nessuno. La voce di menu si collega al proprio permesso per **identificativo**, mai per codice, quindi niente lo richiede. La prova che la versione precedente era sbagliata sta nel sorgente: gli unici due punti che leggevano `permission.code` erano dentro `reserveUniqueCode`, che li consultava solo per rendere unici i codici che stava generando — un anello chiuso, senza consumatori. Ne discende che DEC-3 (codice piatto, opaco, immutabile) vale **solo** per i codici del catalogo.
 - [x] ✅ ID=DEC-13, Title=Una categoria vuota non si mostra più — conseguenza voluta di DEC-7 e DEC-2, decisa il 2026-09-02 con il caso concreto sotto gli occhi. Nel modello vecchio una categoria presente fra le concessioni compariva nella barra laterale **anche senza discendenti visibili**, perché categoria e permesso erano la stessa riga. Nel modello nuovo un contenitore di menu non porta mai un permesso proprio — il travaso azzera `id_permission` su ogni riga di tipo categoria — quindi si mostra solo se contiene qualcosa di visibile. Sul database di sviluppo questo fa sparire la categoria «Home», concessa a due ruoli e priva di discendenti concessi. È il vestigio che la ristrutturazione elimina, non una regressione da riparare: la Fase 1 accetta qui una deviazione dichiarata dal proprio criterio «non cambia niente», ed è l'unica.
 - [x] ✅ ID=DEC-12, Title=Profilo e tema restano servizi personali — `saveProfile` e `saveThemeConfig` scrivono sulla riga dell'utente collegato. Nessun permesso: l'unico controllo sensato è «sei autenticato e stai modificando te stesso».
 
@@ -79,7 +80,7 @@ conseguenze osservabili nel codice:
 |---|---|---|
 | `id_permission` | bigint PK | è il vecchio `id_item`, invariato |
 | `kind` | `CATEGORY` \| `GRANT` | le categorie raggruppano, non si concedono |
-| `code` | varchar(80) UNIQUE NULL | obbligatorio se `GRANT`, sempre nullo se `CATEGORY` |
+| `code` | varchar(80) UNIQUE NULL | obbligatorio **solo** se `origin = 'SOURCE'` e `kind = 'GRANT'`; nullo in ogni altro caso (DEC-14) |
 | `origin` | `SOURCE` \| `CONSOLE` | DEC-1 |
 | `id_parent` | bigint → `permission` | l'albero |
 | `order_position` | integer | |
@@ -91,7 +92,10 @@ conseguenze osservabili nel codice:
 Vincoli:
 
 ```sql
-check ((kind = 'GRANT' and code is not null) or (kind = 'CATEGORY' and code is null))
+-- Il code è il patto con `requirePermission('...')` nel sorgente. Un permesso
+-- creato dalla console non ha controparte nel sorgente: quel patto sarebbe con
+-- nessuno, quindi il code resta nullo (DEC-14).
+check ((origin = 'SOURCE' and kind = 'GRANT') = (code is not null))
 ```
 
 Le righe `origin = 'SOURCE'` hanno `code` immutabile e non sono cancellabili dalla console. Il
@@ -209,8 +213,16 @@ Tre regole, e la seconda è quella che `rbac-permissions.md` sbaglia:
    nella console, le concessioni restano sul database, e se un domani quel codice torna nessuno si
    accorge di nulla.
 
-**Adozione.** Se un permesso creato dalla console ha già quel `code`, la sincronizzazione ne ribalta
-`origin` a `SOURCE` e conserva le concessioni, invece di fallire per chiave duplicata.
+**Nessuna adozione automatica** (DEC-14). Una versione precedente di questa specifica prevedeva che
+la sincronizzazione, trovando un permesso della console con lo stesso `code`, ne ribaltasse `origin`
+a `SOURCE`. Con i permessi della console privi di codice quel meccanismo non ha più su cosa
+agganciarsi, e non serve: quando il catalogo introduce `read-users`, nasce un permesso nuovo accanto
+a quello che la console aveva creato, e l'amministratore ci ripunta la voce di menu.
+
+È un guadagno, non una perdita. L'adozione per coincidenza di nome avrebbe legato un permesso del
+catalogo a uno creato dalla console per il solo fatto che si chiamavano uguale — e un `users`
+derivato dal nome di una voce di menu non significa affatto la stessa cosa di un `read-users`
+dichiarato dal sorgente. Il ripuntamento esplicito costa un gesto e non nasconde niente.
 
 ## 6. Enforcement
 

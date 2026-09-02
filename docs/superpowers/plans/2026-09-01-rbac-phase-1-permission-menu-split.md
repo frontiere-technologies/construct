@@ -1011,26 +1011,7 @@ Atteso: FAIL — `voce.idPermission` è `undefined`, la voce non viene creata.
 
 - [ ] **Step 3: Riscrivere le quattro azioni**
 
-Il `code` si genera con la stessa normalizzazione della migrazione 0015, così un permesso creato dalla console e uno migrato hanno codici della stessa forma. Aggiungere a `lib/rbac/navigation-actions.ts`:
-
-```ts
-/** Stessa normalizzazione della migrazione 0015: minuscolo, non alfanumerici in
- *  trattini, trattini di bordo via. Il suffisso numerico risolve le collisioni. */
-export function toPermissionCode(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'permesso'
-}
-
-async function reserveUniqueCode(tx: typeof db, base: string): Promise<string> {
-  const taken = await tx
-    .select({ code: permission.code })
-    .from(permission)
-    .where(or(eq(permission.code, base), like(permission.code, `${base}-%`)))
-  if (!taken.some(r => r.code === base)) return base
-  let n = 2
-  while (taken.some(r => r.code === `${base}-${n}`)) n += 1
-  return `${base}-${n}`
-}
-```
+> **Corretto il 2026-09-02 (DEC-14).** Una versione precedente di questo piano faceva generare qui un `code` dal nome della voce. È sbagliato: il `code` è il patto con `requirePermission('...')` nel sorgente, e un permesso creato dalla console non ha controparte nel sorgente. **Un permesso di origine `CONSOLE` nasce con `code` nullo**, e `toPermissionCode`/`reserveUniqueCode` non esistono più — le rimuove il task di riparazione che precede questo. Se le trovi ancora in `lib/rbac/navigation-actions.ts`, fermati e segnalalo: vuol dire che quel task non è stato completato.
 
 **Creare** — una funzionalità inserisce due righe, una categoria una sola:
 
@@ -1043,10 +1024,10 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
     // Una categoria di menu non è un permesso: raggruppa voci, non protegge niente.
     let idPermission: number | null = null
     if (!isCategory) {
-      const code = await reserveUniqueCode(tx, toPermissionCode(input.name))
       const [created] = await tx.insert(permission).values({
         kind: 'GRANT',
-        code,
+        // Nessun code: lo porta solo un permesso dichiarato dal sorgente (DEC-14).
+        // La voce di menu si collega a questo permesso per identificativo.
         origin: 'CONSOLE',
         name: input.name,
         description: input.description,
