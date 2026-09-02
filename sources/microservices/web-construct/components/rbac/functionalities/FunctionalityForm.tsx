@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { createNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'
 import { isGenitoreLocked, buildGenitoreOptions, genitoreValue, parseGenitoreSelection } from '@/lib/rbac/genitore-lock'
 import { ITEM_TYPES, resolveItemType } from '@/lib/rbac/item-type-options'
-import { ITEM_TYPE_FUNCTIONALITY } from '@/lib/rbac/types'
+import { ITEM_TYPE_CATEGORY, ITEM_TYPE_FUNCTIONALITY } from '@/lib/rbac/types'
 import { useI18n } from '@/context/I18nContext'
 import type { CreateNavItemInput, ParentOption } from '@/lib/rbac/types'
 import { defaultNavigationLocale, type NavigationLocale } from '@/lib/rbac/navigation-locales'
@@ -47,10 +47,29 @@ export default function FunctionalityForm(
 
   // Il server (updateNavigationItem) rifiuta un cambio di tipologia categoria <-> funzionalità:
   // un id_functionality_type senza id_permission diventerebbe una voce pubblica e ingovernabile
-  // (vedi il commento in navigation-actions.ts). La tendina si blocca qui per lo stesso motivo,
-  // non solo perché il server la rifiuterebbe: un campo che accetta una scelta e poi la rifiuta
-  // al salvataggio è peggio di uno che non l'accetta affatto.
-  const typeLocked = mode === 'edit'
+  // (vedi il commento in navigation-actions.ts). La tendina lo rispecchia qui, non solo perché
+  // il server rifiuterebbe: un campo che accetta una scelta e poi la rifiuta al salvataggio è
+  // peggio di uno che non l'accetta affatto.
+  //
+  // Ma il confine che il server difende è UNO, e le opzioni di questa tendina sono quattro:
+  // «categoria» sta da un lato, i tre sottotipi di funzionalità (embedded, link esterno, link
+  // interno) dall'altro. Passare fra i tre sottotipi non ha nessuna conseguenza sui permessi —
+  // id_permission non si muove — e il server infatti lo accetta. La prima versione di questa
+  // correzione disabilitava l'intera tendina, e con essa una cosa che funzionava: trasformare
+  // un link interno in esterno su una voce esistente richiedeva cancellarla e ricrearla,
+  // perdendone id, tag e posizione nell'albero.
+  //
+  // Quindi in modifica non si blocca il controllo, si restringe la scelta al proprio lato del
+  // confine. Su una categoria il lato ha una sola opzione, e allora sì che il controllo è
+  // bloccato — con il perché scritto nel tooltip, invece di una tendina viva che non fa nulla.
+  const editingCategory = mode === 'edit' && initial.idItemType === ITEM_TYPE_CATEGORY
+  const typeLocked = editingCategory
+  const typeOptions = mode === 'create'
+    ? ITEM_TYPES
+    : ITEM_TYPES.filter(option =>
+        editingCategory
+          ? option.idItemType === ITEM_TYPE_CATEGORY
+          : option.idItemType === ITEM_TYPE_FUNCTIONALITY)
 
   // null while no tipologia has been picked yet — the dropdown then shows its placeholder
   // instead of a type the item doesn't actually have, and the Link field stays hidden.
@@ -142,10 +161,10 @@ export default function FunctionalityForm(
               ariaLabel={t('functionalities.form.type_heading')}
               value={selectedType?.key ?? ''}
               onChange={v => {
-                const opt = ITEM_TYPES.find(candidate => candidate.key === v)
+                const opt = typeOptions.find(candidate => candidate.key === v)
                 if (opt) setF(prev => ({ ...prev, idItemType: opt.idItemType, idFunctionalityType: opt.idFunctionalityType }))
               }}
-              options={ITEM_TYPES.map(opt => ({ value: opt.key, label: itemTypeLabels[opt.key] ?? opt.label }))}
+              options={typeOptions.map(opt => ({ value: opt.key, label: itemTypeLabels[opt.key] ?? opt.label }))}
               placeholder={t('functionalities.form.type_placeholder')}
               disabled={typeLocked}
               title={typeLocked ? t('functionalities.form.type_locked_edit_hint') : undefined}
