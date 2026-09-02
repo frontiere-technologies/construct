@@ -94,6 +94,28 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   // Una categoria di menu non è un permesso: raggruppa voci, non protegge niente.
   const isCategory = input.idItemType === ITEM_TYPE_CATEGORY
 
+  // La stessa invariante che updateNavigationItem impone sulla conversione, imposta qui
+  // sulla nascita. I due campi dicono la stessa cosa due volte — idItemType decide se
+  // nasce un permesso, idFunctionalityType finisce sulla riga di menu — e niente, prima
+  // di questa riga, li obbligava a concordare. Una coppia incoerente
+  // { idItemType: CATEGORIA, idFunctionalityType: 3 } produceva esattamente lo stato che
+  // il rifiuto sulla conversione esiste per impedire: id_functionality_type valorizzato e
+  // id_permission nullo, cioè una voce che sidebar-adapter mostra a chiunque sia
+  // autenticato e che non compare in Ruoli & Permessi da nessuna parte. Il verso opposto
+  // { FUNZIONALITÀ, null } crea un permesso che governa un contenitore, meno grave ma
+  // altrettanto non voluto.
+  //
+  // Il modulo non è raggiungibile dall'interfaccia (FunctionalityForm manda sempre una
+  // coppia coerente), ma una server action è un endpoint HTTP: la sua sicurezza non può
+  // dipendere da quale modulo la chiama. Un vincolo sul database sarebbe sbagliato — la
+  // specifica §3.2 elenca «voce con id_permission nullo» fra i casi legittimi del modello
+  // — quindi il posto giusto è qui, dove si conosce l'intenzione.
+  if (isCategory !== (input.idFunctionalityType === null)) {
+    throw new Error(
+      'Inconsistent item type: a category must have no functionality type, and a functionality must have one.',
+    )
+  }
+
   try {
     const created = await db.transaction(async tx => {
       await lockNavigationWrites(tx)
@@ -149,6 +171,12 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   }
 }
 
+// `input.idItemType` non si legge mai qui, deliberatamente: UpdateNavItemInput riusa la
+// forma di CreateNavItemInput, ma su una voce che esiste già la tipologia la dicono i dati
+// salvati, non il chiamante. È proprio questo a rendere il rifiuto qui sotto non
+// aggirabile — nessuna forma dell'input può spacciare una voce per quello che non è. Sul
+// percorso di creazione, invece, idItemType è l'unica fonte e createNavigationItem lo
+// valida contro idFunctionalityType.
 export async function updateNavigationItem(id: number, input: UpdateNavItemInput): Promise<void> {
   await requireAdmin()
   if (!input.name.trim()) throw new Error('Name is required')

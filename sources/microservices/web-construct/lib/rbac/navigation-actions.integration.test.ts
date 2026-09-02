@@ -174,6 +174,35 @@ describeIntegration('navigation mutations against the database', () => {
     expect(after.idPermission).toBe(before.idPermission)
   })
 
+  // Le due sopra coprono la CONVERSIONE; queste due la NASCITA. La revisione dell'ondata
+  // finale ha notato che le due funzioni definivano «categoria» in due modi diversi —
+  // update dai dati salvati, create dall'input — e che solo update imponeva la coerenza.
+  // Una coppia incoerente in ingresso a create raggiungeva lo stesso stato che il rifiuto
+  // sulla conversione esiste per impedire, senza passare da nessuna conversione.
+  it('rifiuta la creazione di una categoria con un tipo di funzionalità: non scrive né voce né permesso', async () => {
+    const name = `${PREFIX}${sequence++}`
+
+    await expect(
+      createNavigationItem({ ...categoryInput(name), idFunctionalityType: 3 }),
+    ).rejects.toThrow()
+
+    // La coppia incoerente sarebbe stata la voce pubblica e ingovernabile: nessuna delle
+    // due righe deve esistere, nemmeno il permesso da solo.
+    expect(await db.select().from(menuEntry).where(eq(menuEntry.name, name))).toHaveLength(0)
+    expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
+  })
+
+  it('rifiuta la creazione di una funzionalità senza tipo di funzionalità: non scrive né voce né permesso', async () => {
+    const name = `${PREFIX}${sequence++}`
+
+    await expect(
+      createNavigationItem({ ...functionalityInput(name), idFunctionalityType: null }),
+    ).rejects.toThrow()
+
+    expect(await db.select().from(menuEntry).where(eq(menuEntry.name, name))).toHaveLength(0)
+    expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
+  })
+
   it('rolls back field and parent changes when an update tag write fails', async () => {
     const original = `${PREFIX}${sequence++}`
     const { id } = await createNavigationItem(functionalityInput(original))
