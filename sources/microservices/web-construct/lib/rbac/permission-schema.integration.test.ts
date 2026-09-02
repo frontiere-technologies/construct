@@ -114,13 +114,35 @@ describe('identità del permesso', () => {
 
   /* Direzione simmetrica della precedente: un code presente su una riga CONSOLE è
    * altrettanto una violazione del vincolo nuovo, non solo la sua assenza su una SOURCE. */
-  it('rifiuta un code su un permesso di origine CONSOLE', async () => {
+  it('rifiuta un GRANT di origine CONSOLE con un code', async () => {
     await expect(
       db.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
         values ('GRANT', 'non-dovrebbe-esistere', 'CONSOLE', 'con codice', 0, 0, 2)
       `),
     ).rejects.toThrow()
+  })
+
+  /* GAP-1 (giro 1 di revisione): i quattro test sopra esercitano origin e "code presente
+   * o assente", ma nessuno tocca kind su una riga origin = 'SOURCE' — un vincolo
+   * semplificato in "(origin = 'SOURCE') = (code is not null)", perdendo "and kind =
+   * 'GRANT'", li passerebbe comunque tutti. Questo test copre proprio quella cella della
+   * tavola di verità: una CATEGORY di origine SOURCE con un code è una violazione tanto
+   * quanto lo sono le altre tre, ed è l'unica che la versione senza kind lascerebbe
+   * passare. Controprova eseguita a mano (transazione poi annullata, mai applicata: vedi
+   * il report) prima di scrivere questo test — con il vincolo attuale l'insert sotto viene
+   * rifiutato, con la versione semplificata sarebbe accettato. */
+  it('rifiuta una CATEGORY di origine SOURCE con un code', async () => {
+    try {
+      await expect(
+        db.execute(sql`
+          insert into public.permission (kind, code, origin, description, id_parent, order_position, id_item_type)
+          values ('CATEGORY', 'test-categoria-source-con-code', 'SOURCE', 'categoria con codice', 0, 0, 1)
+        `),
+      ).rejects.toThrow()
+    } finally {
+      await db.execute(sql`delete from public.permission where code = 'test-categoria-source-con-code'`)
+    }
   })
 
   it('rifiuta due permessi SOURCE con lo stesso code', async () => {
