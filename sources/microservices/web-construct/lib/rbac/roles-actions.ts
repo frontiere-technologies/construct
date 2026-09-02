@@ -67,7 +67,7 @@ export async function updateRolePermissions(roleId: number, deltas: PermissionDe
   // silenzio che in applyToggle ha prodotto HOLE-5, spostato di un livello. Un chiamante che
   // genera un delta simile ha un difetto da far emergere subito, non da assorbire.
   if (deltas.length) {
-    let targeted: { idPermission: number; kind: string }[]
+    let targeted: { idPermission: number; kind: 'CATEGORY' | 'GRANT' }[]
     try {
       targeted = await db
         .select({ idPermission: permission.idPermission, kind: permission.kind })
