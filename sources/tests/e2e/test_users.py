@@ -127,8 +127,17 @@ def test_status_toggle_updates_grid_in_place(logged_in_page, base_url):
 
     def _toggle_via_menu(expected_menu_label):
         row_by_id.locator('[data-testid^="row-menu"]').click()
-        page.once("dialog", lambda d: d.accept())
-        page.get_by_role("button", name=expected_menu_label).click()
+        # The status toggle stopped using a native confirm() on 2026-09-02: it
+        # now opens this project's ConfirmModal, whose confirm button reuses the
+        # same label as the row-menu item. The two never coexist (the menu
+        # closes as the modal opens), so re-querying by role/name after each
+        # click targets the currently-visible one — same idiom as
+        # test_roles.py's _delete_role.
+        page.get_by_role("button", name=expected_menu_label).click()  # menu item -> ConfirmModal
+        dialog = page.get_by_role("dialog")
+        expect(dialog).to_be_visible()
+        dialog.get_by_role("button", name=expected_menu_label).click()  # confirm
+        expect(dialog).to_have_count(0)
 
     _toggle_via_menu("Disattiva" if original_text == "Attivo" else "Attiva")
     expect(row_by_id.locator('[data-testid="status-badge"]')).to_have_text(flipped_text)

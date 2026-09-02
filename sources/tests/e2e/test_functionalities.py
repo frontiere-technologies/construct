@@ -3,6 +3,27 @@ from playwright.sync_api import expect
 from helpers import nav, drag_row_onto
 
 
+def _confirm_delete_modal(page):
+    """Confirm the ConfirmModal that the delete controls open.
+
+    Deletion stopped going through a native browser dialog on 2026-09-02: it now
+    opens this project's ConfirmModal (AccessibleDialog underneath). A
+    `page.once("dialog", ...)` handler therefore never fires, and the old code
+    left the modal open and the row undeleted while every assertion still looked
+    like it was testing a delete.
+
+    The confirm button and the tree row's own delete trigger share the label
+    "Elimina" AND coexist in the DOM (the row stays behind the modal), so this
+    must be scoped to the dialog — an unscoped get_by_role would be a
+    strict-mode violation. Waiting for the dialog to disappear is the real
+    completion signal; a fixed timeout only looks like one.
+    """
+    dialog = page.get_by_role("dialog")
+    expect(dialog).to_be_visible()
+    dialog.get_by_role("button", name="Elimina", exact=True).click()
+    expect(dialog).to_have_count(0)
+
+
 def _select_tipologia(page, label: str):
     """Open the Tipologia custom-select dropdown and click an option by label.
 
@@ -34,9 +55,8 @@ def _delete_functionality(page, base_url, name):
     nav(page, f"{base_url}/functionalities")
     page.get_by_text(name, exact=True).first.scroll_into_view_if_needed()
     row = page.locator("div").filter(has_text=name).filter(has=page.locator('[data-testid="nav-delete"]')).last
-    page.once("dialog", lambda d: d.accept())
     row.locator('[data-testid="nav-delete"]').click()
-    page.wait_for_timeout(600)
+    _confirm_delete_modal(page)
 
 
 def test_tree_loads(logged_in_page, base_url):
@@ -135,9 +155,8 @@ def test_create_edit_delete_functionality(logged_in_page, base_url):
     # Delete — find the row for the renamed item and click its delete button.
     page.get_by_text(renamed, exact=True).first.scroll_into_view_if_needed()
     delete_row = page.locator("div").filter(has_text=renamed).filter(has=page.locator('[data-testid="nav-delete"]')).last
-    page.once("dialog", lambda d: d.accept())
     delete_row.locator('[data-testid="nav-delete"]').click()
-    page.wait_for_timeout(800)
+    _confirm_delete_modal(page)
     page.reload()
     page.wait_for_load_state("networkidle")
     expect(page.get_by_text(renamed, exact=True)).to_have_count(0)

@@ -131,9 +131,14 @@ def _delete_functionality(page, base_url, name):
     nav(page, f"{base_url}/functionalities")
     page.get_by_text(name, exact=True).first.scroll_into_view_if_needed()
     row = page.locator("div").filter(has_text=name).filter(has=page.locator('[data-testid="nav-delete"]')).last
-    page.once("dialog", lambda d: d.accept())
     row.locator('[data-testid="nav-delete"]').click()
-    page.wait_for_timeout(600)
+    # Deletion goes through this project's ConfirmModal, not a native dialog.
+    # Scoped to the dialog: the row's own delete trigger carries the same
+    # "Elimina" label and stays in the DOM behind the modal.
+    dialog = page.get_by_role("dialog")
+    expect(dialog).to_be_visible()
+    dialog.get_by_role("button", name="Elimina", exact=True).click()
+    expect(dialog).to_have_count(0)
     page.reload()
     page.wait_for_load_state("networkidle")
     expect(page.get_by_text(name, exact=True)).to_have_count(0)
