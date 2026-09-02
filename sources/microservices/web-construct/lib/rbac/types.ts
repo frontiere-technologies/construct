@@ -168,7 +168,8 @@ export interface CreateNavItemInput {
   /** External links only: open the URL in a new tab. Defaults to true when omitted. */
   openInNewTab?: boolean
   idItemParent: number | null
-  /** Resolved active-root id (ROOT_ID=0 or OPERATIONS_ID=-1). Used only on create to determine placement when idItemParent is null. Optional so edit-mode callers can omit it. */
+  /** Vestigial (Task 5): the menu root is now the absence of a parent, so createNavigationItem
+   * no longer consults this to place a null idItemParent. Removed in the Task 7 cleanup. */
   idRootParent?: number | null
   description: string
   itemTranslation: Record<string, { name?: string; description?: string }>

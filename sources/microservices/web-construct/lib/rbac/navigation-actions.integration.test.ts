@@ -79,6 +79,70 @@ describeIntegration('navigation mutations against the database', () => {
     expect(await db.select().from(permission).where(eq(permission.idPermission, idPerm))).toHaveLength(0)
   })
 
+  it('non cancella mai un permesso di origine SOURCE, anche se la voce che lo cita viene eliminata', async () => {
+    const name = `${PREFIX}${sequence++}`
+    const code = `${PREFIX}source_${sequence++}`
+    // Nessuna riga SOURCE esiste ancora in Fase 1 (arriva con la sincronizzazione del
+    // catalogo, Fase 2): la inseriamo a mano per esercitare il ramo comunque, oggi.
+    const [perm] = await db.insert(permission).values({
+      kind: 'GRANT',
+      origin: 'SOURCE',
+      code,
+      name,
+      idItemType: 2,
+      description: '',
+      itemTranslation: { EN: { name } },
+      idParent: null,
+      orderPosition: 0,
+    }).returning({ id: permission.idPermission })
+
+    const [entry] = await db.insert(menuEntry).values({
+      idPermission: perm.id,
+      idParent: null,
+      name,
+      idFunctionalityType: 3,
+      functionalityLink: `/${name}`,
+      openInNewTab: 1,
+      itemTranslation: { EN: { name } },
+      orderPosition: 0,
+    }).returning({ id: menuEntry.idMenuEntry })
+
+    try {
+      await deleteNavigationItem(entry.id)
+
+      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id))).toHaveLength(0)
+      // Il permesso SOURCE sopravvive: lo possiede il sorgente, non la console.
+      expect(await db.select().from(permission).where(eq(permission.idPermission, perm.id))).toHaveLength(1)
+    } finally {
+      await db.delete(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id))
+      await db.delete(permission).where(eq(permission.idPermission, perm.id))
+    }
+  })
+
+  it('elimina i permessi orfani di un intero sottoalbero, non solo del primo livello', async () => {
+    // categoria > sotto-categoria > funzionalità: due livelli sotto la voce cancellata,
+    // cosi' un cammino fermato al primo figlio farebbe fallire questo test.
+    const catName = `${PREFIX}${sequence++}`
+    const subName = `${PREFIX}${sequence++}`
+    const funcName = `${PREFIX}${sequence++}`
+
+    const { id: catId } = await createNavigationItem(categoryInput(catName))
+    const { id: subId } = await createNavigationItem({ ...categoryInput(subName), idItemParent: catId })
+    const { id: funcId } = await createNavigationItem({ ...functionalityInput(funcName), idItemParent: subId })
+
+    const [funcEntry] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, funcId))
+    const idPerm = funcEntry.idPermission!
+
+    await deleteNavigationItem(catId)
+
+    // Il cascade su menu_entry.id_parent porta via l'intero sottoalbero...
+    expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, catId))).toHaveLength(0)
+    expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, subId))).toHaveLength(0)
+    expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, funcId))).toHaveLength(0)
+    // ...e il permesso della funzionalita' a due livelli di profondita' non resta orfano.
+    expect(await db.select().from(permission).where(eq(permission.idPermission, idPerm))).toHaveLength(0)
+  })
+
   it('rolls back the permission + entry pair when tag replacement fails', async () => {
     const name = `${PREFIX}${sequence++}`
     await expect(createNavigationItem(functionalityInput(name, 'x'.repeat(51)))).rejects.toThrow()

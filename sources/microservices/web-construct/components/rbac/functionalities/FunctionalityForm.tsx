@@ -23,7 +23,8 @@ interface Initial {
   functionalityLink: string; iconPath: string; idItemParent: number | null
   /** External links only: open the URL in a new tab (the default) instead of in this one. */
   openInNewTab: boolean
-  /** Active root id (ROOT_ID=0 or OPERATIONS_ID=-1). Used only in create mode to determine placement when idItemParent is null. */
+  /** Vestigial (Task 5): the menu root is now the absence of a parent, so createNavigationItem
+   * no longer consults this to place a null idItemParent. Removed in the Task 7 cleanup. */
   idRootParent?: number | null
   translations: Record<string, { name?: string; description?: string }>; tagTranslations: Record<string, string[]>
 }
