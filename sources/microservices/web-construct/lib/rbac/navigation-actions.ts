@@ -168,9 +168,13 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
       // funzione sa fare in sicurezza, e il divieto resta (DEC-22) — ma il motivo è cambiato.
       // Prima era: una categoria convertita resterebbe senza id_permission, cioè una voce
       // pubblica e ingovernabile. Quella colonna non esiste più. Il motivo che sopravvive è
-      // l'altro verso: convertire una funzionalità in categoria butterebbe via le sue
-      // concessioni in silenzio, perché una cartella non è concedibile. Implementarlo bene è
-      // lavoro della Fase 3, insieme all'editor dei permessi.
+      // l'altro verso, ed è più forte di "butterebbe via le concessioni": questa funzione non
+      // tocca role_functionality, quindi le righe di una funzionalità convertita in categoria
+      // sopravvivrebbero, concessioni su una riga ormai classificata contenitore — invisibili
+      // in entrambi gli alberi (stampAuthorization timbra solo le funzionalità, resolveVisibleIds
+      // salta i contenitori) e non più revocabili dall'interfaccia. Righe orfane e ingovernabili:
+      // esattamente il difetto che questo lavoro esiste per rendere impossibile. Implementarlo
+      // bene è lavoro della Fase 3, insieme all'editor dei permessi.
       const wasCategory = current.id_functionality_type === null
       const willBeCategory = input.idFunctionalityType == null
       if (wasCategory !== willBeCategory) {

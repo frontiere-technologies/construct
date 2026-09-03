@@ -38,7 +38,11 @@ export interface PermissionRow {
 
 /** Una riga di menu_entry. La voce È il proprio permesso (DEC-17): non punta a una riga di
  *  `permission`, e la concessione vive in `role_functionality`. Un contenitore
- *  (`id_functionality_type` nullo) non è concedibile — raggruppa voci, non protegge niente. */
+ *  (`id_functionality_type` nullo) non è concedibile — raggruppa voci, non protegge niente.
+ *  Per questo `updateNavigationItem` rifiuta di cambiare una funzionalità in contenitore
+ *  (o viceversa): non cancellerebbe le sue concessioni, le lascerebbe sopravvivere su una
+ *  riga ormai classificata contenitore — invisibili in entrambi gli alberi e non più
+ *  revocabili dall'interfaccia. */
 export interface MenuEntryRow {
   id_menu_entry: number
   id_parent: number | null

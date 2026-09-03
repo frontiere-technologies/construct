@@ -23,8 +23,10 @@ export const ITEM_TYPES: ItemTypeOption[] = [
  * e' uno: `updateNavigationItem` rifiuta il passaggio categoria <-> funzionalita'. Il vincolo
  * resta, il motivo e' cambiato (DEC-22): non esiste piu' una «voce pubblica» da creare per
  * sbaglio, perche' menu_entry non porta piu' id_permission. Quel che sopravvive e' l'altro
- * verso -- convertire una funzionalita' in categoria butterebbe via le sue concessioni in
- * silenzio, perche' una cartella non e' concedibile.
+ * verso, e l'argomento e' piu' forte di "butterebbe via le concessioni": updateNavigationItem
+ * non tocca role_functionality, quindi convertire una funzionalita' in categoria lascerebbe
+ * le sue concessioni sopravvivere su una riga ormai classificata contenitore -- invisibili in
+ * entrambi gli alberi e non piu' revocabili dall'interfaccia. Righe orfane e ingovernabili.
  * Fra i tre sottotipi di funzionalita' (embedded, link esterno, link interno) invece il
  * permesso non si muove, e il server accetta: restringere e' giusto, disabilitare tutto no.
  *

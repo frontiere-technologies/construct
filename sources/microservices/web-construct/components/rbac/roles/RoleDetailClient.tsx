@@ -28,6 +28,7 @@ export default function RoleDetailClient({ role, trees }: Props) {
   const [operations, setOperations] = useState(loadedOperations)
   const [renaming, setRenaming] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const isSystem = role.roleType === 'SYSTEM'
   const canRename = role.roleType === 'SERVICE'
@@ -35,6 +36,7 @@ export default function RoleDetailClient({ role, trees }: Props) {
   const cancel = () => router.push('/roles-permissions')
   const save = async () => {
     setBusy(true)
+    setError(null)
     try {
       const deltas = {
         functionalities: computeDeltas(loadedFunctionalities, functionalities),
@@ -44,6 +46,13 @@ export default function RoleDetailClient({ role, trees }: Props) {
         await updateRolePermissions(role.id, deltas)
       }
       router.refresh()
+    } catch {
+      // updateRolePermissions non avvolge più gli errori del database (Task 7): il messaggio
+      // grezzo che arriverebbe qui è testo di Postgres, non leggibile da un amministratore.
+      // Un salvataggio rifiutato senza avviso sarebbe peggio — ogni interruttore resterebbe a
+      // mostrare "concesso" e nessuno se ne accorgerebbe — quindi il messaggio è sempre questo,
+      // generico e tradotto, mai err.message.
+      setError(t('roles.detail.save_error'))
     } finally { setBusy(false) }
   }
 
@@ -80,12 +89,15 @@ export default function RoleDetailClient({ role, trees }: Props) {
         <PermissionsTree trees={trees.operations} map={operations} onChange={setOperations} editable={!isSystem} />
       </section>
 
-      <div className="pt-4 border-t border-border flex items-center justify-end gap-3">
-        <Button variant="outline" onClick={cancel}>{t('common.actions.cancel')}</Button>
-        <Button
-          onClick={save} disabled={busy || isSystem}
-          title={isSystem ? t('roles.detail.system_readonly_hint') : undefined}
-        >{t('common.actions.save')}</Button>
+      <div className="pt-4 border-t border-border flex items-center justify-between gap-3">
+        <div>{error && <p role="alert" className="text-sm text-destructive-muted-foreground">{error}</p>}</div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={cancel}>{t('common.actions.cancel')}</Button>
+          <Button
+            onClick={save} disabled={busy || isSystem}
+            title={isSystem ? t('roles.detail.system_readonly_hint') : undefined}
+          >{t('common.actions.save')}</Button>
+        </div>
       </div>
 
       {renaming && <RenameRoleModal roleId={role.id} currentName={role.roleName} onClose={() => setRenaming(false)} />}

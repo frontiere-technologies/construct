@@ -134,7 +134,7 @@ describe('identità del permesso', () => {
       await expectRejectedByConstraint(
         () => db.execute(sql`
           insert into public.permission (kind, origin, description, id_parent, order_position)
-          values ('BOGUS', 'CONSOLE', 'kind non valido', 0, 0)
+          values ('BOGUS', 'CONSOLE', 'kind non valido', -1, 0)
         `),
         'permission_kind_valid',
       )
@@ -149,7 +149,7 @@ describe('identità del permesso', () => {
       await expectRejectedByConstraint(
         () => db.execute(sql`
           insert into public.permission (kind, origin, description, id_parent, order_position)
-          values ('GRANT', 'BOGUS', 'origin non valido', 0, 0)
+          values ('GRANT', 'BOGUS', 'origin non valido', -1, 0)
         `),
         'permission_origin_valid',
       )
@@ -162,7 +162,7 @@ describe('identità del permesso', () => {
     await expectRejectedByConstraint(
       () => db.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
-        values ('GRANT', null, 'SOURCE', 'senza codice', 0, 0)
+        values ('GRANT', null, 'SOURCE', 'senza codice', -1, 0)
       `),
       'permission_code_matches_kind',
     )
@@ -174,7 +174,7 @@ describe('identità del permesso', () => {
     await expectRejectedByConstraint(
       () => db.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
-        values ('GRANT', 'non-dovrebbe-esistere', 'CONSOLE', 'con codice', 0, 0)
+        values ('GRANT', 'non-dovrebbe-esistere', 'CONSOLE', 'con codice', -1, 0)
       `),
       'permission_code_matches_kind',
     )
@@ -194,7 +194,7 @@ describe('identità del permesso', () => {
       await expectRejectedByConstraint(
         () => db.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
-          values ('CATEGORY', 'test-categoria-source-con-code', 'SOURCE', 'categoria con codice', 0, 0)
+          values ('CATEGORY', 'test-categoria-source-con-code', 'SOURCE', 'categoria con codice', -1, 0)
         `),
         'permission_code_matches_kind',
       )
@@ -268,6 +268,15 @@ describe('travaso in menu_entry', () => {
       where id_permission not in (select id_permission from code_permissions)
     `)
     expect(rows[0].estranee).toBe(0)
+
+    // «Nessuna estranea» da sola non basta: una tabella permission svuotata darebbe 0 anche a
+    // questa condizione. La migrazione 0027 scende ricorsivamente da id_permission = -1 scritto
+    // in fisso, senza guardia — se quella riga mancasse, `not in (insieme vuoto)` sarebbe vero
+    // per ogni riga e la migrazione svuoterebbe la tabella, cascando sulle concessioni.
+    // È irraggiungibile oggi (0001_baseline.sql semina -1 prima), ma solo la metà positiva se
+    // ne accorgerebbe: operations e le sue otto foglie, nove righe in tutto.
+    const [{ totali }] = await db.execute(sql`select count(*)::int as totali from public.permission`)
+    expect(totali).toBe(9)
   })
 
   it('non ha più una colonna id_permission su menu_entry (MIG-4)', async () => {

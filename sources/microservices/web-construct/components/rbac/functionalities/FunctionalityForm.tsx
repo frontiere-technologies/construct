@@ -48,10 +48,12 @@ export default function FunctionalityForm(
   // Il server (updateNavigationItem) rifiuta un cambio di tipologia categoria <-> funzionalità.
   // Il vincolo resta, il motivo è cambiato (DEC-22): non esiste più una «voce pubblica»
   // da creare per sbaglio, perché menu_entry non porta più id_permission. Quel che
-  // sopravvive è l'altro verso — convertire una funzionalità in categoria butterebbe via
-  // le sue concessioni in silenzio, perché una cartella non è concedibile (vedi il commento
-  // in navigation-actions.ts). La tendina lo rispecchia qui, non solo perché il server
-  // rifiuterebbe: un campo che accetta una scelta e poi la rifiuta al salvataggio è
+  // sopravvive è l'altro verso, con un argomento più forte di "butterebbe via le concessioni":
+  // updateNavigationItem non tocca role_functionality, quindi convertire una funzionalità in
+  // categoria lascerebbe le sue concessioni sopravvivere su una riga ormai classificata
+  // contenitore — invisibili in entrambi gli alberi e non più revocabili dall'interfaccia
+  // (vedi il commento in navigation-actions.ts). La tendina lo rispecchia qui, non solo perché
+  // il server rifiuterebbe: un campo che accetta una scelta e poi la rifiuta al salvataggio è
   // peggio di uno che non l'accetta affatto.
   //
   // In modifica il controllo non si blocca, si restringe al proprio lato del confine: la
