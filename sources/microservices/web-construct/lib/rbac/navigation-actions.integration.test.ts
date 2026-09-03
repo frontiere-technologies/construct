@@ -72,14 +72,63 @@ describeIntegration('navigation mutations against the database', () => {
     }
   })
 
-  // 'non cancella mai un permesso di origine SOURCE, anche se la voce che lo cita viene
-  // eliminata' viveva qui, e costruiva lo scenario inserendo una voce con
-  // `idPermission: perm.id`. Trovata dal controllo di Step 1 del Task 6 (0027): quella colonna
-  // non esiste più, quindi lo scenario non si può più costruire. Non ha bisogno di un
-  // rimpiazzo — deleteNavigationItem non tocca più `permission` in nessun percorso (vedi il
-  // commento lì sopra), quindi un permesso SOURCE non può più essere toccato dalla
-  // cancellazione di una voce: non per una prova a runtime, ma perché le due tabelle non si
-  // parlano più.
+  // Revisione Task 6, giro 1 (RILIEVO): questo test viveva accoppiando la voce al permesso
+  // con `idPermission: perm.id` — quel campo è sparito con la 0027, ma l'invariante che
+  // proteggeva non è sparito con lui: deleteNavigationItem non tocca mai `permission` (vedi il
+  // commento lì sopra), quindi un permesso SOURCE sopravvive alla cancellazione di una voce di
+  // menu anche senza nessun collegamento fra le due righe da rompere. Riscritto senza il
+  // collegamento, che era l'unica cosa diventata impossibile — non cancellato: era l'unica
+  // prova nel file sul percorso di cancellazione, le altre su `permission` (sopra e sotto)
+  // coprono solo la creazione.
+  it('non cancella mai un permesso di origine SOURCE, anche se una voce di menu viene eliminata', async () => {
+    const name = `${PREFIX}${sequence++}`
+    const code = `${PREFIX}source_${sequence++}`
+    // Nessuna riga SOURCE esiste ancora in Fase 1 (arriva con la sincronizzazione del
+    // catalogo, Fase 2): la inseriamo a mano per esercitare il ramo comunque, oggi.
+    //
+    // id_parent = -1 (operations), non nullo: una riga SOURCE lasciata alla radice sarebbe
+    // uno "strago" secondo il criterio strutturale della 0027 (risalita da operations), e un
+    // run interrotto a metà la lascerebbe sul database — facendo fallire il test MIG-5 di
+    // permission-schema.integration.test.ts, in un altro file, per una causa che chi lo
+    // diagnostica non troverebbe qui.
+    //
+    // code non nullo e unico: permission_code_matches_kind lo pretende per un GRANT di
+    // origine SOURCE — col prefisso di prova del file, cosi' la pulizia lo raggiunge.
+    const [perm] = await db.insert(permission).values({
+      kind: 'GRANT',
+      origin: 'SOURCE',
+      code,
+      name,
+      description: '',
+      itemTranslation: { EN: { name } },
+      idParent: -1,
+      orderPosition: 0,
+    }).returning({ id: permission.idPermission })
+
+    // Nessun collegamento al permesso: menu_entry.id_permission e' sparito con la 0027. Le
+    // due righe non condividono altro che il prefisso di test.
+    const [entry] = await db.insert(menuEntry).values({
+      idParent: null,
+      name,
+      idFunctionalityType: 3,
+      functionalityLink: `/${name}`,
+      openInNewTab: 1,
+      itemTranslation: { EN: { name } },
+      orderPosition: 0,
+    }).returning({ id: menuEntry.idMenuEntry })
+
+    try {
+      await deleteNavigationItem(entry.id)
+
+      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id))).toHaveLength(0)
+      // Il permesso SOURCE sopravvive: lo possiede il sorgente, non la console, e
+      // deleteNavigationItem non tocca mai `permission`.
+      expect(await db.select().from(permission).where(eq(permission.idPermission, perm.id))).toHaveLength(1)
+    } finally {
+      await db.delete(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id))
+      await db.delete(permission).where(eq(permission.idPermission, perm.id))
+    }
+  })
 
   it('annulla la creazione della voce se la sostituzione dei tag fallisce', async () => {
     const name = `${PREFIX}${sequence++}`
