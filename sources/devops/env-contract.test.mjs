@@ -154,15 +154,29 @@ test('every variable the code reads is documented in a template', () => {
     : undefined)
 })
 
-test('operator credentials stay out of the Next template', () => {
+/**
+ * Migration and provisioning credentials belong to exactly one of the three
+ * templates. Stated as "only the operator template" rather than "not the Next
+ * template", because the runtime that loads a file is not the only way a
+ * credential reaches the application: the web-construct-e2e configuration in
+ * .claude/launch.json bulk-sources .env.test.local into a Next process, so a
+ * variable documented for the E2E consumer lands there just as surely as one
+ * documented for Next. TEST_MIGRATION_DATABASE_URL is in this category for that
+ * exact reason — it used to sit in .env.test.local, which put an owner-level
+ * connection string in the E2E application's environment.
+ */
+const OPERATOR_CREDENTIAL = /^(TEST_)?(MIGRATION_DATABASE_URL|CONSTRUCT_RUNTIME_DB_)/
+
+test('operator credentials appear only in the operator template', () => {
   // The Next template says it in prose; this makes it enforceable. Putting a
   // migration or provisioning credential in a file that next dev/build loads is
   // how a privileged connection string ends up inside the application process.
-  const nextTemplate = documentedVariables()
-  for (const [name, consumers] of nextTemplate) {
-    if (!/^(MIGRATION_DATABASE_URL|CONSTRUCT_RUNTIME_DB_)/.test(name)) continue
-    assert.ok(!consumers.has('next'),
-      `${name} is an operator credential and must not appear in ${TEMPLATES.next}`)
+  for (const [name, consumers] of documentedVariables()) {
+    if (!OPERATOR_CREDENTIAL.test(name)) continue
+    const misplaced = [...consumers].filter(consumer => consumer !== 'operator').sort()
+    assert.deepEqual(misplaced, [],
+      `${name} is an operator credential and belongs only in ${TEMPLATES.operator}, `
+      + `but it is documented for: ${misplaced.join(', ')}`)
   }
 })
 

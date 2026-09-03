@@ -15,6 +15,10 @@ npm run test:watch   # Vitest watch mode
 npm run test:integration   # DB integration tests (gated behind I18N_INTEGRATION_DB=1, needs a real DB)
                            # Credenziali del DB usa-e-getta in .env.test.local, caricato da vitest.integration.config.ts
 
+# Verifica che la connessione dell'app stia dentro il confine dei privilegi
+# (read-only, si può puntare a qualunque ambiente compresa la produzione)
+node sources/devops/db/db.mjs boundary-check
+
 # E2E tests (Python — use uv, never python/python3 directly)
 uv run pytest                              # tutti i test
 uv run pytest sources/tests/e2e/test_sidebar.py    # singolo gruppo

@@ -273,4 +273,68 @@ describeIntegration('database runtime boundary', () => {
     `)
     expect(privileges[0].allowed).toBe(false)
   })
+
+  /**
+   * Every assertion above this one names `construct_runtime` literally, which
+   * makes them all independent of who is connected: they establish that the role
+   * is hemmed in, never that the application reaches the database through it. For
+   * months nothing checked the second half, and the gap was not hypothetical — the
+   * test database connected as the migration owner (a Supabase `postgres` holding
+   * `pg_read_all_data`, `service_role` and `construct_runtime` at once), so the
+   * whole section passed while the boundary it describes was bypassed on the only
+   * database it ran against.
+   *
+   * This spec closes it by probing `current_user` instead of a name. It is the
+   * one assertion here that fails when DATABASE_URL is repointed at a privileged
+   * login, so it is what stops the split in db.mjs from being quietly undone.
+   */
+  it('connects through the runtime role and nothing wider', async () => {
+    const [identity] = await db.execute<{
+      rolsuper: boolean
+      rolcreatedb: boolean
+      rolcreaterole: boolean
+      rolreplication: boolean
+      rolbypassrls: boolean
+    }>(sql`
+      select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
+      from pg_roles where rolname = current_user
+    `)
+    expect(identity).toEqual({
+      rolsuper: false,
+      rolcreatedb: false,
+      rolcreaterole: false,
+      rolreplication: false,
+      rolbypassrls: false,
+    })
+
+    // `distinct` because a role granted by two grantors yields two rows in
+    // pg_auth_members, and the platform roles are exactly the kind of membership
+    // this assertion exists to reject — a duplicate must not read as a second one.
+    const memberships = await db.execute<{ granted: string }>(sql`
+      select distinct granted.rolname as granted
+      from pg_auth_members membership
+      join pg_roles member on member.oid = membership.member
+      join pg_roles granted on granted.oid = membership.roleid
+      where member.rolname = current_user
+      order by granted.rolname
+    `)
+    expect(memberships.map(row => row.granted)).toEqual(['construct_runtime'])
+
+    // Membership alone is not enough: a login can hold privileges granted
+    // directly, which inherit from nothing and so survive every check above.
+    const directGrants = await db.execute<{ source: string }>(sql`
+      select 'table' as source from information_schema.role_table_grants where grantee = current_user
+      union all select 'routine' from information_schema.role_routine_grants where grantee = current_user
+      union all select 'usage' from information_schema.role_usage_grants where grantee = current_user
+    `)
+    expect(directGrants.map(row => row.source)).toEqual([])
+
+    // The same probe the boundary is described by, asked of the live connection
+    // rather than of the role name — this is the one that was reported false while
+    // the connection in front of it answered true.
+    const history = await db.execute<{ allowed: boolean }>(sql`
+      select has_table_privilege(current_user, 'public.construct_schema_migration', 'select') as allowed
+    `)
+    expect(history[0].allowed).toBe(false)
+  })
 })
