@@ -1,3 +1,4 @@
+import warnings
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -48,6 +49,21 @@ def _delete_role(page, base_url, name):
     expect(_rows(page).filter(has_text=name)).to_have_count(0)
 
 
+def _report_cleanup_failure(message: str) -> None:
+    """Surface a cleanup failure through a channel a plain `uv run pytest` shows.
+
+    A bare `print` is captured and discarded by pytest's default output capture
+    for any test whose outcome is "passed" — and that is precisely the case this
+    exists to cover: the test body's own assertions all succeeded, only its
+    `finally`-time deletion silently failed. `warnings.warn` is different: pytest
+    collects warnings into the terminal's summary regardless of a test's outcome,
+    so this is the channel that actually survives the one case a print does not.
+    The print stays too, for anyone re-running with `-s`.
+    """
+    print(f"[cleanup] {message}")
+    warnings.warn(message)
+
+
 def _safe_delete_role(page, base_url, name) -> None:
     """Cleanup safety net for a role: delete `name` if it is present, and do nothing
     (not raise) if it never was.
@@ -72,12 +88,14 @@ def _safe_delete_role(page, base_url, name) -> None:
     through (a flaky row-menu click, a confirm modal that doesn't close, the
     trailing count-is-zero assertion inside `_delete_role`), the sibling calls
     after it in that `finally` would never run, turning one lost row into several.
-    A failure here is printed, not raised, precisely so it cannot cancel a sibling
+    A failure here is reported, not raised, precisely so it cannot cancel a sibling
     cleanup, and precisely so it cannot replace — by raising fresh from a `finally`
     — the real exception of a test that failed for its own reason (or flip a
-    passing test to failing over a cleanup-only problem). The print is the only
-    trace it leaves: a lost row with a trace can be found and matched to a cause; a
-    lost row with none just looks like a random flaky run next time.
+    passing test to failing over a cleanup-only problem). See
+    _report_cleanup_failure above for why that report goes through
+    `warnings.warn` and not only a `print`: the case this exists to catch is a
+    test whose own assertions all passed, and pytest's default capture discards
+    printed output for exactly that outcome.
     """
     try:
         _search(page, base_url, name)
@@ -85,13 +103,13 @@ def _safe_delete_role(page, base_url, name) -> None:
     except AssertionError:
         return  # never created, or gone already — nothing to clean up
     except Exception as err:
-        print(f"[cleanup] could not check whether role {name!r} still exists: {err}")
+        _report_cleanup_failure(f"could not check whether role {name!r} still exists: {err}")
         return
 
     try:
         _delete_role(page, base_url, name)
     except Exception as err:
-        print(f"[cleanup] failed to delete role {name!r}, it may still be in the database: {err}")
+        _report_cleanup_failure(f"failed to delete role {name!r}, it may still be in the database: {err}")
 
 
 def _safe_delete_functionality(page, base_url, name) -> None:
@@ -103,9 +121,10 @@ def _safe_delete_functionality(page, base_url, name) -> None:
     Same reasoning as _safe_delete_role above, including the part that matters most
     here: the leading `nav` and the real `_delete_functionality` call are inside the
     same try/except as the presence check, and this function never raises — a
-    failure is printed and swallowed so it cannot cancel the `_safe_delete_*` calls
-    that follow it in the same `finally`, and cannot mask a real assertion failure
-    from the test body by raising fresh out of `finally`.
+    failure is reported (via _report_cleanup_failure, not a bare print — see there)
+    and swallowed so it cannot cancel the `_safe_delete_*` calls that follow it in
+    the same `finally`, and cannot mask a real assertion failure from the test body
+    by raising fresh out of `finally`.
     """
     try:
         nav(page, f"{base_url}/functionalities")
@@ -113,13 +132,13 @@ def _safe_delete_functionality(page, base_url, name) -> None:
     except AssertionError:
         return  # never created, or gone already — nothing to clean up
     except Exception as err:
-        print(f"[cleanup] could not check whether functionality {name!r} still exists: {err}")
+        _report_cleanup_failure(f"could not check whether functionality {name!r} still exists: {err}")
         return
 
     try:
         _delete_functionality(page, base_url, name)
     except Exception as err:
-        print(f"[cleanup] failed to delete functionality {name!r}, it may still be in the database: {err}")
+        _report_cleanup_failure(f"failed to delete functionality {name!r}, it may still be in the database: {err}")
 
 
 def test_roles_list_loads(logged_in_page, base_url):
