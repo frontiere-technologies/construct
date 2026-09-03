@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { applyToggle } from '@/lib/rbac/permission-tree'
+import { toggleNode } from '@/lib/rbac/permission-tree'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 import NavigationTree from './NavigationTree'
 
@@ -40,7 +40,7 @@ export default function PermissionsTree({ trees, map, onChange, editable }: Perm
         <Toggle
           on={map.get(node.id) ?? false}
           disabled={!editable}
-          onToggle={() => onChange(applyToggle(trees, map, node.id, !(map.get(node.id) ?? false)))}
+          onToggle={() => onChange(toggleNode(trees, map, node.id))}
         />
       )}
     />

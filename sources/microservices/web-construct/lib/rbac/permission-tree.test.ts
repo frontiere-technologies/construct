@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildAuthTree, buildAuthMap, applyToggle, computeDeltas } from './permission-tree'
-import type { PermissionRow } from './types'
+import { buildAuthTree, buildAuthMap, computeDeltas, folderState, toggleNode, stampAuthorization } from './permission-tree'
+import type { PermissionRow, UserNavigationTreeDto } from './types'
 
 const perm = (over: Partial<PermissionRow> & { id_permission: number }): PermissionRow => ({
   kind: 'GRANT', code: `code-${over.id_permission}`, id_parent: null, order_position: 0,
@@ -89,45 +89,6 @@ describe('buildAuthMap', () => {
   })
 })
 
-describe('applyToggle', () => {
-  const tree = buildAuthTree(items, new Set())
-  const base = buildAuthMap(tree)
-
-  it('category ON accende solo le foglie GRANT del sottoalbero, mai la categoria stessa', () => {
-    const next = applyToggle(tree, base, 2, true)
-    expect(next.get(3)).toBe(true)
-    expect(next.get(4)).toBe(true)
-    expect(next.get(2)).toBe(false) // la categoria non riceve mai una concessione (spec 3.3)
-  })
-
-  it('category OFF spegne tutte le foglie GRANT del sottoalbero', () => {
-    const on = applyToggle(tree, base, 2, true)
-    const off = applyToggle(tree, on, 2, false)
-    expect(off.get(3)).toBe(false)
-    expect(off.get(4)).toBe(false)
-    expect(off.get(2)).toBe(false)
-  })
-
-  it('leaf ON accende solo se stessa: nessun antenato viene marcato concesso (HOLE-5)', () => {
-    const next = applyToggle(tree, base, 3, true)
-    expect(next.get(3)).toBe(true)
-    expect(next.get(2)).toBe(false) // antenato: MAI più risalito
-    expect(next.get(4)).toBe(false) // fratello non toccato
-  })
-
-  it('leaf OFF non ha antenati da revocare: non ce n\'erano da propagare all\'accensione', () => {
-    const on = applyToggle(tree, base, 3, true)
-    const off = applyToggle(tree, on, 3, false)
-    expect(off.get(3)).toBe(false)
-    expect(off.get(2)).toBe(false)
-  })
-
-  it('leaf ON does not touch the tree root either, not just its direct category parent', () => {
-    const next = applyToggle(tree, base, 3, true)
-    expect(next.get(0)).toBe(false)
-  })
-})
-
 describe('computeDeltas', () => {
   it('returns only changed ids with their new value', () => {
     const loaded = new Map<number, boolean>([[2, true], [3, true], [4, false]])
@@ -141,5 +102,143 @@ describe('computeDeltas', () => {
   it('no-op toggles produce no deltas', () => {
     const m = new Map<number, boolean>([[2, true]])
     expect(computeDeltas(m, new Map(m))).toEqual([])
+  })
+})
+
+// --- Task 2: cartelle a tre stati, e il clic che decide il verso da sé (DEC-20) ---
+
+const nodo = (
+  id: number,
+  type: 'CATEGORY' | 'FUNCTIONALITY',
+  children: UserNavigationTreeDto[] = [],
+): UserNavigationTreeDto => ({
+  id, name: `nodo-${id}`, type, parentId: null, authorization: false, children,
+})
+
+// Home(1) > Test2(2) > [Le scienze(3, foglia), AAA(4, contenitore vuoto)];  Admin(5) > [6, 7]
+const menu: UserNavigationTreeDto[] = [
+  nodo(1, 'CATEGORY', [nodo(2, 'CATEGORY', [nodo(3, 'FUNCTIONALITY'), nodo(4, 'CATEGORY')])]),
+  nodo(5, 'CATEGORY', [nodo(6, 'FUNCTIONALITY'), nodo(7, 'FUNCTIONALITY')]),
+]
+const spento = new Map<number, boolean>()
+
+describe('folderState', () => {
+  it('dice «empty» su un contenitore senza foglie nel sottoalbero', () => {
+    expect(folderState(menu[0].children[0].children[1], spento)).toBe('empty')
+  })
+
+  it('dice «off» quando nessuna foglia del sottoalbero è concessa', () => {
+    expect(folderState(menu[1], spento)).toBe('off')
+  })
+
+  it('dice «partial» quando alcune sì e alcune no', () => {
+    expect(folderState(menu[1], new Map([[6, true]]))).toBe('partial')
+  })
+
+  it('dice «on» quando tutte le foglie del sottoalbero sono concesse', () => {
+    expect(folderState(menu[1], new Map([[6, true], [7, true]]))).toBe('on')
+  })
+
+  it('guarda le foglie annidate, non solo i figli diretti, e ignora i contenitori intermedi', () => {
+    // Home(1) ha una sola foglia in tutto il sottoalbero: Le scienze(3), sotto Test2(2).
+    // AAA(4) è un contenitore e non conta come foglia da concedere.
+    expect(folderState(menu[0], new Map([[3, true]]))).toBe('on')
+  })
+})
+
+describe('toggleNode', () => {
+  it('su una foglia inverte solo se stessa', () => {
+    const next = toggleNode(menu, new Map([[6, true]]), 6)
+    expect(next.get(6)).toBe(false)
+    // 7 non è mai stata nella mappa in ingresso: "inverte solo se stessa" vuol dire che resta
+    // assente, non che diventi esplicitamente false (altrimenti toggleNode scriverebbe una
+    // chiave che non le compete).
+    expect(next.get(7)).toBeUndefined()
+  })
+
+  it('su una foglia spenta la accende, senza toccare gli antenati (HOLE-5)', () => {
+    const next = toggleNode(menu, spento, 6)
+    expect(next.get(6)).toBe(true)
+    expect(next.get(5)).toBeUndefined()
+  })
+
+  // BUG-3: prima il verso lo calcolava il chiamante da `!(map.get(id) ?? false)`, e su una
+  // cartella — sempre spenta per costruzione — valeva sempre true: accendeva e non spegneva mai.
+  it('su una cartella spenta accende tutte le foglie del sottoalbero', () => {
+    const next = toggleNode(menu, spento, 5)
+    expect(next.get(6)).toBe(true)
+    expect(next.get(7)).toBe(true)
+  })
+
+  it('su una cartella parziale accende tutto, non inverte foglia per foglia', () => {
+    const next = toggleNode(menu, new Map([[6, true]]), 5)
+    expect(next.get(6)).toBe(true)
+    expect(next.get(7)).toBe(true)
+  })
+
+  it('su una cartella piena spegne tutte le foglie del sottoalbero', () => {
+    const next = toggleNode(menu, new Map([[6, true], [7, true]]), 5)
+    expect(next.get(6)).toBe(false)
+    expect(next.get(7)).toBe(false)
+  })
+
+  it('non scrive mai la cartella stessa, in nessuno dei due versi', () => {
+    const acceso = toggleNode(menu, spento, 5)
+    expect(acceso.has(5)).toBe(false)
+    const spentoDiNuovo = toggleNode(menu, acceso, 5)
+    expect(spentoDiNuovo.has(5)).toBe(false)
+  })
+
+  it('scende oltre i contenitori intermedi', () => {
+    const next = toggleNode(menu, spento, 1)
+    expect(next.get(3)).toBe(true)
+    expect(next.has(2)).toBe(false)
+    expect(next.has(4)).toBe(false)
+  })
+
+  it('su un contenitore vuoto non cambia niente', () => {
+    const next = toggleNode(menu, spento, 4)
+    expect([...next.entries()]).toEqual([])
+  })
+
+  it('non modifica la mappa ricevuta', () => {
+    const originale = new Map([[6, true]])
+    toggleNode(menu, originale, 5)
+    expect(originale.get(7)).toBeUndefined()
+  })
+
+  it('su un id sconosciuto restituisce una copia intatta', () => {
+    const originale = new Map([[6, true]])
+    const next = toggleNode(menu, originale, 9999)
+    expect([...next.entries()]).toEqual([[6, true]])
+    expect(next).not.toBe(originale)
+  })
+})
+
+describe('stampAuthorization', () => {
+  it('timbra la concessione sulle funzionalità e mai sui contenitori', () => {
+    const stamped = stampAuthorization(menu, new Set([3, 6]))
+    expect(stamped[0].children[0].children[0].authorization).toBe(true)
+    expect(stamped[1].children[0].authorization).toBe(true)
+    expect(stamped[1].children[1].authorization).toBe(false)
+    expect(stamped[0].authorization).toBe(false)
+  })
+
+  // Il gemello del test che protegge buildAuthTree da una concessione residua su una
+  // categoria: se il database portasse una riga su un contenitore, l'albero la ignora.
+  it('ignora una concessione che puntasse a un contenitore', () => {
+    const stamped = stampAuthorization(menu, new Set([5]))
+    expect(stamped[1].authorization).toBe(false)
+  })
+
+  it('non modifica l\'albero ricevuto', () => {
+    stampAuthorization(menu, new Set([6]))
+    expect(menu[1].children[0].authorization).toBe(false)
+  })
+
+  it('conserva gli altri campi del nodo', () => {
+    const stamped = stampAuthorization(menu, new Set([6]))
+    expect(stamped[1].name).toBe('nodo-5')
+    expect(stamped[1].children.map(c => c.id)).toEqual([6, 7])
   })
 })

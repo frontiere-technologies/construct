@@ -61,54 +61,11 @@ function indexTree(trees: UserNavigationTreeDto[]) {
   return byId
 }
 
-function descendantIds(node: UserNavigationTreeDto): number[] {
-  const out: number[] = []
-  const walk = (nodes: UserNavigationTreeDto[]) => {
-    for (const n of nodes) { out.push(n.id); walk(n.children) }
-  }
-  walk(node.children)
-  return out
-}
-
 export function buildAuthMap(trees: UserNavigationTreeDto[]): Map<number, boolean> {
   const map = new Map<number, boolean>()
   const byId = indexTree(trees)
   for (const [id, node] of byId) map.set(id, node.authorization)
   return map
-}
-
-/**
- * Spec 3.3: la concessione sta sulle foglie. Una categoria non riceve mai una riga propria in
- * role_permission — né accendendola né spegnendola — quindi il toggle su una categoria si
- * limita a propagare ai discendenti di tipo FUNCTIONALITY (foglie, comprese quelle sotto una
- * sotto-categoria intermedia), senza mai scrivere `itemId` stesso né una sotto-categoria.
- *
- * Il ramo simmetrico di HOLE-5: la vecchia versione, accendendo una foglia, risaliva gli
- * antenati e li segnava concessi — ma spegnendola non li revocava mai, lasciando concessioni
- * residue sulle categorie (pulite una volta per tutte dalla migrazione 0020). Qui quella
- * risalita sparisce del tutto: una foglia accende o spegne solo se stessa, e poiché una
- * categoria non è mai scritta come concessa, non c'è nulla da revocare quando l'ultima foglia
- * di un ramo si spegne.
- */
-export function applyToggle(
-  trees: UserNavigationTreeDto[],
-  map: Map<number, boolean>,
-  itemId: number,
-  enabled: boolean,
-): Map<number, boolean> {
-  const byId = indexTree(trees)
-  const node = byId.get(itemId)
-  const next = new Map(map)
-  if (!node) return next
-
-  if (node.type === 'CATEGORY') {
-    for (const d of descendantIds(node)) {
-      if (byId.get(d)?.type === 'FUNCTIONALITY') next.set(d, enabled)
-    }
-  } else {
-    next.set(itemId, enabled)
-  }
-  return next
 }
 
 export function computeDeltas(
@@ -123,4 +80,86 @@ export function computeDeltas(
     if (was !== now) deltas.push({ idItem: id, authorization: now })
   }
   return deltas
+}
+
+/**
+ * Lo stato di una cartella (DEC-20). Non è un dato: è il riassunto delle foglie del proprio
+ * sottoalbero, ricalcolato a ogni disegno. `empty` è il contenitore che non ha nessuna
+ * funzionalità sotto di sé — il suo interruttore va disabilitato, non lasciato inerte: un
+ * controllo che non risponde e non spiega perché è esattamente il difetto segnalato (BUG-2).
+ */
+export type FolderState = 'off' | 'partial' | 'on' | 'empty'
+
+/** Le funzionalità del sottoalbero di `node`, a qualunque profondità. I contenitori
+ *  intermedi si attraversano e non si contano: non sono concedibili. */
+function leafIds(node: UserNavigationTreeDto): number[] {
+  const out: number[] = []
+  const walk = (nodes: UserNavigationTreeDto[]) => {
+    for (const n of nodes) {
+      if (n.type === 'FUNCTIONALITY') out.push(n.id)
+      walk(n.children)
+    }
+  }
+  walk(node.children)
+  return out
+}
+
+export function folderState(node: UserNavigationTreeDto, map: Map<number, boolean>): FolderState {
+  const leaves = leafIds(node)
+  if (leaves.length === 0) return 'empty'
+  const accese = leaves.filter(id => map.get(id) ?? false).length
+  if (accese === 0) return 'off'
+  if (accese === leaves.length) return 'on'
+  return 'partial'
+}
+
+/**
+ * Il clic decide il verso da sé, e questo è il punto (BUG-3). Prima lo calcolava il chiamante
+ * come `!(map.get(node.id) ?? false)`: su una foglia è corretto, su una cartella — che
+ * `buildAuthTree` marcava `authorization: false` per costruzione — quell'espressione valeva
+ * sempre `true`, quindi una cartella accendeva e non spegneva mai. Portando la decisione qui
+ * dentro non resta un chiamante che possa sbagliarla.
+ *
+ * Su una cartella la regola è: accendi tutte le foglie se non sono già tutte accese
+ * (`off` e `partial` vanno entrambi verso l'accensione — «parziale» non è metà di un ciclo a
+ * tre passi, è una condizione da completare), spegnile tutte se lo sono. La cartella stessa
+ * non viene mai scritta nella mappa: `next.has(idCartella)` resta falso in entrambi i versi,
+ * ed è ciò che impedisce a `computeDeltas` di generare un delta che il server rifiuterebbe.
+ */
+export function toggleNode(
+  trees: UserNavigationTreeDto[],
+  map: Map<number, boolean>,
+  itemId: number,
+): Map<number, boolean> {
+  const byId = indexTree(trees)
+  const node = byId.get(itemId)
+  const next = new Map(map)
+  if (!node) return next
+
+  if (node.type === 'FUNCTIONALITY') {
+    next.set(itemId, !(map.get(itemId) ?? false))
+    return next
+  }
+
+  const enabled = folderState(node, map) !== 'on'
+  for (const id of leafIds(node)) next.set(id, enabled)
+  return next
+}
+
+/**
+ * Timbra la concessione su un albero costruito altrove — per il menu, da `buildNavTree` in
+ * nav-tree-builder.ts, che è l'unico posto dove quella gerarchia è vera (BUG-1). Solo sulle
+ * funzionalità: un contenitore è un riassunto, non una riga, quindi resta `false` anche se
+ * `grantedIds` lo contenesse. È lo stesso presidio che `buildAuthTree` applica alle categorie
+ * di `permission`, applicato all'altro albero.
+ */
+export function stampAuthorization(
+  nodes: UserNavigationTreeDto[],
+  grantedIds: Set<number>,
+): UserNavigationTreeDto[] {
+  return nodes.map(n => ({
+    ...n,
+    authorization: n.type === 'FUNCTIONALITY' && grantedIds.has(n.id),
+    children: stampAuthorization(n.children, grantedIds),
+  }))
 }
