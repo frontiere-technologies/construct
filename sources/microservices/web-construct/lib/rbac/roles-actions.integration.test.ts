@@ -133,4 +133,36 @@ describeIntegration('updateRolePermissions against the database', () => {
     expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(1)
     expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId))).toHaveLength(1)
   })
+
+  // Revisione Task 4, giro 1 (RILIEVO 1): le quattro guardie sopra rifiutano PRIMA di
+  // eseguire qualunque `tx.execute` — il che le rende vere anche con due `db.execute` nudi,
+  // senza transazione, perché la scrittura rifiutata non viene mai nemmeno tentata. Non
+  // difendono quindi la proprietà che il commento di updateRolePermissions dichiara: «un
+  // rifiuto su un albero non deve lasciare scritto l'altro».
+  //
+  // Per esercitare DAVVERO quella proprietà serve una scrittura che fallisca DOPO che
+  // l'altra è già stata eseguita — non prima. Un id-contenitore vero non basta: la guardia
+  // in memoria lo intercetta subito, prima di qualunque `tx.execute` (lo stesso buco di
+  // sopra). Un id di voce INESISTENTE invece supera la guardia in memoria (il SELECT non
+  // trova righe da segnalare come contenitore) e arriva fino alla RPC
+  // `apply_role_functionality_deltas`, dove l'INSERT viola la FK di
+  // `role_functionality.id_menu_entry` verso `menu_entry` — un rifiuto del DATABASE, non di
+  // una guardia JS, e arriva DOPO che la scrittura delle operazioni è già stata eseguita
+  // (l'ordine nel codice è: guardie di entrambi gli alberi, poi esecuzione di entrambi,
+  // operazioni prima). Verificato spostando temporaneamente la transazione a due
+  // `db.execute` indipendenti: senza transazione questo test fallisce (`grantId` resta
+  // scritto in `role_permission`); con la transazione passa. Vedi il rapporto del Task 4
+  // per la prova.
+  it('un fallimento sulla scrittura delle funzionalità annulla anche la scrittura delle operazioni già eseguita, nella stessa transazione', async () => {
+    const roleId = await makeServiceRole()
+    const grantId = await makePermission('GRANT')
+    const idVoceInesistente = 999999999
+
+    await expect(updateRolePermissions(roleId, {
+      functionalities: [{ idItem: idVoceInesistente, authorization: true }],
+      operations: [{ idItem: grantId, authorization: true }],
+    })).rejects.toThrow()
+
+    expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
+  })
 })

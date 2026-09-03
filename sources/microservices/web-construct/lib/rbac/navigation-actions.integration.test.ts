@@ -256,13 +256,30 @@ describeIntegration('navigation mutations against the database', () => {
     }
   })
 
-  it('cancellare una voce porta via le sue concessioni, per cascata', async () => {
-    const { id } = await createNavigationItem(functionalityInput(`${PREFIX}${sequence++}`))
+  // Revisione Task 4, giro 1 (RILIEVO 2): il test rimosso allo Step 8
+  // («elimina i permessi orfani di un intero sottoalbero») aveva un cammino a due livelli
+  // apposta — «cosi' un cammino fermato al primo figlio farebbe fallire questo test». Un
+  // rimpiazzo a profondità 0 (una foglia isolata) non prova che la cascata attraversi il
+  // sottoalbero: `menu_entry.id_parent on delete cascade` sul PRIMO livello sarebbe bastato
+  // a farlo passare comunque. Qui si cancella il contenitore in cima a
+  // contenitore > sotto-contenitore > funzionalità, e si verificano sia i tre `menu_entry`
+  // (il cascade attraversa due livelli, non uno) sia la riga `role_functionality` sulla
+  // funzionalità più profonda (la cascata di `role_functionality.id_menu_entry`, migrazione
+  // 0024, arriva fino in fondo).
+  it('cancellare un contenitore porta via l\'intero sottoalbero e le concessioni dei discendenti, per cascata', async () => {
+    const { id: catId } = await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`))
+    const { id: subId } = await createNavigationItem({ ...categoryInput(`${PREFIX}${sequence++}`), idItemParent: catId })
+    const { id: funcId } = await createNavigationItem({ ...functionalityInput(`${PREFIX}${sequence++}`), idItemParent: subId })
     const [ruolo] = await db.insert(role).values({ description: `${PREFIX}cascata`, idRoleType: 2 }).returning({ idRole: role.idRole })
     try {
-      await db.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: id })
-      await deleteNavigationItem(id)
-      const rimaste = await db.select().from(roleFunctionality).where(eq(roleFunctionality.idMenuEntry, id))
+      await db.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: funcId })
+
+      await deleteNavigationItem(catId)
+
+      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, catId))).toHaveLength(0)
+      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, subId))).toHaveLength(0)
+      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, funcId))).toHaveLength(0)
+      const rimaste = await db.select().from(roleFunctionality).where(eq(roleFunctionality.idMenuEntry, funcId))
       expect(rimaste).toHaveLength(0)
     } finally {
       await db.delete(role).where(eq(role.idRole, ruolo.idRole))
