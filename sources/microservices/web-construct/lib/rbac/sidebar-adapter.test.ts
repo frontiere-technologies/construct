@@ -4,7 +4,7 @@ import { FUNCTYPE_EMBEDDED_PAGE, FUNCTYPE_EXTERNAL_LINK } from './types'
 import type { MenuEntryRow } from './types'
 
 const voce = (over: Partial<MenuEntryRow> & { id_menu_entry: number }): MenuEntryRow => ({
-  id_permission: null, id_parent: null, name: `voce-${over.id_menu_entry}`,
+  id_parent: null, name: `voce-${over.id_menu_entry}`,
   order_position: 0, navbar_position: null, icon_path: null,
   id_functionality_type: 1, functionality_link: null, open_in_new_tab: 1,
   item_translation: null, is_immutable: 0, ...over,

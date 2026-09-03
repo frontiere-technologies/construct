@@ -146,7 +146,6 @@ export const rolePermission = pgTable('role_permission', {
 
 export const menuEntry = pgTable('menu_entry', {
   idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_menu_entry')`),
-  idPermission: bigint('id_permission', { mode: 'number' }).references(() => permission.idPermission, { onDelete: 'restrict' }),
   idParent: bigint('id_parent', { mode: 'number' }).references((): AnyPgColumn => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
   name: text('name'),
   orderPosition: integer('order_position').notNull().default(0),
@@ -161,7 +160,6 @@ export const menuEntry = pgTable('menu_entry', {
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (t) => [
   index('menu_entry_parent_order_idx').on(t.idParent, t.orderPosition),
-  index('menu_entry_permission_idx').on(t.idPermission),
 ])
 
 export const menuEntryTag = pgTable('menu_entry_tag', {

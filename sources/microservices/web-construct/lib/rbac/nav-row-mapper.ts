@@ -18,7 +18,6 @@ export function toPermissionRow(r: typeof permission.$inferSelect): PermissionRo
 export function toMenuEntryRow(r: typeof menuEntry.$inferSelect): MenuEntryRow {
   return {
     id_menu_entry: r.idMenuEntry,
-    id_permission: r.idPermission,
     id_parent: r.idParent,
     name: r.name,
     order_position: r.orderPosition,

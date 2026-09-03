@@ -216,16 +216,20 @@ describe('identità del permesso', () => {
     // test non poteva PIU' girare — e la pulizia non c'era nemmeno, perche' il primo
     // insert cadeva fuori dal try. Randomizzare basta a rendere la riesecuzione possibile;
     // il try la rende pulita.
+    // id_parent = -1 (operations), non 0: la migrazione 0027 (Task 6) ha cancellato la riga
+    // radice `root` insieme a tutto cio' che non discende dal codice, e un id_parent = 0
+    // farebbe fallire l'insert prima ancora sulla chiave esterna anziche' sul vincolo che
+    // questo test vuole esercitare.
     const code = `test-dup-${unique()}`
     try {
       await db.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
-        values ('GRANT', ${code}, 'SOURCE', 'primo', 0, 0)
+        values ('GRANT', ${code}, 'SOURCE', 'primo', -1, 0)
       `)
       await expectRejectedByConstraint(
         () => db.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
-          values ('GRANT', ${code}, 'SOURCE', 'secondo', 0, 0)
+          values ('GRANT', ${code}, 'SOURCE', 'secondo', -1, 0)
         `),
         'permission_code_unique',
       )
@@ -242,22 +246,36 @@ describe('travaso in menu_entry', () => {
   // `permission` — colonne che il Task 7 toglie perché il travaso (0017/0018) è già
   // un fatto scritto e concluso, non un contratto che si riverifica a ogni run. Non sono
   // riscritte su menu_entry: verificherebbero solo che menu_entry non contraddice se stesso,
-  // non che il travaso sia stato corretto. Restano invece i due test sotto, che non
-  // dipendono da colonne tolte.
+  // non che il travaso sia stato corretto.
+  //
+  // Le due prove che le sostituivano — «nessuna voce con id_permission puntato a una
+  // categoria» e «rifiuta di cancellare un permesso a cui una voce punta» — sono cadute a
+  // loro volta con la migrazione 0027 (Task 6): la prima leggeva menu_entry.id_permission,
+  // la seconda la chiave esterna che quella colonna portava, e nessuna delle due esiste più.
+  // Al loro posto, il contratto che conta oggi: `permission` ridotta a operations e al suo
+  // sottoalbero (MIG-5), e la colonna sparita da menu_entry (MIG-4).
 
-  it('non genera mai una voce con id_permission puntato a una categoria', async () => {
-    // Join su id_menu_entry (riusa l'id del permesso originale, sempre valorizzato), non su
-    // id_permission: quella colonna è nulla per costruzione sulle categorie, e un inner join su di
-    // lei scarterebbe le righe da controllare prima ancora di guardarle. Sul dataset di test
-    // esistono due categorie reali (Home, Admin, entrambe con id_permission nullo in menu_entry):
-    // questo controllo è eseguito su dati veri, non a vuoto.
+  it('lascia in permission solo operations e il suo sottoalbero (MIG-5)', async () => {
     const rows = await db.execute(sql`
-      select count(*)::int as sbagliate
-      from public.menu_entry me
-      join public.permission p on p.id_permission = me.id_menu_entry
-      where p.kind = 'CATEGORY' and me.id_permission is not null
+      with recursive code_permissions as (
+        select id_permission from public.permission where id_permission = -1
+        union all
+        select c.id_permission from public.permission c
+        join code_permissions p on c.id_parent = p.id_permission
+      )
+      select count(*)::int as estranee
+      from public.permission
+      where id_permission not in (select id_permission from code_permissions)
     `)
-    expect(rows[0].sbagliate).toBe(0)
+    expect(rows[0].estranee).toBe(0)
+  })
+
+  it('non ha più una colonna id_permission su menu_entry (MIG-4)', async () => {
+    const rows = await db.execute(sql`
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'menu_entry' and column_name = 'id_permission'
+    `)
+    expect(rows).toHaveLength(0)
   })
 
   it('concede la tabella nuova al ruolo di runtime', async () => {
@@ -270,14 +288,6 @@ describe('travaso in menu_entry', () => {
     expect(rows[0].concesse).toBe(8)
   })
 
-  it('rifiuta di cancellare un permesso a cui una voce punta', async () => {
-    const [voce] = await db.execute(sql`
-      select id_permission from public.menu_entry where id_permission is not null limit 1
-    `)
-    await expect(
-      db.execute(sql`delete from public.permission where id_permission = ${voce.id_permission}`),
-    ).rejects.toThrow()
-  })
 })
 
 describe('pulizia colonne e tabelle assorbite (Task 7)', () => {
@@ -487,14 +497,15 @@ describe('role_functionality (0024)', () => {
     expect(rows[0].policy).toBe(1)
   })
 
-  it('non lascia in role_permission nessuna concessione su una voce di menu (travaso MIG-2/MIG-3)', async () => {
-    const rows = await db.execute(sql`
-      select count(*)::int as residue
-      from public.role_permission rp
-      join public.menu_entry m on m.id_permission = rp.id_permission
-    `)
-    expect(rows[0].residue).toBe(0)
-  })
+  // 'non lascia in role_permission nessuna concessione su una voce di menu (travaso
+  // MIG-2/MIG-3)' viveva qui, e univa role_permission a menu_entry su m.id_permission =
+  // rp.id_permission. Trovata dal controllo di Step 1 del Task 6 (0027): quella colonna non
+  // esiste più, e il join non si può più scrivere. Non ha bisogno di un rimpiazzo — il
+  // contratto che proteggeva è ora garantito per costruzione, non da una query: dopo la
+  // 0027 `permission` contiene solo operations e il suo sottoalbero (il test MIG-5 qui sopra),
+  // e role_permission.id_permission è on delete cascade, quindi non può più esistere una riga
+  // di role_permission che punti a un permesso-gemello di una voce di menu — quelle righe
+  // sono state cancellate insieme ai permessi che citavano, dalla stessa 0027.
 
   it('has_permissions è vero per un ruolo che concede solo una voce di menu', async () => {
     const [created] = await db

@@ -53,7 +53,9 @@ function omitFunctionalityType(input: CreateNavItemInput): CreateNavItemInput {
 
 describeIntegration('navigation mutations against the database', () => {
   afterEach(async () => {
-    // menu_entry -> permission è on delete restrict: la voce se ne va prima del permesso.
+    // menu_entry e permission non hanno più relazione dopo la 0027 (Task 6): questa riga di
+    // pulizia è difensiva, nel caso un test qui sotto inserisca ancora un permesso con questo
+    // prefisso — nessuno lo fa più oggi.
     await db.delete(menuEntry).where(like(menuEntry.name, `${PREFIX}%`))
     await db.delete(permission).where(like(permission.name, `${PREFIX}%`))
   })
@@ -70,50 +72,19 @@ describeIntegration('navigation mutations against the database', () => {
     }
   })
 
-  it('non cancella mai un permesso di origine SOURCE, anche se la voce che lo cita viene eliminata', async () => {
-    const name = `${PREFIX}${sequence++}`
-    const code = `${PREFIX}source_${sequence++}`
-    // Nessuna riga SOURCE esiste ancora in Fase 1 (arriva con la sincronizzazione del
-    // catalogo, Fase 2): la inseriamo a mano per esercitare il ramo comunque, oggi.
-    const [perm] = await db.insert(permission).values({
-      kind: 'GRANT',
-      origin: 'SOURCE',
-      code,
-      name,
-      description: '',
-      itemTranslation: { EN: { name } },
-      idParent: null,
-      orderPosition: 0,
-    }).returning({ id: permission.idPermission })
+  // 'non cancella mai un permesso di origine SOURCE, anche se la voce che lo cita viene
+  // eliminata' viveva qui, e costruiva lo scenario inserendo una voce con
+  // `idPermission: perm.id`. Trovata dal controllo di Step 1 del Task 6 (0027): quella colonna
+  // non esiste più, quindi lo scenario non si può più costruire. Non ha bisogno di un
+  // rimpiazzo — deleteNavigationItem non tocca più `permission` in nessun percorso (vedi il
+  // commento lì sopra), quindi un permesso SOURCE non può più essere toccato dalla
+  // cancellazione di una voce: non per una prova a runtime, ma perché le due tabelle non si
+  // parlano più.
 
-    const [entry] = await db.insert(menuEntry).values({
-      idPermission: perm.id,
-      idParent: null,
-      name,
-      idFunctionalityType: 3,
-      functionalityLink: `/${name}`,
-      openInNewTab: 1,
-      itemTranslation: { EN: { name } },
-      orderPosition: 0,
-    }).returning({ id: menuEntry.idMenuEntry })
-
-    try {
-      await deleteNavigationItem(entry.id)
-
-      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id))).toHaveLength(0)
-      // Il permesso SOURCE sopravvive: lo possiede il sorgente, non la console.
-      expect(await db.select().from(permission).where(eq(permission.idPermission, perm.id))).toHaveLength(1)
-    } finally {
-      await db.delete(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id))
-      await db.delete(permission).where(eq(permission.idPermission, perm.id))
-    }
-  })
-
-  it('rolls back the permission + entry pair when tag replacement fails', async () => {
+  it('annulla la creazione della voce se la sostituzione dei tag fallisce', async () => {
     const name = `${PREFIX}${sequence++}`
     await expect(createNavigationItem(functionalityInput(name, 'x'.repeat(51)))).rejects.toThrow(/Failed to create item/)
     expect(await db.select().from(menuEntry).where(eq(menuEntry.name, name))).toHaveLength(0)
-    expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
   })
 
   it('rifiuta la conversione di una categoria in funzionalità: id_functionality_type resta nullo', async () => {

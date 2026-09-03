@@ -36,12 +36,11 @@ export interface PermissionRow {
   deprecated_at: string | null
 }
 
-/** A menu_entry row (Task 3): a voice reuses its origin permission's id, but the tree it
- * describes is structural, not authorization — id_permission null means a public voice,
- * and a container (id_functionality_type null) carries no permission of its own at all. */
+/** Una riga di menu_entry. La voce È il proprio permesso (DEC-17): non punta a una riga di
+ *  `permission`, e la concessione vive in `role_functionality`. Un contenitore
+ *  (`id_functionality_type` nullo) non è concedibile — raggruppa voci, non protegge niente. */
 export interface MenuEntryRow {
   id_menu_entry: number
-  id_permission: number | null
   id_parent: number | null
   name: string | null
   order_position: number

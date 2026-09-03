@@ -20,8 +20,11 @@ export const ITEM_TYPES: ItemTypeOption[] = [
  * tipologia SALVATA della voce.
  *
  * In creazione tutte e quattro. In modifica solo il proprio lato del confine, e il confine
- * e' uno: `updateNavigationItem` rifiuta il passaggio categoria <-> funzionalita' perche'
- * un id_functionality_type senza id_permission sarebbe una voce pubblica e ingovernabile.
+ * e' uno: `updateNavigationItem` rifiuta il passaggio categoria <-> funzionalita'. Il vincolo
+ * resta, il motivo e' cambiato (DEC-22): non esiste piu' una «voce pubblica» da creare per
+ * sbaglio, perche' menu_entry non porta piu' id_permission. Quel che sopravvive e' l'altro
+ * verso -- convertire una funzionalita' in categoria butterebbe via le sue concessioni in
+ * silenzio, perche' una cartella non e' concedibile.
  * Fra i tre sottotipi di funzionalita' (embedded, link esterno, link interno) invece il
  * permesso non si muove, e il server accetta: restringere e' giusto, disabilitare tutto no.
  *
