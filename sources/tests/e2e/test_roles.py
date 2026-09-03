@@ -64,13 +64,34 @@ def _safe_delete_role(page, base_url, name) -> None:
     `.count()` right after can read 0 during that gap and skip a role that is very
     much still there, which is exactly the failure this safety net had at first:
     three real roles left behind, each wrongly concluded "never created".
+
+    EVERYTHING here — the leading `_search`, and the real `_delete_role` call, not
+    only the presence check — runs inside try/except, and nothing this function
+    does ever raises. Three `_safe_delete_*` calls sit back to back in the same
+    `finally` in each of the three new tests: if one of them let an exception
+    through (a flaky row-menu click, a confirm modal that doesn't close, the
+    trailing count-is-zero assertion inside `_delete_role`), the sibling calls
+    after it in that `finally` would never run, turning one lost row into several.
+    A failure here is printed, not raised, precisely so it cannot cancel a sibling
+    cleanup, and precisely so it cannot replace — by raising fresh from a `finally`
+    — the real exception of a test that failed for its own reason (or flip a
+    passing test to failing over a cleanup-only problem). The print is the only
+    trace it leaves: a lost row with a trace can be found and matched to a cause; a
+    lost row with none just looks like a random flaky run next time.
     """
-    _search(page, base_url, name)
     try:
+        _search(page, base_url, name)
         expect(_rows(page).filter(has_text=name)).to_be_visible(timeout=5_000)
     except AssertionError:
+        return  # never created, or gone already — nothing to clean up
+    except Exception as err:
+        print(f"[cleanup] could not check whether role {name!r} still exists: {err}")
         return
-    _delete_role(page, base_url, name)
+
+    try:
+        _delete_role(page, base_url, name)
+    except Exception as err:
+        print(f"[cleanup] failed to delete role {name!r}, it may still be in the database: {err}")
 
 
 def _safe_delete_functionality(page, base_url, name) -> None:
@@ -79,15 +100,26 @@ def _safe_delete_functionality(page, base_url, name) -> None:
     behaviour already deleted it (test_deleted_functionality_disappears_from_roles
     does exactly that as the action under test, before this safety net ever runs).
 
-    Same reasoning as _safe_delete_role above: a bounded, retrying visibility check,
-    not a bare `.count()` that can race the tree's own render.
+    Same reasoning as _safe_delete_role above, including the part that matters most
+    here: the leading `nav` and the real `_delete_functionality` call are inside the
+    same try/except as the presence check, and this function never raises — a
+    failure is printed and swallowed so it cannot cancel the `_safe_delete_*` calls
+    that follow it in the same `finally`, and cannot mask a real assertion failure
+    from the test body by raising fresh out of `finally`.
     """
-    nav(page, f"{base_url}/functionalities")
     try:
+        nav(page, f"{base_url}/functionalities")
         expect(page.get_by_text(name, exact=True).first).to_be_visible(timeout=5_000)
     except AssertionError:
+        return  # never created, or gone already — nothing to clean up
+    except Exception as err:
+        print(f"[cleanup] could not check whether functionality {name!r} still exists: {err}")
         return
-    _delete_functionality(page, base_url, name)
+
+    try:
+        _delete_functionality(page, base_url, name)
+    except Exception as err:
+        print(f"[cleanup] failed to delete functionality {name!r}, it may still be in the database: {err}")
 
 
 def test_roles_list_loads(logged_in_page, base_url):
