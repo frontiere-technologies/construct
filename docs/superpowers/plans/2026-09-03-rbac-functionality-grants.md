@@ -163,7 +163,10 @@ describe('toggleNode', () => {
   it('su una foglia inverte solo se stessa', () => {
     const next = toggleNode(menu, new Map([[6, true]]), 6)
     expect(next.get(6)).toBe(false)
-    expect(next.get(7)).toBe(false)
+    // 7 non è mai stata nella mappa in ingresso: «inverte solo se stessa» vuol dire che resta
+    // assente, non che diventi esplicitamente false — `toggleNode` non deve scrivere una
+    // chiave che non le compete. `toBe(false)` qui falliva per costruzione.
+    expect(next.get(7)).toBeUndefined()
   })
 
   it('su una foglia spenta la accende, senza toccare gli antenati (HOLE-5)', () => {
@@ -360,7 +363,7 @@ export function stampAuthorization(
 npm run test -- lib/rbac/permission-tree.test.ts
 ```
 
-Atteso: PASS su tutti. I test preesistenti su `buildAuthTree`, `buildAuthMap` e `computeDeltas` restano verdi; quelli su `applyToggle` **falliscono in compilazione** perché la funzione non esiste più — cancella il loro `describe('applyToggle', …)` per intero: i sei casi che copriva sono riscritti sopra su `toggleNode`, tranne quelli sulla risalita agli antenati (HOLE-5), che `toggleNode` non fa e che il test «senza toccare gli antenati» copre.
+Atteso: PASS su tutti. I test preesistenti su `buildAuthTree`, `buildAuthMap` e `computeDeltas` restano verdi; quelli su `applyToggle` **falliscono in compilazione** perché la funzione non esiste più — cancella il loro `describe('applyToggle', …)` per intero: i **cinque** casi che copriva sono riscritti sopra su `toggleNode`, e quelli sulla risalita agli antenati (HOLE-5), che `toggleNode` non fa, li copre il test «senza toccare gli antenati». Togli anche `descendantIds`, che resta orfana quando `applyToggle` sparisce — era il suo unico chiamante, non è esportata, e `leafIds` non la sostituisce: ESLint la segnala come non usata. L'omonima in `nav-tree-builder.ts` è un'altra funzione, con un'altra firma e quattro chiamanti vivi: quella **non** si tocca.
 
 - [ ] **Step 5: Il resto della suite, e i tipi**
 
