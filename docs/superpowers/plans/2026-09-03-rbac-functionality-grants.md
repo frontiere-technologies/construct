@@ -1338,7 +1338,7 @@ Poi, nel riquadro Browser, ricarica `/roles-permissions/554` e verifica con `rea
 
 Controlla `read_console_messages` per errori, e la barra laterale: le voci concesse al ruolo dell'utente collegato devono essere quelle di prima (il travaso della `0024` non ha cambiato chi vede cosa).
 
-- [ ] **Step 12: Commit**
+- [✅] **Step 12: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/ \
