@@ -1121,7 +1121,7 @@ Nota sull'errore: il messaggio non è più avvolto in `Failed to update permissi
 npm run test:integration -- lib/rbac/roles-actions.integration.test.ts
 ```
 
-Atteso: PASS su tutti e sette.
+Atteso: PASS su tutti e sei.
 
 - [✅] **Step 7: Togli la creazione, la copia e la cancellazione del permesso gemello**
 
