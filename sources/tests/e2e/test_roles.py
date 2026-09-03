@@ -48,6 +48,48 @@ def _delete_role(page, base_url, name):
     expect(_rows(page).filter(has_text=name)).to_have_count(0)
 
 
+def _safe_delete_role(page, base_url, name) -> None:
+    """Cleanup safety net for a role: delete `name` if it is present, and do nothing
+    (not raise) if it never was.
+
+    Used in a `finally` that starts covering resources from before the first one is
+    created — a setup step earlier in the same test can throw and leave a later
+    resource never created at all, and this must not itself fail in that case, or it
+    would replace the real failure with a misleading one raised while cleaning up.
+
+    The presence check is a bounded, RETRYING `expect(...).to_be_visible()`, not a
+    bare `.count()`: `_search` applies the grid filter via a network round trip, and
+    `wait_for_load_state("networkidle")` inside it only confirms that response
+    landed — not that AG Grid has finished painting the resulting row. A bare
+    `.count()` right after can read 0 during that gap and skip a role that is very
+    much still there, which is exactly the failure this safety net had at first:
+    three real roles left behind, each wrongly concluded "never created".
+    """
+    _search(page, base_url, name)
+    try:
+        expect(_rows(page).filter(has_text=name)).to_be_visible(timeout=5_000)
+    except AssertionError:
+        return
+    _delete_role(page, base_url, name)
+
+
+def _safe_delete_functionality(page, base_url, name) -> None:
+    """Cleanup safety net for a functionality/category: delete `name` if it is
+    present, and do nothing if it never was created or if the test's own exercised
+    behaviour already deleted it (test_deleted_functionality_disappears_from_roles
+    does exactly that as the action under test, before this safety net ever runs).
+
+    Same reasoning as _safe_delete_role above: a bounded, retrying visibility check,
+    not a bare `.count()` that can race the tree's own render.
+    """
+    nav(page, f"{base_url}/functionalities")
+    try:
+        expect(page.get_by_text(name, exact=True).first).to_be_visible(timeout=5_000)
+    except AssertionError:
+        return
+    _delete_functionality(page, base_url, name)
+
+
 def test_roles_list_loads(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/roles-permissions")
@@ -272,10 +314,16 @@ def test_roles_tree_follows_the_menu_tree(logged_in_page, base_url):
     cat, func = f"E2E TreeCat {ts}", f"E2E TreeFunc {ts}"
     role_name = f"E2E TreeRole {ts}"
 
-    _create_category(page, base_url, cat)
-    _create_functionality(page, base_url, func, f"/e2e-tree-{ts}")
-    detail_url = _create_role(page, base_url, role_name)
+    # The try starts here, before the first creation: a failure partway through
+    # setup (e.g. _create_role timing out after _create_category and
+    # _create_functionality already succeeded) must not leak those two rows with
+    # no cleanup attempt at all. The finally below covers all three unconditionally
+    # via safety-net helpers that tolerate a resource never having been created.
     try:
+        _create_category(page, base_url, cat)
+        _create_functionality(page, base_url, func, f"/e2e-tree-{ts}")
+        detail_url = _create_role(page, base_url, role_name)
+
         # La categoria appena creata compare in Ruoli: prima non ci arrivava mai,
         # perché un contenitore di menu non generava una riga in `permission`.
         nav(page, detail_url)
@@ -301,9 +349,9 @@ def test_roles_tree_follows_the_menu_tree(logged_in_page, base_url):
             f"padding {func_pad}px contro {cat_pad}px"
         )
     finally:
-        _delete_role(page, base_url, role_name)
-        _delete_functionality(page, base_url, func)
-        _delete_functionality(page, base_url, cat)
+        _safe_delete_role(page, base_url, role_name)
+        _safe_delete_functionality(page, base_url, func)
+        _safe_delete_functionality(page, base_url, cat)
 
 
 def _tree_padding_left(page, name: str) -> int:
@@ -348,10 +396,14 @@ def test_folder_toggle_grants_and_revokes_the_subtree(logged_in_page, base_url):
     cat, func = f"E2E FolderCat {ts}", f"E2E FolderFunc {ts}"
     role_name = f"E2E FolderRole {ts}"
 
-    _create_category(page, base_url, cat)
-    _create_functionality(page, base_url, func, f"/e2e-folder-{ts}")
-    detail_url = _create_role(page, base_url, role_name)
+    # See test_roles_tree_follows_the_menu_tree above: the try starts before the
+    # first creation so a setup failure partway through doesn't leak whatever
+    # already succeeded with zero cleanup attempt.
     try:
+        _create_category(page, base_url, cat)
+        _create_functionality(page, base_url, func, f"/e2e-folder-{ts}")
+        detail_url = _create_role(page, base_url, role_name)
+
         # Annida la funzionalità nella categoria, così la cartella ha una foglia sola:
         # con una foglia sola gli stati della cartella e della foglia coincidono, e
         # l'asserzione non dipende da cos'altro c'è nell'albero.
@@ -385,9 +437,9 @@ def test_folder_toggle_grants_and_revokes_the_subtree(logged_in_page, base_url):
         expect(_perm_row_toggle(page, func)).to_have_attribute("aria-checked", "false")
         expect(_perm_row_toggle(page, cat)).to_have_attribute("aria-checked", "false")
     finally:
-        _delete_role(page, base_url, role_name)
-        _delete_functionality(page, base_url, func)
-        _delete_functionality(page, base_url, cat)
+        _safe_delete_role(page, base_url, role_name)
+        _safe_delete_functionality(page, base_url, func)
+        _safe_delete_functionality(page, base_url, cat)
 
 
 def test_deleted_functionality_disappears_from_roles(logged_in_page, base_url):
@@ -403,9 +455,19 @@ def test_deleted_functionality_disappears_from_roles(logged_in_page, base_url):
     cat = f"E2E Vanish {ts}"
     role_name = f"E2E VanishRole {ts}"
 
-    _create_category(page, base_url, cat)
-    detail_url = _create_role(page, base_url, role_name)
+    # The try starts before creation (see test_roles_tree_follows_the_menu_tree
+    # above), and cat's cleanup lives ONLY in the finally, via the tolerant safety
+    # net — not as a bare call in the body. The delete at line ~448 below is the
+    # behaviour under test, not cleanup: if the sanity assertion just above it ever
+    # failed — exactly what would happen if BUG-4 reappeared and the category never
+    # reached the Roles tree — that line would never run, and a bare
+    # `_delete_functionality(cat)` only in the body would leave cat permanently
+    # orphaned: the very "unreachable orphaned row" symptom this test exists to
+    # catch, reproduced on the test's own failure path.
     try:
+        _create_category(page, base_url, cat)
+        detail_url = _create_role(page, base_url, role_name)
+
         nav(page, detail_url)
         expect(page.get_by_text(cat, exact=True).first).to_be_visible()
 
@@ -414,4 +476,5 @@ def test_deleted_functionality_disappears_from_roles(logged_in_page, base_url):
         nav(page, detail_url)
         expect(page.get_by_text(cat, exact=True)).to_have_count(0)
     finally:
-        _delete_role(page, base_url, role_name)
+        _safe_delete_role(page, base_url, role_name)
+        _safe_delete_functionality(page, base_url, cat)
