@@ -528,11 +528,10 @@ def test_tipologia_in_edit_offers_only_the_functionality_subtypes(logged_in_page
     """On an existing functionality the type stays changeable BETWEEN SUBTYPES, and
     "Category" is not on offer.
 
-    The server refuses one boundary — category <-> functionality — because crossing it
-    would leave an id_functionality_type without an id_permission, i.e. a public,
-    ungovernable menu entry. It accepts a subtype change, which moves no permission. The
-    first version of that refusal disabled the whole dropdown and took the subtype change
-    down with it; this test pins the narrower behaviour.
+    Il divieto resta, il motivo è cambiato (DEC-22): non esiste più una «voce pubblica»
+    da creare per sbaglio, perché menu_entry non porta più id_permission. Quel che
+    sopravvive è l'altro verso — convertire una funzionalità in categoria butterebbe
+    via le sue concessioni in silenzio, perché una cartella non è concedibile.
     """
     page = logged_in_page
     name = f"E2E Subtype {int(time.time())}"
