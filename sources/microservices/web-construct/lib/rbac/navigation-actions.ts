@@ -4,10 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
-import { permission, menuEntry } from '@/lib/db/schema'
+import { menuEntry } from '@/lib/db/schema'
 import { toMenuEntryRow } from './nav-row-mapper'
 import { sanitizeSvg } from './svg-sanitize'
-import { canDeleteSubtree, descendantIds, isDescendant } from './nav-tree-builder'
+import { canDeleteSubtree, isDescendant } from './nav-tree-builder'
 import type { CreateNavItemInput, UpdateNavItemInput, MoveInput, MenuEntryRow } from './types'
 import { ITEM_TYPE_CATEGORY } from './types'
 
@@ -94,33 +94,17 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   // Una categoria di menu non è un permesso: raggruppa voci, non protegge niente.
   const isCategory = input.idItemType === ITEM_TYPE_CATEGORY
 
-  // La stessa invariante che updateNavigationItem impone sulla conversione, imposta qui
-  // sulla nascita. I due campi dicono la stessa cosa due volte — idItemType decide se
-  // nasce un permesso, idFunctionalityType finisce sulla riga di menu — e niente, prima
-  // di questa riga, li obbligava a concordare. Una coppia incoerente
-  // { idItemType: CATEGORIA, idFunctionalityType: 3 } produceva esattamente lo stato che
-  // il rifiuto sulla conversione esiste per impedire: id_functionality_type valorizzato e
-  // id_permission nullo, cioè una voce che sidebar-adapter mostra a chiunque sia
-  // autenticato e che non compare in Ruoli & Permessi da nessuna parte. Il verso opposto
-  // { FUNZIONALITÀ, null } crea un permesso che governa un contenitore, meno grave ma
-  // altrettanto non voluto.
+  // I due campi dicono la stessa cosa due volte, e niente li obbligava a concordare. Il
+  // motivo originale del controllo è caduto con la colonna id_permission: non nasce più un
+  // permesso, quindi non esiste più la coppia incoerente che produceva una voce «pubblica e
+  // ingovernabile». Il controllo resta perché una coppia incoerente resta una richiesta
+  // priva di senso — { CATEGORIA, tipo 3 } chiede una cartella che è anche una pagina — e
+  // una server action è un endpoint HTTP: rifiutare un input contraddittorio è il suo lavoro.
   //
-  // Il modulo non è raggiungibile dall'interfaccia (FunctionalityForm manda sempre una
-  // coppia coerente), ma una server action è un endpoint HTTP: la sua sicurezza non può
-  // dipendere da quale modulo la chiama. Un vincolo sul database sarebbe sbagliato — la
-  // specifica §3.2 elenca «voce con id_permission nullo» fra i casi legittimi del modello
-  // — quindi il posto giusto è qui, dove si conosce l'intenzione.
-  //
-  // `== null` e non `=== null`: su un campo che arriva dall'INPUT «assente» e «nullo»
-  // devono dire la stessa cosa. Vale anche per `willBeCategory` in
-  // updateNavigationItem, che ha la stessa origine; non vale per `wasCategory`, che viene
-  // dai dati salvati, dove una colonna e' nulla o valorizzata e assente non esiste. Con il confronto
-  // stretto una funzionalita' col campo OMESSO passava l'invariante, il permesso nasceva, e
-  // Drizzle scriveva `default` sulla colonna — che non ha default, quindi NULL: un permesso
-  // che governa un contenitore, il verso che questo commento dichiarava di rifiutare. E una
-  // categoria legittima col campo omesso veniva rifiutata a torto. Trovato dalla
-  // ri-revisione con una tabella di verita' sulle forme dell'input, non da un test: i due
-  // test che ora lo coprono sono nati dopo la diagnosi.
+  // `== null` e non `=== null`: su un campo che arriva dall'INPUT «assente» e «nullo» devono
+  // dire la stessa cosa. Vale anche per `willBeCategory` in updateNavigationItem, che ha la
+  // stessa origine; non vale per `wasCategory`, che viene dai dati salvati, dove una colonna
+  // è nulla o valorizzata e «assente» non esiste.
   if (isCategory !== (input.idFunctionalityType == null)) {
     throw new Error(
       'Inconsistent item type: a category must have no functionality type, and a functionality must have one.',
@@ -130,25 +114,6 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   try {
     const created = await db.transaction(async tx => {
       await lockNavigationWrites(tx)
-
-      let idPermission: number | null = null
-      if (!isCategory) {
-        const [row] = await tx
-          .insert(permission)
-          .values({
-            kind: 'GRANT',
-            // Nessun code: lo porta solo un permesso dichiarato dal sorgente (DEC-14).
-            // Un permesso creato dalla console non ha controparte in requirePermission('...').
-            origin: 'CONSOLE',
-            name: input.name.trim(),
-            description: input.description,
-            itemTranslation: input.itemTranslation,
-            idParent: null,
-            orderPosition: 0,
-          })
-          .returning({ id: permission.idPermission })
-        idPermission = row.id
-      }
 
       // Le voci di primo livello hanno id_parent nullo: append-at-end fra i fratelli veri
       // (quelli sotto lo stesso genitore, root incluso), non un ordine fisso a 0.
@@ -160,7 +125,6 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
       const [entry] = await tx
         .insert(menuEntry)
         .values({
-          idPermission,
           idParent: input.idItemParent,
           name: input.name.trim(),
           idFunctionalityType: input.idFunctionalityType,
@@ -200,26 +164,13 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
       const current = items.find(i => i.id_menu_entry === id)
       if (!current) throw new Error(`Menu entry ${id} not found`)
 
-      // Una voce è una categoria quando non ha un tipo di funzionalità (deduzione dai
-      // dati, non dall'input): cambiarla in funzionalità o viceversa non è
-      // un'operazione che questa funzione sa fare in sicurezza. Una categoria diventata
-      // funzionalità porterebbe un id_functionality_type senza mai guadagnare un
-      // id_permission (perché qui sotto il permesso si aggiorna solo se
-      // entry.idPermission non è già nullo) — e id_permission nullo, in
-      // sidebar-adapter.ts, significa voce pubblica: visibile a chiunque sia
-      // autenticato, senza controllo e senza comparire in Ruoli & Permessi da nessuna
-      // parte. Rifiutare l'intera chiamata, non scartare in silenzio il campo: è la
-      // stessa politica di updateRolePermissions (roles-actions.ts) e per lo stesso
-      // motivo — il silenzio nasconderebbe un chiamante difettoso.
-      // `wasCategory` viene dai dati salvati, dove la colonna e' nulla o valorizzata e
-      // «assente» non esiste: `=== null` e' esatto. `willBeCategory` viene dall'INPUT, e
-      // la' assente e nullo devono dire la stessa cosa, come nell'invariante di
-      // createNavigationItem — altrimenti aggiornare una categoria col campo omesso viene
-      // rifiutato con «Cannot change item type», che e' l'errore sbagliato per un
-      // chiamante che non stava convertendo niente. Qui il verso pericoloso non c'era
-      // comunque: `mapUpdateSet` di Drizzle scarta gli undefined dal .set(), quindi un
-      // campo omesso su una funzionalita' lasciava la colonna intatta invece di
-      // azzerarla. Il difetto era il messaggio, non la riga scritta.
+      // Convertire una categoria in funzionalità o viceversa non è un'operazione che questa
+      // funzione sa fare in sicurezza, e il divieto resta (DEC-22) — ma il motivo è cambiato.
+      // Prima era: una categoria convertita resterebbe senza id_permission, cioè una voce
+      // pubblica e ingovernabile. Quella colonna non esiste più. Il motivo che sopravvive è
+      // l'altro verso: convertire una funzionalità in categoria butterebbe via le sue
+      // concessioni in silenzio, perché una cartella non è concedibile. Implementarlo bene è
+      // lavoro della Fase 3, insieme all'editor dei permessi.
       const wasCategory = current.id_functionality_type === null
       const willBeCategory = input.idFunctionalityType == null
       if (wasCategory !== willBeCategory) {
@@ -233,9 +184,6 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
         await reparent(tx, items, id, input.idItemParent, siblings)
       }
 
-      const [entry] = await tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)).limit(1)
-      if (!entry) throw new Error(`Menu entry ${id} not found`)
-
       await tx
         .update(menuEntry)
         .set({
@@ -248,18 +196,6 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
           updatedAt: new Date().toISOString(),
         })
         .where(eq(menuEntry.idMenuEntry, id))
-
-      if (entry.idPermission !== null) {
-        // Il code resta quello di sempre: è il patto col sorgente, non un'etichetta (DEC-3).
-        await tx
-          .update(permission)
-          .set({
-            name: input.name.trim(),
-            description: input.description,
-            itemTranslation: input.itemTranslation,
-          })
-          .where(eq(permission.idPermission, entry.idPermission))
-      }
 
       await writeMenuEntryTags(tx, id, input.tagTranslations)
     })
@@ -289,31 +225,12 @@ export async function deleteNavigationItem(id: number): Promise<void> {
       if (!items.some(i => i.id_menu_entry === id)) return
       if (!canDeleteSubtree(items, id)) throw new Error('This item (or a descendant) is immutable and cannot be deleted')
 
-      // menu_entry.id_parent è on delete cascade: cancellare `id` travolge anche l'intero
-      // sottoalbero. Raccogliamo i permessi collegati — la voce stessa e ogni discendente —
-      // PRIMA di cancellare, altrimenti quelli dei discendenti travolti dal cascade
-      // resterebbero orfani (mai più cancellati, perché nessuna voce li cita più).
-      const subtree = descendantIds(items, id)
-      const idPermissions = items
-        .filter(i => subtree.has(i.id_menu_entry) && i.id_permission !== null)
-        .map(i => i.id_permission!)
-
-      // L'ordine conta: on delete restrict fa fallire la cancellazione del
-      // permesso finché una voce ci punta contro.
+      // menu_entry.id_parent è on delete cascade: cancellare `id` travolge il sottoalbero.
+      // Le concessioni se ne vanno con lui, per la cascata su role_functionality.id_menu_entry
+      // (migrazione 0024) — non c'è più niente da raccogliere prima di cancellare, e non c'è
+      // più un permesso gemello che possa restare orfano. Era BUG-4: la riga di permission di
+      // una categoria non era puntata da nessuna voce, quindi nessun percorso la citava mai.
       await tx.delete(menuEntry).where(eq(menuEntry.idMenuEntry, id))
-
-      for (const idPermission of idPermissions) {
-        const [perm] = await tx
-          .select({ origin: permission.origin })
-          .from(permission)
-          .where(eq(permission.idPermission, idPermission))
-          .limit(1)
-        // Un permesso SOURCE non si cancella da qui: lo possiede il sorgente.
-        // In Fase 1 non ne esistono ancora, ma il ramo va scritto adesso.
-        if (perm?.origin === 'CONSOLE') {
-          await tx.delete(permission).where(eq(permission.idPermission, idPermission))
-        }
-      }
     })
   } catch (err) {
     throw new Error(`Failed to delete item: ${err instanceof Error ? err.message : String(err)}`)

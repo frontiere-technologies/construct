@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { eq, like } from 'drizzle-orm'
+import { count, eq, like } from 'drizzle-orm'
 import postgres from 'postgres'
 import { db } from '@/lib/db'
-import { permission, menuEntry } from '@/lib/db/schema'
+import { permission, menuEntry, role, roleFunctionality } from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
 import type { CreateNavItemInput } from './types'
 
@@ -58,38 +58,16 @@ describeIntegration('navigation mutations against the database', () => {
     await db.delete(permission).where(like(permission.name, `${PREFIX}%`))
   })
 
-  it('creare una funzionalità crea il permesso e la voce, collegati', async () => {
-    const name = `${PREFIX}${sequence++}`
-    const { id } = await createNavigationItem(functionalityInput(name))
-
-    const [voce] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
-    expect(voce.idPermission).not.toBeNull()
-
-    const [perm] = await db.select().from(permission).where(eq(permission.idPermission, voce.idPermission!))
-    expect(perm.kind).toBe('GRANT')
-    expect(perm.origin).toBe('CONSOLE')
-    // DEC-14: un permesso di origine CONSOLE nasce con code nullo — non c'è
-    // controparte in requirePermission('...') nel sorgente.
-    expect(perm.code).toBeNull()
-  })
-
-  it('creare una categoria crea la sola voce, senza permesso', async () => {
-    const name = `${PREFIX}${sequence++}`
-    const { id } = await createNavigationItem(categoryInput(name))
-    const [voce] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
-    expect(voce.idPermission).toBeNull()
-  })
-
-  it('eliminare una funzionalità elimina anche il permesso che aveva creato', async () => {
-    const name = `${PREFIX}${sequence++}`
-    const { id } = await createNavigationItem(functionalityInput(name))
-    const [voce] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
-    const idPerm = voce.idPermission!
-
-    await deleteNavigationItem(id)
-
-    expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))).toHaveLength(0)
-    expect(await db.select().from(permission).where(eq(permission.idPermission, idPerm))).toHaveLength(0)
+  it('non crea alcun permesso gemello per una funzionalità nuova (via la sincronizzazione)', async () => {
+    const nome = `${PREFIX}${sequence++}`
+    const primaDi = await db.select({ n: count() }).from(permission)
+    const { id } = await createNavigationItem(functionalityInput(nome))
+    try {
+      const dopoDi = await db.select({ n: count() }).from(permission)
+      expect(dopoDi[0].n).toBe(primaDi[0].n)
+    } finally {
+      await deleteNavigationItem(id)
+    }
   })
 
   it('non cancella mai un permesso di origine SOURCE, anche se la voce che lo cita viene eliminata', async () => {
@@ -131,30 +109,6 @@ describeIntegration('navigation mutations against the database', () => {
     }
   })
 
-  it('elimina i permessi orfani di un intero sottoalbero, non solo del primo livello', async () => {
-    // categoria > sotto-categoria > funzionalità: due livelli sotto la voce cancellata,
-    // cosi' un cammino fermato al primo figlio farebbe fallire questo test.
-    const catName = `${PREFIX}${sequence++}`
-    const subName = `${PREFIX}${sequence++}`
-    const funcName = `${PREFIX}${sequence++}`
-
-    const { id: catId } = await createNavigationItem(categoryInput(catName))
-    const { id: subId } = await createNavigationItem({ ...categoryInput(subName), idItemParent: catId })
-    const { id: funcId } = await createNavigationItem({ ...functionalityInput(funcName), idItemParent: subId })
-
-    const [funcEntry] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, funcId))
-    const idPerm = funcEntry.idPermission!
-
-    await deleteNavigationItem(catId)
-
-    // Il cascade su menu_entry.id_parent porta via l'intero sottoalbero...
-    expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, catId))).toHaveLength(0)
-    expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, subId))).toHaveLength(0)
-    expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, funcId))).toHaveLength(0)
-    // ...e il permesso della funzionalita' a due livelli di profondita' non resta orfano.
-    expect(await db.select().from(permission).where(eq(permission.idPermission, idPerm))).toHaveLength(0)
-  })
-
   it('rolls back the permission + entry pair when tag replacement fails', async () => {
     const name = `${PREFIX}${sequence++}`
     await expect(createNavigationItem(functionalityInput(name, 'x'.repeat(51)))).rejects.toThrow(/Failed to create item/)
@@ -162,7 +116,7 @@ describeIntegration('navigation mutations against the database', () => {
     expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
   })
 
-  it('rifiuta la conversione di una categoria in funzionalità: id_functionality_type e id_permission restano nulli', async () => {
+  it('rifiuta la conversione di una categoria in funzionalità: id_functionality_type resta nullo', async () => {
     const name = `${PREFIX}${sequence++}`
     const { id } = await createNavigationItem(categoryInput(name))
 
@@ -170,21 +124,18 @@ describeIntegration('navigation mutations against the database', () => {
 
     const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
     expect(row.idFunctionalityType).toBeNull()
-    expect(row.idPermission).toBeNull()
   })
 
-  it('rifiuta la conversione di una funzionalità in categoria: id_functionality_type e id_permission restano quelli di prima', async () => {
+  it('rifiuta la conversione di una funzionalità in categoria: id_functionality_type resta quello di prima', async () => {
     const name = `${PREFIX}${sequence++}`
     const { id } = await createNavigationItem(functionalityInput(name))
     const [before] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
     expect(before.idFunctionalityType).not.toBeNull()
-    expect(before.idPermission).not.toBeNull()
 
     await expect(updateNavigationItem(id, categoryInput(name))).rejects.toThrow(/Cannot change item type/)
 
     const [after] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
     expect(after.idFunctionalityType).toBe(before.idFunctionalityType)
-    expect(after.idPermission).toBe(before.idPermission)
   })
 
   // Le due sopra coprono la CONVERSIONE; queste due la NASCITA. La revisione dell'ondata
@@ -243,7 +194,6 @@ describeIntegration('navigation mutations against the database', () => {
 
     const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
     expect(row.idFunctionalityType).toBeNull()
-    expect(row.idPermission).toBeNull()
   })
 
   // La terza ri-revisione ha trovato la stessa asimmetria sul percorso di AGGIORNAMENTO:
@@ -263,7 +213,6 @@ describeIntegration('navigation mutations against the database', () => {
     const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
     expect(row.name).toBe(rinominata)
     expect(row.idFunctionalityType).toBeNull()
-    expect(row.idPermission).toBeNull()
   })
 
   it('rolls back field and parent changes when an update tag write fails', async () => {
@@ -304,6 +253,19 @@ describeIntegration('navigation mutations against the database', () => {
     } finally {
       connection.release()
       await sql.end({ timeout: 5 })
+    }
+  })
+
+  it('cancellare una voce porta via le sue concessioni, per cascata', async () => {
+    const { id } = await createNavigationItem(functionalityInput(`${PREFIX}${sequence++}`))
+    const [ruolo] = await db.insert(role).values({ description: `${PREFIX}cascata`, idRoleType: 2 }).returning({ idRole: role.idRole })
+    try {
+      await db.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: id })
+      await deleteNavigationItem(id)
+      const rimaste = await db.select().from(roleFunctionality).where(eq(roleFunctionality.idMenuEntry, id))
+      expect(rimaste).toHaveLength(0)
+    } finally {
+      await db.delete(role).where(eq(role.idRole, ruolo.idRole))
     }
   })
 })

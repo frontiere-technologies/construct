@@ -2,20 +2,26 @@ import type { MenuItem, MenuPosition } from '@/types/menu'
 import { type MenuEntryRow, type Locale, DEFAULT_LOCALE, FUNCTYPE_EMBEDDED_PAGE, FUNCTYPE_EXTERNAL_LINK } from './types'
 import { resolveNavigationText } from './navigation-locales'
 
-/** Presenza della riga = concessione (DEC-7): non c'è più un flag da leggere. */
-export function resolveGrantedPermissionIds(
-  rolePermissions: { id_role: number; id_permission: number }[],
+/** Presenza della riga = concessione (DEC-7): non c'è un flag da leggere. L'oggetto della
+ *  concessione è la VOCE, non un permesso gemello (DEC-17). */
+export function resolveGrantedFunctionalityIds(
+  roleFunctionalities: { id_role: number; id_menu_entry: number }[],
   roleIds: number[],
 ): Set<number> {
   const roleSet = new Set(roleIds)
   const ids = new Set<number>()
-  for (const rp of rolePermissions) if (roleSet.has(rp.id_role)) ids.add(rp.id_permission)
+  for (const rf of roleFunctionalities) if (roleSet.has(rf.id_role)) ids.add(rf.id_menu_entry)
   return ids
 }
 
-/** id_permission nullo = voce pubblica. Sostituisce no_permission_need_for_navigation. */
+/**
+ * Una funzionalità si vede solo se concessa (DEC-18). Il ramo «id_permission nullo = voce
+ * pubblica» è sparito con la colonna: era l'ultimo residuo di
+ * `no_permission_need_for_navigation`, e nessuna riga dei dati reali lo usava. Un contenitore
+ * non passa da qui — lo mostra `resolveVisibleIds` risalendo dai figli visibili.
+ */
 function isEntryVisible(entry: MenuEntryRow, grantedIds: Set<number>): boolean {
-  return entry.id_permission === null || grantedIds.has(entry.id_permission)
+  return grantedIds.has(entry.id_menu_entry)
 }
 
 function normalizeRoute(link: string | null): string | undefined {

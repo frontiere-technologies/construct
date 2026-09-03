@@ -4,9 +4,9 @@ import RoleDetailClient from '@/components/rbac/roles/RoleDetailClient'
 export default async function RoleDetailPage({ params }: { params: Promise<{ roleId: string }> }) {
   const { roleId } = await params
   const id = Number(roleId)
-  const [role, tree] = await Promise.all([
+  const [role, trees] = await Promise.all([
     getRole(id),
     getRoleAuthorizationTree(id),
   ])
-  return <RoleDetailClient role={role} tree={tree} />
+  return <RoleDetailClient role={role} trees={trees} />
 }

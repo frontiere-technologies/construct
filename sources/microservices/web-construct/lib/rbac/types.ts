@@ -112,6 +112,20 @@ export interface PermissionDelta {
   authorization: boolean
 }
 
+/** I due alberi della pagina Ruoli. Restano separati perché `id_menu_entry` e `id_permission`
+ *  vengono da due sequenze indipendenti che possono portare lo stesso numero (DEC-19). */
+export interface RoleAuthorizationTrees {
+  functionalities: UserNavigationTreeDto[]
+  operations: UserNavigationTreeDto[]
+}
+
+/** `functionalities[].idItem` è un `id_menu_entry`; `operations[].idItem` un `id_permission`.
+ *  Due liste e non una: lo stesso numero significa cose diverse nei due alberi. */
+export interface RolePermissionDeltas {
+  functionalities: PermissionDelta[]
+  operations: PermissionDelta[]
+}
+
 export interface RolesQuery {
   page: number
   size: number

@@ -1,10 +1,10 @@
 import { cache } from 'react'
 import { asc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { menuEntry, rolePermission } from '@/lib/db/schema'
+import { menuEntry, roleFunctionality } from '@/lib/db/schema'
 import type { MenuItem } from '@/types/menu'
 import { toMenuEntryRow } from './nav-row-mapper'
-import { resolveGrantedPermissionIds, mapMenuToSidebar } from './sidebar-adapter'
+import { resolveGrantedFunctionalityIds, mapMenuToSidebar } from './sidebar-adapter'
 import { DEFAULT_LOCALE, type Locale, type MenuEntryRow } from './types'
 
 export const getSidebarMenu = cache(async (
@@ -16,13 +16,13 @@ export const getSidebarMenu = cache(async (
     db.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition)),
     roleIds.length
       ? db
-          .select({ id_role: rolePermission.idRole, id_permission: rolePermission.idPermission })
-          .from(rolePermission)
-          .where(inArray(rolePermission.idRole, roleIds))
+          .select({ id_role: roleFunctionality.idRole, id_menu_entry: roleFunctionality.idMenuEntry })
+          .from(roleFunctionality)
+          .where(inArray(roleFunctionality.idRole, roleIds))
       : Promise.resolve([]),
   ])
   const entries = entryRows.map(toMenuEntryRow)
-  const granted = resolveGrantedPermissionIds(grantRows, roleIds)
+  const granted = resolveGrantedFunctionalityIds(grantRows, roleIds)
   return mapMenuToSidebar(entries, granted, locale, fallbackLocale)
 })
 

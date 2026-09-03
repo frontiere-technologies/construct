@@ -750,7 +750,7 @@ La pagina e il componente cambiano quanto serve a compilare e funzionare (due al
   - `resolveGrantedFunctionalityIds(rows: { id_role: number; id_menu_entry: number }[], roleIds: number[]): Set<number>` in `sidebar-adapter.ts`, che sostituisce `resolveGrantedPermissionIds`
   - `PermissionDelta.idItem` resta il nome del campo: per l'albero delle funzionalità porta un `id_menu_entry`. Non si rinomina in questo lavoro — il tipo è consumato da `computeDeltas`, che è comune ai due alberi.
 
-- [ ] **Step 1: Dichiara i due tipi nuovi**
+- [✅] **Step 1: Dichiara i due tipi nuovi**
 
 In `lib/rbac/types.ts`, accanto a `PermissionDelta`:
 
@@ -770,7 +770,7 @@ export interface RolePermissionDeltas {
 }
 ```
 
-- [ ] **Step 2: Scrivi i test che falliscono, sull'adattatore della barra laterale**
+- [✅] **Step 2: Scrivi i test che falliscono, sull'adattatore della barra laterale**
 
 In `lib/rbac/sidebar-adapter.test.ts`, la fabbrica `voce(...)` in cima al file passa `id_permission`, e `mapMenuToSidebar` riceve un insieme di id di permesso. Dopo questo task l'insieme contiene **id di voce**. Riscrivi i primi tre casi così, e adegua gli altri sostituendo l'id atteso nell'insieme con l'`id_menu_entry` della voce:
 
@@ -811,7 +811,7 @@ npm run test -- lib/rbac/sidebar-adapter.test.ts
 
 Atteso: FAIL, con `resolveGrantedFunctionalityIds is not a function` e con i casi di visibilità che sbagliano perché `isEntryVisible` guarda ancora `id_permission`.
 
-- [ ] **Step 3: Converti l'adattatore e il servizio della barra laterale**
+- [✅] **Step 3: Converti l'adattatore e il servizio della barra laterale**
 
 In `lib/rbac/sidebar-adapter.ts`, sostituisci le prime due funzioni:
 
@@ -871,7 +871,7 @@ npm run test -- lib/rbac/sidebar-adapter.test.ts
 
 Atteso: PASS.
 
-- [ ] **Step 4: Fai leggere alla pagina Ruoli l'albero del menu**
+- [✅] **Step 4: Fai leggere alla pagina Ruoli l'albero del menu**
 
 In `lib/rbac/roles-service.ts`, sostituisci `getRoleAuthorizationTree`:
 
@@ -922,7 +922,7 @@ export const getRoleAuthorizationTree = cache(
 )
 ```
 
-- [ ] **Step 5: Scrivi i test che falliscono sulla scrittura**
+- [✅] **Step 5: Scrivi i test che falliscono sulla scrittura**
 
 In `lib/rbac/roles-actions.integration.test.ts`, i tre casi esistenti passano una lista piatta. Riscrivili sulla forma nuova e aggiungi la guardia simmetrica sulle voci contenitore. Servono in più `menuEntry` e `roleFunctionality` fra gli import di `@/lib/db/schema`.
 
@@ -1041,7 +1041,7 @@ npm run test:integration -- lib/rbac/roles-actions.integration.test.ts
 
 Atteso: FAIL. La firma nuova non esiste ancora, quindi TypeScript rifiuta l'oggetto dove è attesa una lista.
 
-- [ ] **Step 6: Converti la scrittura**
+- [✅] **Step 6: Converti la scrittura**
 
 In `lib/rbac/roles-actions.ts`, sostituisci `updateRolePermissions`:
 
@@ -1123,7 +1123,7 @@ npm run test:integration -- lib/rbac/roles-actions.integration.test.ts
 
 Atteso: PASS su tutti e sette.
 
-- [ ] **Step 7: Togli la creazione, la copia e la cancellazione del permesso gemello**
+- [✅] **Step 7: Togli la creazione, la copia e la cancellazione del permesso gemello**
 
 In `lib/rbac/navigation-actions.ts`, tre rimozioni. Sono il cuore della «sincronizzazione» che va via.
 
@@ -1176,7 +1176,7 @@ In `deleteNavigationItem`, elimina l'intero blocco che raccoglie e cancella i pe
 
 Togli `permission` e `descendantIds` dagli import se non restano altri usi (`canDeleteSubtree` e `isDescendant` invece restano).
 
-- [ ] **Step 8: Adegua i test d'integrazione delle azioni di navigazione**
+- [✅] **Step 8: Adegua i test d'integrazione delle azioni di navigazione**
 
 In `lib/rbac/navigation-actions.integration.test.ts` cadono le asserzioni sul permesso gemello. Riscrivile così:
 
@@ -1219,7 +1219,7 @@ it('cancellare una voce porta via le sue concessioni, per cascata', async () => 
 })
 ```
 
-- [ ] **Step 9: Aggiorna la pagina e il componente**
+- [✅] **Step 9: Aggiorna la pagina e il componente**
 
 `app/(protected)/(admin)/roles-permissions/[roleId]/page.tsx`:
 
@@ -1293,7 +1293,7 @@ e nel corpo, al posto del singolo `<PermissionsTree …>`:
       </section>
 ```
 
-- [ ] **Step 10: Semina le due chiavi di traduzione**
+- [✅] **Step 10: Semina le due chiavi di traduzione**
 
 `roles.detail.functionalities` e `roles.detail.operations` non esistono: senza seme il titolo mostrerebbe la chiave grezza, che è il difetto che la `0023` è servita a chiudere. Crea `sources/devops/db/migrations/0025_role_detail_section_labels.sql`:
 
@@ -1323,7 +1323,7 @@ node sources/devops/db/db.mjs schema-write
 npm run test:i18n-keys
 ```
 
-- [ ] **Step 11: Verifica tutto, e guarda la pagina**
+- [✅] **Step 11: Verifica tutto, e guarda la pagina**
 
 ```bash
 npm run test && npm run typecheck && npm run lint && npm run test:integration
