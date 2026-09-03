@@ -171,6 +171,14 @@ export const menuEntryTag = pgTable('menu_entry_tag', {
   dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.idMenuEntry, t.tagLan, t.tag] })])
 
+/** La concessione su una VOCE DI MENU. Una funzionalità è il proprio permesso (DEC-17), quindi
+ *  la concessione punta alla voce e non a una riga gemella in `permission`. Presenza della riga
+ *  = concessione (DEC-7): nessuna colonna `authorized`, revocare cancella la riga. */
+export const roleFunctionality = pgTable('role_functionality', {
+  idRole: bigint('id_role', { mode: 'number' }).notNull().references(() => role.idRole, { onDelete: 'cascade' }),
+  idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).notNull().references(() => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
+}, (t) => [primaryKey({ columns: [t.idRole, t.idMenuEntry] })])
+
 export const userInfo = pgTable('user_info', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   attributeType: varchar('attribute_type', { length: 30 }).notNull(),

@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { eq, sql } from 'drizzle-orm'
+import { afterEach, describe, expect, it } from 'vitest'
+import { eq, like, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { appLanguage, permission, role, roleListView, rolePermission, translationKey, translationValue, users } from '@/lib/db/schema'
+import { appLanguage, menuEntry, permission, role, roleFunctionality, roleListView, rolePermission, translationKey, translationValue, users } from '@/lib/db/schema'
 import { unique } from '@/lib/i18n/test-support/db-fixtures'
 
 /** Il rename è riuscito solo se i nomi vecchi sono spariti: una vista o una
@@ -453,5 +453,96 @@ describe('trigger set_updated_at, su ogni tabella che lo esegue (Task 9, giro 2)
     for (const table of tables) {
       await exerciseByTable[table]()
     }
+  })
+})
+
+describe('role_functionality (0024)', () => {
+  const PREFIX = 'zzz_role_functionality_'
+
+  afterEach(async () => {
+    // role_functionality cascata via id_role -> role: basta spazzare il ruolo.
+    await db.delete(role).where(like(role.description, `${PREFIX}%`))
+  })
+
+  it('concede la tabella nuova al ruolo di runtime', async () => {
+    const rows = await db.execute(sql`
+      select count(*)::int as concesse from information_schema.role_table_grants
+      where table_schema = 'public' and grantee = 'construct_runtime'
+        and table_name = 'role_functionality'
+        and privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+    `)
+    expect(rows[0].concesse).toBe(4)
+  })
+
+  it('ha la policy RLS che il confine di runtime richiede', async () => {
+    const rows = await db.execute(sql`
+      select c.relrowsecurity as rls, count(p.polname)::int as policy
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      left join pg_policy p on p.polrelid = c.oid and p.polname = 'construct_runtime_server_access'
+      where n.nspname = 'public' and c.relname = 'role_functionality'
+      group by c.relrowsecurity
+    `)
+    expect(rows[0].rls).toBe(true)
+    expect(rows[0].policy).toBe(1)
+  })
+
+  it('non lascia in role_permission nessuna concessione su una voce di menu (travaso MIG-2/MIG-3)', async () => {
+    const rows = await db.execute(sql`
+      select count(*)::int as residue
+      from public.role_permission rp
+      join public.menu_entry m on m.id_permission = rp.id_permission
+    `)
+    expect(rows[0].residue).toBe(0)
+  })
+
+  it('has_permissions è vero per un ruolo che concede solo una voce di menu', async () => {
+    const [created] = await db
+      .insert(role)
+      .values({ description: `${PREFIX}solo_menu`, idRoleType: 2 })
+      .returning({ idRole: role.idRole })
+    const [entry] = await db.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1)
+
+    await db.insert(roleFunctionality).values({ idRole: created.idRole, idMenuEntry: entry.id })
+
+    const rows = await db.execute(sql`
+      select has_permissions from public.role_list_view where id = ${created.idRole}
+    `)
+    expect(rows[0].has_permissions).toBe(true)
+  })
+
+  it('cancella le concessioni con il ruolo, per cascata', async () => {
+    const [created] = await db
+      .insert(role)
+      .values({ description: `${PREFIX}cascata`, idRoleType: 2 })
+      .returning({ idRole: role.idRole })
+    const [entry] = await db.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1)
+    await db.insert(roleFunctionality).values({ idRole: created.idRole, idMenuEntry: entry.id })
+
+    await db.delete(role).where(eq(role.idRole, created.idRole))
+
+    const rows = await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole))
+    expect(rows).toHaveLength(0)
+  })
+
+  it('apply_role_functionality_deltas concede, revoca e timbra date_mod', async () => {
+    const [created] = await db
+      .insert(role)
+      .values({ description: `${PREFIX}deltas`, idRoleType: 2 })
+      .returning({ idRole: role.idRole })
+    const [entry] = await db.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1)
+
+    await db.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, ${`{${entry.id}}`}::bigint[], '{}'::bigint[])`)
+    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole))).toHaveLength(1)
+
+    // Ripetere la concessione è idempotente: on conflict do nothing, non un errore di chiave.
+    await db.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, ${`{${entry.id}}`}::bigint[], '{}'::bigint[])`)
+    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole))).toHaveLength(1)
+
+    const [conDataMod] = await db.execute(sql`select date_mod from public.role where id_role = ${created.idRole}`)
+    expect(conDataMod.date_mod).not.toBeNull()
+
+    await db.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, '{}'::bigint[], ${`{${entry.id}}`}::bigint[])`)
+    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole))).toHaveLength(0)
   })
 })
