@@ -1632,7 +1632,7 @@ npm run test:i18n-keys
 npm run test -- components/rbac/PermissionsTree.test.tsx
 ```
 
-Atteso: PASS su tutti e sei. Poi la suite intera:
+Atteso: PASS su tutti e sette. Poi la suite intera:
 
 ```bash
 npm run test && npm run typecheck && npm run lint
