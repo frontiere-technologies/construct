@@ -59,5 +59,13 @@ tmp/
 # Superpowers scratch (session tokens, sdd review diffs) — docs/superpowers/ is tracked separately
 .superpowers/
 
+# Credenziali operatore per migrazioni e provisioning dei ruoli. Non devono mai
+# finire in un file che un processo Next carica: vedi operator.env.example.
+sources/devops/db/operator.env
+
 # Kubernetes secrets (valori reali — mai committare)
 sources/devops/k8s/*/secret.env
+
+# Dump di database creati come backup prima delle migrazioni: contengono utenti,
+# email, hash delle password e token. Non devono mai entrare nella storia di git.
+*.dump

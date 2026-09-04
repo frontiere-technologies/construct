@@ -141,6 +141,27 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+The same rule applies to every database the application connects to, test ones
+included, and it is asserted rather than trusted: `connects through the runtime
+role and nothing wider` in
+`sources/microservices/web-construct/lib/schema-contract.integration.test.ts`
+probes `current_user` — its attributes, its membership set, its direct grants and
+its access to `construct_schema_migration`. The other assertions in that section
+name `construct_runtime` literally, so they describe how the role is hemmed in
+without establishing that the application arrives through it; this one is what
+fails if a connection string is repointed at an owner-level login.
+
+That spec can only ever run against the disposable test database, because the
+suite refuses a `TEST_DATABASE_URL` equal to `DATABASE_URL` — a refusal worth
+keeping, since it is what stops a mutating suite from reaching development. Ask
+the same four questions of any other environment with the read-only command,
+which connects through `DATABASE_URL` and exits non-zero when the connection sits
+outside the boundary:
+
+```bash
+node sources/devops/db/db.mjs boundary-check
+```
+
 ### Migration checksums
 
 Every applied migration is recorded in `public.construct_schema_migration` together with a
@@ -295,11 +316,25 @@ npm audit --omit=dev
 
 ### Database integration and E2E tests
 
-Mutating tests require a separate disposable database. Commands refuse to run unless `TEST_DATABASE_URL` exists, differs from `DATABASE_URL`, and `TEST_DATABASE_DISPOSABLE=1` explicitly confirms the target can be destroyed or changed. Never use a shared development, staging, or production database.
+Mutating tests require a separate disposable database. Commands refuse to run unless the URL they are given exists, differs from `DATABASE_URL`, and `TEST_DATABASE_DISPOSABLE=1` explicitly confirms the target can be destroyed or changed. Never use a shared development, staging, or production database.
+
+The test database splits its credentials the same way the development one does, and for the same reason. `TEST_MIGRATION_DATABASE_URL` owns the schema and is read only by `db.mjs test-apply`; `TEST_DATABASE_URL` and `TEST_DATABASE_POOLED_URL` must both be a limited login inheriting only `construct_runtime`, because the integration suite and the E2E application server connect through them. Provision that login the same way as the development one:
 
 ```bash
-export TEST_DATABASE_URL='postgresql://...dedicated-test-database...:5432/postgres'
+export TEST_MIGRATION_DATABASE_URL='postgresql://...owner...@test-host:5432/postgres'
 export TEST_DATABASE_DISPOSABLE=1
+MIGRATION_DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" \
+  CONSTRUCT_RUNTIME_DB_USER=construct_app \
+  CONSTRUCT_RUNTIME_DB_PASSWORD='...at least 24 characters...' \
+  node sources/devops/db/db.mjs provision-runtime-role
+```
+
+Keep `TEST_MIGRATION_DATABASE_URL` in `sources/devops/db/operator.env` (gitignored), **not** in `.env.test.local`: the `web-construct-e2e` configuration in `.claude/launch.json` bulk-sources that file into a Next process, so an owner-level string there would land in the application's own environment.
+
+```bash
+export TEST_DATABASE_URL='postgresql://construct_app...@test-host:5432/postgres'
+export TEST_DATABASE_DISPOSABLE=1
+set -a && . ./sources/devops/db/operator.env && set +a
 node sources/devops/db/db.mjs test-apply
 
 cd sources/microservices/web-construct

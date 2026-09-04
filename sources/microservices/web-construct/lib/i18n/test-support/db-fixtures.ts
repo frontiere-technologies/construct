@@ -22,7 +22,7 @@ export function testKey(suffix: string): string {
 
 /**
  * Delete everything this suite could have created. `translation_value` and
- * `role_item` rows disappear with their parents (ON DELETE CASCADE), so only
+ * `role_permission` rows disappear with their parents (ON DELETE CASCADE), so only
  * the two parent tables need sweeping.
  */
 export async function cleanupTestData(): Promise<void> {

@@ -1,6 +1,6 @@
 import re
 from playwright.sync_api import expect
-from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows
+from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows, confirm_modal
 
 
 def test_users_list_loads(logged_in_page, base_url):
@@ -127,8 +127,14 @@ def test_status_toggle_updates_grid_in_place(logged_in_page, base_url):
 
     def _toggle_via_menu(expected_menu_label):
         row_by_id.locator('[data-testid^="row-menu"]').click()
-        page.once("dialog", lambda d: d.accept())
-        page.get_by_role("button", name=expected_menu_label).click()
+        # The status toggle stopped using a native confirm() on 2026-09-02: it
+        # now opens this project's ConfirmModal, whose confirm button reuses the
+        # same label as the row-menu item. The two never coexist (the menu
+        # closes as the modal opens), so re-querying by role/name after each
+        # click targets the currently-visible one — same idiom as
+        # test_roles.py's _delete_role.
+        page.get_by_role("button", name=expected_menu_label).click()  # menu item -> ConfirmModal
+        confirm_modal(page, expected_menu_label)
 
     _toggle_via_menu("Disattiva" if original_text == "Attivo" else "Attiva")
     expect(row_by_id.locator('[data-testid="status-badge"]')).to_have_text(flipped_text)

@@ -1800,3 +1800,725 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- Migration: 0014_permission_rename.sql
+-- navigation_item era gia' il permesso: e' role_item a puntarci contro. Il nome
+-- diceva l'altra meta' del lavoro — la voce di menu — e quella meta' esce da qui
+-- nella migrazione 0016. Questa rinomina soltanto: nessuna colonna cambia,
+-- nessun dato si muove, nessuna concessione si perde.
+--
+-- Si rinomina invece di ricreare-e-copiare perche' ALTER TABLE ... RENAME
+-- conserva privilegi, policy RLS e chiavi esterne. Ricreare significherebbe
+-- riconcedere tutto a construct_runtime a mano, e dimenticarne una e' un buco
+-- che si scopre in produzione.
+
+alter table public.navigation_item rename to permission;
+alter table public.permission rename column id_item to id_permission;
+alter table public.permission rename column id_item_parent to id_parent;
+-- ALTER TABLE ... RENAME non raggiunge il vincolo di chiave primaria implicito,
+-- un indice qualunque, o un trigger: restano intestati a navigation_item finche'
+-- non li si rinomina esplicitamente. Rinominare l'indice di un vincolo di
+-- chiave primaria rinomina anche il vincolo stesso (verificato: stesso
+-- comportamento usato sotto per role_item_pkey).
+alter index public.navigation_item_pkey rename to permission_pkey;
+alter index public.navigation_item_parent_order_idx rename to permission_parent_order_idx;
+alter trigger navigation_item_updated_at on public.permission rename to permission_updated_at;
+
+alter table public.role_item rename to role_permission;
+alter table public.role_permission rename column id_item to id_permission;
+-- La chiave primaria e' un indice, non una tabella: ALTER TABLE ... RENAME non
+-- la raggiunge. Il rename dell'indice e' cosmetico ma tenerlo allineato evita
+-- che il prossimo che legge schema.sql cerchi una role_item che non c'e' piu'.
+alter index public.role_item_pkey rename to role_permission_pkey;
+
+alter sequence public.s_id_navigation_item rename to s_id_permission;
+
+-- Il corpo della funzione e' testo, non un riferimento per OID: dopo il rename
+-- citerebbe una tabella role_item che non esiste piu' e fallirebbe alla prima
+-- chiamata. replace_item_tags non e' toccata: lavora su navigation_item_tag,
+-- che questa migrazione non rinomina (resta cosi' fino al Task 3).
+create or replace function public.apply_role_permission_deltas(
+  p_role_id bigint, p_grant_ids bigint[], p_revoke_ids bigint[]
+) returns void language plpgsql security invoker set search_path = '' as $$
+begin
+  if array_length(p_grant_ids, 1) is not null then
+    insert into public.role_permission (id_role, id_permission, authorized)
+      select p_role_id, unnest(p_grant_ids), true
+      on conflict (id_role, id_permission) do update set authorized = true;
+  end if;
+  if array_length(p_revoke_ids, 1) is not null then
+    delete from public.role_permission where id_role = p_role_id and id_permission = any(p_revoke_ids);
+  end if;
+  update public.role set date_mod = now() where id_role = p_role_id;
+end;
+$$;
+
+-- role_list_view conta le concessioni: la sua definizione cita i nomi vecchi.
+-- create or replace preserva grant e proprietario della vista (a differenza di
+-- drop+create), quindi non serve riconcedere select a construct_runtime qui.
+-- Il reloption security_invoker invece create or replace NON lo conserva (va
+-- ridichiarato, o la vista torna silenziosamente a security definer).
+--
+-- has_permissions resta "esiste una riga qualunque in role_permission per
+-- questo ruolo", non "esiste una riga autorizzata": nessun and rp.authorized.
+-- E' un rename, non un cambio di semantica — oggi non farebbe differenza
+-- (nessun percorso applicativo scrive authorized = false), ma cambiare la
+-- condizione qui sarebbe una regola nuova infilata in una migrazione che deve
+-- solo rinominare.
+create or replace view public.role_list_view with (security_invoker = true) as
+  select r.id_role as id,
+         r.description,
+         rt.description as role_type,
+         r.date_ins,
+         r.date_mod,
+         (select count(*) from public.user_role ur where ur.id_role = r.id_role) as associated_users,
+         exists (select 1 from public.role_permission rp
+                 where rp.id_role = r.id_role) as has_permissions
+  from public.role r
+  left join public.role_type rt on rt.id_role_type = r.id_role_type;
+
+-- Migration: 0015_permission_identity.sql
+-- Le quattro colonne che rendono un permesso identificabile dal sorgente.
+-- Nessun codice le legge ancora: servono alla Fase 2, e stanno qui perche' il
+-- popolamento dai dati esistenti va fatto una volta sola, adesso che i dati
+-- esistenti sono ancora tutti in una tabella.
+--
+-- origin = 'CONSOLE' per tutto: ogni riga presente oggi e' stata creata dalla
+-- console o seminata come se lo fosse. La sincronizzazione del catalogo, in
+-- Fase 2, adottera' quelle che le competono ribaltando origin a 'SOURCE'.
+
+alter table public.permission
+  add column kind text,
+  add column code varchar(80),
+  add column origin text not null default 'CONSOLE',
+  add column deprecated_at timestamptz;
+
+-- id_item_type: 1 = categoria, 2 = funzionalita'.
+update public.permission set kind = case when id_item_type = 1 then 'CATEGORY' else 'GRANT' end;
+
+-- Un code leggibile e stabile dal nome, reso univoco dall'id quando serve.
+-- E' provvisorio per definizione: la Fase 2 lo sostituira' con i codici del
+-- catalogo per le righe che il catalogo copre. Le altre se lo tengono, ed e'
+-- il motivo per cui vale la pena guardarli una volta a mano prima di andare
+-- avanti — DEC-3 dice che un code non cambia mai piu'.
+update public.permission
+set code = regexp_replace(
+      lower(coalesce(nullif(trim(name), ''), 'permesso-' || id_permission::text)),
+      '[^a-z0-9]+', '-', 'g')
+where kind = 'GRANT';
+
+update public.permission p
+set code = p.code || '-' || p.id_permission::text
+where p.kind = 'GRANT'
+  and exists (select 1 from public.permission q
+              where q.kind = 'GRANT' and q.code = p.code and q.id_permission <> p.id_permission);
+
+update public.permission set code = trim(both '-' from code) where kind = 'GRANT';
+
+alter table public.permission
+  alter column kind set not null,
+  add constraint permission_kind_valid check (kind in ('CATEGORY', 'GRANT')),
+  add constraint permission_origin_valid check (origin in ('SOURCE', 'CONSOLE')),
+  add constraint permission_code_matches_kind
+    check ((kind = 'GRANT' and code is not null) or (kind = 'CATEGORY' and code is null));
+
+create unique index permission_code_unique on public.permission (code) where code is not null;
+
+-- Migration: 0016_permission_code_fallback.sql
+-- La 0015 intercettava il nome vuoto o fatto di soli spazi, non il nome non
+-- vuoto ma privo di caratteri alfanumerici: "!!!" produceva un code di stringa
+-- vuota, che il vincolo accetta perche' non e' nullo. Il runtime
+-- (toPermissionCode) ha sempre avuto il ripiego 'permesso': questa allinea il
+-- database a quel comportamento.
+--
+-- Sui dati attuali non ripara nulla — nessun permesso ha un nome del genere —
+-- ed e' voluto: la 0015 e' gia' applicata e non si modifica, quindi la
+-- correzione arriva come migrazione propria invece che come ritocco.
+--
+-- 'permesso-' || id_permission e non il nudo 'permesso': due righe con
+-- entrambe un nome senza caratteri alfanumerici finirebbero altrimenti sullo
+-- stesso code fisso, violando permission_code_unique (0015). Il suffisso
+-- sull'id le tiene distinte, sempre.
+update public.permission
+set code = 'permesso-' || id_permission::text
+where kind = 'GRANT' and (code is null or trim(code) = '');
+
+-- Nota sulla divergenza dei suffissi, che qui c'entra perche' anche questo
+-- ripiego ne porta uno: la disambiguazione per collisione nella 0015 (la
+-- seconda update di quel file, quella che appende -<id_permission> ai code
+-- duplicati) usa l'id_permission. A runtime, reserveUniqueCode
+-- (lib/rbac/navigation-actions.ts) disambigua invece con un contatore che
+-- parte da 2 (base-2, base-3, ...): la' l'identificativo non esiste ancora
+-- quando il code va calcolato, prima dell'insert, e ottenerlo vorrebbe dire
+-- scrivere il code e poi correggerlo — l'abitudine che DEC-3 vieta per un code
+-- gia' assegnato. Le due forme non sono la stessa stringa, ma restano uniche
+-- fra loro: reserveUniqueCode legge lo stato reale della tabella (compresi i
+-- code nati da migrazione) prima di scegliere il proprio contatore, quindi non
+-- propone mai un code gia' preso, da chiunque sia stato scritto.
+
+-- Migration: 0017_menu_entry.sql
+-- La voce di menu esce dal permesso. Da qui in poi sono due cose: una riga di
+-- permission dice cosa si puo' fare, una riga di menu_entry dice cosa si vede e
+-- dove. La freccia va in una direzione sola, ed e' annullabile: id_permission
+-- nullo significa voce pubblica, e manda in pensione la colonna
+-- no_permission_need_for_navigation.
+--
+-- on delete restrict e' voluto: cancellare un permesso a cui una voce punta
+-- deve fallire con un messaggio, non svuotare il collegamento in silenzio.
+
+create sequence if not exists public.s_id_menu_entry;
+
+create table public.menu_entry (
+  id_menu_entry bigint primary key default nextval('public.s_id_menu_entry'),
+  id_permission bigint references public.permission(id_permission) on delete restrict,
+  -- Deferrable perche' il travaso qui sotto e' un INSERT ... SELECT solo: dentro
+  -- una sola istruzione Postgres non garantisce che un genitore sia inserito
+  -- prima dei suoi figli, e con un vincolo immediato la migrazione fallirebbe a
+  -- seconda dell'ordine in cui il pianificatore restituisce le righe.
+  id_parent bigint references public.menu_entry(id_menu_entry) on delete cascade
+    deferrable initially deferred,
+  name text,
+  order_position integer not null default 0,
+  navbar_position text check (navbar_position in ('TOP', 'BOTTOM')),
+  icon_path text,
+  id_functionality_type bigint references public.functionality_type(id_functionality_type),
+  functionality_link text,
+  open_in_new_tab smallint not null default 1,
+  item_translation jsonb,
+  is_immutable smallint not null default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Convenzione della 0001 per ogni sequenza legata a una PK: la sequenza segue
+-- la vita della tabella, invece di restare orfana se la tabella viene tolta.
+alter sequence public.s_id_menu_entry owned by public.menu_entry.id_menu_entry;
+
+create index menu_entry_parent_order_idx on public.menu_entry (id_parent, order_position);
+create index menu_entry_permission_idx on public.menu_entry (id_permission);
+
+create table public.menu_entry_tag (
+  id_menu_entry bigint not null references public.menu_entry(id_menu_entry) on delete cascade,
+  tag_lan varchar(5) not null,
+  tag varchar(50) not null,
+  date_ins timestamptz not null default now(),
+  primary key (id_menu_entry, tag_lan, tag)
+);
+
+-- Il modello di sicurezza di 0002: senza queste tre righe l'applicazione non
+-- vede la tabella e schema-contract.integration.test.ts fallisce.
+--
+-- Questo blocco, la ENABLE ROW LEVEL SECURITY e le policy qui sotto devono
+-- restare PRIMA del travaso, non dopo: l'INSERT ... SELECT in fondo a questo
+-- file popola id_parent, il vincolo deferrable initially deferred sopra, e un
+-- vincolo differito lascia un evento di trigger pendente sulla tabella fino al
+-- commit. Un ALTER TABLE (ENABLE ROW LEVEL SECURITY compreso: e' un ALTER
+-- TABLE anche lui) su una relazione con eventi pendenti nella stessa
+-- transazione fallisce con "cannot ALTER TABLE ... because it has pending
+-- trigger events" — verificato riproducendolo in isolamento. Ogni migrazione
+-- gira in una sola transazione, quindi l'ordine qui non e' un'preferenza
+-- estetica: e' l'unico ordine in cui questo file puo' completare.
+revoke all on table public.menu_entry, public.menu_entry_tag from public;
+grant select, insert, update, delete on table public.menu_entry, public.menu_entry_tag to construct_runtime;
+grant usage, select on sequence public.s_id_menu_entry to construct_runtime;
+
+alter table public.menu_entry enable row level security;
+alter table public.menu_entry_tag enable row level security;
+create policy construct_runtime_server_access on public.menu_entry
+  for all to construct_runtime using (true) with check (true);
+create policy construct_runtime_server_access on public.menu_entry_tag
+  for all to construct_runtime using (true) with check (true);
+
+-- replace_item_tags scrive sui tag: ora i tag stanno sulle voci.
+create or replace function public.replace_menu_entry_tags(p_id_menu_entry bigint, p_tags jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  delete from public.menu_entry_tag where id_menu_entry = p_id_menu_entry;
+  insert into public.menu_entry_tag (id_menu_entry, tag_lan, tag)
+    select p_id_menu_entry, elem->>'tag_lan', elem->>'tag'
+    from jsonb_array_elements(p_tags) as elem
+    on conflict do nothing;
+end $$;
+
+grant execute on function public.replace_menu_entry_tags(bigint, jsonb) to construct_runtime;
+
+-- Travaso. L'id della voce riusa l'id del permesso, cosi' le rotte
+-- /embedded/{id} gia' emesse continuano a risolvere e i tag si ripuntano con
+-- una join banale. E' l'unico punto in cui i due mondi condividono un numero:
+-- da qui in avanti le sequenze sono separate.
+--
+-- Ultimo blocco del file, deliberatamente: e' l'insert che genera l'evento
+-- differito descritto sopra, quindi tutto cio' che e' un ALTER TABLE deve
+-- essere gia' passato prima di arrivare qui.
+insert into public.menu_entry (
+  id_menu_entry, id_permission, id_parent, name, order_position, navbar_position,
+  icon_path, id_functionality_type, functionality_link, open_in_new_tab,
+  item_translation, is_immutable
+)
+select
+  p.id_permission,
+  case when p.kind = 'GRANT' and p.no_permission_need_for_navigation = 0
+       then p.id_permission else null end,
+  nullif(p.id_parent, 0),
+  p.name,
+  p.order_position,
+  p.navbar_position,
+  p.icon_path,
+  p.id_functionality_type,
+  p.functionality_link,
+  p.open_in_new_tab,
+  p.item_translation,
+  p.is_immutable
+from public.permission p
+where p.id_permission not in (0, -1)
+  -- L'intero sottoalbero di Operations, non la sola radice: una riga il cui
+  -- genitore e' -1 genererebbe una voce che punta a un menu_entry(-1)
+  -- inesistente, e la chiave esterna fallirebbe. Quelle righe erano gia'
+  -- invisibili nel menu, quindi non c'e' niente da travasare.
+  and not exists (
+    with recursive discendenti as (
+      select id_permission from public.permission where id_permission = -1
+      union all
+      select c.id_permission from public.permission c
+      join discendenti d on c.id_parent = d.id_permission
+    )
+    select 1 from discendenti where discendenti.id_permission = p.id_permission
+  )
+  and coalesce(p.id_functionality_type, 0) <> 5
+  and p.config_visibility <> 1;
+
+select setval('public.s_id_menu_entry', (select coalesce(max(id_menu_entry), 0) + 1 from public.menu_entry), false);
+
+insert into public.menu_entry_tag (id_menu_entry, tag_lan, tag, date_ins)
+select t.id_item, t.tag_lan, t.tag, t.date_ins
+from public.navigation_item_tag t
+join public.menu_entry me on me.id_menu_entry = t.id_item;
+
+-- Migration: 0018_menu_entry_hidden_subtree_repair.sql
+-- La 0017 esclude dal travaso il sottoalbero di Operations per intero (ricorsivo), ma le altre
+-- due condizioni di visibilita' -- coalesce(id_functionality_type, 0) = 5 e config_visibility = 1
+-- -- le valuta riga per riga. L'applicazione invece le tratta come "nascondi tutto il
+-- sottoalbero", non solo la riga: in lib/rbac/nav-tree-builder.ts un nodo con
+-- config_visibility === 1 non entra nella mappa dei figli (childrenByParent), e la visita
+-- ricorsiva raggiunge un discendente solo passando dal genitore -- quindi i discendenti di un
+-- nodo nascosto non compaiono mai, anche se la riga del discendente non ha nulla che la nasconda
+-- di per se'. In lib/rbac/sidebar-adapter.ts vale lo stesso attraverso il filtro finale
+-- `emitted.has(m.parentId)`: un discendente di un nodo che isRenderable esclude (config_visibility
+-- o id_functionality_type = FUNCTYPE_PERMISSION) resta fuori da `out` quando il genitore non c'e',
+-- quindi viene scartato anche se la sua riga, isolata, sarebbe passata il controllo.
+--
+-- La 0017 e' gia' applicata: non si tocca. Questa migrazione non rifa' il travaso -- ripara lo
+-- stato che la 0017 ha gia' scritto, cancellando le voci di menu_entry che non sarebbero dovute
+-- nascere. Su un database dove la 0017 e' gia' passata (compreso quello di test), ripara quello
+-- che trova; su un database applicato da zero le due migrazioni corrono in sequenza -- la 0017
+-- inserisce ancora in modo asimmetrico, questa cancella subito dopo cio' che non doveva esserci --
+-- e il risultato finale e' corretto in entrambi i casi.
+--
+-- id_permission = 0 (root) e' l'unica eccezione alla simmetria: root ha config_visibility = 1 sui
+-- dati reali, ma non e' un nodo che l'applicazione nasconde per quel motivo -- lo esclude per
+-- identita' (ROOT_ID), e i suoi figli restano visibili in base alla propria riga, non alla sua.
+-- Trattarlo come un seme di "nascosti" travolgerebbe l'intero albero, perche' ogni riga discende
+-- da root: verificato prima di scrivere la delete qui sotto, con una simulazione a valori
+-- letterali che non tocca alcuna tabella reale (vedi il report per il dettaglio). -1 (Operations)
+-- resta seme legittimo: e' gia' un sottoalbero nascosto per intero nella 0017, e config_visibility
+-- = 1 su quella riga non aggiunge nulla che l'`id_permission = -1` esplicito non copra gia'.
+with recursive nascosti as (
+  select id_permission from public.permission
+  where id_permission = -1
+     or (id_permission <> 0 and (coalesce(id_functionality_type, 0) = 5 or config_visibility = 1))
+  union all
+  select c.id_permission from public.permission c
+  join nascosti d on c.id_parent = d.id_permission
+)
+-- id_menu_entry riusa l'id del permesso originale (vedi 0017): e' quel numero, non
+-- menu_entry.id_permission (nullo per categorie e voci pubbliche), a corrispondere alla riga di
+-- permission che non sarebbe dovuta generare una voce. on delete cascade su menu_entry.id_parent
+-- e su menu_entry_tag.id_menu_entry fa il resto: cancellare qui una voce cancella anche i suoi
+-- discendenti gia' inseriti in menu_entry e i loro tag, senza bisogno di ripeterlo a mano.
+delete from public.menu_entry
+where id_menu_entry in (select id_permission from nascosti);
+
+-- Migration: 0019_permission_code_source_only.sql
+-- DEC-14: il code appartiene solo ai permessi che il sorgente dichiara.
+--
+-- Il vincolo della 0015 (permission_code_matches_kind) legava il code al solo
+-- kind: ogni GRANT ne aveva uno, incluse le voci create dalla console a
+-- runtime (repubblica, le-scienze, e2e-child-*, e2e-embed-*, ...). Quei
+-- permessi non hanno controparte in un requirePermission('...') del sorgente:
+-- il code sarebbe un patto con nessuno. Il proprietario del progetto lo ha
+-- notato guardando i code nati dai dati reali — vedi DEC-14 e §3.1 della
+-- specifica 2026-09-01-rbac-permission-model-design.md.
+--
+-- La prova che il vincolo vecchio era sbagliato sta nel sorgente stesso: gli
+-- unici due punti che leggevano permission.code erano dentro
+-- reserveUniqueCode (lib/rbac/navigation-actions.ts), che li consultava solo
+-- per rendere unici i code che stava generando per la console — un anello
+-- chiuso, senza consumatori. La voce di menu si collega al proprio permesso
+-- per identificativo (menu_entry.id_permission), mai per code.
+--
+-- Il vincolo vecchio (permission_code_matches_kind, 0015) impone code not
+-- null su ogni riga kind = 'GRANT': va tolto PRIMA dell'update sotto, non
+-- dopo — azzerare il code di una riga GRANT mentre il vincolo vecchio e'
+-- ancora attivo violerebbe lui, non quello nuovo.
+
+alter table public.permission
+  drop constraint permission_code_matches_kind;
+
+update public.permission
+set code = null
+where origin = 'CONSOLE' and code is not null;
+
+alter table public.permission
+  add constraint permission_code_matches_kind
+    -- Equivalenza fra due booleani, non un OR di casi: vale exists un unico
+    -- lato composto, "e' un GRANT di origine SOURCE", da solo determina se il
+    -- code deve esserci. Sui dati di oggi nessuna riga origin = 'SOURCE'
+    -- esiste ancora (la Fase 2 introduce la prima): l'unico effetto immediato
+    -- di questa migrazione e' l'update sopra.
+    check ((origin = 'SOURCE' and kind = 'GRANT') = (code is not null));
+
+-- permission_code_unique (0015, indice parziale where code is not null) resta
+-- valido cosi' com'e': un indice sui code non nulli non ha bisogno di sapere
+-- perche' un code manca.
+
+-- Migration: 0020_role_permission_category_cleanup.sql
+-- HOLE-5 (docs/superpowers/specs/2026-09-01-rbac-permission-model-design.md, sez. 6) e DEC-13
+-- (sez. 2): applyToggle in lib/rbac/permission-tree.ts concedeva gli antenati accendendo una
+-- foglia, ma non li revocava mai spegnendola -- role_permission ha accumulato righe che
+-- puntano a permessi di kind = 'CATEGORY'. Con la spec 3.3 una categoria non riceve MAI una
+-- concessione propria (la concessione sta sulle foglie), e il Task 6 rimuove la causa in
+-- permission-tree.ts: applyToggle non risale piu' gli antenati, ne' accendendo ne' spegnendo.
+--
+-- Questa migrazione rimuove il residuo gia' scritto dal bug, non la causa (gia' rimossa nel
+-- codice). Sul database di sviluppo la categoria "Home" (id_permission = 1) risultava concessa
+-- a due ruoli senza un solo discendente concesso -- il caso concreto dietro HOLE-5.
+--
+-- Non e' cosmesi: role_list_view.has_permissions (0001_baseline.sql) e' vera se esiste una
+-- riga QUALUNQUE in role_permission per il ruolo. Un ruolo con solo concessioni residue su
+-- categorie risulterebbe "ha permessi" pur non potendo fare niente -- buildAuthTree tratta
+-- ogni categoria come mai concessa a prescindere da role_permission, quindi la vista mentiva
+-- gia' rispetto a cio' che l'interfaccia mostrava anche prima di questa pulizia.
+--
+-- I permessi deprecati (deprecated_at non nullo, DEC-9) non sono la trappola qui: le loro
+-- concessioni non si toccano MAI (restano sul database, solo l'albero le nasconde). Questa
+-- delete guarda solo `kind`, mai `deprecated_at` -- una categoria deprecata con una riga
+-- residua viene ripulita comunque, perche' e' comunque un residuo del bug HOLE-5, non una
+-- concessione da conservare per un domani in cui il permesso torni visibile.
+delete from public.role_permission rp
+using public.permission p
+where p.id_permission = rp.id_permission
+  and p.kind = 'CATEGORY';
+
+-- Migration: 0021_permission_cleanup.sql
+-- Ultima migrazione della Fase 1 RBAC: toglie le colonne e le tabelle che il modello nuovo ha
+-- assorbito. Va per ultima apposta -- finche' esistevano, un percorso di lettura dimenticato
+-- avrebbe continuato a funzionare leggendo dati fermi al momento del travaso, ed e' il modo
+-- peggiore di scoprire un errore: nessun sintomo, dati silenziosamente vecchi. Toglierle e' cio'
+-- che trasforma una dimenticanza in un errore di compilazione.
+
+-- 1. permission: le colonne di presentazione sono su menu_entry dal 0016/0017 e nessun lettore
+--    del sorgente le cita piu' -- verificato con grep per ognuna, non solo per le quattro che il
+--    brief indicava come prive di lettori. L'unico punto che scriveva ancora id_item_type era
+--    l'insert in createNavigationItem (lib/rbac/navigation-actions.ts), tolto nello stesso
+--    commit di questa migrazione.
+alter table public.permission
+  drop column id_item_type,
+  drop column id_functionality_type,
+  drop column functionality_link,
+  drop column icon_path,
+  drop column navbar_position,
+  drop column open_in_new_tab,
+  drop column config_visibility,
+  drop column no_permission_need_for_navigation,
+  drop column external_id,
+  drop column click_count,
+  drop column created_at,
+  drop column updated_at;
+
+-- 2. role_permission: le righe a false non erano un divieto -- presenza della riga =
+--    concessione (DEC-7), e ogni lettore rimasto (resolveGrantedPermissionIds,
+--    getRoleAuthorizationTree) le tratta gia' cosi'. Vanno cancellate PRIMA di togliere la
+--    colonna: lasciarle sopravvivrebbe alla colonna che le rendeva ininfluenti, e diventerebbero
+--    concessioni valide dal solo fatto di esistere come riga.
+delete from public.role_permission where authorized = false;
+alter table public.role_permission drop column authorized;
+
+-- apply_role_permission_deltas scrive ancora `authorized`: va riscritta insieme alla colonna che
+-- cita, altrimenti si romperebbe alla prima chiamata, non all'applicazione di questa migrazione.
+-- La forma sotto e' quella REALE della funzione oggi in schema.sql (security invoker, search_path
+-- vuoto, insert con on conflict do update authorized = true) -- non quella ipotizzata dal brief
+-- del Task 7 (security definer, search_path public), che non e' mai stata applicata a questo
+-- database: due implementatori precedenti in questa fase hanno riscritto funzioni sulla forma
+-- ipotizzata invece che su quella vera, e una volta e' diventato un difetto Critical.
+create or replace function public.apply_role_permission_deltas(
+  p_role_id bigint, p_grant_ids bigint[], p_revoke_ids bigint[]
+) returns void language plpgsql security invoker set search_path = '' as $$
+begin
+  if array_length(p_grant_ids, 1) is not null then
+    insert into public.role_permission (id_role, id_permission)
+      select p_role_id, unnest(p_grant_ids)
+      on conflict (id_role, id_permission) do nothing;
+  end if;
+  if array_length(p_revoke_ids, 1) is not null then
+    delete from public.role_permission where id_role = p_role_id and id_permission = any(p_revoke_ids);
+  end if;
+  update public.role set date_mod = now() where id_role = p_role_id;
+end;
+$$;
+-- CREATE OR REPLACE conserva i privilegi della funzione (stessa firma): construct_runtime tiene
+-- l'EXECUTE che aveva, senza bisogno di un GRANT qui.
+
+-- role_list_view non cita `authorized` -- non l'ha mai citata: has_permissions e' "esiste una
+-- riga qualunque in role_permission per il ruolo" fin dalla 0014, non "esiste una riga
+-- autorizzata". Non c'e' nulla da riscrivere qui, a differenza di quanto il brief del Task 7
+-- ipotizzava (un drop/create della vista che questa migrazione non fa perche' non serve).
+
+-- 3. navigation_item_tag e navigation_item_type: assorbite da menu_entry_tag e dalle voci di
+--    menu_entry (0017), e nessun punto del sorgente le cita piu' -- verificato con grep.
+--    replace_item_tags lavorava sulla prima ed e' sostituita da replace_menu_entry_tags dal
+--    Task 3: va tolta insieme alla tabella che citava, per lo stesso motivo di
+--    apply_role_permission_deltas sopra.
+drop function if exists public.replace_item_tags(bigint, jsonb);
+drop table if exists public.navigation_item_tag;
+drop table if exists public.navigation_item_type;
+
+-- Migration: 0022_permission_updated_at_trigger_orphan.sql
+-- Il trigger permission_updated_at (rinominato da navigation_item_updated_at nel Task 1,
+-- vedi 0014_permission_rename.sql) esegue la funzione condivisa public.set_updated_at(), che
+-- fa `new.updated_at = now()`. Il Task 7 (0021_permission_cleanup.sql) ha tolto la colonna
+-- updated_at da permission perche' nessun lettore del sorgente la citava piu' -- ma non ha
+-- toccato il trigger che ancora la scriveva: nessuno ha collegato le due cose. Da quella
+-- migrazione in poi qualunque UPDATE su permission fallisce (`record "new" has no field
+-- "updated_at"`), e in produzione modificare una funzionalita' con un permesso associato da'
+-- errore 500. Verificato di persona sul database di sviluppo prima di scrivere questa
+-- migrazione: il trigger c'e' ancora, e il corpo di set_updated_at() cita updated_at.
+--
+-- E' il tipo di difetto che si ripete perche' il legame tra una colonna e il trigger che la
+-- scrive vive solo nel testo del corpo della funzione trigger, non in un vincolo che Postgres
+-- controlli al momento del DROP COLUMN -- a differenza di una foreign key o di una vista, che
+-- il DROP avrebbe rifiutato subito. Chi toglie una colonna deve cercare a mano i trigger
+-- BEFORE UPDATE sulla stessa tabella (pg_trigger), non fidarsi che l'assenza di un errore alla
+-- migrazione significhi assenza di un difetto: qui il DROP COLUMN e' passato senza una riga di
+-- avviso, e il sintomo si è visto solo al primo UPDATE successivo, sull'applicazione.
+--
+-- set_updated_at() e' condivisa da app_language, permission, translation_key,
+-- translation_value e users (verificato con una query su pg_trigger prima di scrivere questa
+-- migrazione). Delle cinque, permission e' l'unica ad aver perso la colonna che la funzione
+-- scrive: questa migrazione tocca solo il suo trigger. La funzione condivisa non si tocca, e
+-- nemmeno i trigger delle altre quattro tabelle -- restano cosi' come sono, con updated_at
+-- ancora al suo posto. menu_entry non c'entra: ha una propria colonna updated_at ma non ha mai
+-- avuto un trigger set_updated_at (verificato: nessuna riga per lei in pg_trigger con quella
+-- funzione), quindi non e' toccata ne' da questa migrazione ne' dal difetto che corregge.
+drop trigger permission_updated_at on public.permission;
+
+-- Migration: 0023_functionality_type_locked_hint.sql
+-- La revisione finale del ramo ha trovato che `updateNavigationItem` scriveva la nuova
+-- tipologia sulla voce di menu senza mai creare il permesso corrispondente: una categoria
+-- convertita in funzionalita' restava con `id_permission` nullo, cioe' una voce PUBBLICA e
+-- ingovernabile, perche' una voce senza permesso non compare in Ruoli & Permessi. La
+-- decisione e' stata di rifiutare la conversione invece di implementarla: il server la
+-- respinge in entrambi i versi e la tendina «Tipologia» e' disabilitata in modifica
+-- (`typeLocked = mode === 'edit'` in FunctionalityForm.tsx).
+--
+-- Una tendina disabilitata senza spiegazione e' un vicolo cieco: l'utente vede un controllo
+-- che non risponde e non sa perche'. Il rimedio e' il `title` di cortesia, come per il
+-- «Genitore» bloccato (`functionalities.form.parent_locked_*_hint`, seminate nella 0001) —
+-- ma la chiave nuova non era mai stata seminata, perche' il compito che ha scritto il
+-- rifiuto aveva le migrazioni fuori dal proprio perimetro. Fino a questa migrazione il
+-- tooltip mostrava la chiave grezza.
+--
+-- Additiva, come ogni seme: apply_translation_seed inserisce on conflict do nothing, quindi
+-- rieseguirla non cambia niente.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"functionalities.form.type_locked_edit_hint","namespace":"functionalities","module":"rbac","description":"Tipologia disabled-select tooltip, edit mode: converting a category into a functionality (or back) is refused, so the type is fixed at creation","it":"La tipologia non può essere modificata dopo la creazione","en":"The type cannot be changed after creation"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0024_role_functionality.sql
+-- Prima meta' della separazione fra permesso e funzionalita' (specifica del 2026-09-03).
+--
+-- SOLO ADDITIVA, per la ragione che la 0021 dichiara al contrario: finche'
+-- menu_entry.id_permission esiste, ogni lettore non ancora convertito continua a funzionare e
+-- l'applicazione resta in piedi a ogni commit. La meta' distruttiva -- il DROP di quella colonna
+-- e la riduzione di `permission` ai soli permessi del codice -- e' la 0025, e va DOPO il codice
+-- che la rende inerte: e' cio' che trasforma una dimenticanza in un errore di compilazione
+-- invece che in un dato vecchio letto in silenzio.
+
+-- 1. La tabella. Presenza della riga = concessione (DEC-7, come role_permission dalla 0021):
+--    nessuna colonna `authorized`, revocare cancella la riga.
+--
+--    Entrambe le chiavi esterne sono `on delete cascade`, e non per simmetria: e' cio' che
+--    sostituisce il blocco di pulizia manuale in deleteNavigationItem. Cancellare una voce, o un
+--    ruolo, porta via le sue concessioni senza che nessun percorso applicativo debba
+--    ricordarsene -- la classe di dimenticanza che ha prodotto BUG-4, dove una categoria-permesso
+--    orfana restava per sempre perche' nessuna voce la citava piu'.
+create table public.role_functionality (
+  id_role       bigint not null references public.role(id_role)             on delete cascade,
+  id_menu_entry bigint not null references public.menu_entry(id_menu_entry) on delete cascade,
+  primary key (id_role, id_menu_entry)
+);
+
+-- 2. Privilegi e RLS nella forma della 0017 (menu_entry), non affidandosi alle privilegi di
+--    default della 0002: quelle si applicano solo alle tabelle create dallo stesso ruolo che le
+--    ha dichiarate, e una tabella creata da una migrazione successiva non e' coperta.
+alter table public.role_functionality enable row level security;
+grant select, insert, update, delete on table public.role_functionality to construct_runtime;
+create policy construct_runtime_server_access on public.role_functionality
+  for all to construct_runtime using (true) with check (true);
+
+-- 3. Il travaso. Il join su id_permission E' la mappa fra le due tabelle, e vive solo finche'
+--    quella colonna esiste: da qui l'ordine fra 0024 e 0025. Sul database di sviluppo sono 14
+--    righe su 22; le altre 8 concedono i permessi del codice e restano in role_permission.
+--    `on conflict do nothing` non e' difensivo a vuoto: la specifica §3.2 del design del
+--    2026-09-01 ammetteva piu' voci di menu sullo stesso permesso, e due voci concesse allo
+--    stesso ruolo collasserebbero sulla stessa riga di destinazione.
+insert into public.role_functionality (id_role, id_menu_entry)
+select rp.id_role, m.id_menu_entry
+from public.role_permission rp
+join public.menu_entry m on m.id_permission = rp.id_permission
+on conflict (id_role, id_menu_entry) do nothing;
+
+delete from public.role_permission
+where id_permission in (select id_permission from public.menu_entry where id_permission is not null);
+
+-- 4. Gemella di apply_role_permission_deltas, nella forma REALE di quella funzione oggi
+--    (security invoker, search_path vuoto, insert con on conflict do nothing, timbratura di
+--    role.date_mod) e non in una forma ipotizzata: la 0021 avverte che due implementatori di
+--    questa fase hanno riscritto funzioni sulla forma supposta dal proprio brief invece che su
+--    quella vera, e una volta e' diventato un difetto Critical.
+create or replace function public.apply_role_functionality_deltas(
+  p_role_id bigint, p_grant_ids bigint[], p_revoke_ids bigint[]
+) returns void language plpgsql security invoker set search_path = '' as $$
+begin
+  if array_length(p_grant_ids, 1) is not null then
+    insert into public.role_functionality (id_role, id_menu_entry)
+      select p_role_id, unnest(p_grant_ids)
+      on conflict (id_role, id_menu_entry) do nothing;
+  end if;
+  if array_length(p_revoke_ids, 1) is not null then
+    delete from public.role_functionality
+      where id_role = p_role_id and id_menu_entry = any(p_revoke_ids);
+  end if;
+  update public.role set date_mod = now() where id_role = p_role_id;
+end;
+$$;
+
+-- Funzione NUOVA: a differenza della 0021, che usava CREATE OR REPLACE su una firma gia'
+-- esistente e ne conservava i privilegi, qui l'EXECUTE va concesso.
+grant execute on function public.apply_role_functionality_deltas(bigint, bigint[], bigint[])
+  to construct_runtime;
+
+-- 5. has_permissions deve guardare entrambe le tabelle. Senza questo, un ruolo che concede solo
+--    voci di menu risulterebbe «senza permessi» nella griglia e nel filtro omonimo -- cioe' ogni
+--    ruolo reale di oggi tranne l'Amministratore, perche' il travaso qui sopra ha appena
+--    spostato le sue concessioni fuori da role_permission.
+--
+--    `with (security_invoker = true)` va ridichiarato: create or replace conserva grant e
+--    proprietario della vista, ma NON il reloption -- senza, la vista torna silenziosamente a
+--    security definer. E' la stessa nota che la 0014 lascia sulla propria riscrittura.
+create or replace view public.role_list_view with (security_invoker = true) as
+  select r.id_role as id,
+         r.description,
+         rt.description as role_type,
+         r.date_ins,
+         r.date_mod,
+         (select count(*) from public.user_role ur where ur.id_role = r.id_role) as associated_users,
+         (exists (select 1 from public.role_permission rp where rp.id_role = r.id_role)
+          or exists (select 1 from public.role_functionality rf where rf.id_role = r.id_role))
+           as has_permissions
+  from public.role r
+  left join public.role_type rt on rt.id_role_type = r.id_role_type;
+
+-- Migration: 0025_role_detail_section_labels.sql
+-- Le due intestazioni di sezione della pagina Ruoli, che ora mostra due alberi invece di uno
+-- (DEC-19). Senza seme il titolo renderebbe la chiave grezza -- il difetto che la 0023 e'
+-- servita a chiudere sul tooltip della tipologia.
+--
+-- Additiva, come ogni seme: apply_translation_seed inserisce on conflict do nothing, quindi
+-- rieseguirla non cambia niente.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"roles.detail.functionalities","namespace":"roles","module":"rbac","description":"Role detail: heading of the menu-functionalities tree, where a functionality is its own permission","it":"Funzionalità","en":"Functionalities"},
+    {"key":"roles.detail.operations","namespace":"roles","module":"rbac","description":"Role detail: heading of the code-declared permissions tree","it":"Operazioni","en":"Operations"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0026_empty_container_hint.sql
+-- Il `title` di cortesia sull'interruttore di un contenitore senza foglie: disabilitato, quindi
+-- ha bisogno di dire perche' (stessa regola della 0023 sul tooltip della tipologia).
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"roles.detail.empty_container_hint","namespace":"roles","module":"rbac","description":"Role detail: disabled folder switch tooltip — the container holds no functionality to grant","it":"Questa sezione non contiene funzionalità da concedere","en":"This section holds no functionality to grant"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0027_permission_code_only.sql
+-- Seconda meta' della separazione fra permesso e funzionalita' (specifica del 2026-09-03), e va
+-- DOPO il codice per la ragione che la 0021 dichiara: finche' la colonna esiste, un percorso di
+-- lettura dimenticato continua a funzionare leggendo dati fermi al travaso della 0024 -- ed e' il
+-- modo peggiore di scoprire un errore, perche' non ha sintomi. Toglierla e' cio' che trasforma
+-- una dimenticanza in un errore di compilazione.
+--
+-- Correzione al numero: l'intestazione della 0024 chiama questa meta' "la 0025" -- era vero
+-- quando e' stata scritta, e non lo e' piu', perche' la 0025 e' finita per essere una migrazione
+-- di seme (0025_role_detail_section_labels.sql), e la 0026 era gia' presa a sua volta
+-- (0026_empty_container_hint.sql). Il numero vero e' questo, la 0027. La 0024 e' applicata e
+-- immutabile, quindi non si corregge la': si mette la correzione qui, dove chi tocca di nuovo
+-- questo spazio la puo' trovare -- la stessa convenzione che la DEC-16 della specifica usa per
+-- un caso identico.
+
+-- 1. menu_entry non punta piu' a un permesso: e' lei il permesso (DEC-17). Con la colonna se ne
+--    va anche il vincolo `on delete restrict` che la proteggeva, ed e' proprio quel vincolo a
+--    imporre l'ordine con il punto 2: finche' c'e', la cancellazione dei permessi gemelli qui
+--    sotto fallirebbe.
+drop index if exists public.menu_entry_permission_idx;
+alter table public.menu_entry drop column id_permission;
+
+-- 2. Riduce `permission` ai soli permessi dichiarati dal codice: resta `operations` e il suo
+--    sottoalbero. Via i 4 doppioni dei contenitori di menu, le 3 categorie orfane che nessun
+--    percorso di cancellazione citava piu' (BUG-4), gli 8 gemelli delle funzionalita' e la
+--    radice `root`.
+--
+--    Il criterio e' STRUTTURALE -- risalita di id_parent dalla radice dei permessi del codice,
+--    la stessa che buildAuthTree usa per costruire l'albero -- e non un elenco di identificativi
+--    noti: un elenco scritto a mano sarebbe giusto solo sul database di sviluppo, e sbagliato in
+--    silenzio su ogni altro.
+--
+--    role_permission.id_permission e' on delete cascade, quindi eventuali concessioni residue su
+--    queste righe se ne vanno con loro. Dopo il travaso della 0024 non ce ne sono: e' il test
+--    'non lascia in role_permission nessuna concessione su una voce di menu' a garantirlo.
+with recursive code_permissions as (
+  select id_permission from public.permission where id_permission = -1
+  union all
+  select c.id_permission
+  from public.permission c
+  join code_permissions p on c.id_parent = p.id_permission
+)
+delete from public.permission
+where id_permission not in (select id_permission from code_permissions);
+
+-- Migration: 0028_role_detail_save_error.sql
+-- Il catch che RoleDetailClient non aveva: un salvataggio rifiutato (per esempio una voce
+-- cancellata da un'altra sessione mentre l'albero era aperto, e la scrittura che viola la
+-- chiave esterna) falliva chiuso ma in silenzio -- ogni interruttore restava a mostrare
+-- "concesso" e nessuno se ne accorgeva. Il messaggio e' generico apposta: updateRolePermissions
+-- non avvolge piu' gli errori del database, quindi il messaggio grezzo che arriverebbe e'
+-- testo di Postgres, non leggibile da un amministratore.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"roles.detail.save_error","namespace":"roles","module":"rbac","description":"Role detail: generic save failure fallback shown when updateRolePermissions rejects","it":"Salvataggio non riuscito. Riprova.","en":"Save failed. Please try again."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;

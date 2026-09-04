@@ -77,6 +77,12 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/application_not_for_tests
       TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/construct_test
+      # Stesso superutente di TEST_DATABASE_URL, non un login separato come in
+      # locale (vedi operator.env.example): il container Postgres del job è
+      # usa-e-getta e nessuno oltre questo workflow lo tocca, quindi qui
+      # l'identità che possiede lo schema e quella del test coincidono senza
+      # rischio. db.mjs test-apply legge questa variabile per le migrazioni.
+      TEST_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/construct_test
       TEST_DATABASE_DISPOSABLE: "1"
       AUTH_SECRET: ci-only-auth-secret-at-least-32-characters
       AUTH_URL: http://localhost:3000
@@ -138,6 +144,19 @@ jobs:
             exit 1
           fi
           node sources/devops/db/db.mjs test-query "alter default privileges in schema public revoke select on tables from construct_default_acl; drop role construct_default_acl;"
+      - name: Provision the runtime login used by the integration suite
+        # Deve girare dopo le migrazioni: è la migrazione 0002 a creare il ruolo
+        # di gruppo construct_runtime a cui questo login viene concesso.
+        # MIGRATION_DATABASE_URL passato esplicitamente come nei due passi di
+        # verifica sopra, non letto da TEST_MIGRATION_DATABASE_URL: è il
+        # contratto di provision-runtime-role in db.mjs. La password qui deve
+        # combaciare con quella usata per sovrascrivere TEST_DATABASE_URL nel
+        # passo "Run database integration tests" più sotto.
+        run: |
+          MIGRATION_DATABASE_URL="$TEST_DATABASE_URL" \
+          CONSTRUCT_RUNTIME_DB_USER=construct_app \
+          CONSTRUCT_RUNTIME_DB_PASSWORD=construct-app-ci-runtime-password \
+          node sources/devops/db/db.mjs provision-runtime-role
       - name: Verify legacy administrators survived migration
         run: >-
           node sources/devops/db/db.mjs test-query
@@ -152,6 +171,14 @@ jobs:
           insert into user_role(user_id,id_role) select id,0 from users where email in ('admin-e2e@example.com','user-e2e@example.com') on conflict do nothing;
           insert into user_role(user_id,id_role) select id,1 from users where email='admin-e2e@example.com' on conflict do nothing;"
       - name: Run database integration tests
+        # Sovrascrive TEST_DATABASE_URL del job (il superutente) col login
+        # limitato appena provisionato: è la connessione che la prova
+        # "connects through the runtime role and nothing wider" in
+        # lib/schema-contract.integration.test.ts osserva con current_user.
+        # I quattro passi precedenti restano sul superutente perché creano
+        # fixture, ruoli e semi con db.mjs test-query.
+        env:
+          TEST_DATABASE_URL: postgresql://construct_app:construct-app-ci-runtime-password@127.0.0.1:5432/construct_test
         run: npm run test:integration
         working-directory: sources/microservices/web-construct
       - run: uv sync --locked

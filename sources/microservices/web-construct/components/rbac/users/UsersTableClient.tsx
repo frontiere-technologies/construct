@@ -5,6 +5,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import { DataGrid } from '@/components/grid/DataGrid'
 import { GridToolbar } from '@/components/grid/GridToolbar'
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { DATE_FILTER, TEXT_FILTER } from '@/components/grid/grid-column-filters'
 import { resetGridFilters } from '@/components/grid/grid-reset'
 import { useGridUrlSync } from '@/components/grid/grid-url-sync'
@@ -46,6 +47,11 @@ export default function UsersTableClient(props: Props) {
   const pathname = usePathname()
   const sp = useSearchParams()
   const [managing, setManaging] = useState<UserDto | null>(null)
+  const [confirmingStatus, setConfirmingStatus] = useState<UserDto | null>(null)
+  // Errore in linea invece di alert() nativo, come in LanguagesTableClient e
+  // TranslationsTableClient: un dialogo del browser sull'esito contraddiceva il passaggio
+  // a ConfirmModal sulla conferma.
+  const [error, setError] = useState<string | null>(null)
   const [gridApi, setGridApi] = useState<GridApi<UserDto> | null>(null)
   // Kept alongside the `gridApi` state: `columnDefs` below is memoized and its cell
   // renderers close over `toggleStatus`, so a ref (always current, regardless of when
@@ -56,14 +62,12 @@ export default function UsersTableClient(props: Props) {
   const gridUrlSync = useGridUrlSync(pathname, sp.toString(), url => router.replace(url))
   const setParam = (updates: Record<string, string | null>) => gridUrlSync.update(updates)
 
-  const toggleStatus = async (u: UserDto) => {
+  const confirmToggleStatus = async (u: UserDto) => {
     const next = u.status.idUserStatus === USER_STATUS_ACTIVE ? USER_STATUS_DEACTIVATED : USER_STATUS_ACTIVE
-    const confirmMessage = next === USER_STATUS_DEACTIVATED
-      ? t('users.confirm.deactivate', { email: u.email })
-      : t('users.confirm.activate', { email: u.email })
-    if (!confirm(confirmMessage)) return
+    setError(null)
     try { await setUserStatus(u.id, next); router.refresh(); gridApiRef.current?.refreshInfiniteCache() }
-    catch (e) { alert(e instanceof Error ? e.message : t('errors.generic')) }
+    catch (e) { setError(e instanceof Error ? e.message : t('errors.generic')) }
+    finally { setConfirmingStatus(null) }
   }
 
   const fullName = (u: UserDto) => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email
@@ -81,7 +85,7 @@ export default function UsersTableClient(props: Props) {
   const columnDefs = useMemo<ColDef<UserDto>[]>(() => [
     actionsColumnDef<UserDto>(u => [
       { label: t('users.actions.manage_roles'), onClick: () => setManaging(u) },
-      { label: u.status.idUserStatus === USER_STATUS_ACTIVE ? t('users.actions.deactivate') : t('users.actions.activate'), onClick: () => toggleStatus(u) },
+      { label: u.status.idUserStatus === USER_STATUS_ACTIVE ? t('users.actions.deactivate') : t('users.actions.activate'), onClick: () => setConfirmingStatus(u) },
     ]),
     {
       colId: 'firstName', headerName: t('users.list.name'), sortable: true,
@@ -109,7 +113,7 @@ export default function UsersTableClient(props: Props) {
       ...dateFilter,
       valueGetter: p => p.data?.updatedAt ? fmt.date(p.data.updatedAt) : '—',
     },
-  ], [allRolesKey, t, fmt]) // eslint-disable-line react-hooks/exhaustive-deps -- allRolesKey stands in for props.allRoles (see comment above); toggleStatus is intentionally omitted too, same as before this change
+  ], [allRolesKey, t, fmt]) // eslint-disable-line react-hooks/exhaustive-deps -- allRolesKey stands in for props.allRoles (see comment above)
 
   const columnLabels = useMemo(() => [
     { colId: 'firstName', label: t('users.list.name') },
@@ -135,8 +139,14 @@ export default function UsersTableClient(props: Props) {
     setGridApi(event.api)
   }
 
+  // Lo stesso confronto serviva tre volte nel ConfirmModal qui sotto (titolo, messaggio,
+  // etichetta di conferma). `confirmingStatus` e' nullo fuori dal modale, e la, false e'
+  // il valore giusto: il blocco non viene reso.
+  const deactivating = confirmingStatus?.status.idUserStatus === USER_STATUS_ACTIVE
+
   return (
     <>
+      {error && <p role="alert" className="mb-3 text-sm text-destructive-muted-foreground">{error}</p>}
       <GridToolbar
         gridApi={gridApi}
         columns={columnLabels}
@@ -158,6 +168,17 @@ export default function UsersTableClient(props: Props) {
           allRoles={props.allRoles}
           onClose={() => setManaging(null)}
           onSaved={() => { setManaging(null); router.refresh(); gridApi?.refreshInfiniteCache() }}
+        />
+      )}
+      {confirmingStatus && (
+        <ConfirmModal
+          title={deactivating ? t('users.actions.deactivate') : t('users.actions.activate')}
+          message={deactivating
+            ? t('users.confirm.deactivate', { email: confirmingStatus.email })
+            : t('users.confirm.activate', { email: confirmingStatus.email })}
+          confirmLabel={deactivating ? t('users.actions.deactivate') : t('users.actions.activate')}
+          onCancel={() => setConfirmingStatus(null)}
+          onConfirm={() => confirmToggleStatus(confirmingStatus)}
         />
       )}
     </>

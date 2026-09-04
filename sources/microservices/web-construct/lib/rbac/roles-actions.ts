@@ -1,10 +1,15 @@
 'use server'
 
-import { eq, sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
-import { role, roleType } from '@/lib/db/schema'
-import type { PermissionDelta, RoleType as RoleTypeStr } from './types'
+import { permission, menuEntry, role, roleType } from '@/lib/db/schema'
+import type { RolePermissionDeltas, RoleType as RoleTypeStr } from './types'
+
+/** `{id_role, ids}` → il letterale di array che Postgres si aspetta. `drizzle-orm`'s `sql`
+ *  non ha un helper `.array()`: si passa il letterale come parametro di testo e si casta,
+ *  lo stesso idioma di `writeTags` (`::jsonb`) e `updateUserRoles` (`::bigint[]`). */
+const arrayLiteral = (ids: number[]) => `{${ids.join(',')}}`
 
 const ROLE_TYPE_SERVICE = 2
 
@@ -50,24 +55,64 @@ export async function renameRole(roleId: number, roleName: string): Promise<void
   }
 }
 
-export async function updateRolePermissions(roleId: number, deltas: PermissionDelta[]): Promise<void> {
+export async function updateRolePermissions(roleId: number, deltas: RolePermissionDeltas): Promise<void> {
   await requireAdmin()
   if ((await getRoleType(roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
 
-  const grantIds = deltas.filter(d => d.authorization).map(d => d.idItem)
-  const revokeIds = deltas.filter(d => !d.authorization).map(d => d.idItem)
+  // Una cartella non riceve mai una riga di concessione (DEC-20). L'invariante viveva solo
+  // nelle funzioni pure lato client, ed è la classe di errore che ha prodotto HOLE-5: una
+  // regola affidata alla buona educazione del chiamante, che regge finché tutti i chiamanti
+  // sono quelli che conosci. Una server action è un endpoint HTTP: la sua sicurezza non può
+  // dipendere da quale modulo la chiama.
+  //
+  // Politica severa e non tollerante, su ENTRAMBI gli alberi: un delta verso una cartella
+  // rifiuta l'INTERA chiamata invece di essere scartato in silenzio. Scartarlo nasconderebbe
+  // un chiamante difettoso di domani — lo stesso silenzio che in applyToggle ha prodotto
+  // HOLE-5, spostato di un livello.
+  //
+  // Il criterio è dedotto dai DATI SALVATI, non dall'input: `kind` sulla riga di permission,
+  // `id_functionality_type` nullo sulla voce di menu. Nessuna forma dell'input può spacciare
+  // una cartella per una foglia.
+  await db.transaction(async tx => {
+    if (deltas.operations.length) {
+      const targeted = await tx
+        .select({ idPermission: permission.idPermission, kind: permission.kind })
+        .from(permission)
+        .where(inArray(permission.idPermission, deltas.operations.map(d => d.idItem)))
+      const categoryIds = targeted.filter(p => p.kind === 'CATEGORY').map(p => p.idPermission)
+      if (categoryIds.length) {
+        throw new Error(`Cannot grant or revoke category permission(s): ${categoryIds.join(', ')}`)
+      }
+    }
 
-  // Atomic grant/revoke + date_mod stamp in one transaction via the schema.sql RPC (DEC-3).
-  // drizzle-orm's `sql` tag has no `.array()` helper — pass each Postgres array literal as a
-  // bound text parameter and cast it explicitly, same idiom as writeTags's `::jsonb` cast (Task 7)
-  // and updateUserRoles's `::bigint[]` cast (Task 8).
-  const grantIdsArray = `{${grantIds.join(',')}}`
-  const revokeIdsArray = `{${revokeIds.join(',')}}`
-  try {
-    await db.execute(sql`select public.apply_role_permission_deltas(${roleId}, ${grantIdsArray}::bigint[], ${revokeIdsArray}::bigint[])`)
-  } catch (err) {
-    throw new Error(`Failed to update permissions: ${err instanceof Error ? err.message : String(err)}`)
-  }
+    if (deltas.functionalities.length) {
+      const targeted = await tx
+        .select({ idMenuEntry: menuEntry.idMenuEntry, idFunctionalityType: menuEntry.idFunctionalityType })
+        .from(menuEntry)
+        .where(inArray(menuEntry.idMenuEntry, deltas.functionalities.map(d => d.idItem)))
+      const containerIds = targeted.filter(e => e.idFunctionalityType === null).map(e => e.idMenuEntry)
+      if (containerIds.length) {
+        throw new Error(`Cannot grant or revoke container menu entry(ies): ${containerIds.join(', ')}`)
+      }
+    }
+
+    // Le due funzioni del database, nella stessa transazione: un rifiuto su un albero non
+    // deve lasciare scritto l'altro.
+    if (deltas.operations.length) {
+      await tx.execute(sql`select public.apply_role_permission_deltas(
+        ${roleId},
+        ${arrayLiteral(deltas.operations.filter(d => d.authorization).map(d => d.idItem))}::bigint[],
+        ${arrayLiteral(deltas.operations.filter(d => !d.authorization).map(d => d.idItem))}::bigint[]
+      )`)
+    }
+    if (deltas.functionalities.length) {
+      await tx.execute(sql`select public.apply_role_functionality_deltas(
+        ${roleId},
+        ${arrayLiteral(deltas.functionalities.filter(d => d.authorization).map(d => d.idItem))}::bigint[],
+        ${arrayLiteral(deltas.functionalities.filter(d => !d.authorization).map(d => d.idItem))}::bigint[]
+      )`)
+    }
+  })
 }
 
 export async function deleteRole(roleId: number): Promise<void> {

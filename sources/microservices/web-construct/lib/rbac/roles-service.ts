@@ -1,14 +1,14 @@
 import { cache } from 'react'
-import { and, asc, count, desc, eq, gte, ilike, inArray, lt, lte, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { navigationItem, roleItem, roleListView } from '@/lib/db/schema'
+import { menuEntry, permission, roleFunctionality, rolePermission, roleListView } from '@/lib/db/schema'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
-import { toNavigationItemRow } from './nav-row-mapper'
-import { buildAuthTree } from './permission-tree'
+import { toMenuEntryRow, toPermissionRow } from './nav-row-mapper'
+import { buildNavTree } from './nav-tree-builder'
+import { buildAuthTree, stampAuthorization } from './permission-tree'
 import {
   type RolesQuery, type RolesPage, type RolePageItemDto, type RoleInformationDto,
-  type RoleType, type UserNavigationTreeDto,
-  ROOT_ID, OPERATIONS_ID,
+  type RoleType, type RoleAuthorizationTrees,
 } from './types'
 import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
 
@@ -131,20 +131,41 @@ export const getRole = cache(async (roleId: number): Promise<RoleInformationDto>
   }
 })
 
+/**
+ * I due alberi della pagina Ruoli (DEC-19).
+ *
+ * «Funzionalità» si costruisce da `menu_entry` con lo STESSO `buildNavTree` che disegna la
+ * pagina Funzionalità, e non da `permission`: la gerarchia del menu è vera solo là. Prima si
+ * costruiva da una copia in `permission` con un proprio `id_parent` che nessuna scrittura
+ * aggiornava — una voce spostata restava dov'era, un contenitore nuovo non compariva affatto,
+ * e i contenitori pre-migrazione comparivano due volte (BUG-1). Passando la mappa dei tag vuota
+ * perché qui i tag non servono: servono a ritrovare una voce, non a concederla.
+ */
 export const getRoleAuthorizationTree = cache(
-  async (roleId: number, rootName: 'ROOT' | 'OPERATIONS'): Promise<UserNavigationTreeDto[]> => {
-    let navRows: (typeof navigationItem.$inferSelect)[]
-    let riRows: { idItem: number; authorized: boolean }[]
+  async (roleId: number): Promise<RoleAuthorizationTrees> => {
+    let entryRows: (typeof menuEntry.$inferSelect)[]
+    let permRows: (typeof permission.$inferSelect)[]
+    let functionalityGrants: { idMenuEntry: number }[]
+    let permissionGrants: { idPermission: number }[]
     try {
-      ;[navRows, riRows] = await Promise.all([
-        db.select().from(navigationItem).orderBy(asc(navigationItem.orderPosition)),
-        db.select({ idItem: roleItem.idItem, authorized: roleItem.authorized }).from(roleItem).where(eq(roleItem.idRole, roleId)),
+      ;[entryRows, permRows, functionalityGrants, permissionGrants] = await Promise.all([
+        db.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition)),
+        db.select().from(permission).where(isNull(permission.deprecatedAt)).orderBy(asc(permission.orderPosition)),
+        db.select({ idMenuEntry: roleFunctionality.idMenuEntry }).from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId)),
+        db.select({ idPermission: rolePermission.idPermission }).from(rolePermission).where(eq(rolePermission.idRole, roleId)),
       ])
     } catch (err) {
       throw new Error(`Failed to load navigation: ${err instanceof Error ? err.message : String(err)}`)
     }
-    const authorized = new Set<number>(riRows.filter(r => r.authorized).map(r => r.idItem))
-    const rootId = rootName === 'ROOT' ? ROOT_ID : OPERATIONS_ID
-    return buildAuthTree(navRows.map(toNavigationItemRow), authorized, rootId)
+    return {
+      functionalities: stampAuthorization(
+        buildNavTree(entryRows.map(toMenuEntryRow), new Map()),
+        new Set(functionalityGrants.map(r => r.idMenuEntry)),
+      ),
+      operations: buildAuthTree(
+        permRows.map(toPermissionRow),
+        new Set(permissionGrants.map(r => r.idPermission)),
+      ),
+    }
   }
 )

@@ -14,11 +14,6 @@ export const roleType = pgTable('role_type', {
   description: text('description').notNull(),
 })
 
-export const navigationItemType = pgTable('navigation_item_type', {
-  idItemType: bigint('id_item_type', { mode: 'number' }).primaryKey(),
-  description: text('description').notNull(),
-})
-
 export const functionalityType = pgTable('functionality_type', {
   idFunctionalityType: bigint('id_functionality_type', { mode: 'number' }).primaryKey(),
   description: text('description').notNull(),
@@ -127,42 +122,60 @@ export const userRole = pgTable('user_role', {
   index('user_role_id_role_user_id_idx').on(t.idRole, t.userId),
 ])
 
-export const navigationItem = pgTable('navigation_item', {
-  idItem: bigint('id_item', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_navigation_item')`),
+export const permission = pgTable('permission', {
+  idPermission: bigint('id_permission', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_permission')`),
   name: text('name'),
-  idItemType: bigint('id_item_type', { mode: 'number' }).notNull().references(() => navigationItemType.idItemType),
-  idFunctionalityType: bigint('id_functionality_type', { mode: 'number' }).references(() => functionalityType.idFunctionalityType),
-  functionalityLink: text('functionality_link'),
-  iconPath: text('icon_path'),
-  idItemParent: bigint('id_item_parent', { mode: 'number' }).references((): AnyPgColumn => navigationItem.idItem, { onDelete: 'cascade' }),
+  idParent: bigint('id_parent', { mode: 'number' }).references((): AnyPgColumn => permission.idPermission, { onDelete: 'cascade' }),
   orderPosition: integer('order_position').notNull().default(0),
   description: text('description'),
-  navbarPosition: text('navbar_position', { enum: ['TOP', 'BOTTOM'] }),
   itemTranslation: jsonb('item_translation'),
   isImmutable: smallint('is_immutable').notNull().default(0),
-  configVisibility: smallint('config_visibility').notNull().default(0),
-  noPermissionNeedForNavigation: smallint('no_permission_need_for_navigation').notNull().default(0),
+  kind: text('kind', { enum: ['CATEGORY', 'GRANT'] }).notNull(),
+  code: varchar('code', { length: 80 }),
+  origin: text('origin', { enum: ['SOURCE', 'CONSOLE'] }).notNull().default('CONSOLE'),
+  deprecatedAt: timestamp('deprecated_at', { withTimezone: true, mode: 'string' }),
+}, (t) => [
+  index('permission_parent_order_idx').on(t.idParent, t.orderPosition),
+  uniqueIndex('permission_code_unique').on(t.code).where(sql`${t.code} is not null`),
+])
+
+export const rolePermission = pgTable('role_permission', {
+  idRole: bigint('id_role', { mode: 'number' }).notNull().references(() => role.idRole, { onDelete: 'cascade' }),
+  idPermission: bigint('id_permission', { mode: 'number' }).notNull().references(() => permission.idPermission, { onDelete: 'cascade' }),
+}, (t) => [primaryKey({ columns: [t.idRole, t.idPermission] })])
+
+export const menuEntry = pgTable('menu_entry', {
+  idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_menu_entry')`),
+  idParent: bigint('id_parent', { mode: 'number' }).references((): AnyPgColumn => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
+  name: text('name'),
+  orderPosition: integer('order_position').notNull().default(0),
+  navbarPosition: text('navbar_position', { enum: ['TOP', 'BOTTOM'] }),
+  iconPath: text('icon_path'),
+  idFunctionalityType: bigint('id_functionality_type', { mode: 'number' }).references(() => functionalityType.idFunctionalityType),
+  functionalityLink: text('functionality_link'),
   openInNewTab: smallint('open_in_new_tab').notNull().default(1),
-  externalId: text('external_id'),
-  clickCount: bigint('click_count', { mode: 'number' }).default(0),
+  itemTranslation: jsonb('item_translation'),
+  isImmutable: smallint('is_immutable').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (t) => [
-  index('navigation_item_parent_order_idx').on(t.idItemParent, t.orderPosition),
+  index('menu_entry_parent_order_idx').on(t.idParent, t.orderPosition),
 ])
 
-export const navigationItemTag = pgTable('navigation_item_tag', {
-  idItem: bigint('id_item', { mode: 'number' }).notNull().references(() => navigationItem.idItem, { onDelete: 'cascade' }),
+export const menuEntryTag = pgTable('menu_entry_tag', {
+  idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).notNull().references(() => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
   tagLan: varchar('tag_lan', { length: 5 }).notNull(),
   tag: varchar('tag', { length: 50 }).notNull(),
   dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
-}, (t) => [primaryKey({ columns: [t.idItem, t.tagLan, t.tag] })])
+}, (t) => [primaryKey({ columns: [t.idMenuEntry, t.tagLan, t.tag] })])
 
-export const roleItem = pgTable('role_item', {
+/** La concessione su una VOCE DI MENU. Una funzionalità è il proprio permesso (DEC-17), quindi
+ *  la concessione punta alla voce e non a una riga gemella in `permission`. Presenza della riga
+ *  = concessione (DEC-7): nessuna colonna `authorized`, revocare cancella la riga. */
+export const roleFunctionality = pgTable('role_functionality', {
   idRole: bigint('id_role', { mode: 'number' }).notNull().references(() => role.idRole, { onDelete: 'cascade' }),
-  idItem: bigint('id_item', { mode: 'number' }).notNull().references(() => navigationItem.idItem, { onDelete: 'cascade' }),
-  authorized: boolean('authorized').notNull().default(false),
-}, (t) => [primaryKey({ columns: [t.idRole, t.idItem] })])
+  idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).notNull().references(() => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
+}, (t) => [primaryKey({ columns: [t.idRole, t.idMenuEntry] })])
 
 export const userInfo = pgTable('user_info', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

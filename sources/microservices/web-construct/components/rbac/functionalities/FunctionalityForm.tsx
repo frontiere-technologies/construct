@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { createNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'
-import { isGenitoreLocked, buildGenitoreOptions, genitoreValue } from '@/lib/rbac/genitore-lock'
-import { ITEM_TYPES, resolveItemType } from '@/lib/rbac/item-type-options'
+import { isGenitoreLocked, buildGenitoreOptions, genitoreValue, parseGenitoreSelection } from '@/lib/rbac/genitore-lock'
+import { isTypeLocked, resolveItemType, typeOptionsFor } from '@/lib/rbac/item-type-options'
 import { ITEM_TYPE_FUNCTIONALITY } from '@/lib/rbac/types'
 import { useI18n } from '@/context/I18nContext'
 import type { CreateNavItemInput, ParentOption } from '@/lib/rbac/types'
@@ -23,8 +23,6 @@ interface Initial {
   functionalityLink: string; iconPath: string; idItemParent: number | null
   /** External links only: open the URL in a new tab (the default) instead of in this one. */
   openInNewTab: boolean
-  /** Active root id (ROOT_ID=0 or OPERATIONS_ID=-1). Used only in create mode to determine placement when idItemParent is null. */
-  idRootParent?: number | null
   translations: Record<string, { name?: string; description?: string }>; tagTranslations: Record<string, string[]>
 }
 
@@ -46,6 +44,25 @@ export default function FunctionalityForm(
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const set = <K extends keyof Initial>(k: K, v: Initial[K]) => setF(prev => ({ ...prev, [k]: v }))
+
+  // Il server (updateNavigationItem) rifiuta un cambio di tipologia categoria <-> funzionalità.
+  // Il vincolo resta, il motivo è cambiato (DEC-22): non esiste più una «voce pubblica»
+  // da creare per sbaglio, perché menu_entry non porta più id_permission. Quel che
+  // sopravvive è l'altro verso, con un argomento più forte di "butterebbe via le concessioni":
+  // updateNavigationItem non tocca role_functionality, quindi convertire una funzionalità in
+  // categoria lascerebbe le sue concessioni sopravvivere su una riga ormai classificata
+  // contenitore — invisibili in entrambi gli alberi e non più revocabili dall'interfaccia
+  // (vedi il commento in navigation-actions.ts). La tendina lo rispecchia qui, non solo perché
+  // il server rifiuterebbe: un campo che accetta una scelta e poi la rifiuta al salvataggio è
+  // peggio di uno che non l'accetta affatto.
+  //
+  // In modifica il controllo non si blocca, si restringe al proprio lato del confine: la
+  // regola sta in typeOptionsFor, accanto alle opzioni che filtra e ai suoi test unitari,
+  // perché è una funzione pura di (modo, tipologia salvata) e non un fatto di questo form.
+  // `initial` e non `f`: il lato lo dicono i dati salvati, non ciò che l'utente ha appena
+  // scelto.
+  const typeOptions = typeOptionsFor(mode, initial.idItemType)
+  const typeLocked = isTypeLocked(mode, initial.idItemType)
 
   // null while no tipologia has been picked yet — the dropdown then shows its placeholder
   // instead of a type the item doesn't actually have, and the Link field stays hidden.
@@ -80,7 +97,6 @@ export default function FunctionalityForm(
           functionalityLink: isFunc ? f.functionalityLink : null,
           iconPath: f.iconPath || null, idItemParent: f.idItemParent,
           openInNewTab: f.openInNewTab,
-          idRootParent: f.idRootParent ?? null,
           description: primaryDescription, itemTranslation: f.translations, tagTranslations: f.tagTranslations,
         }
         await createNavigationItem(input)
@@ -108,7 +124,7 @@ export default function FunctionalityForm(
                 data-testid="select-genitore"
                 ariaLabel={t('functionalities.form.parent_placeholder')}
                 value={genitoreValue(f.idItemParent)}
-                onChange={v => set('idItemParent', Number(v))}
+                onChange={v => set('idItemParent', parseGenitoreSelection(Number(v)))}
                 options={buildGenitoreOptions(parents)}
                 placeholder={t('functionalities.form.parent_placeholder')}
                 disabled={genitoreLocked}
@@ -138,11 +154,13 @@ export default function FunctionalityForm(
               ariaLabel={t('functionalities.form.type_heading')}
               value={selectedType?.key ?? ''}
               onChange={v => {
-                const opt = ITEM_TYPES.find(candidate => candidate.key === v)
+                const opt = typeOptions.find(candidate => candidate.key === v)
                 if (opt) setF(prev => ({ ...prev, idItemType: opt.idItemType, idFunctionalityType: opt.idFunctionalityType }))
               }}
-              options={ITEM_TYPES.map(opt => ({ value: opt.key, label: itemTypeLabels[opt.key] ?? opt.label }))}
+              options={typeOptions.map(opt => ({ value: opt.key, label: itemTypeLabels[opt.key] ?? opt.label }))}
               placeholder={t('functionalities.form.type_placeholder')}
+              disabled={typeLocked}
+              title={typeLocked ? t('functionalities.form.type_locked_edit_hint') : undefined}
             />
             {isFunc && (
               <Input value={f.functionalityLink} onChange={e => set('functionalityLink', e.target.value)} placeholder={t('functionalities.form.link_placeholder')}

@@ -10,41 +10,51 @@ export const USER_STATUS_DEACTIVATED = 1
 export const USER_STATUS_ACTIVE = 2
 
 export const ROOT_ID = 0
-export const OPERATIONS_ID = -1
 
 export const ITEM_TYPE_CATEGORY = 1
 export const ITEM_TYPE_FUNCTIONALITY = 2
 export const FUNCTYPE_EMBEDDED_PAGE = 1
 export const FUNCTYPE_EXTERNAL_LINK = 2
-export const FUNCTYPE_PERMISSION = 5
 
 export interface ItemTranslation {
   name?: string
   description?: string
 }
 
-export interface NavigationItemRow {
-  id_item: number
+/** A `permission` row (Task 6): the authorization tree on Roles & Permissions builds from
+ * this alone — no presentation columns (icon, link, functionality type). Those live on
+ * `menu_entry` (Task 3/5) and describe the menu, not what a role may do. */
+export interface PermissionRow {
+  id_permission: number
+  kind: 'CATEGORY' | 'GRANT'
+  code: string | null
   name: string | null
-  id_item_type: number
-  id_functionality_type: number | null
-  functionality_link: string | null
-  icon_path: string | null
-  id_item_parent: number | null
+  id_parent: number | null
   order_position: number
-  navbar_position: 'TOP' | 'BOTTOM' | null
   item_translation: Record<string, ItemTranslation> | null
-  is_immutable: number
-  config_visibility: number
-  no_permission_need_for_navigation: number
-  /** 1 = open in a new tab. Only consulted for EXTERNAL_LINK items. */
-  open_in_new_tab: number
+  description: string | null
+  deprecated_at: string | null
 }
 
-export interface RoleItemRow {
-  id_role: number
-  id_item: number
-  authorized: boolean
+/** Una riga di menu_entry. La voce È il proprio permesso (DEC-17): non punta a una riga di
+ *  `permission`, e la concessione vive in `role_functionality`. Un contenitore
+ *  (`id_functionality_type` nullo) non è concedibile — raggruppa voci, non protegge niente.
+ *  Per questo `updateNavigationItem` rifiuta di cambiare una funzionalità in contenitore
+ *  (o viceversa): non cancellerebbe le sue concessioni, le lascerebbe sopravvivere su una
+ *  riga ormai classificata contenitore — invisibili in entrambi gli alberi e non più
+ *  revocabili dall'interfaccia. */
+export interface MenuEntryRow {
+  id_menu_entry: number
+  id_parent: number | null
+  name: string | null
+  order_position: number
+  navbar_position: 'TOP' | 'BOTTOM' | null
+  icon_path: string | null
+  id_functionality_type: number | null
+  functionality_link: string | null
+  open_in_new_tab: number
+  item_translation: Record<string, ItemTranslation> | null
+  is_immutable: number
 }
 
 export type RoleType = 'SYSTEM' | 'SERVICE' | 'SYNCED'
@@ -105,6 +115,20 @@ export interface PermissionDelta {
   authorization: boolean
 }
 
+/** I due alberi della pagina Ruoli. Restano separati perché `id_menu_entry` e `id_permission`
+ *  vengono da due sequenze indipendenti che possono portare lo stesso numero (DEC-19). */
+export interface RoleAuthorizationTrees {
+  functionalities: UserNavigationTreeDto[]
+  operations: UserNavigationTreeDto[]
+}
+
+/** `functionalities[].idItem` è un `id_menu_entry`; `operations[].idItem` un `id_permission`.
+ *  Due liste e non una: lo stesso numero significa cose diverse nei due alberi. */
+export interface RolePermissionDeltas {
+  functionalities: PermissionDelta[]
+  operations: PermissionDelta[]
+}
+
 export interface RolesQuery {
   page: number
   size: number
@@ -150,14 +174,13 @@ export interface CreateNavItemInput {
   /** External links only: open the URL in a new tab. Defaults to true when omitted. */
   openInNewTab?: boolean
   idItemParent: number | null
-  /** Resolved active-root id (ROOT_ID=0 or OPERATIONS_ID=-1). Used only on create to determine placement when idItemParent is null. Optional so edit-mode callers can omit it. */
-  idRootParent?: number | null
   description: string
   itemTranslation: Record<string, { name?: string; description?: string }>
   tagTranslations: Record<string, string[]>
 }
 export type UpdateNavItemInput = CreateNavItemInput
-export interface MoveInput { targetParentId: number; orderPosition: number }
+/** targetParentId null means the menu root — there is no item that stands for it (Task 5). */
+export interface MoveInput { targetParentId: number | null; orderPosition: number }
 
 export type UserStatusId = 1 | 2 // 1 Deactivated, 2 Active
 

@@ -1,6 +1,6 @@
 import time
 from playwright.sync_api import expect
-from helpers import nav, drag_row_onto
+from helpers import nav, drag_row_onto, confirm_modal
 
 
 def _select_tipologia(page, label: str):
@@ -34,9 +34,8 @@ def _delete_functionality(page, base_url, name):
     nav(page, f"{base_url}/functionalities")
     page.get_by_text(name, exact=True).first.scroll_into_view_if_needed()
     row = page.locator("div").filter(has_text=name).filter(has=page.locator('[data-testid="nav-delete"]')).last
-    page.once("dialog", lambda d: d.accept())
     row.locator('[data-testid="nav-delete"]').click()
-    page.wait_for_timeout(600)
+    confirm_modal(page, "Elimina")
 
 
 def test_tree_loads(logged_in_page, base_url):
@@ -135,9 +134,8 @@ def test_create_edit_delete_functionality(logged_in_page, base_url):
     # Delete — find the row for the renamed item and click its delete button.
     page.get_by_text(renamed, exact=True).first.scroll_into_view_if_needed()
     delete_row = page.locator("div").filter(has_text=renamed).filter(has=page.locator('[data-testid="nav-delete"]')).last
-    page.once("dialog", lambda d: d.accept())
     delete_row.locator('[data-testid="nav-delete"]').click()
-    page.wait_for_timeout(800)
+    confirm_modal(page, "Elimina")
     page.reload()
     page.wait_for_load_state("networkidle")
     expect(page.get_by_text(renamed, exact=True)).to_have_count(0)
@@ -493,3 +491,88 @@ def test_add_button_on_immutable_section_preselects_it_as_parent(logged_in_page,
     row.locator('[data-testid="nav-add"]').click()
     page.wait_for_url("**/functionalities/create?parent=*", timeout=10_000)
     expect(page.locator('[data-testid="select-genitore"]')).to_have_text("Admin")
+
+def _create_category(page, base_url, name):
+    """Create a category (a menu container, no functionality type) at the root level."""
+    nav(page, f"{base_url}/functionalities/create")
+    page.get_by_placeholder("Nome funzionalità *").fill(name)
+    page.get_by_placeholder("Descrizione *").fill("e2e")
+    _select_tipologia(page, "Category")
+    page.get_by_role("button", name="Salva").click()
+    page.wait_for_url("**/functionalities", timeout=10_000)
+    page.wait_for_load_state("networkidle")
+
+
+def _open_edit(page, base_url, name):
+    """Open a tree row's edit page through its nav-edit button (same idiom as
+    test_create_edit_delete_functionality: the trailing actions live inside the row)."""
+    nav(page, f"{base_url}/functionalities")
+    page.get_by_text(name, exact=True).first.scroll_into_view_if_needed()
+    row = page.locator("div").filter(has_text=name).filter(has=page.locator('[data-testid="nav-edit"]')).last
+    row.locator('[data-testid="nav-edit"]').click()
+    page.wait_for_url("**/edit", timeout=10_000)
+    page.wait_for_load_state("networkidle")
+
+
+def _tipologia_wrapper(page):
+    """The div that carries the disabled-select tooltip.
+
+    CustomSelect puts `title` on its wrapping div, not on the <button>: a disabled
+    button receives no mouse events, so a title on it would never show. Anyone
+    checking the attribute on the button concludes wrongly that it is missing.
+    """
+    return page.locator('div[title]').filter(has=page.locator('[data-testid="select-tipologia"]'))
+
+
+def test_tipologia_in_edit_offers_only_the_functionality_subtypes(logged_in_page, base_url):
+    """On an existing functionality the type stays changeable BETWEEN SUBTYPES, and
+    "Category" is not on offer.
+
+    Il divieto resta, il motivo è cambiato (DEC-22): non esiste più una «voce pubblica»
+    da creare per sbaglio, perché menu_entry non porta più id_permission. Quel che
+    sopravvive è l'altro verso — convertire una funzionalità in categoria butterebbe
+    via le sue concessioni in silenzio, perché una cartella non è concedibile.
+    """
+    page = logged_in_page
+    name = f"E2E Subtype {int(time.time())}"
+    _create_functionality(page, base_url, name, "/e2e-subtype")
+
+    _open_edit(page, base_url, name)
+    tipologia = page.locator('[data-testid="select-tipologia"]')
+    expect(tipologia).to_be_enabled()
+    expect(_tipologia_wrapper(page)).to_have_count(0)  # no "locked" tooltip on a functionality
+
+    tipologia.click()
+    options = page.get_by_role("listbox", name="Tipologia").get_by_role("option")
+    expect(options).to_have_count(3)
+    expect(page.get_by_role("listbox", name="Tipologia").get_by_role("option", name="Category", exact=True)).to_have_count(0)
+    page.keyboard.press("Escape")
+
+    # And the change actually persists: internal link -> external link.
+    _select_tipologia(page, "Link esterno (http[s])")
+    page.get_by_placeholder("Link *").fill("https://example.invalid/e2e")
+    page.get_by_role("button", name="Salva").click()
+    page.wait_for_url("**/functionalities", timeout=10_000)
+    page.wait_for_load_state("networkidle")
+
+    _open_edit(page, base_url, name)
+    expect(page.locator('[data-testid="select-tipologia"]')).to_have_text("Link esterno (http[s])")
+
+    _delete_functionality(page, base_url, name)
+
+
+def test_tipologia_in_edit_is_locked_on_a_category(logged_in_page, base_url):
+    """On a category the one boundary the server defends is the whole choice, so the
+    control is genuinely locked — and says why, instead of being a live dropdown that
+    does nothing."""
+    page = logged_in_page
+    name = f"E2E Cat {int(time.time())}"
+    _create_category(page, base_url, name)
+
+    _open_edit(page, base_url, name)
+    expect(page.locator('[data-testid="select-tipologia"]')).to_be_disabled()
+    expect(_tipologia_wrapper(page)).to_have_attribute(
+        "title", "La tipologia non può essere modificata dopo la creazione"
+    )
+
+    _delete_functionality(page, base_url, name)

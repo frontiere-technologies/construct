@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isGenitoreLocked, buildGenitoreOptions, genitoreValue, ROOT_OPTION_LABEL } from './genitore-lock'
+import { isGenitoreLocked, buildGenitoreOptions, genitoreValue, parseGenitoreSelection, ROOT_OPTION_LABEL } from './genitore-lock'
 import { ROOT_ID } from './types'
 
 describe('isGenitoreLocked', () => {
@@ -56,5 +56,20 @@ describe('genitoreValue', () => {
 
   it('shows the category itself for nested items', () => {
     expect(genitoreValue(12)).toBe(12)
+  })
+})
+
+describe('parseGenitoreSelection', () => {
+  it('maps the Root sentinel back to null — the menu root is the absence of a parent', () => {
+    expect(parseGenitoreSelection(ROOT_ID)).toBeNull()
+  })
+
+  it('passes a real category id through unchanged', () => {
+    expect(parseGenitoreSelection(12)).toBe(12)
+  })
+
+  it('round-trips with genitoreValue', () => {
+    expect(parseGenitoreSelection(genitoreValue(null))).toBeNull()
+    expect(parseGenitoreSelection(genitoreValue(12))).toBe(12)
   })
 })

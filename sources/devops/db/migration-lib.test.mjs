@@ -109,6 +109,50 @@ test('allows retrying an incomplete migration only when its checksum is unchange
   ]))
 })
 
+// completed_at nullo significa "tentata e fallita", non "applicata": la transazione è stata
+// annullata, nessuno schema porta il segno di quel tentativo. markStarted (db.mjs) fa apposta un
+// upsert che sovrascrive checksum e azzera completed_at ad ogni nuovo tentativo — l'unica ragione
+// per farlo è permettere di correggere il file e riprovare. Un controllo che blocca proprio quella
+// correzione, sull'unica riga per cui l'upsert esiste, non protegge niente: non c'è schema da
+// proteggere. Il caso simmetrico sotto (bytes changed, completedAt impostato) resta la protezione
+// vera e non deve indebolirsi.
+test('allows correcting an incomplete migration whose checksum changed, but still rejects a completed one', () => {
+  const oldSql = 'select 1;\n'
+  const fixedSql = 'select 2;\n'
+  const migrations = [{
+    version: '0001',
+    name: 'baseline',
+    filename: '0001_baseline.sql',
+    sql: fixedSql,
+    checksum: migrationChecksum(fixedSql),
+  }]
+
+  assert.doesNotThrow(() => assertAppliedMigrationChecksums(migrations, [
+    { version: '0001', checksum: migrationChecksum(oldSql), completedAt: null },
+  ]))
+
+  assert.throws(
+    () => assertAppliedMigrationChecksums(migrations, [
+      { version: '0001', checksum: migrationChecksum(oldSql), completedAt: new Date() },
+    ]),
+    /checksum mismatch for applied migration 0001_baseline/i,
+  )
+})
+
+// Il salto per completed_at nullo deve scartare solo il confronto del checksum, non l'intero
+// corpo del ciclo: applyPendingMigrations itera sui file letti da disco, non sulla cronologia, e
+// se una riga di cronologia (completata o no) non trova piu' un file corrispondente su disco,
+// quella migrazione non verrebbe mai piu' ne' ritentata ne' segnalata — sparirebbe in silenzio.
+// L'esistenza del file va verificata per ogni riga, prima di guardare se e' completata.
+test('still reports a missing migration file for an incomplete history row', () => {
+  assert.throws(
+    () => assertAppliedMigrationChecksums([], [
+      { version: '0001', checksum: 'a'.repeat(64), completedAt: null },
+    ]),
+    /applied migration 0001 is missing from the repository/i,
+  )
+})
+
 test('applies only pending or incomplete migrations in order', async () => {
   const migrations = [
     { version: '0001', name: 'first', filename: '0001_first.sql', sql: 'select 1;', checksum: 'a'.repeat(64) },

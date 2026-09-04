@@ -11,6 +11,31 @@ def nav(page, url: str) -> None:
     )
 
 
+def confirm_modal(page, label: str) -> None:
+    """Confirm the ConfirmModal that a destructive control just opened.
+
+    Deletion and the user status toggle stopped going through a native browser
+    dialog on 2026-09-02: they now open this project's ConfirmModal
+    (AccessibleDialog underneath). A `page.once("dialog", ...)` handler
+    therefore never fires — it left the modal open and the action undone while
+    every assertion downstream still looked like it was testing the action.
+
+    Scoped to the dialog on purpose. On the users grid the row-menu item and the
+    confirm button share a label but never coexist, so an unscoped query would
+    work; on the functionalities tree they DO coexist (the row stays in the DOM
+    behind the modal, with the same "Elimina" aria-label), and an unscoped
+    get_by_role would be a strict-mode violation. One helper that is correct in
+    both beats three call-site variants that are each correct in one.
+
+    Waiting for the dialog to disappear is the real completion signal; a fixed
+    timeout only looks like one.
+    """
+    dialog = page.get_by_role("dialog")
+    expect(dialog).to_be_visible()
+    dialog.get_by_role("button", name=label, exact=True).click()
+    expect(dialog).to_have_count(0)
+
+
 def open_column_filter(page, col_id: str):
     """Click the funnel icon on an AG Grid column header to open its filter popup.
 

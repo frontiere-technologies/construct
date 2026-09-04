@@ -10,25 +10,25 @@ import PermissionsTree from '@/components/rbac/PermissionsTree'
 import { buildAuthMap, computeDeltas } from '@/lib/rbac/permission-tree'
 import { updateRolePermissions } from '@/lib/rbac/roles-actions'
 import { useI18n } from '@/context/I18nContext'
-import type { RoleInformationDto, UserNavigationTreeDto } from '@/lib/rbac/types'
+import type { RoleAuthorizationTrees, RoleInformationDto } from '@/lib/rbac/types'
 import RenameRoleModal from './RenameRoleModal'
 
 interface Props {
   role: RoleInformationDto
-  sezioniTree: UserNavigationTreeDto[]
-  operazioniTree: UserNavigationTreeDto[]
+  trees: RoleAuthorizationTrees
 }
 
-export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: Props) {
+export default function RoleDetailClient({ role, trees }: Props) {
   const { t } = useI18n()
   const router = useRouter()
-  const allTrees = useMemo(() => [...sezioniTree, ...operazioniTree], [sezioniTree, operazioniTree])
-  const loaded = useMemo(() => buildAuthMap(allTrees), [allTrees])
+  const loadedFunctionalities = useMemo(() => buildAuthMap(trees.functionalities), [trees.functionalities])
+  const loadedOperations = useMemo(() => buildAuthMap(trees.operations), [trees.operations])
 
-  const [tab, setTab] = useState<'sezioni' | 'operazioni'>('sezioni')
-  const [map, setMap] = useState<Map<number, boolean>>(loaded)
+  const [functionalities, setFunctionalities] = useState(loadedFunctionalities)
+  const [operations, setOperations] = useState(loadedOperations)
   const [renaming, setRenaming] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const isSystem = role.roleType === 'SYSTEM'
   const canRename = role.roleType === 'SERVICE'
@@ -36,14 +36,25 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
   const cancel = () => router.push('/roles-permissions')
   const save = async () => {
     setBusy(true)
+    setError(null)
     try {
-      const deltas = computeDeltas(loaded, map)
-      if (deltas.length) await updateRolePermissions(role.id, deltas)
+      const deltas = {
+        functionalities: computeDeltas(loadedFunctionalities, functionalities),
+        operations: computeDeltas(loadedOperations, operations),
+      }
+      if (deltas.functionalities.length || deltas.operations.length) {
+        await updateRolePermissions(role.id, deltas)
+      }
       router.refresh()
+    } catch {
+      // updateRolePermissions non avvolge più gli errori del database (Task 7): il messaggio
+      // grezzo che arriverebbe qui è testo di Postgres, non leggibile da un amministratore.
+      // Un salvataggio rifiutato senza avviso sarebbe peggio — ogni interruttore resterebbe a
+      // mostrare "concesso" e nessuno se ne accorgerebbe — quindi il messaggio è sempre questo,
+      // generico e tradotto, mai err.message.
+      setError(t('roles.detail.save_error'))
     } finally { setBusy(false) }
   }
-
-  const trees = tab === 'sezioni' ? sezioniTree : operazioniTree
 
   return (
     <PageContainer
@@ -68,24 +79,25 @@ export default function RoleDetailClient({ role, sezioniTree, operazioniTree }: 
       }
       subtitle={`${role.associatedUsersCount} ${t('roles.list.associated_users')}`}
     >
-      <div className="flex gap-6 border-b border-border-subtle">
-        {(['sezioni', 'operazioni'] as const).map(tabKey => (
-          <button
-            key={tabKey}
-            onClick={() => setTab(tabKey)}
-            className={`pb-2 text-sm font-medium border-b-2 -mb-px ${tab === tabKey ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground'}`}
-          >{tabKey === 'sezioni' ? t('roles.detail.tab_sections') : t('roles.detail.tab_operations')}</button>
-        ))}
-      </div>
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium text-muted-foreground">{t('roles.detail.functionalities')}</h2>
+        <PermissionsTree trees={trees.functionalities} map={functionalities} onChange={setFunctionalities} editable={!isSystem} />
+      </section>
 
-      <PermissionsTree trees={trees} map={map} onChange={setMap} editable={!isSystem} />
+      <section className="space-y-2 pt-4">
+        <h2 className="text-sm font-medium text-muted-foreground">{t('roles.detail.operations')}</h2>
+        <PermissionsTree trees={trees.operations} map={operations} onChange={setOperations} editable={!isSystem} />
+      </section>
 
-      <div className="pt-4 border-t border-border flex items-center justify-end gap-3">
-        <Button variant="outline" onClick={cancel}>{t('common.actions.cancel')}</Button>
-        <Button
-          onClick={save} disabled={busy || isSystem}
-          title={isSystem ? t('roles.detail.system_readonly_hint') : undefined}
-        >{t('common.actions.save')}</Button>
+      <div className="pt-4 border-t border-border flex items-center justify-between gap-3">
+        <div>{error && <p role="alert" className="text-sm text-destructive-muted-foreground">{error}</p>}</div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={cancel}>{t('common.actions.cancel')}</Button>
+          <Button
+            onClick={save} disabled={busy || isSystem}
+            title={isSystem ? t('roles.detail.system_readonly_hint') : undefined}
+          >{t('common.actions.save')}</Button>
+        </div>
       </div>
 
       {renaming && <RenameRoleModal roleId={role.id} currentName={role.roleName} onClose={() => setRenaming(false)} />}
