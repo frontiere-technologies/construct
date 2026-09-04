@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from playwright.sync_api import expect
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from helpers import nav, do_test_login, switch_language, grid_rows as _rows, open_column_filter
 
 
@@ -24,13 +25,25 @@ def _open_translations(page, base_url):
 
 
 def _filter_by_key(page, key):
-    """Filter the translations grid by the `key` column's text filter."""
+    """Filter the translations grid by the `key` column's text filter.
+
+    AG Grid documents Enter as equivalent to its Apply button for text
+    filters, and applying the filter updates the URL through
+    `router.replace()`. That navigation can recreate the whole filter popup
+    while Playwright is mid-action on it. This helper used to press Enter on
+    the input instead of clicking the Apply button, on the theory that the
+    input was the stable element and the button was the one at risk of being
+    detached — but the input lives inside that same popup, so it detaches
+    right along with the button; moving the action one element over just
+    moved the race, it didn't remove it. The fix lives one level up instead:
+    treat "open the popup, fill it, press Enter" as a single unit and, if any
+    step of it fails because the popup was torn down mid-action, reopen the
+    popup and replay the whole unit, for a small fixed number of attempts. A
+    failure on the last attempt is a real defect, not a timing hiccup, and is
+    left to propagate unchanged.
+    """
     if parse_qs(urlparse(page.url).query).get("search") == [key]:
         return
-
-    open_column_filter(page, "key")
-    filter_input = page.locator('.ag-filter input[type="text"]').first
-    filter_input.fill(key)
 
     def is_filtered_grid_response(response):
         if not response.url.endswith("/api/i18n/translations-grid"):
@@ -42,14 +55,25 @@ def _filter_by_key(page, key):
         except (AttributeError, ValueError):
             return False
 
-    # AG Grid documents Enter as equivalent to its Apply button for text
-    # filters. Pressing it on the stable input avoids racing the Apply button:
-    # applying the filter updates the URL through router.replace(), which can
-    # recreate the popup and detach that button while Playwright is clicking.
-    with page.expect_response(is_filtered_grid_response, timeout=15_000) as response_info:
-        filter_input.press("Enter")
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        open_column_filter(page, "key")
+        filter_input = page.locator('.ag-filter input[type="text"]').first
+        try:
+            filter_input.fill(key)
+            with page.expect_response(is_filtered_grid_response, timeout=15_000) as response_info:
+                filter_input.press("Enter")
+            response = response_info.value
+            break
+        except PlaywrightTimeoutError:
+            if attempt == max_attempts:
+                raise
+            # The popup was recreated mid-action and detached the element
+            # Playwright was acting on. Reopen it and replay the sequence
+            # from the top rather than chasing the race onto yet another
+            # element inside the same popup.
+            continue
 
-    response = response_info.value
     assert response.ok, f"translations grid filter returned {response.status}"
     response.finished()
     page.wait_for_url(f"**search={key}**", timeout=15_000)
