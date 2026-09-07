@@ -164,6 +164,7 @@ export function TranslationsTableClient(props: Props) {
         <ConfirmModal
           title={t('translation.confirm.delete_title')}
           message={t('translation.confirm.delete_message', { key: deleting.key })}
+          destructive
           confirmLabel={t('common.actions.delete')}
           onCancel={() => setDeleting(null)}
           onConfirm={async () => {

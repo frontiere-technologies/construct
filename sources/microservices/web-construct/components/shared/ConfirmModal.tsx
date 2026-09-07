@@ -9,11 +9,21 @@ interface ConfirmModalProps {
   title: string
   message: string
   confirmLabel?: string
+  /**
+   * L'azione confermata distrugge qualcosa e non si torna indietro. Colora la
+   * conferma con la variante `destructive` invece che con il primario.
+   *
+   * Sta qui e non sul chiamante perche' i punti d'uso sono sei e solo quattro
+   * sono cancellazioni: gli altri due confermano un cambio di stato reversibile
+   * (attiva/disattiva un utente) e la promozione di una lingua a predefinita,
+   * che non devono diventare rossi.
+   */
+  destructive?: boolean
   onConfirm: () => void | Promise<void>
   onCancel: () => void
 }
 
-export function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }: ConfirmModalProps) {
+export function ConfirmModal({ title, message, confirmLabel, destructive = false, onConfirm, onCancel }: ConfirmModalProps) {
   const { t } = useI18n()
   const [busy, setBusy] = useState(false)
   const titleId = useId()
@@ -37,7 +47,7 @@ export function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel
         <p id={descriptionId} className="text-sm text-muted-foreground mb-6">{message}</p>
         <div className="flex justify-end gap-2">
           <Button variant="outline" data-dialog-initial-focus data-dialog-close onClick={onCancel}>{t('common.actions.cancel')}</Button>
-          <Button onClick={confirm} disabled={busy}>{confirmLabel ?? t('common.actions.confirm')}</Button>
+          <Button variant={destructive ? 'destructive' : 'default'} onClick={confirm} disabled={busy}>{confirmLabel ?? t('common.actions.confirm')}</Button>
         </div>
     </AccessibleDialog>
   )

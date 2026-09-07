@@ -163,6 +163,7 @@ export default function LanguagesTableClient(props: Props) {
         <ConfirmModal
           title={t('language.confirm.delete_title')}
           message={t('language.confirm.delete_message', { name: deleting.name })}
+          destructive
           confirmLabel={t('common.actions.delete')}
           onCancel={() => setDeleting(null)}
           onConfirm={async () => { await run(() => deleteLanguage(deleting.id)); setDeleting(null) }}
