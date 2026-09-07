@@ -227,6 +227,100 @@ def test_drag_moves_item_after_last(logged_in_page, base_url):
         _delete_functionality(page, base_url, b)
 
 
+def test_keyboard_drag_moves_item_after_last(logged_in_page, base_url):
+    """A11Y-3: la stessa cosa di sopra, ma da tastiera.
+
+    La maniglia era gia' focalizzabile e aveva gia' un nome accessibile perfetto:
+    da tastiera semplicemente non faceva niente, perche' l'albero registrava solo
+    il PointerSensor. Questo test fallisce se torna a essere cosi'.
+
+    Il tasto Giu' basta una volta sola: i punti d'inserimento escludono la riga
+    trascinata, quindi il primo varco sotto di essa e' gia' "dopo B".
+    """
+    page = logged_in_page
+    ts = int(time.time())
+    a, b = f"E2E Key A {ts}", f"E2E Key B {ts}"
+    _create_functionality(page, base_url, a, f"/e2e-key-a-{ts}")
+    _create_functionality(page, base_url, b, f"/e2e-key-b-{ts}")
+    try:
+        nav(page, f"{base_url}/functionalities")
+        page.wait_for_load_state("networkidle")
+
+        handle = page.locator("div").filter(has_text=a).filter(
+            has=page.locator('[data-testid="drag-handle"]')
+        ).last.locator('[data-testid="drag-handle"]')
+        handle.scroll_into_view_if_needed()
+        handle.focus()
+
+        page.keyboard.press("Enter")   # solleva
+        page.keyboard.press("ArrowDown")
+        # Stesso segnale di completamento del trascinamento col mouse: la linea di
+        # rilascio resa, non un'attesa a tempo.
+        page.locator('[data-testid^="drop-line"]').first.wait_for(state="visible", timeout=3_000)
+
+        # L'annuncio deve dire dove andra' a finire: senza, chi usa un lettore di
+        # schermo non ha modo di saperlo, visto che la linea non la vede.
+        expect(page.locator('[role="status"]')).to_contain_text("verrà inserito dopo", timeout=3_000)
+
+        page.keyboard.press("Enter")   # rilascia
+        page.wait_for_function(
+            """([a, b]) => {
+                const labels = [...document.querySelectorAll('.rounded-lg.border span.flex-1')].map(e => e.textContent.trim());
+                return labels.includes(a) && labels.includes(b) && labels.indexOf(a) > labels.indexOf(b);
+            }""",
+            arg=[a, b],
+            timeout=8_000,
+        )
+    finally:
+        _delete_functionality(page, base_url, a)
+        _delete_functionality(page, base_url, b)
+
+
+def test_keyboard_drag_nests_into_a_category(logged_in_page, base_url):
+    """A11Y-3: Destra annida, che e' la meta' del modello che il mouse esprime
+    con la banda centrale della riga e che da tastiera non ha una traduzione
+    ovvia. Su e Giu' scelgono fra le righe, Destra entra nella categoria.
+    """
+    page = logged_in_page
+    ts = int(time.time())
+    cat, item = f"E2E Nest Cat {ts}", f"E2E Nest Item {ts}"
+    _create_category(page, base_url, cat)
+    _create_functionality(page, base_url, item, f"/e2e-nest-{ts}")
+    try:
+        nav(page, f"{base_url}/functionalities")
+        page.wait_for_load_state("networkidle")
+
+        handle = page.locator("div").filter(has_text=item).filter(
+            has=page.locator('[data-testid="drag-handle"]')
+        ).last.locator('[data-testid="drag-handle"]')
+        handle.scroll_into_view_if_needed()
+        handle.focus()
+
+        page.keyboard.press("Enter")     # solleva
+        page.keyboard.press("ArrowUp")   # sale al varco sopra, che e' "dopo la categoria"
+        page.keyboard.press("ArrowRight")  # e vi entra dentro
+        # "dentro" non disegna una linea ma illumina la riga: si aspetta l'annuncio,
+        # che e' anche l'unica cosa su cui puo' contare chi non vede l'evidenziazione.
+        expect(page.locator('[role="status"]')).to_contain_text("annidato dentro", timeout=3_000)
+
+        page.keyboard.press("Enter")     # rilascia
+        # La categoria ha ora un interruttore di espansione, che non aveva da vuota.
+        page.wait_for_function(
+            """(cat) => {
+                const rows = [...document.querySelectorAll('.rounded-lg.border span.flex-1')];
+                const row = rows.find(e => e.textContent.trim() === cat);
+                if (!row) return false;
+                const line = row.closest('div.flex');
+                return !!line && !!line.querySelector('[data-testid="tree-toggle"]');
+            }""",
+            arg=cat,
+            timeout=8_000,
+        )
+    finally:
+        _delete_functionality(page, base_url, item)
+        _delete_functionality(page, base_url, cat)
+
+
 def test_functionality_create_annulla_navigates_back(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/functionalities/create")
