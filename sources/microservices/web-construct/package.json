@@ -41,6 +41,7 @@
     "nodemailer": "9.0.3",
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
+    "radix-ui": "^1.6.7",
     "react": "^19.0.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.0.0",

@@ -175,8 +175,8 @@ def _delete_role(page, base_url, name):
     expect(row).to_be_visible()
     row_menu = row.locator('[data-testid^="row-menu"]')
     row_menu.click()
-    page.get_by_role("button", name="Elimina").click()
-    page.get_by_role("button", name="Elimina").click()
+    page.get_by_role("menuitem", name="Elimina").click()  # voce di menu
+    page.get_by_role("button", name="Elimina").click()  # conferma nel dialogo
     _search_role(page, base_url, name)
     expect(grid_rows(page).filter(has_text=name)).to_have_count(0)
 

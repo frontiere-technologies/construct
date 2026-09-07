@@ -87,8 +87,8 @@ def _open_editor(page):
     populated. The editor's own test id is the real signal.
     """
     page.locator('[data-testid^="row-menu"]').first.click()
-    page.get_by_role("button", name="Modifica").or_(
-        page.get_by_role("button", name="Edit")).click()
+    page.get_by_role("menuitem", name="Modifica").or_(
+        page.get_by_role("menuitem", name="Edit")).click()
     page.wait_for_url(re.compile(r"/admin/translations/\d+/edit"), timeout=15_000)
     editor = page.locator('[data-testid="translation-editor"]')
     expect(editor).to_be_visible(timeout=15_000)
@@ -144,7 +144,7 @@ def _delete_translation_key(page, base_url, key) -> None:
         if rows.count() == 0:
             return
         rows.first.locator('[data-testid^="row-menu"]').click()
-        page.get_by_role("button", name="Elimina").click()  # row-menu item -> opens ConfirmModal
+        page.get_by_role("menuitem", name="Elimina").click()  # row-menu item -> opens ConfirmModal
         page.get_by_role("button", name="Elimina").click()  # ConfirmModal's confirm button
         page.wait_for_load_state("networkidle")
     except Exception as exc:  # pragma: no cover - best-effort cleanup
@@ -158,7 +158,7 @@ def _delete_language(page, base_url, native_name) -> None:
         if row.count() == 0:
             return
         row.locator('[data-testid^="row-menu"]').click()
-        page.get_by_role("button", name="Elimina").click()  # row-menu item -> opens ConfirmModal
+        page.get_by_role("menuitem", name="Elimina").click()  # row-menu item -> opens ConfirmModal
         page.get_by_role("button", name="Elimina").click()  # ConfirmModal's confirm button
         page.wait_for_load_state("networkidle")
     except Exception as exc:  # pragma: no cover - best-effort cleanup
@@ -329,7 +329,7 @@ def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, ba
         nav(page, f"{base_url}/admin/languages")
         row = _rows(page).filter(has_text="Nederlands")
         row.locator('[data-testid^="row-menu"]').click()
-        page.get_by_role("button", name="Disattiva").click()
+        page.get_by_role("menuitem", name="Disattiva").click()
         # Same `wait_for_load_state("networkidle")` no-op as above: it would
         # return immediately without waiting for `setLanguageActive()`'s
         # request to land. Wait for the grid's own "Attiva" cell to actually
