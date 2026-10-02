@@ -1,259 +1,140 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useUI } from '@/context/UIContext'
-import { defaultThemeConfig } from '@/types/menu'
-import { saveThemeConfig } from '@/lib/theme-actions'
-import type { ContrastViolation } from '@/lib/theme-vars'
-import type { ThemeConfig } from '@/types/menu'
+import React, { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Eye, Palette } from 'lucide-react'
+import { saveAppPrimaryColor } from '@/lib/theme-actions'
+import { DEFAULT_PRIMARY, PRIMARY_PRESETS, derivePrimary, type DerivedPrimary } from '@/lib/theme-vars'
+import { DARK_CLASS } from '@/lib/appearance'
 import { PageContainer } from '@/components/shared/PageContainer'
+import { SettingsRow, SettingsSection } from '@/components/settings/SettingsSection'
+import { ColorSwatches } from '@/components/theme/ColorSwatches'
+import { PalettePreview } from '@/components/theme/PalettePreview'
 import { useI18n } from '@/context/I18nContext'
-import type { TranslateFn } from '@/lib/i18n/types'
 import { Button } from '@/components/ui/button'
 
-interface ColorPickerProps {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  disabled?: boolean
-}
-
-const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, disabled }) => (
-  <div className="flex items-center justify-between">
-    <label className="text-sm text-foreground-secondary">{label}</label>
-    <div className="flex items-center space-x-2">
-      <span className="text-xs text-muted-foreground font-mono uppercase w-16 text-right">{value}</span>
-      <input
-        type="color"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        disabled={disabled}
-        className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed"
-      />
-    </div>
-  </div>
-)
-
-interface TokenRowProps {
-  label: string
-  lightValue: string
-  darkValue: string
-  onChangeLight: (v: string) => void
-  onChangeDark: (v: string) => void
-  disabled?: boolean
-}
-
-const TokenRow: React.FC<TokenRowProps & { lightLabel: string; darkLabel: string }> = (
-  { label, lightValue, darkValue, onChangeLight, onChangeDark, disabled, lightLabel, darkLabel },
-) => (
-  <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4">
-    <span className="text-sm text-foreground-secondary">{label}</span>
-    <div className="flex items-center gap-1">
-      <span className="text-[10px] uppercase text-foreground-faint w-8">{lightLabel}</span>
-      <input type="color" value={lightValue} onChange={e => onChangeLight(e.target.value)} disabled={disabled} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed" />
-    </div>
-    <div className="flex items-center gap-1">
-      <span className="text-[10px] uppercase text-foreground-faint w-8">{darkLabel}</span>
-      <input type="color" value={darkValue} onChange={e => onChangeDark(e.target.value)} disabled={disabled} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed" />
-    </div>
-  </div>
-)
-
-export interface TokenGroup {
-  key: string
-  title: string
-  rows: { key: string; label: string; lightKey: keyof ThemeConfig; darkKey: keyof ThemeConfig }[]
+/** Chiavi intere, non costruite: `npm run test:i18n-keys` le cerca come letterali. */
+const PRESET_LABEL_KEYS: Record<(typeof PRIMARY_PRESETS)[number]['id'], string> = {
+  indigo: 'theme.preset.indigo',
+  green: 'theme.preset.green',
+  pink: 'theme.preset.pink',
+  orange: 'theme.preset.orange',
+  sky: 'theme.preset.sky',
 }
 
 /**
- * Built from `t()` on every render (not a module-level constant): the group and
- * row labels are translated strings, so they must follow the active UI language
- * like everything else in this task, not be frozen at module-load time.
+ * L'anteprima dal vivo (specifica §4): il colore non ancora salvato, come stile
+ * inline su <html>, nella variante del modo corrente. Lo stile inline vince sul
+ * `<style>` del layout; `null` lo toglie e lascia ricomparire il colore salvato.
  */
-function buildTokenGroups(t: TranslateFn): TokenGroup[] {
-  return [
-    {
-      key: 'backgrounds',
-      title: t('theme.section.backgrounds'),
-      rows: [
-        { key: 'page', label: t('theme.field.page_background'), lightKey: 'pageLight', darkKey: 'pageDark' },
-        { key: 'surface', label: t('theme.field.surface'), lightKey: 'surfaceLight', darkKey: 'surfaceDark' },
-        { key: 'surfaceOverlay', label: t('theme.field.surface_overlay'), lightKey: 'surfaceOverlayLight', darkKey: 'surfaceOverlayDark' },
-        { key: 'surfaceHover', label: t('theme.field.surface_hover'), lightKey: 'surfaceHoverLight', darkKey: 'surfaceHoverDark' },
-      ],
-    },
-    {
-      key: 'border',
-      title: t('theme.section.border'),
-      rows: [
-        { key: 'border', label: t('theme.field.border'), lightKey: 'borderLight', darkKey: 'borderDark' },
-        { key: 'borderSubtle', label: t('theme.field.border_subtle'), lightKey: 'borderSubtleLight', darkKey: 'borderSubtleDark' },
-      ],
-    },
-    {
-      key: 'text',
-      title: t('theme.section.text'),
-      rows: [
-        { key: 'foreground', label: t('theme.field.foreground'), lightKey: 'foregroundLight', darkKey: 'foregroundDark' },
-        { key: 'foregroundSecondary', label: t('theme.field.foreground_secondary'), lightKey: 'foregroundSecondaryLight', darkKey: 'foregroundSecondaryDark' },
-        { key: 'foregroundMuted', label: t('theme.field.foreground_muted'), lightKey: 'foregroundMutedLight', darkKey: 'foregroundMutedDark' },
-        { key: 'foregroundFaint', label: t('theme.field.foreground_faint'), lightKey: 'foregroundFaintLight', darkKey: 'foregroundFaintDark' },
-      ],
-    },
-    {
-      key: 'sidebar',
-      title: t('theme.section.sidebar'),
-      rows: [
-        { key: 'sidebarBg', label: t('theme.field.sidebar_bg'), lightKey: 'sidebarBgLight', darkKey: 'sidebarBgDark' },
-        { key: 'sidebarText', label: t('theme.field.sidebar_text'), lightKey: 'sidebarTextLight', darkKey: 'sidebarTextDark' },
-        { key: 'activeItemBg', label: t('theme.field.active_item_bg'), lightKey: 'activeItemBgLight', darkKey: 'activeItemBgDark' },
-        { key: 'activeItemText', label: t('theme.field.active_item_text'), lightKey: 'activeItemTextLight', darkKey: 'activeItemTextDark' },
-      ],
-    },
-  ]
-}
-
-/**
- * Il nome che l'amministratore vede accanto al colore, non la chiave di
- * ThemeConfig: chi legge un rifiuto deve sapere quale riga aprire. Pura e
- * esportata per essere provata direttamente, senza montare il pannello.
- */
-export function tokenLabel(
-  groups: TokenGroup[],
-  key: keyof ThemeConfig,
-  lightWord: string,
-  darkWord: string,
-): string {
-  for (const group of groups) {
-    for (const row of group.rows) {
-      if (row.lightKey === key) return `${row.label} (${lightWord})`
-      if (row.darkKey === key) return `${row.label} (${darkWord})`
-    }
+export function applyPrimaryPreview(root: HTMLElement, derived: DerivedPrimary | null): void {
+  if (!derived) {
+    root.style.removeProperty('--primary')
+    root.style.removeProperty('--primary-foreground')
+    return
   }
-  return key
+  const pair = root.classList.contains(DARK_CLASS) ? derived.dark : derived.light
+  root.style.setProperty('--primary', pair.primary)
+  root.style.setProperty('--primary-foreground', pair.foreground)
 }
 
-interface ContrastRejectionProps {
-  message: string
-  items: { key: string; label: string; ratio: number }[]
-}
+type SaveStatus = 'idle' | 'success' | 'error' | 'unreadable'
 
-/**
- * Il rifiuto per contrasto insufficiente. Un elenco, non una frase sola: se tre
- * colori sono sotto soglia, l'amministratore deve vederli tutti e tre con il
- * proprio rapporto, altrimenti li scopre uno per volta a tentativi.
- */
-export const ContrastRejection: React.FC<ContrastRejectionProps> = ({ message, items }) => (
-  <div className="text-sm text-destructive-muted-foreground" role="alert">
-    <p>{message}</p>
-    <ul className="mt-1 space-y-0.5">
-      {items.map(item => (
-        <li key={item.key} className="font-mono text-xs">
-          {item.label} — {item.ratio.toFixed(2)}:1
-        </li>
-      ))}
-    </ul>
-  </div>
-)
-
-export const AdminTheme: React.FC = () => {
+export const AdminTheme: React.FC<{ savedColor: string }> = ({ savedColor }) => {
   const { t } = useI18n()
-  const { settings, setSettings } = useUI()
+  const router = useRouter()
+  const [color, setColor] = useState(savedColor)
   const [saving, setSaving] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [violations, setViolations] = useState<ContrastViolation[]>([])
-  const tokenGroups = buildTokenGroups(t)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const derived = derivePrimary(color) ?? derivePrimary(DEFAULT_PRIMARY)!
 
+  useEffect(() => {
+    applyPrimaryPreview(document.documentElement, derivePrimary(color))
+  }, [color])
 
-
-  const updateTheme = (key: keyof ThemeConfig, value: string) => {
-    setSettings(prev => ({ ...prev, themeConfig: { ...prev.themeConfig, [key]: value } }))
-  }
-
-  const handleReset = () => {
-    setSettings(prev => ({ ...prev, themeConfig: defaultThemeConfig }))
-  }
+  // Uscendo dalla pagina l'anteprima se ne va, salvata o no: il colore giusto da
+  // li' in poi e' quello del <style> del layout.
+  useEffect(() => () => applyPrimaryPreview(document.documentElement, null), [])
 
   const handleSave = async () => {
     setSaving(true)
     setSaveStatus('idle')
-    const { error, violations: rejected } = await saveThemeConfig(settings.themeConfig)
+    const { error } = await saveAppPrimaryColor(color)
     setSaving(false)
-    setViolations(rejected ?? [])
-    setSaveStatus(error ? 'error' : 'success')
-    // Un rifiuto per contrasto va letto e agito: resta finche' non si salva di
-    // nuovo, mentre gli altri esiti sfumano come prima.
-    if (!rejected?.length) setTimeout(() => setSaveStatus('idle'), 3000)
+    if (error === null) {
+      setSaveStatus('success')
+      // Riscrive il <style> del layout con il colore appena salvato.
+      router.refresh()
+    } else {
+      setSaveStatus(error === 'unreadable' ? 'unreadable' : 'error')
+    }
+    // Un rifiuto per leggibilita' resta finche' non si sceglie altro; gli altri esiti sfumano.
+    if (error !== 'unreadable') setTimeout(() => setSaveStatus('idle'), 3000)
   }
+
+  const options = PRIMARY_PRESETS.map(preset => ({
+    id: preset.id,
+    color: preset.color,
+    label: t(PRESET_LABEL_KEYS[preset.id]),
+  }))
 
   return (
     <PageContainer title={t('theme.page.title')} subtitle={t('theme.page.subtitle')}>
-        <div className="space-y-4">
-          <h3 className="font-medium text-foreground border-b pb-2 border-border">{t('theme.section.global')}</h3>
-          <ColorPicker
-            label={t('theme.field.primary_color')}
-            value={settings.themeConfig.primaryColor}
-            onChange={v => updateTheme('primaryColor', v)}
+      <SettingsSection icon={Palette} title={t('theme.section.primary_color')}>
+        <SettingsRow hint={t('theme.field.primary_color_hint')}>
+          <ColorSwatches
+            options={options}
+            value={color}
+            groupLabel={t('theme.field.swatches')}
+            customLabel={t('theme.preset.custom')}
             disabled={saving}
+            onChange={next => {
+              setColor(next)
+              if (saveStatus === 'unreadable') setSaveStatus('idle')
+            }}
           />
-        </div>
+        </SettingsRow>
+      </SettingsSection>
 
-        {tokenGroups.map(group => (
-          <details key={group.key} open>
-            <summary className="cursor-pointer font-medium text-foreground border-b pb-2 border-border">
-              {group.title}
-            </summary>
-            <div className="space-y-3 mt-4">
-              {group.rows.map(row => (
-                <TokenRow
-                  key={row.key}
-                  label={row.label}
-                  lightLabel={t('theme.token.light')}
-                  darkLabel={t('theme.token.dark')}
-                  lightValue={settings.themeConfig[row.lightKey]}
-                  darkValue={settings.themeConfig[row.darkKey]}
-                  onChangeLight={v => updateTheme(row.lightKey, v)}
-                  onChangeDark={v => updateTheme(row.darkKey, v)}
-                  disabled={saving}
-                />
-              ))}
-            </div>
-          </details>
-        ))}
+      <SettingsSection icon={Eye} title={t('theme.preview.title')}>
+        <PalettePreview
+          derived={derived}
+          labels={{
+            light: t('theme.preview.light'),
+            dark: t('theme.preview.dark'),
+            primary: t('theme.preview.swatch.primary'),
+            hover: t('theme.preview.swatch.hover'),
+            surface: t('theme.preview.swatch.surface'),
+            background: t('theme.preview.swatch.background'),
+            sidebar: t('theme.preview.swatch.sidebar'),
+          }}
+        />
+      </SettingsSection>
 
-        <div className="pt-4 border-t border-border flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {saveStatus === 'idle' && (
-              <span className="text-sm text-foreground-faint">
-                {t('theme.banner.unsaved_hint')}
-              </span>
-            )}
-            {saveStatus === 'success' && (
-              <span className="text-sm text-success-muted-foreground">{t('theme.status.saved')}</span>
-            )}
-            {saveStatus === 'error' && violations.length === 0 && (
-              <span className="text-sm text-destructive-muted-foreground">{t('theme.status.save_failed')}</span>
-            )}
-            {saveStatus === 'error' && violations.length > 0 && (
-              <ContrastRejection
-                message={t('theme.status.contrast_rejected')}
-                items={violations.map(violation => ({
-                  key: violation.key,
-                  label: tokenLabel(tokenGroups, violation.key, t('theme.token.light'), t('theme.token.dark')),
-                  ratio: violation.ratio,
-                }))}
-              />
-            )}
-          </div>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={handleReset} disabled={saving}>
-              {t('theme.actions.reset_defaults')}
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? t('theme.status.saving') : t('common.actions.save')}
-            </Button>
-          </div>
+      <div className="pt-4 border-t border-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          {saveStatus === 'idle' && (
+            <span className="text-sm text-foreground-faint">{t('theme.banner.unsaved_hint')}</span>
+          )}
+          {saveStatus === 'success' && (
+            <span className="text-sm text-success-muted-foreground">{t('theme.status.saved')}</span>
+          )}
+          {saveStatus === 'error' && (
+            <span className="text-sm text-destructive-muted-foreground">{t('theme.status.save_failed')}</span>
+          )}
+          {saveStatus === 'unreadable' && (
+            <p className="text-sm text-destructive-muted-foreground" role="alert">{t('theme.status.unreadable')}</p>
+          )}
         </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => setColor(DEFAULT_PRIMARY)} disabled={saving}>
+            {t('theme.actions.reset_defaults')}
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? t('theme.status.saving') : t('common.actions.save')}
+          </Button>
+        </div>
+      </div>
     </PageContainer>
   )
 }
