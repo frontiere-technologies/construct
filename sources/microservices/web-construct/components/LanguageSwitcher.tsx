@@ -1,25 +1,19 @@
 'use client'
 
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Check, Globe } from 'lucide-react'
+import { Check, ChevronDown, Globe } from 'lucide-react'
 import clsx from 'clsx'
 import { useI18n } from '@/context/I18nContext'
 
-interface LanguageSwitcherProps {
-  /** Icon-only rendering for the collapsed sidebar column. */
-  collapsed: boolean
-  /** The user panel's shared row styling, passed in so the switcher matches its neighbours. */
-  itemClassName: string
-}
-
 /**
- * Only active languages are offered (§5.2). Rendered as a listbox rather than a
- * native <select> so it matches the sidebar's visual language while staying
- * keyboard- and screen-reader-navigable: the trigger is the only tab stop while
- * closed, the list becomes the only tab stop while open (arrow keys move
+ * A field of the Settings page, not a row of the sidebar. Only active languages
+ * are offered (§5.2). Rendered as a listbox rather than a native <select> so it
+ * matches the app's visual language while staying keyboard- and
+ * screen-reader-navigable: the trigger is the only tab stop while closed, the
+ * list becomes the only tab stop while open (arrow keys move
  * aria-activedescendant instead of Tab), and focus returns to the trigger on close.
  */
-export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageSwitcherProps) {
+export default function LanguageSwitcher() {
   const { t, code, languages, setLanguage, isSwitching } = useI18n()
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -141,22 +135,14 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={t('profile.language')}
-        title={collapsed ? `${t('profile.language')}: ${current?.nativeName ?? code}` : undefined}
         disabled={isSwitching}
         onClick={toggle}
         onKeyDown={handleTriggerKeyDown}
-        className={clsx(itemClassName, 'disabled:opacity-50')}
+        className="inline-flex w-56 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50"
       >
-        <Globe size={16} className="flex-shrink-0" />
-        {!collapsed && (
-          <>
-            <span className="flex-1 min-w-0 truncate text-left">{t('profile.language')}</span>
-            {/* max-w-[40%]: the label is flex-1, so its flex-basis is 0 and it takes
-                no share of the shrinking (shrink x basis = 0). Without a cap here a
-                long nativeName claims the whole row and the label disappears. */}
-            <span className="max-w-[40%] min-w-0 truncate text-xs opacity-60">{current?.nativeName ?? code}</span>
-          </>
-        )}
+        <Globe size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="flex-1 min-w-0 truncate text-left">{current?.nativeName ?? code}</span>
+        <ChevronDown size={14} className="shrink-0 text-muted-foreground" aria-hidden="true" />
       </button>
 
       {open && (
@@ -170,7 +156,7 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
           }
           onKeyDown={handleListKeyDown}
           data-testid="language-switcher-options"
-          className="absolute bottom-full left-0 z-50 mb-1 w-44 rounded-lg border border-sidebar-foreground/10 bg-sidebar p-1 shadow-lg outline-none"
+          className="absolute top-full left-0 z-50 mt-1 w-56 rounded-lg border border-border bg-popover p-1 shadow-lg outline-none"
         >
           {languages.map((language, index) => {
             const selected = language.code === code
@@ -187,8 +173,8 @@ export default function LanguageSwitcher({ collapsed, itemClassName }: LanguageS
                 onMouseEnter={() => setActiveIndex(index)}
                 className={clsx(
                   'flex w-full cursor-pointer items-center gap-2 rounded px-3 py-2 text-left text-sm',
-                  active && 'bg-sidebar-accent',
-                  selected ? 'font-medium text-sidebar-accent-foreground' : 'text-sidebar-foreground',
+                  active && 'bg-accent',
+                  selected ? 'font-medium text-foreground' : 'text-foreground-secondary',
                 )}
               >
                 <span className="flex-1 min-w-0 truncate">{language.nativeName}</span>
