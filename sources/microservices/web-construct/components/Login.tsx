@@ -87,7 +87,7 @@ function LoginForm() {
                not themed.
             2. The root layout themes /login too, so `.dark` reaches it for
                any browser whose appearance cookie still says `dark` from the
-               last user who signed in — that is not a preference this
+               last user who changed a preference on this browser — that is not a preference this
                unauthenticated visitor expressed here, so there is nothing to
                honour by repainting the page from it.
 

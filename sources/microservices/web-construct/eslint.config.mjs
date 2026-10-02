@@ -9,7 +9,7 @@ const config = [
   {
     rules: {
       // Intentional SSR hydration pattern: read localStorage only after mount
-      // (documented in AGENTS.md — UIContext and Sidebar use this deliberately)
+      // (documented in AGENTS.md — Sidebar uses this deliberately)
       'react-hooks/set-state-in-effect': 'off',
 
       // Il logging passa da lib/logger.ts (pino). Nessuna eccezione qui: la

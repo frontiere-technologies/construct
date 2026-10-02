@@ -160,7 +160,7 @@ consumatore non prova che è condiviso — spostarlo prima è una previsione, no
 - `UPPER_SNAKE_CASE` **solo** per letterali immutabili di modulo e configurazione fissa
   (`FETCH_TIMEOUT_MS`, `GRID_BLOCK_SIZE`, `PLACEHOLDER_RE`). Non tutti i `const` vanno in
   maiuscolo: varianti, factory, context e componenti mantengono il casing semantico
-  (`buttonVariants`, `appGridTheme`, `UIContext`).
+  (`buttonVariants`, `appGridTheme`, `I18nContext`).
 - Callback prop `onX` (`onChange`, `onOpenChange`). Handler locali `handleX` (`handleSubmit`).
   `guards/handler-naming.test.ts` rifiuta una *dichiarazione* chiamata `onX` in `app/`,
   `components/` e `context/`; il nome della prop non è una dichiarazione e resta `onX`. Fuori
