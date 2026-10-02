@@ -1,5 +1,9 @@
 import type { Metadata } from 'next'
 import { getI18nBundle } from '@/lib/i18n/server'
+import { getAppearance } from '@/lib/appearance-server'
+import { getAppPrimaryColor } from '@/lib/theme-server'
+import { primaryCss } from '@/lib/theme-vars'
+import { THEME_MODE_SCRIPT } from '@/lib/appearance'
 import { Providers } from './Providers'
 import './globals.css'
 
@@ -10,11 +14,25 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Resolved in the root layout so /login, /register and the rest of the public
-  // surface are translated too, not just the protected area.
-  const i18n = await getI18nBundle()
+  // surface are translated and themed too, not just the protected area.
+  const [i18n, appearance, primaryColor] = await Promise.all([
+    getI18nBundle(), getAppearance(), getAppPrimaryColor(),
+  ])
 
   return (
-    <html lang={i18n.language.code}>
+    // suppressHydrationWarning: la classe `dark` la mette THEME_MODE_SCRIPT prima
+    // dell'idratazione, quindi su <html> l'HTML del server e il DOM differiscono
+    // per costruzione. React non gestisce quella classe (specifica §4).
+    <html
+      lang={i18n.language.code}
+      data-theme-mode={appearance.mode}
+      style={{ fontSize: `${appearance.scale}%` }}
+      suppressHydrationWarning
+    >
+      <head>
+        <style id="app-primary" dangerouslySetInnerHTML={{ __html: primaryCss(primaryColor) }} />
+        <script dangerouslySetInnerHTML={{ __html: THEME_MODE_SCRIPT }} />
+      </head>
       <body>
         <Providers i18n={i18n}>
           {children}

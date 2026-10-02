@@ -162,6 +162,8 @@ const NOT_A_KEY = [
   // i18n audit event names. Same shape as a key, emitted into the log stream.
   { file: 'lib/i18n/language-actions.ts', pattern: /^language\./, why: 'audit event names' },
   { file: 'lib/i18n/translation-actions.ts', pattern: /^translation_(key|value)\./, why: 'audit event names' },
+  // A CSS length that happens to be lowercase digits around a dot.
+  { file: 'components/grid/data-grid-config.ts', pattern: /^0\.875rem$/, why: 'ag-grid font size in rem' },
 ]
 
 function isExcluded(key, files) {

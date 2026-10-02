@@ -31,4 +31,8 @@ describe('appGridThemeParams', () => {
     expect(appGridThemeParams.headerTextColor).toBe('var(--foreground)')
     expect(appGridThemeParams.pinnedColumnBorder).toBe(false)
   })
+
+  it('sizes the grid text in rem, so it follows the personal text scale', () => {
+    expect(appGridThemeParams.fontSize).toBe('0.875rem')
+  })
 })

@@ -20,6 +20,9 @@ export function columnPinningState<T>(columnDefs: ColDef<T>[]): { leftColIds: st
 }
 
 export const appGridThemeParams = {
+  // In rem, non in px: segue la dimensione del testo scelta nelle Impostazioni,
+  // che agisce sul font-size di <html>.
+  fontSize: '0.875rem',
   backgroundColor: 'var(--card)',
   foregroundColor: 'var(--foreground)',
   borderColor: 'var(--border)',

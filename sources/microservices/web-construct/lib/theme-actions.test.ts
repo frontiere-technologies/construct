@@ -5,7 +5,6 @@ const mocks = vi.hoisted(() => ({
   set: vi.fn(),
 }))
 
-vi.mock('@/lib/auth', () => ({ auth: vi.fn() }))
 vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdmin: mocks.requireAdmin }))
 vi.mock('@/lib/db', () => ({
   db: { update: () => ({ set: (values: unknown) => mocks.set(values) }) },

@@ -43,7 +43,6 @@ export const users = pgTable('users', {
   lastName: text('last_name'),
   username: text('username'),
   phone: text('phone'),
-  themeConfig: jsonb('theme_config'),
   themeMode: varchar('theme_mode', { length: 6 }).notNull().default('system'),
   textScale: smallint('text_scale').notNull().default(100),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),

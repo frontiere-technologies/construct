@@ -34,7 +34,7 @@ Altre dipendenze rilevanti: `@dnd-kit/*` (drag & drop), `bcryptjs` (hashing), `i
 
 ### Livello UI: shadcn/ui
 
-Il livello UI sono le primitive shadcn/ui (`components/ui/`, `class-variance-authority`, `@radix-ui/react-slot`), e il vocabolario di token di shadcn è l'unico vocabolario di stile: i `--theme-*` non esistono, né in `globals.css` né in una `className`. Il confine è `lib/theme-vars.ts`: da lì in giù valgono i nomi di dominio di `ThemeConfig` (`primaryColor`, `surfaceHoverLight`, …), che sono anche quelli sul database e nel pannello Admin → Tema; da lì in su solo nomi shadcn (`--primary`, `--card`, `--sidebar`, …). Le griglie sono ag-grid: shadcn non ha una data grid.
+Il livello UI sono le primitive shadcn/ui (`components/ui/`, `class-variance-authority`, `@radix-ui/react-slot`), e il vocabolario di token di shadcn è l'unico vocabolario di stile: i `--theme-*` non esistono, né in `globals.css` né in una `className`. Il confine è `lib/theme-vars.ts`: da lì in giù vivono il colore principale calcolato e la tavolozza fissa (`LIGHT_PALETTE` e `DARK_PALETTE`, specchiate in `globals.css`); da lì in su solo nomi shadcn (`--primary`, `--card`, `--sidebar`, …). Le griglie sono ag-grid: shadcn non ha una data grid.
 
 **Ogni componente importato con `npx shadcn add` va riletto prima di essere accettato**, non incollato: è codice copiato, senza percorso di upgrade da vendor. Lo stock potrebbe contraddire scelte già prese qui e coperte da test: prima di accettarlo, confrontalo con i test del progetto e con i token del tema, e adatta quello che serve.
 
