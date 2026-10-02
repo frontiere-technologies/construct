@@ -312,17 +312,12 @@ def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, ba
 
         page.reload()
         page.wait_for_load_state("networkidle")
-        page.locator('[data-testid="sidebar-account-button"]').click()
+        nav(page, f"{base_url}/settings")
         page.locator('[data-testid="language-switcher"]').click()
         expect(page.locator(f'[data-testid="language-option-{code}"]')).to_be_visible()
+        # Escape closes the listbox; switch_language() navigates to /settings
+        # on its own, so there is no panel state to restore any more.
         page.keyboard.press("Escape")
-        # Escape only closes the language-switcher listbox itself (its own
-        # `open` state) — the account/user panel opened above stays open.
-        # `sidebar-account-button` toggles that panel, so `switch_language()`
-        # below would otherwise close it instead of opening it, hiding
-        # `language-switcher` and timing out. Close it explicitly first to
-        # restore the closed baseline `switch_language()` assumes.
-        page.locator('[data-testid="sidebar-account-button"]').click()
 
         # A user who had picked it falls back to the default once it is deactivated.
         switch_language(page, code)
@@ -339,7 +334,7 @@ def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, ba
 
         nav(page, f"{base_url}/profile")
         expect(page.get_by_role("button", name="Salva")).to_be_visible()   # back to Italian
-        page.locator('[data-testid="sidebar-account-button"]').click()
+        nav(page, f"{base_url}/settings")
         page.locator('[data-testid="language-switcher"]').click()
         expect(page.locator(f'[data-testid="language-option-{code}"]')).to_have_count(0)
         page.keyboard.press("Escape")
