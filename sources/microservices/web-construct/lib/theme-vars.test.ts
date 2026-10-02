@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { defaultThemeConfig } from '@/types/menu'
-import { resolveThemeVars, primaryForeground, themeContrastViolations } from './theme-vars'
+import {
+  DARK_PALETTE, DEFAULT_PRIMARY, LIGHT_PALETTE, PRIMARY_PRESETS,
+  derivePrimary, primaryCss, primaryForeground, resolveThemeVars, themeContrastViolations,
+  type PrimaryPair,
+} from './theme-vars'
 
 describe('resolveThemeVars', () => {
   it('resolves light values when isDark is false', () => {
@@ -263,5 +267,119 @@ describe('themeContrastViolations', () => {
     // #6366f1 non arriva a 4,5:1 con nessuna etichetta, ma e' un colore di
     // marchio: il progetto deriva la meno peggio invece di rifiutare la scelta.
     expect(themeContrastViolations({ ...defaultThemeConfig, primaryColor: '#6366f1' })).toEqual([])
+  })
+})
+
+/**
+ * Il colore principale calcolato da un colore scelto (specifica §3).
+ *
+ * L'aritmetica del contrasto e' riscritta qui e non importata dal modulo, come
+ * nel blocco «default palette contrast»: un test che misura con la stessa
+ * funzione che verifica non si accorgerebbe di una formula sbagliata.
+ */
+describe('derivePrimary', () => {
+  const luminance = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16)
+    const channel = (v: number) => {
+      const c = v / 255
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255)
+  }
+  const ratio = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+  const surfaces = (p: typeof LIGHT_PALETTE) =>
+    [p.background, p.card, p.popover, p.accent, p.sidebar, p['sidebar-accent']]
+
+  const expectReadable = (pair: PrimaryPair, palette: typeof LIGHT_PALETTE) => {
+    expect(pair.primary).toMatch(/^#[0-9a-f]{6}$/)
+    expect(pair.foreground).toMatch(/^#[0-9a-f]{6}$/)
+    for (const surface of surfaces(palette)) {
+      expect(ratio(pair.primary, surface)).toBeGreaterThanOrEqual(4.5)
+    }
+    expect(ratio(pair.foreground, pair.primary)).toBeGreaterThanOrEqual(4.5)
+  }
+
+  /** HSL -> hex, per generare colori di prova senza passare dal codice sotto test. */
+  const hslToHex = (h: number, s: number, l: number) => {
+    const a = s * Math.min(l, 1 - l)
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12
+      const v = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+      return Math.round(v * 255).toString(16).padStart(2, '0')
+    }
+    return `#${f(0)}${f(8)}${f(4)}`
+  }
+
+  it('keeps the shipped default untouched in light mode', () => {
+    const derived = derivePrimary(DEFAULT_PRIMARY)!
+    expect(derived.light).toEqual({ primary: '#4f46e5', foreground: '#ffffff' })
+  })
+
+  it('lightens the default in dark mode, where #4f46e5 reads 1.8:1 on the card', () => {
+    expect(ratio('#4f46e5', DARK_PALETTE.card)).toBeLessThan(4.5)
+    const derived = derivePrimary(DEFAULT_PRIMARY)!
+    expect(derived.dark.primary).not.toBe('#4f46e5')
+    expectReadable(derived.dark, DARK_PALETTE)
+  })
+
+  it.each(PRIMARY_PRESETS.map(p => [p.id, p.color]))('makes the %s preset readable in both modes', (_id, color) => {
+    const derived = derivePrimary(color)!
+    expectReadable(derived.light, LIGHT_PALETTE)
+    expectReadable(derived.dark, DARK_PALETTE)
+  })
+
+  it('makes any colour readable in both modes', () => {
+    for (let hue = 0; hue < 360; hue += 15) {
+      for (const saturation of [0.3, 0.65, 1]) {
+        for (const lightness of [0.2, 0.4, 0.6, 0.85]) {
+          const seed = hslToHex(hue, saturation, lightness)
+          const derived = derivePrimary(seed)
+          expect(derived, seed).not.toBeNull()
+          expectReadable(derived!.light, LIGHT_PALETTE)
+          expectReadable(derived!.dark, DARK_PALETTE)
+        }
+      }
+    }
+  })
+
+  it('returns a colour that already passes exactly as chosen', () => {
+    expect(derivePrimary('#123456')!.light.primary).toBe('#123456')
+  })
+
+  it('normalises upper case to lower case', () => {
+    expect(derivePrimary('#4F46E5')!.light.primary).toBe('#4f46e5')
+  })
+
+  it.each(['', '#fff', 'red', '#12345g', '4f46e5', '#4f46e5 '])('rejects %j, which is not six hex digits', value => {
+    expect(derivePrimary(value)).toBeNull()
+  })
+})
+
+describe('primaryCss', () => {
+  it('writes both modes with selectors that beat the :root fallback in globals.css', () => {
+    // html:root e html.dark pesano (0,1,1), :root di globals.css (0,1,0): vincono qualunque sia
+    // l'ordine in cui il browser incontra il <style> del layout e il foglio di globals.css.
+    const css = primaryCss(DEFAULT_PRIMARY)
+    expect(css).toContain('html:root{--primary:#4f46e5;--primary-foreground:#ffffff}')
+    expect(css).toMatch(/html\.dark\{--primary:#[0-9a-f]{6};--primary-foreground:#[0-9a-f]{6}\}/)
+    expect(css.indexOf('html:root')).toBeLessThan(css.indexOf('html.dark'))
+  })
+
+  it('falls back to the default for a value that is not a colour', () => {
+    expect(primaryCss('nope')).toBe(primaryCss(DEFAULT_PRIMARY))
+  })
+})
+
+describe('fixed palette', () => {
+  it('ships the same values in TypeScript and in globals.css', () => {
+    // Fino al Task 9 globals.css ha solo il blocco :root; il confronto con .dark entra la'.
+    const css = readFileSync(resolve(__dirname, '../app/globals.css'), 'utf8')
+    for (const [token, value] of Object.entries(LIGHT_PALETTE)) {
+      const declared = css.match(new RegExp(`\\n  --${token}:\\s*(#[0-9a-fA-F]{6})`))?.[1]
+      expect(declared, token).toBe(value)
+    }
   })
 })
