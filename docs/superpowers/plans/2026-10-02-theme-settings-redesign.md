@@ -28,7 +28,7 @@ Fra T7 e T9 l'app è in uno stato di transizione: il colore salvato dalla nuova 
 - [✅] ID=T5, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Componenti shadcn, Fix description=`toggle`, `toggle-group`, `slider` aggiunti, riletti e adattati.
 - [✅] ID=T6, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Mattoni dell'interfaccia, Fix description=`SettingsSection`/`SettingsRow`, `ColorSwatches`, `PalettePreview`.
 - [✅] ID=T7, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Pagina Admin Tema & Stili, Fix description=Riscrittura di `AdminTheme` sul colore unico.
-- [ ] ID=T8, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Pagina Impostazioni e pannello utente, Fix description=`/settings`, `LanguageSwitcher` ristilizzato, link nella sidebar.
+- [✅] ID=T8, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Pagina Impostazioni e pannello utente, Fix description=`/settings`, `LanguageSwitcher` ristilizzato, link nella sidebar.
 - [ ] ID=T9, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Passaggio al rendering server, Fix description=Layout, `globals.css`, eliminazione di `UIContext` e dei 29 colori, ag-grid in `rem`.
 - [ ] ID=T10, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Migrazione distruttiva 0032, Fix description=Drop di `users.theme_config`, cancellazione delle chiavi obsolete.
 - [ ] ID=T11, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Test E2E, Fix description=`switch_language`, `test_i18n.py`, `test_admin_theme.py`, `test_settings.py`.
