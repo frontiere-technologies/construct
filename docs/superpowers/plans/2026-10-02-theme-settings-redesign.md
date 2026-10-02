@@ -24,7 +24,7 @@ Fra T7 e T9 l'app è in uno stato di transizione: il colore salvato dalla nuova 
 - [✅] ID=T1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Migrazione additiva 0031, Fix description=`app_theme`, `users.theme_mode`, `users.text_scale`, chiavi di traduzione nuove, Drizzle, `schema.sql`, `test-reset-e2e` esteso.
 - [✅] ID=T2, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Calcolo del colore in OKLCH, Fix description=`derivePrimary`, `primaryCss`, `LIGHT_PALETTE`/`DARK_PALETTE`, preset, in `lib/theme-vars.ts`.
 - [✅] ID=T3, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Modello delle preferenze, Fix description=`lib/appearance.ts`: tipi, schema Zod, cookie, `THEME_MODE_SCRIPT`, `applyAppearance`.
-- [ ] ID=T4, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Letture e azioni server, Fix description=`getAppearance`, `getAppPrimaryColor`, `saveAppearance`, `saveAppPrimaryColor`.
+- [✅] ID=T4, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Letture e azioni server, Fix description=`getAppearance`, `getAppPrimaryColor`, `saveAppearance`, `saveAppPrimaryColor`.
 - [ ] ID=T5, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Componenti shadcn, Fix description=`toggle`, `toggle-group`, `slider` aggiunti, riletti e adattati.
 - [ ] ID=T6, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Mattoni dell'interfaccia, Fix description=`SettingsSection`/`SettingsRow`, `ColorSwatches`, `PalettePreview`.
 - [ ] ID=T7, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Pagina Admin Tema & Stili, Fix description=Riscrittura di `AdminTheme` sul colore unico.
