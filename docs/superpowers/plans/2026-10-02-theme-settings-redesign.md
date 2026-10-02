@@ -26,7 +26,7 @@ Fra T7 e T9 l'app è in uno stato di transizione: il colore salvato dalla nuova 
 - [✅] ID=T3, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Modello delle preferenze, Fix description=`lib/appearance.ts`: tipi, schema Zod, cookie, `THEME_MODE_SCRIPT`, `applyAppearance`.
 - [✅] ID=T4, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Letture e azioni server, Fix description=`getAppearance`, `getAppPrimaryColor`, `saveAppearance`, `saveAppPrimaryColor`.
 - [✅] ID=T5, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Componenti shadcn, Fix description=`toggle`, `toggle-group`, `slider` aggiunti, riletti e adattati.
-- [ ] ID=T6, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Mattoni dell'interfaccia, Fix description=`SettingsSection`/`SettingsRow`, `ColorSwatches`, `PalettePreview`.
+- [✅] ID=T6, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Mattoni dell'interfaccia, Fix description=`SettingsSection`/`SettingsRow`, `ColorSwatches`, `PalettePreview`.
 - [ ] ID=T7, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Pagina Admin Tema & Stili, Fix description=Riscrittura di `AdminTheme` sul colore unico.
 - [ ] ID=T8, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Pagina Impostazioni e pannello utente, Fix description=`/settings`, `LanguageSwitcher` ristilizzato, link nella sidebar.
 - [ ] ID=T9, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Passaggio al rendering server, Fix description=Layout, `globals.css`, eliminazione di `UIContext` e dei 29 colori, ag-grid in `rem`.
