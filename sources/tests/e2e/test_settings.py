@@ -88,14 +88,16 @@ def test_automatic_follows_the_operating_system(browser, base_url, admin_storage
     )
     page = ctx.new_page()
     try:
-        nav(page, f"{base_url}/settings")
-        _choose_mode(page, "Chiaro")
-        _choose_mode(page, "Automatico")
-        assert _is_dark(page)
-        page.emulate_media(color_scheme="light")
-        page.wait_for_function("!document.documentElement.classList.contains('dark')", timeout=5_000)
+        try:
+            nav(page, f"{base_url}/settings")
+            _choose_mode(page, "Chiaro")
+            _choose_mode(page, "Automatico")
+            assert _is_dark(page)
+            page.emulate_media(color_scheme="light")
+            page.wait_for_function("!document.documentElement.classList.contains('dark')", timeout=5_000)
+        finally:
+            _restore(page, base_url)
     finally:
-        _restore(page, base_url)
         ctx.close()
 
 
