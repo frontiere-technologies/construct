@@ -80,19 +80,30 @@ alter table public.users
   add column theme_mode varchar(6) not null default 'system'
     check (theme_mode in ('light', 'dark', 'system')),
   add column text_scale smallint not null default 100
-    check (text_scale in (90, 100, 110, 120, 130)),
-  drop column theme_config;
+    check (text_scale in (90, 100, 110, 120, 130));
+
+-- nella 0032, dopo il codice che smette di leggerla:
+alter table public.users drop column theme_config;
 ```
 
 ### 2.3 Cookie
 
-Il cookie `construct_appearance` (httpOnly, durata 1 anno) contiene `{mode, scale}`. Lo scrivono:
+Il cookie `construct_appearance` (httpOnly, durata 1 anno) contiene modo e scala nella forma
+`<mode>.<scale>`, per esempio `dark.110`. Lo scrive soltanto l'azione server delle preferenze, a
+ogni modifica.
 
-- l'azione server delle preferenze, a ogni modifica;
-- il login, partendo dal profilo, così un browser nuovo vede subito le preferenze dell'utente.
+Il layout risolve le preferenze in quest'ordine:
 
-Il layout legge il cookie. Se manca, usa il profilo dell'utente autenticato; se manca anche
-quello, usa i predefiniti. È lo stesso schema già usato per la lingua (`lib/i18n/user-language-actions.ts`).
+1. **Utente autenticato**: il profilo (`users.theme_mode`, `users.text_scale`). Il profilo è la
+   fonte di verità.
+2. **Visitatore anonimo** (`/login` dopo un logout): il cookie.
+3. Altrimenti i predefiniti (`system`, 100).
+
+*Corretto durante la scrittura del piano.* La prima versione leggeva prima il cookie e lo scriveva
+anche al login. Ma un cookie di un anno su un secondo browser resterebbe fermo alla scelta vecchia
+anche dopo una modifica fatta altrove. La lingua evita il problema con un cookie di sessione in più;
+qui basta leggere il profilo, con una query già necessaria per sapere chi è l'utente. Di
+conseguenza non serve agganciarsi al login.
 
 ## 3. Calcolo del colore (`lib/theme-vars.ts`)
 
@@ -132,14 +143,23 @@ modo chiaro e una per lo scuro. Le leggono sia il calcolo sia un test che le con
 
 ## 4. Applicazione delle variabili
 
-- **`app/layout.tsx`** legge `app_theme` (in cache) e le preferenze (cookie o profilo), poi scrive:
-  - su `<html>`: `class="dark"` se il modo è `dark`, e `style="font-size: <scale>%"`;
+- **`app/layout.tsx`** legge `app_theme` e le preferenze (§2.3). Ciascuna lettura è una query per
+  richiesta, deduplicata con `cache()` di React. Poi scrive:
+  - su `<html>`: `data-theme-mode="<mode>"` e `style="font-size: <scale>%"`;
   - un `<style>` con `:root{--primary:…;--primary-foreground:…}` e
     `.dark{--primary:…;--primary-foreground:…}`.
-- **Modo `system`**: un piccolo script inline in `<head>`, prima che la pagina compaia, legge
-  `matchMedia('(prefers-color-scheme: dark)')` e mette o toglie la classe `dark`. Resta in
-  ascolto dei cambi. Oggi l'app non ha una CSP globale; se in futuro se ne aggiunge una, lo script
-  avrà bisogno di un nonce.
+- **La classe `dark` non la scrive React**: la mette uno script inline in `<head>`, sempre
+  presente, che gira prima che la pagina compaia. Legge `data-theme-mode`:
+  - `dark` mette la classe;
+  - `light` la toglie;
+  - `system` segue `matchMedia('(prefers-color-scheme: dark)')` e resta in ascolto dei cambi.
+
+  Se fosse React a gestire la classe, un `router.refresh()` (per esempio dopo un cambio lingua)
+  potrebbe toglierla a un utente in `system` con sistema operativo scuro. `<html>` porta
+  `suppressHydrationWarning` per la classe aggiunta dallo script.
+
+  Oggi l'app non ha una CSP globale; se in futuro se ne aggiunge una, lo script avrà bisogno di un
+  nonce.
 - **`globals.css`**:
   - le variabili delle superfici, dei bordi, dei testi e della sidebar sono scritte in `:root` e
     `.dark`, con i valori predefiniti di oggi (presi da `types/menu.ts`
@@ -151,18 +171,21 @@ modo chiaro e una per lo scuro. Le leggono sia il calcolo sia un test che le con
   CSS.
 - **Anteprima dal vivo nella pagina admin**: un pallino scelto e non ancora salvato scrive
   `--primary` e `--primary-foreground` come stile inline su `<html>`, come oggi. "Valori di
-  Default" fa lo stesso con `#4f46e5`. Se si esce senza salvare, il ricaricamento riporta il
-  colore salvato.
+  Default" fa lo stesso con `#4f46e5`.
+  - Quando si esce dalla pagina lo stile inline viene tolto, salvato o no.
+  - Dopo un salvataggio riuscito, `router.refresh()` riscrive il `<style>` del layout con il
+    colore nuovo.
 - **Pulizia**: `UIContext` perde tutta la parte del tema, cioè `localStorage.appSettings`,
   `setProperty` e la classe `dark`. Se non resta altro, `UIContext` si elimina.
 
 ## 5. Azioni server
 
 - **`saveAppPrimaryColor(color)`** in `lib/theme-actions.ts`:
-  - richiede `session.user.isAdmin`;
+  - richiede un admin con `requireAdmin()` (`lib/rbac/auth-guard.ts`), che verifica i ruoli sul
+    database e non si fida del JWT;
   - valida il valore con Zod (`/^#[0-9a-f]{6}$/i`, poi lo porta in minuscolo);
   - rifiuta se `derivePrimary` restituisce `null`;
-  - aggiorna `app_theme` e invalida la cache del tema.
+  - aggiorna `app_theme`.
 - **`saveAppearance({ mode?, scale? })`** in un nuovo `lib/appearance-actions.ts`:
   - richiede una sessione;
   - valida con Zod (enum e valori ammessi);
@@ -194,8 +217,9 @@ per ogni impostazione.
 
     Più un pallino "Personalizzato" che apre `<input type="color">`. Il pallino selezionato
     mostra una spunta, e accanto compare il codice esadecimale.
-  - **Accessibilità**: i pallini sono un gruppo a scelta singola (base `radio-group` di shadcn),
-    navigabile con le frecce, e ogni pallino ha un nome tradotto.
+  - **Accessibilità**: i pallini sono un gruppo a scelta singola, costruito direttamente sulla
+    primitiva `RadioGroup` di `radix-ui` (vedi §6.4). Si naviga con le frecce e ogni pallino ha un
+    nome tradotto.
 - **Anteprima**: due strisce, "Chiaro" e "Scuro". Ognuna mostra i colori reali di quel modo:
   principale (con la sua scritta), passaggio del mouse (`--accent`), superficie (`--card`), sfondo
   (`--background`) e sidebar (`--sidebar`).
@@ -208,9 +232,14 @@ per ogni impostazione.
 
 - **Accesso**: tutti gli utenti autenticati. Nessuna voce della sidebar evidenziata.
 - **Sezione "Lingua e regione"** (icona `Languages`):
-  - **Lingua**: `select` di shadcn con le lingue attive. Spiegazione: "Interfaccia, date e numeri
-    si aggiornano subito". Nascosta se c'è una sola lingua attiva, come oggi `LanguageSwitcher`.
-    Usa `I18nContext.setLanguage`, che esiste già.
+  - **Lingua**: si riusa `LanguageSwitcher`, ristilizzato da riga della sidebar a campo di pagina
+    (apre verso il basso, colori `popover`). Spiegazione: "Interfaccia, date e numeri si
+    aggiornano subito". Nascosta se c'è una sola lingua attiva.
+
+    *Corretto durante la scrittura del piano*: la prima versione prevedeva un `select` di shadcn.
+    `LanguageSwitcher` ha però già una navigazione da tastiera completa e i `data-testid` su cui
+    poggiano `switch_language()` e `test_i18n.py`. Sostituirlo vorrebbe dire rifare un componente
+    che funziona e riscrivere quei test, senza alcun vantaggio.
   - **Formato data**: riga in sola lettura (icona `Calendar`) con un esempio da
     `createFormatters(locale)`: la data di oggi e un numero, per esempio "2 ott 2026 · 1.234.567".
 - **Sezione "Aspetto"** (icona `Sun`):
@@ -230,16 +259,25 @@ chiaro/scuro e `LanguageSwitcher`. Compare il link "Impostazioni" (icona `Settin
 
 ### 6.4 Componenti shadcn nuovi
 
-Si aggiungono `toggle-group`, `select`, `slider` e `radio-group` con `npx shadcn add`. Ognuno va
-riletto e adattato prima di accettarlo, come chiede AGENTS.md:
+Si aggiungono `toggle-group` (che porta con sé `toggle`) e `slider` con `npx shadcn add`. Ognuno
+va riletto e adattato prima di accettarlo, come chiede AGENTS.md:
 
 - solo token shadcn;
 - niente `--theme-*`;
 - coerenza con i test esistenti di `button` e `input`.
 
+Inoltre: le eventuali modifiche che `shadcn add` fa a `globals.css` si scartano.
+
+*Corretto durante la scrittura del piano*:
+- **`select` non serve**: la lingua riusa `LanguageSwitcher` (§6.2).
+- **`radio-group` non si aggiunge**: il `RadioGroupItem` di shadcn disegna sempre il suo cerchietto
+  con indicatore interno, che non si può sostituire con un pallino colorato senza riscriverlo.
+  I pallini usano direttamente `RadioGroup` di `radix-ui`, già dipendenza del progetto e già
+  usata così da `components/ui/dropdown-menu.tsx`.
+
 ## 7. Traduzioni
 
-Nuova migrazione, numerata dopo l'ultima esistente (`0030`).
+Le chiavi nuove entrano nella migrazione additiva `0031`; quelle obsolete si cancellano nella `0032`, che va applicata dopo il codice che smette di usarle (stessa divisione di 0024/0025).
 
 - **Chiavi aggiunte** (it ed en):
   - Pagina admin: `theme.section.primary_color`, `theme.field.primary_color_hint`,
@@ -298,8 +336,13 @@ Nuova migrazione, numerata dopo l'ultima esistente (`0030`).
   - Chiaro e Scuro mettono e tolgono la classe `dark`;
   - Automatico segue `prefers-color-scheme` emulato;
   - la dimensione del testo cambia `font-size` di `<html>` e resta dopo il ricaricamento.
-- **Esistenti da aggiornare**: `test_sidebar.py` (pannello utente). `test_rbac.py` e
-  `test_highlight.py` restano validi.
+- **Esistenti da aggiornare**:
+  - `test_sidebar.py` (pannello utente);
+  - l'helper `switch_language()` in `helpers.py`, che apre `/settings` invece del pannello utente;
+  - il test di `test_i18n.py` che apre direttamente il selettore nel pannello utente;
+  - `db.mjs test-reset-e2e`, che deve azzerare anche modo, scala e colore globale.
+
+  `test_rbac.py` e `test_highlight.py` restano validi.
 - **Ripristino obbligatorio**: ogni test che cambia il colore globale, il modo, la scala o la
   lingua rimette il valore di partenza alla fine. Il colore è globale e le preferenze restano sul
   profilo, quindi uno stato lasciato a metà altererebbe gli altri test.
@@ -313,13 +356,13 @@ Nuova migrazione, numerata dopo l'ultima esistente (`0030`).
 
 ## 10. Lavori
 
-- [ ] ID=DB-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Migrazione schema tema, Fix description=Creare `app_theme` (una riga, `#4f46e5`, grant a `construct_runtime`), aggiungere `users.theme_mode` e `users.text_scale`, togliere `users.theme_config`; aggiornare `lib/db/schema.ts` e `schema.sql`; lanciare `boundary-check`.
+- [ ] ID=DB-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Migrazione schema tema, Fix description=Due migrazioni, come 0024/0025: `0031` solo additiva (`app_theme` con una riga `#4f46e5`, grant e RLS per `construct_runtime`, `users.theme_mode` e `users.text_scale`, chiavi di traduzione nuove), `0032` distruttiva dopo il codice (drop di `users.theme_config`, cancellazione delle chiavi obsolete); aggiornare `lib/db/schema.ts` e `schema.sql`; lanciare `boundary-check`.
 - [ ] ID=CORE-1, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Calcolo del colore in OKLCH, Fix description=`derivePrimary` e costanti delle superfici in `lib/theme-vars.ts`, con i test di §8.1; eliminare `ThemeConfig` a 29 campi, `mergeThemeConfig`, `themeContrastViolations`.
 - [ ] ID=CORE-2, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Variabili scritte dal server, Fix description=`app/layout.tsx` scrive classe, `font-size` e `<style>` del colore; script inline per `system`; `globals.css` con le superfici fisse in `:root` e `.dark`; togliere la parte tema da `UIContext`; dimensione del carattere di ag-grid in `rem`.
-- [ ] ID=ACT-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Azioni server, Fix description=`saveAppPrimaryColor` con isAdmin e Zod; `saveAppearance` con Zod e cookie; cookie scritto anche al login; test di §8.1.
-- [ ] ID=UI-1, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Componenti shadcn, Fix description=Aggiungere `toggle-group`, `select`, `slider` e `radio-group`, rileggerli e adattarli ai token e ai test.
+- [ ] ID=ACT-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Azioni server, Fix description=`saveAppPrimaryColor` con `requireAdmin()` e Zod; `saveAppearance` con Zod e cookie; test di §8.1.
+- [ ] ID=UI-1, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Componenti shadcn, Fix description=Aggiungere `toggle-group` (con `toggle`) e `slider`, rileggerli e adattarli ai token e ai test; scartare le modifiche a `globals.css`.
 - [ ] ID=UI-2, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Pagina Admin Tema & Stili, Fix description=Riscrivere `components/AdminTheme.tsx` secondo §6.1: pallini, personalizzato, anteprima chiaro/scuro, anteprima dal vivo, salva e default.
 - [ ] ID=UI-3, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Pagina Impostazioni, Fix description=Nuova route `/settings` secondo §6.2: lingua, formato data, tema a tre stati, dimensione testo, salvataggio immediato con ritorno indietro in caso di errore.
 - [ ] ID=UI-4, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Pannello utente della sidebar, Fix description=Togliere interruttore e `LanguageSwitcher`, aggiungere il link "Impostazioni" (§6.3).
-- [ ] ID=I18N-1, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Traduzioni, Fix description=Migrazione con le chiavi nuove (it/en) e la cancellazione delle obsolete (§7); `npm run test:i18n-keys` verde.
+- [ ] ID=I18N-1, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Traduzioni, Fix description=Chiavi nuove (it/en) in `0031`, cancellazione delle obsolete in `0032` (§7); `npm run test:i18n-keys` verde.
 - [ ] ID=E2E-1, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Test E2E, Fix description=Riscrivere `test_admin_theme.py`, creare `test_settings.py`, aggiornare `test_sidebar.py`, con ripristino dello stato in ogni test (§8.2).
