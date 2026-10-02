@@ -35,14 +35,17 @@ const swatchCls = cn(
  * di radix-ui, non il `radio-group` di shadcn: quello disegna sempre il proprio
  * cerchietto con indicatore e non lascia posto a un pallino colorato (§6.4).
  *
- * Il pallino «Personalizzato» apre il selettore nativo con un click (o Invio /
- * Spazio). Le frecce lo raggiungono senza aprire nulla: un selettore che si apre
- * mentre si scorre il gruppo con la tastiera sarebbe una trappola.
+ * Il pallino «Personalizzato» apre il selettore nativo solo con un'attivazione
+ * vera: un click del puntatore, oppure Invio / Spazio. Radix, quando una freccia
+ * porta il fuoco su un elemento, ne chiama `click()` per selezionarlo: quel click
+ * non ha puntatore (`detail` 0) e non deve aprire nulla, perche' un selettore che
+ * si apre mentre si scorre il gruppo con la tastiera sarebbe una trappola.
  */
 export function ColorSwatches({ options, value, groupLabel, customLabel, disabled, onChange }: ColorSwatchesProps) {
   const colorInputRef = useRef<HTMLInputElement>(null)
   const selectedId = options.find(option => option.color === value)?.id ?? CUSTOM_SWATCH_ID
   const customSelected = selectedId === CUSTOM_SWATCH_ID
+  const openPicker = () => colorInputRef.current?.click()
 
   return (
     <div className="flex items-center gap-3">
@@ -77,7 +80,16 @@ export function ColorSwatches({ options, value, groupLabel, customLabel, disable
           aria-label={customLabel}
           title={customLabel}
           data-testid="theme-swatch-custom"
-          onClick={() => colorInputRef.current?.click()}
+          onClick={event => {
+            // detail 0: click sintetico (frecce di Radix, rilascio di Spazio): non e' un'attivazione.
+            if (event.detail > 0) openPicker()
+          }}
+          onKeyDown={event => {
+            if (event.repeat || (event.key !== 'Enter' && event.key !== ' ')) return
+            // Spazio: il click sintetico al rilascio ha detail 0 e viene ignorato sopra.
+            event.preventDefault()
+            openPicker()
+          }}
           className={cn(swatchCls, 'border border-border')}
           style={customSelected ? { backgroundColor: value } : undefined}
         >

@@ -64,12 +64,52 @@ describe('ColorSwatches', () => {
     expect(onChange).toHaveBeenCalledWith('#abcdef')
   })
 
-  it('opens the native picker when the custom swatch is clicked', () => {
+  const pickerInput = () => container!.querySelector('[data-testid="theme-custom-color"]') as HTMLInputElement
+  const keydown = (el: Element, key: string) =>
+    act(() => { el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })) })
+
+  it('opens the native picker when the custom swatch is clicked with the pointer', () => {
     render('#4f46e5')
-    const input = container!.querySelector('[data-testid="theme-custom-color"]') as HTMLInputElement
-    const click = vi.spyOn(input, 'click')
+    const click = vi.spyOn(pickerInput(), 'click')
+    act(() => { swatch('custom').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })) })
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not open the picker on a synthetic click without pointer (detail 0)', () => {
+    render('#4f46e5')
+    const click = vi.spyOn(pickerInput(), 'click')
     act(() => swatch('custom').click())
-    expect(click).toHaveBeenCalled()
+    expect(click).not.toHaveBeenCalled()
+  })
+
+  it('opens the native picker on Enter', () => {
+    render('#4f46e5')
+    const click = vi.spyOn(pickerInput(), 'click')
+    keydown(swatch('custom'), 'Enter')
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the native picker exactly once on Space, even with the synthetic click on release', () => {
+    render('#4f46e5')
+    const click = vi.spyOn(pickerInput(), 'click')
+    keydown(swatch('custom'), ' ')
+    act(() => swatch('custom').click())
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not open the picker when an arrow key moves focus onto the custom swatch', async () => {
+    render('#4f46e5')
+    const click = vi.spyOn(pickerInput(), 'click')
+    act(() => swatch('green').focus())
+    // La sequenza di Radix: keydown di una freccia (ascoltato sul documento), poi il fuoco
+    // sull'elemento, il cui onFocus ne chiama click() (detail 0).
+    keydown(swatch('green'), 'ArrowRight')
+    await act(async () => {
+      swatch('custom').focus()
+      await new Promise(resolve => setTimeout(resolve, 20))
+    })
+    expect(document.activeElement).toBe(swatch('custom'))
+    expect(click).not.toHaveBeenCalled()
   })
 
   it('disables every swatch and the picker while disabled', () => {
