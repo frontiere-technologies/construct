@@ -4,8 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, Palette } from 'lucide-react'
 import { saveAppPrimaryColor } from '@/lib/theme-actions'
-import { DEFAULT_PRIMARY, PRIMARY_PRESETS, derivePrimary, type DerivedPrimary } from '@/lib/theme-vars'
-import { DARK_CLASS } from '@/lib/appearance'
+import { DEFAULT_PRIMARY, PRIMARY_PRESETS, derivePrimary, type PrimaryPair } from '@/lib/theme-vars'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { SettingsRow, SettingsSection } from '@/components/settings/SettingsSection'
 import { ColorSwatches } from '@/components/theme/ColorSwatches'
@@ -22,20 +21,30 @@ const PRESET_LABEL_KEYS: Record<(typeof PRIMARY_PRESETS)[number]['id'], string> 
   sky: 'theme.preset.sky',
 }
 
+export const PREVIEW_ID = 'app-primary-preview'
+
 /**
- * L'anteprima dal vivo (specifica §4): il colore non ancora salvato, come stile
- * inline su <html>, nella variante del modo corrente. Lo stile inline vince sul
- * `<style>` del layout; `null` lo toglie e lascia ricomparire il colore salvato.
+ * L'anteprima dal vivo (specifica §4): un `<style id="app-primary-preview">` in
+ * fondo a <head> con la variante chiara e quella scura del colore non ancora
+ * salvato. Ci sono tutte e due perche' il modo della pagina puo' cambiare mentre
+ * la si guarda (modo `system` e sistema operativo che passa allo scuro). I
+ * selettori pesano (0,2,1) e battono `html:root` / `html.dark` (0,1,1) del
+ * layout in qualunque ordine. Un colore non valido ripiega sul predefinito;
+ * `null` toglie l'elemento e lascia ricomparire il colore salvato.
  */
-export function applyPrimaryPreview(root: HTMLElement, derived: DerivedPrimary | null): void {
-  if (!derived) {
-    root.style.removeProperty('--primary')
-    root.style.removeProperty('--primary-foreground')
+export function applyPrimaryPreview(doc: Document, color: string | null): void {
+  const existing = doc.getElementById(PREVIEW_ID)
+  if (color === null) {
+    existing?.remove()
     return
   }
-  const pair = root.classList.contains(DARK_CLASS) ? derived.dark : derived.light
-  root.style.setProperty('--primary', pair.primary)
-  root.style.setProperty('--primary-foreground', pair.foreground)
+  const derived = derivePrimary(color) ?? derivePrimary(DEFAULT_PRIMARY)!
+  const block = (pair: PrimaryPair) => `--primary:${pair.primary};--primary-foreground:${pair.foreground}`
+  const style = existing ?? doc.createElement('style')
+  style.id = PREVIEW_ID
+  style.textContent = `html:root[data-theme-mode]{${block(derived.light)}}html.dark[data-theme-mode]{${block(derived.dark)}}`
+  // Sempre in coda: se dopo e' arrivato altro in <head>, l'anteprima resta ultima.
+  if (doc.head.lastElementChild !== style) doc.head.append(style)
 }
 
 type SaveStatus = 'idle' | 'success' | 'error' | 'unreadable'
@@ -48,13 +57,15 @@ export const AdminTheme: React.FC<{ savedColor: string }> = ({ savedColor }) => 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const derived = derivePrimary(color) ?? derivePrimary(DEFAULT_PRIMARY)!
 
+  // Solo un colore diverso da quello salvato ha bisogno dell'anteprima; a pari
+  // colore resta il <style> del layout (che dopo un salvataggio e' gia' aggiornato).
   useEffect(() => {
-    applyPrimaryPreview(document.documentElement, derivePrimary(color))
-  }, [color])
+    applyPrimaryPreview(document, color === savedColor ? null : color)
+  }, [color, savedColor])
 
   // Uscendo dalla pagina l'anteprima se ne va, salvata o no: il colore giusto da
   // li' in poi e' quello del <style> del layout.
-  useEffect(() => () => applyPrimaryPreview(document.documentElement, null), [])
+  useEffect(() => () => applyPrimaryPreview(document, null), [])
 
   const handleSave = async () => {
     setSaving(true)
@@ -113,21 +124,30 @@ export const AdminTheme: React.FC<{ savedColor: string }> = ({ savedColor }) => 
 
       <div className="pt-4 border-t border-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          {saveStatus === 'idle' && (
-            <span className="text-sm text-foreground-faint">{t('theme.banner.unsaved_hint')}</span>
-          )}
-          {saveStatus === 'success' && (
-            <span className="text-sm text-success-muted-foreground">{t('theme.status.saved')}</span>
-          )}
-          {saveStatus === 'error' && (
-            <span className="text-sm text-destructive-muted-foreground">{t('theme.status.save_failed')}</span>
-          )}
+          <div role="status" className="flex items-center gap-3">
+            {saveStatus === 'idle' && (
+              <span className="text-sm text-foreground-faint">{t('theme.banner.unsaved_hint')}</span>
+            )}
+            {saveStatus === 'success' && (
+              <span className="text-sm text-success-muted-foreground">{t('theme.status.saved')}</span>
+            )}
+            {saveStatus === 'error' && (
+              <span className="text-sm text-destructive-muted-foreground">{t('theme.status.save_failed')}</span>
+            )}
+          </div>
           {saveStatus === 'unreadable' && (
             <p className="text-sm text-destructive-muted-foreground" role="alert">{t('theme.status.unreadable')}</p>
           )}
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setColor(DEFAULT_PRIMARY)} disabled={saving}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setColor(DEFAULT_PRIMARY)
+              if (saveStatus === 'unreadable') setSaveStatus('idle')
+            }}
+            disabled={saving}
+          >
             {t('theme.actions.reset_defaults')}
           </Button>
           <Button onClick={handleSave} disabled={saving}>

@@ -170,9 +170,14 @@ modo chiaro e una per lo scuro. Le leggono sia il calcolo sia un test che le con
   `rem`, così scala con `text_scale`. Se ag-grid non accetta `rem`, la ricavo da una variabile
   CSS.
 - **Anteprima dal vivo nella pagina admin**: un pallino scelto e non ancora salvato scrive
-  `--primary` e `--primary-foreground` come stile inline su `<html>`, come oggi. "Valori di
-  Default" fa lo stesso con `#4f46e5`.
-  - Quando si esce dalla pagina lo stile inline viene tolto, salvato o no.
+  un `<style id="app-primary-preview">` in fondo a `<head>`, con `--primary` e
+  `--primary-foreground` per **tutti e due** i modi (selettori `html:root[data-theme-mode]` e
+  `html.dark[data-theme-mode]`, specificità 0,2,1, che battono quelli del layout in qualunque
+  ordine). "Valori di Default" fa lo stesso con `#4f46e5`. Si installa solo quando il colore è
+  diverso da quello salvato. (Corretto durante la revisione finale: prima era uno stile inline
+  su `<html>` per il solo modo corrente, e un passaggio del sistema operativo allo scuro lasciava
+  la coppia chiara su una card scura.)
+  - Quando si esce dalla pagina l'elemento `<style>` viene tolto, salvato o no.
   - Dopo un salvataggio riuscito, `router.refresh()` riscrive il `<style>` del layout con il
     colore nuovo.
 - **Pulizia**: `UIContext` perde tutta la parte del tema, cioè `localStorage.appSettings`,
