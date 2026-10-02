@@ -44,6 +44,8 @@ export const users = pgTable('users', {
   username: text('username'),
   phone: text('phone'),
   themeConfig: jsonb('theme_config'),
+  themeMode: varchar('theme_mode', { length: 6 }).notNull().default('system'),
+  textScale: smallint('text_scale').notNull().default(100),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
   passwordHash: text('password_hash'),
@@ -61,6 +63,13 @@ export const users = pgTable('users', {
   lastStatusTs: timestamp('last_status_ts', { withTimezone: true, mode: 'string' }),
   idLanguage: bigint('id_language', { mode: 'number' }).references(() => appLanguage.idLanguage, { onDelete: 'set null' }),
 }, (t) => [index('users_id_language_idx').on(t.idLanguage)])
+
+/** Il colore principale dell'app: una riga sola, garantita dal database (0031). */
+export const appTheme = pgTable('app_theme', {
+  id: boolean('id').primaryKey().default(true),
+  primaryColor: varchar('primary_color', { length: 7 }).notNull(),
+  dateMod: timestamp('date_mod', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+})
 
 export const passwordSetTokens = pgTable('password_set_tokens', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -353,8 +353,15 @@ async function runDatabaseCommand(command, argument) {
     if (command === 'test-reset-e2e') {
       const emails = [process.env.TEST_EMAIL, process.env.TEST_EMAIL_USER].filter(Boolean)
       if (!emails.length) throw new Error('TEST_EMAIL or TEST_EMAIL_USER is required')
-      const result = await sql`update users set id_language = null where email = any(${emails})`
-      console.log(`reset language preference for ${result.count} E2E fixture user(s)`)
+      // Lingua, tema e dimensione del testo stanno sul profilo, e il colore dell'app e' globale:
+      // un test che li cambia e non li rimette a posto altera tutti quelli dopo, senza che
+      // l'errore nomini mai la causa (vedi conftest.py, clean_language_preferences).
+      const result = await sql`
+        update users set id_language = null, theme_mode = 'system', text_scale = 100
+        where email = any(${emails})
+      `
+      await sql`update app_theme set primary_color = '#4f46e5', date_mod = now()`
+      console.log(`reset language and appearance for ${result.count} E2E fixture user(s) and the app colour`)
     } else if (command === 'test-delete-user') {
       const email = process.env.E2E_REGISTER_EMAIL
       if (!email) throw new Error('E2E_REGISTER_EMAIL is required')
