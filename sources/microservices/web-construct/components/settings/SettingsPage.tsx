@@ -32,23 +32,28 @@ export function SettingsPage({ initialAppearance }: { initialAppearance: Appeara
   const [appearance, setAppearance] = useState(initialAppearance)
   const [failed, setFailed] = useState<Field | null>(null)
   const committed = useRef(initialAppearance)
+  // Cio' che si vede adesso: ogni scelta parte da qui e non dall'ultimo valore
+  // salvato, cosi' un salvataggio ancora in corso non cancella l'altra scelta.
+  const shown = useRef(initialAppearance)
   const [today] = useState(() => new Date())
 
   const show = (next: Appearance) => {
+    shown.current = next
     setAppearance(next)
     applyAppearance(document.documentElement, next, prefersDarkScheme())
   }
 
   const commit = async (patch: AppearancePatch, field: Field) => {
-    show({ ...committed.current, ...patch })
+    show({ ...shown.current, ...patch })
     setFailed(null)
     const result = await saveAppearance(patch)
     if (result.error || !result.appearance) {
-      show(committed.current)
+      // Torna indietro solo il campo che non e' stato salvato.
+      show({ ...shown.current, [field]: committed.current[field] })
       setFailed(field)
       return
     }
-    committed.current = result.appearance
+    committed.current = { ...committed.current, [field]: result.appearance[field] }
   }
 
   const failure = (field: Field) =>
@@ -96,9 +101,10 @@ export function SettingsPage({ initialAppearance }: { initialAppearance: Appeara
               max={TEXT_SCALES[TEXT_SCALES.length - 1]}
               step={10}
               value={[appearance.scale]}
-              onValueChange={([value]) => show({ ...appearance, scale: value as TextScale })}
+              onValueChange={([value]) => show({ ...shown.current, scale: value as TextScale })}
               onValueCommit={([value]) => commit({ scale: value as TextScale }, 'scale')}
               thumbLabel={t('settings.field.text_size')}
+              thumbValueText={`${appearance.scale}%`}
             />
             <span className="w-10 text-right text-sm tabular-nums text-foreground-secondary">{appearance.scale}%</span>
           </div>

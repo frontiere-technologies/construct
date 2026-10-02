@@ -37,4 +37,12 @@ describe('Slider', () => {
     expect(container.querySelector('[role="slider"]')?.getAttribute('aria-label')).toBe('Dimensione del testo')
     act(() => root.unmount())
   })
+
+  it('carries thumbValueText onto the slider thumb as aria-valuetext', () => {
+    const container = document.createElement('div')
+    const root = createRoot(container)
+    act(() => root.render(<Slider value={[110]} min={90} max={130} thumbValueText="110%" />))
+    expect(container.querySelector('[role="slider"]')?.getAttribute('aria-valuetext')).toBe('110%')
+    act(() => root.unmount())
+  })
 })

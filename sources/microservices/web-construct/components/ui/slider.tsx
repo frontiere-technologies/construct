@@ -16,7 +16,9 @@ import { cn } from "@/lib/utils"
  *   lo stato disabilitato lo porta gia' la radice con `data-[disabled]`;
  * - `thumbLabel`: Radix mette `aria-label` sulla radice, che non e' il controllo.
  *   Il nome accessibile deve stare sul cursore (`role="slider"`), ed e' li' che
- *   questa prop lo porta.
+ *   questa prop lo porta;
+ * - `thumbValueText`: lo stesso per `aria-valuetext` (es. "110%"), cosi' un lettore
+ *   di schermo legge il valore con la sua unita' e non il numero nudo.
  */
 function Slider({
   className,
@@ -25,9 +27,11 @@ function Slider({
   min = 0,
   max = 100,
   thumbLabel,
+  thumbValueText,
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root> & {
   thumbLabel?: string
+  thumbValueText?: string
 }) {
   const _values = React.useMemo(
     () =>
@@ -69,6 +73,7 @@ function Slider({
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           aria-label={thumbLabel}
+          aria-valuetext={thumbValueText}
           key={index}
           className="block size-4 shrink-0 rounded-full border border-primary bg-background shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden"
         />

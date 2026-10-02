@@ -8,10 +8,10 @@ import type { LucideIcon } from 'lucide-react'
 export function SettingsSection({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: ReactNode }) {
   return (
     <section className="space-y-4">
-      <h3 className="flex items-center gap-2 border-b border-border pb-2 font-medium text-foreground">
+      <h2 className="flex items-center gap-2 border-b border-border pb-2 font-medium text-foreground">
         <Icon size={16} className="text-primary" aria-hidden="true" />
         {title}
-      </h3>
+      </h2>
       <div className="space-y-5">{children}</div>
     </section>
   )
