@@ -35,6 +35,10 @@ export function SettingsPage({ initialAppearance }: { initialAppearance: Appeara
   // Cio' che si vede adesso: ogni scelta parte da qui e non dall'ultimo valore
   // salvato, cosi' un salvataggio ancora in corso non cancella l'altra scelta.
   const shown = useRef(initialAppearance)
+  // L'ultima richiesta partita per ciascun campo: se la risposta di una richiesta
+  // non e' piu' l'ultima del suo campo, la scelta e' gia' stata superata e la
+  // risposta non deve ne' ripristinare la pagina ne' mostrare un avviso.
+  const latest = useRef<Record<Field, number>>({ mode: 0, scale: 0 })
   const [today] = useState(() => new Date())
 
   const show = (next: Appearance) => {
@@ -44,15 +48,19 @@ export function SettingsPage({ initialAppearance }: { initialAppearance: Appeara
   }
 
   const commit = async (patch: AppearancePatch, field: Field) => {
+    const requestId = ++latest.current[field]
     show({ ...shown.current, ...patch })
     setFailed(null)
     const result = await saveAppearance(patch)
     if (result.error || !result.appearance) {
+      if (requestId !== latest.current[field]) return
       // Torna indietro solo il campo che non e' stato salvato.
       show({ ...shown.current, [field]: committed.current[field] })
       setFailed(field)
       return
     }
+    // Anche una richiesta superata, se riuscita, e' il vero valore salvato:
+    // un fallimento successivo deve tornare a lui.
     committed.current = { ...committed.current, [field]: result.appearance[field] }
   }
 

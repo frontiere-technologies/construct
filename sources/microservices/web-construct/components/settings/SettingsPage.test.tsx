@@ -122,6 +122,41 @@ describe('SettingsPage', () => {
     expect(alert?.parentElement?.parentElement?.textContent).toContain('settings.field.text_size')
   })
 
+  it('ignores a stale failure of the same field once a newer choice is in flight', async () => {
+    const pending: Array<(value: unknown) => void> = []
+    mocks.saveAppearance.mockImplementation(() => new Promise(resolve => { pending.push(resolve) }))
+    await act(async () => { radio('settings.theme.dark').click() })
+    await act(async () => { radio('settings.theme.system').click() })
+    expect(pending).toHaveLength(2)
+    // La prima scelta fallisce quando la seconda e' ancora in corso: non deve toccare la pagina.
+    await act(async () => pending[0]({ error: 'Save failed' }))
+    expect(html.getAttribute('data-theme-mode')).toBe('system')
+    expect(container!.querySelector('[role="alert"]')).toBeNull()
+    await act(async () => pending[1]({ error: null, appearance: { mode: 'system', scale: 100 } }))
+    expect(html.getAttribute('data-theme-mode')).toBe('system')
+    expect(radio('settings.theme.system').getAttribute('aria-checked')).toBe('true')
+    expect(container!.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('reverts only the text size when it fails while the mode save is still in flight', async () => {
+    let resolveMode!: (value: unknown) => void
+    mocks.saveAppearance.mockImplementation((patch: { mode?: string; scale?: number }) =>
+      patch.mode
+        ? new Promise(resolve => { resolveMode = resolve })
+        : Promise.resolve({ error: 'Save failed' }))
+    await act(async () => { radio('settings.theme.dark').click() })
+    await dragScaleTo(110)
+    expect(html.style.fontSize).toBe('100%')
+    expect(html.classList.contains('dark')).toBe(true)
+    await act(async () => resolveMode({ error: null, appearance: { mode: 'dark', scale: 100 } }))
+    expect(html.classList.contains('dark')).toBe(true)
+    expect(radio('settings.theme.dark').getAttribute('aria-checked')).toBe('true')
+    expect(html.style.fontSize).toBe('100%')
+    const alerts = container!.querySelectorAll('[role="alert"]')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0].parentElement?.parentElement?.textContent).toContain('settings.field.text_size')
+  })
+
   it('shows the language switcher and a read-only date format example', () => {
     expect(container!.querySelector('[data-testid="language-switcher"]')).not.toBeNull()
     expect(container!.textContent).toContain('02/10/2026 · 1.234.567')
