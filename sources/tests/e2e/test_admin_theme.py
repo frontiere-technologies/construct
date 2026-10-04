@@ -1,7 +1,7 @@
 import re
 
 from playwright.sync_api import expect
-from helpers import ensure_l2_open, nav
+from helpers import nav
 
 # Must match DEFAULT_PRIMARY in sources/microservices/web-construct/lib/theme-vars.ts
 # and the row seeded by migration 0031. Duplicated because pytest cannot import
@@ -67,10 +67,9 @@ def test_swatch_applies_live_and_is_dropped_on_leaving(logged_in_page, base_url)
     # Leaving by a client-side navigation (no reload) runs the unmount cleanup:
     # the preview element goes away and the saved colour shows again.
     page.evaluate("window.__stayedInTheSameDocument = true")
-    ensure_l2_open(page)
-    page.locator("aside").nth(1).get_by_role("link", name="Gestione utenti", exact=True).or_(
-        page.locator("aside").nth(1).get_by_role("button", name="Gestione utenti", exact=True)
-    ).click()
+    # The Admin panel (second sidebar column) is already open on /admin/theme, because the
+    # sidebar opens the panels leading to the current page: clicking "Admin" would close it.
+    page.locator("aside").nth(1).get_by_role("link", name="Gestione utenti", exact=True).click()
     page.wait_for_url("**/user-management", timeout=5_000)
     assert page.evaluate("window.__stayedInTheSameDocument === true"), "must be a client-side navigation"
     expect(page.locator("#app-primary-preview")).to_have_count(0)
