@@ -45,4 +45,15 @@ describe('Slider', () => {
     expect(container.querySelector('[role="slider"]')?.getAttribute('aria-valuetext')).toBe('110%')
     act(() => root.unmount())
   })
+
+  it('fills the thumb with the primary colour, ringed in the card colour, so it shows on a dark card', () => {
+    const container = document.createElement('div')
+    const root = createRoot(container)
+    act(() => root.render(<Slider value={[50]} />))
+    const className = container.querySelector('[data-slot="slider-thumb"]')?.className ?? ''
+    expect(className).toContain('bg-primary')
+    expect(className).toContain('border-card')
+    expect(className).not.toContain('bg-background')
+    act(() => root.unmount())
+  })
 })

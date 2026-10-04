@@ -11,7 +11,9 @@ import { cn } from "@/lib/utils"
  * - traccia `bg-switch-off` al posto di `bg-muted`: `--muted` vale `--accent`
  *   (#f3f4f6), 1,1:1 sulla card bianca, e la traccia sparirebbe. `--switch-off`
  *   e' il colore che il progetto ha gia' scelto per lo stesso problema;
- * - cursore `bg-background` al posto del bianco fisso dello stock (nessun colore grezzo), e senza
+ * - cursore `bg-primary` con anello `border-card` al posto del bianco fisso dello stock (nessun colore
+ *   grezzo): pieno di colore principale resta visibile anche in modo scuro sulla card scura, dove un
+ *   cerchio `bg-background` con bordo primario quasi spariva. Non ha
  *   `disabled:*`: il cursore e' uno <span>, `:disabled` non lo raggiunge mai, e
  *   lo stato disabilitato lo porta gia' la radice con `data-[disabled]`;
  * - `thumbLabel`: Radix mette `aria-label` sulla radice, che non e' il controllo.
@@ -75,7 +77,7 @@ function Slider({
           aria-label={thumbLabel}
           aria-valuetext={thumbValueText}
           key={index}
-          className="block size-4 shrink-0 rounded-full border border-primary bg-background shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden"
+          className="block size-4 shrink-0 rounded-full border-2 border-card bg-primary shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden"
         />
       ))}
     </SliderPrimitive.Root>
