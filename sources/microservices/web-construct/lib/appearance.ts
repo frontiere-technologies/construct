@@ -56,6 +56,16 @@ export function toAppearance(row: { themeMode: string; textScale: number }): App
 }
 
 /**
+ * L'aspetto di un visitatore anonimo (specifica §2.3): il modo e' sempre
+ * chiaro, perche' le pagine pubbliche (/login, /register, ...) sono disegnate
+ * chiare e un modo scuro lascerebbe i campi scuri dentro la card bianca; dal
+ * cookie si legge solo la scala del testo.
+ */
+export function anonymousAppearance(cookie: Appearance | null): Appearance {
+  return { mode: 'light', scale: cookie?.scale ?? DEFAULT_APPEARANCE.scale }
+}
+
+/**
  * Mette o toglie la classe `dark` prima che la pagina compaia, leggendo
  * `data-theme-mode` su `<html>`. Sempre presente, non solo in modo `system`:
  * l'ascoltatore resta attivo anche se l'utente passa a `system` dalla pagina

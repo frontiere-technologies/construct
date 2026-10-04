@@ -96,14 +96,22 @@ Il layout risolve le preferenze in quest'ordine:
 
 1. **Utente autenticato**: il profilo (`users.theme_mode`, `users.text_scale`). Il profilo è la
    fonte di verità.
-2. **Visitatore anonimo** (`/login` dopo un logout): il cookie.
-3. Altrimenti i predefiniti (`system`, 100).
+2. **Visitatore anonimo** (`/login` dopo un logout): il modo è sempre `light`; dal cookie si legge
+   solo la scala.
+3. Senza cookie, un visitatore anonimo ha `light` e scala 100. I predefiniti `system` e 100
+   restano quelli del profilo di un utente nuovo.
 
 *Corretto durante la scrittura del piano.* La prima versione leggeva prima il cookie e lo scriveva
 anche al login. Ma un cookie di un anno su un secondo browser resterebbe fermo alla scelta vecchia
 anche dopo una modifica fatta altrove. La lingua evita il problema con un cookie di sessione in più;
 qui basta leggere il profilo, con una query già necessaria per sapere chi è l'utente. Di
 conseguenza non serve agganciarsi al login.
+
+*Corretto dopo la verifica in browser (2026-10-04).* Le pagine pubbliche (`/login`, `/register`,
+`/forgot-password`, `/set-password`) sono disegnate chiare, con una card bianca fissa: con il modo
+dal cookie e il sistema operativo scuro i campi diventavano scuri dentro la card bianca. Per un
+visitatore anonimo il modo è quindi sempre `light` (`anonymousAppearance` in `lib/appearance.ts`) e
+dal cookie si legge solo la scala del testo.
 
 ## 3. Calcolo del colore (`lib/theme-vars.ts`)
 

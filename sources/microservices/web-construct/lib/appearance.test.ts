@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  DARK_CLASS, DEFAULT_APPEARANCE, THEME_MODE_SCRIPT, appearancePatchSchema, applyAppearance,
+  DARK_CLASS, DEFAULT_APPEARANCE, THEME_MODE_SCRIPT, anonymousAppearance, appearancePatchSchema, applyAppearance,
   parseAppearanceCookie, serializeAppearance, toAppearance,
 } from './appearance'
 
@@ -19,6 +19,17 @@ describe('appearance cookie', () => {
     'rejects %j instead of guessing',
     raw => expect(parseAppearanceCookie(raw)).toBeNull(),
   )
+})
+
+describe('anonymousAppearance', () => {
+  it('is always light and keeps only the scale of the cookie', () => {
+    expect(anonymousAppearance({ mode: 'dark', scale: 120 })).toEqual({ mode: 'light', scale: 120 })
+    expect(anonymousAppearance({ mode: 'system', scale: 90 })).toEqual({ mode: 'light', scale: 90 })
+  })
+
+  it('falls back to light at the default scale without a cookie', () => {
+    expect(anonymousAppearance(null)).toEqual({ mode: 'light', scale: 100 })
+  })
 })
 
 describe('toAppearance', () => {
