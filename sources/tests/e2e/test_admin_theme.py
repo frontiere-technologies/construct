@@ -69,7 +69,10 @@ def test_swatch_applies_live_and_is_dropped_on_leaving(logged_in_page, base_url)
     page.evaluate("window.__stayedInTheSameDocument = true")
     # The Admin panel (second sidebar column) is already open on /admin/theme, because the
     # sidebar opens the panels leading to the current page: clicking "Admin" would close it.
-    page.locator("aside").nth(1).get_by_role("link", name="Gestione utenti", exact=True).click()
+    l2 = page.locator("aside").nth(1)
+    l2.get_by_role("link", name="Gestione utenti", exact=True).or_(
+        l2.get_by_role("button", name="Gestione utenti", exact=True)
+    ).click()
     page.wait_for_url("**/user-management", timeout=5_000)
     assert page.evaluate("window.__stayedInTheSameDocument === true"), "must be a client-side navigation"
     expect(page.locator("#app-primary-preview")).to_have_count(0)
