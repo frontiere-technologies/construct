@@ -79,6 +79,14 @@ Dopo questo lavoro:
     nessuna variante leggibile, l'avviso nomina il colore principale.
 
   I predefiniti non producono avvisi (lo fissano i test della tavolozza).
+- **DEC-10 — Colore principale per modo (2026-10-05).** Dopo aver provato la nuova disposizione il
+  proprietario del progetto ha scelto (opzione A) di poter dare al modo scuro un colore principale
+  suo. "Principale · Chiaro" e "Principale · Scuro" si selezionano separatamente. Il colore del
+  chiaro resta `primary_color`; quello dello scuro è `primary_dark`, che può mancare: in quel caso
+  la variante scura si ricava dal chiaro come prima (DEC-8). Un colore scelto per lo scuro si rende
+  leggibile sulla tavolozza scura effettiva allo stesso modo del chiaro; se non ci si riesce, è un
+  avviso per il colore principale del modo scuro (DEC-9). "Valori di Default" toglie anche
+  `primary_dark`.
 
 ## 2. Dati
 
@@ -114,6 +122,14 @@ alter table public.app_theme
 
 I privilegi della `0031` coprono già le colonne nuove. Il contrasto non è un vincolo del
 database: lo controlla l'azione server, che avvisa.
+
+*Aggiunto con la DEC-10 (migrazione additiva `0038`).* Il colore principale del modo scuro, nullable:
+null vuol dire «ricavato da `primary_color`».
+
+```sql
+alter table public.app_theme
+  add column primary_dark varchar(7) check (primary_dark ~ '^#[0-9a-f]{6}$');
+```
 
 ### 2.2 `users`
 
@@ -199,6 +215,13 @@ un avviso per il colore principale (`themeContrastWarnings`), e il CSS mostra in
 colore scelto così com'è (`themePrimary`). `themeContrastWarnings(theme)` applica anche le regole
 dei testi della DEC-9 e riporta ogni problema una volta per modo, testo e superficie dell'admin
 (una superficie scura veste `--card` e `--popover`, ma è un problema solo).
+
+*Aggiornato con la DEC-10.* Il colore scelto di partenza dipende dal modo: nel chiaro
+`primaryColor`, nello scuro `primaryDark ?? primaryColor`. Da lì il calcolo è quello di sopra,
+sulla tavolozza effettiva di quel modo: invariato se già si legge, altrimenti spostato di
+luminosità; nessuna variante leggibile → avviso per il colore principale di quel modo, e il CSS
+mostra il colore scelto così com'è. `themeCss` scrive in `html.dark` il colore principale ricavato
+da `primaryDark` quando c'è.
 
 ## 4. Applicazione delle variabili
 
@@ -314,6 +337,8 @@ per ogni impostazione.
     stati (`aria-pressed`), "Principale" compresa, e non apre più il selettore: sceglie cosa cambiare.
     La cella selezionata ha un contorno interno del colore del suo testo. All'apertura è selezionato
     "Principale"; le due celle "Principale" scelgono lo stesso colore e risultano selezionate insieme.
+    *Sostituito con la DEC-10 (sotto)*: le due celle "Principale" sono bersagli separati, è
+    selezionata una sola cella in tutto, e la selezione è un anello esterno del colore principale.
     Il segno delle superfici cambiate resta. Sotto le strisce: "Scegli una cella per cambiarne il
     colore." (valore aggiornato dalla `0034`).
   - **Sotto, un solo pannello di scelta** con l'aspetto dei pallini di prima (`ColorSwatches`): il
@@ -329,6 +354,25 @@ per ogni impostazione.
     elenco o che, applicato da solo con il colore principale del tema, darebbe un avviso di
     contrasto si sposta di luminosità a passi di 0,01 finché non va. I nomi: Predefinito, Grigio
     freddo, Grigio caldo, Grigio neutro, Tinta del colore principale.
+- *Corretto con la DEC-10 (2026-10-05).* Colore principale per modo e nuovo aspetto delle celle.
+  - **Due celle "Principale" separate.** All'apertura è selezionato "Principale · Chiaro"; c'è
+    sempre una sola cella selezionata nelle due strisce. Il titolo del pannello è "Colore
+    principale · Chiaro" oppure "Colore principale · Scuro".
+  - **"Principale · Chiaro"**: come prima, i cinque preset più "Personalizzato"; cambia
+    `primaryColor`.
+  - **"Principale · Scuro"**: cinque suggerimenti da `primaryDarkSuggestions` — per primo
+    "Automatico", il valore ricavato dal chiaro, poi le varianti scure dei preset, leggibili sulla
+    tavolozza scura del tema, senza ripetizioni e sempre cinque — più "Personalizzato" e il codice.
+    Con `primaryDark` impostato la cella mostra il segno di colore personalizzato e il pannello offre
+    "Usa il predefinito", che lo rimette a null (torna "Automatico", con il fuoco su quel pallino).
+  - **Aspetto delle celle.** Ogni cella è un bottone a sé, con uno spazio fra le celle
+    (`gap-2`), angoli propri e un bordo sottile sempre visibile (`border border-border`). La cella
+    selezionata porta lo stesso segno della voce attiva della sidebar, un anello del colore
+    principale, ma fuori dalla cella e staccato: `ring-2 ring-primary ring-offset-2
+    ring-offset-card`, così si vede anche sulla cella "Principale". Il contorno interno del colore
+    del testo non c'è più; il fuoco da tastiera è un contorno interno (`outline-ring`), perché
+    l'anello è già della selezione. La striscia non ha più `overflow-hidden` e ha un po' di spazio
+    intorno, perché l'anello non venga tagliato.
 - **Fondo pagina**: come oggi, cioè nota "Ricordati di salvare", "Valori di Default" e "Salva".
   - Durante il salvataggio pallini e pulsanti sono disattivati.
   - Esito: "Tema salvato" oppure un errore. Il rifiuto per contrasto usa `role="alert"`.
@@ -484,3 +528,4 @@ Le chiavi nuove entrano nella migrazione additiva `0031`; quelle obsolete si can
 - [✅] ID=SURF-5, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Test E2E delle superfici, Fix description=In `test_admin_theme.py`: una superficie leggibile salvata resta dopo il ricaricamento (`--card` e segno); una superficie scura apre l'avviso e "Annulla" non salva niente; ripristino dei predefiniti in `finally`.
 - [ ] ID=SURF-6, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Chiave obsoleta, Fix description=Cancellare `theme.status.unreadable` in una migrazione distruttiva successiva, applicata dopo il codice che ha smesso di usarla.
 - [✅] ID=SURF-7, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Anteprima selezionabile e pannello di scelta, Fix description=Nuova disposizione di §6.1 (corretta il 2026-10-05): celle dell'anteprima a due stati che scelgono il bersaglio, un solo pannello `ColorSwatches` con i preset o i cinque `surfaceSuggestions`, "Usa il predefinito" per la superficie selezionata, etichette nella `0034` (applicata a dev ed E2E), test unitari ed E2E aggiornati.
+- [ ] ID=SURF-8, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Colore principale per modo e nuovo aspetto delle celle, Fix description=DEC-10: colonna `app_theme.primary_dark` nella `0038` (applicata a dev ed E2E) con le etichette del pannello; `primaryDark` in `AppTheme`, `themePrimary`/`themeCss`/`themeContrastWarnings` con il colore di partenza per modo, `primaryDarkSuggestions`; `saveAppTheme` e `getAppTheme` con la colonna nuova; celle «Principale» separate, celle a bottoni distinti con bordo e anello esterno di selezione (§6.1); test unitari ed E2E.
