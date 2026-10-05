@@ -4,8 +4,9 @@ import postcss from 'postcss'
 import { describe, it, expect } from 'vitest'
 import {
   DARK_PALETTE, DEFAULT_APP_THEME, DEFAULT_PRIMARY, LIGHT_PALETTE, PRIMARY_PRESETS,
-  derivePrimary, effectivePalette, primaryForeground, themeContrastWarnings, themeCss, themePrimary,
-  type AppTheme, type PrimaryPair,
+  SURFACE_KEYS, derivePrimary, effectivePalette, primaryForeground, surfaceSuggestions, themeContrastWarnings,
+  themeCss, themePrimary,
+  type AppTheme, type PaletteMode, type PrimaryPair,
 } from './theme-vars'
 
 describe('primaryForeground', () => {
@@ -347,6 +348,43 @@ describe('themePrimary', () => {
     const pair = themePrimary(theme)
     expect(pair.light).toEqual({ primary: '#6366f1', foreground: primaryForeground('#6366f1') })
     expect(pair.dark).toEqual(derivePrimary('#6366f1')!.dark)
+  })
+})
+
+describe('surfaceSuggestions', () => {
+  const MODES: PaletteMode[] = ['light', 'dark']
+  const PRIMARIES = [DEFAULT_PRIMARY, ...PRIMARY_PRESETS.map(p => p.color)]
+
+  it('offers five distinct lower-case colours, the fixed default first', () => {
+    for (const mode of MODES) {
+      for (const key of SURFACE_KEYS) {
+        const suggestions = surfaceSuggestions(DEFAULT_APP_THEME, mode, key)
+        expect(suggestions.map(s => s.id)).toEqual(['default', 'cool', 'warm', 'neutral', 'tint'])
+        expect(new Set(suggestions.map(s => s.color)).size).toBe(5)
+        for (const s of suggestions) expect(s.color).toMatch(/^#[0-9a-f]{6}$/)
+        const palette = mode === 'light' ? LIGHT_PALETTE : DARK_PALETTE
+        expect(suggestions[0].color).toBe(palette[key])
+      }
+    }
+  })
+
+  it('never suggests a colour that would raise a contrast warning, whatever the preset primary', () => {
+    for (const primaryColor of PRIMARIES) {
+      for (const mode of MODES) {
+        for (const key of SURFACE_KEYS) {
+          for (const { color } of surfaceSuggestions({ ...DEFAULT_APP_THEME, primaryColor }, mode, key)) {
+            const applied = withSurfaces({ [mode]: { [key]: color } })
+            expect(themeContrastWarnings({ ...applied, primaryColor }), `${primaryColor} ${mode} ${key} ${color}`).toEqual([])
+          }
+        }
+      }
+    }
+  })
+
+  it('tints the last suggestion with the hue of the current primary colour', () => {
+    const tint = (primaryColor: string) =>
+      surfaceSuggestions({ ...DEFAULT_APP_THEME, primaryColor }, 'light', 'background').find(s => s.id === 'tint')!.color
+    expect(tint('#059669')).not.toBe(tint('#db2777'))
   })
 })
 

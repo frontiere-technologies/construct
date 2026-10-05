@@ -375,3 +375,65 @@ export function themeCss(theme: AppTheme, selectorSuffix = ''): string {
   }
   return `html:root${selectorSuffix}{${block('light')}}html.dark${selectorSuffix}{${block('dark')}}`
 }
+
+export type SurfaceSuggestionId = 'default' | 'cool' | 'warm' | 'neutral' | 'tint'
+
+export interface SurfaceSuggestion {
+  id: SurfaceSuggestionId
+  color: string
+}
+
+/** Croma dei grigi suggeriti e della tinta: quanto basta per vederli, non per farne colori. */
+const SUGGESTION_GREY_CHROMA = 0.012
+const SUGGESTION_TINT_CHROMA = 0.03
+const degrees = (value: number) => (value * Math.PI) / 180
+const COOL_HUE = degrees(250)
+const WARM_HUE = degrees(75)
+
+/**
+ * Gli spostamenti di luminosita' provati per ogni suggerimento, dal piu' vicino
+ * al predefinito in poi: 0, -0,01, +0,01, -0,02, ... Il primo che da' un colore
+ * nuovo e leggibile vince. Allo 0 il bianco della superficie chiara non ha
+ * spazio per nessuna croma, quindi i grigi partono dal primo passo sotto.
+ */
+const SUGGESTION_OFFSETS = Array.from({ length: 101 }, (_, i) => (i % 2 === 1 ? -1 : 1) * Math.ceil(i / 2) * 0.01)
+
+/**
+ * I cinque colori suggeriti per una superficie di un modo (pagina Tema, scelta
+ * sotto l'anteprima): il predefinito fisso, un grigio freddo, uno caldo, uno
+ * neutro e una tinta leggera del colore principale attuale. Tutti alla
+ * luminosita' del predefinito, in OKLCH; un candidato che si legge male o che
+ * ripete un colore gia' in elenco si sposta di luminosita' finche' non va.
+ *
+ * «Si legge» vuol dire nessun avviso di `themeContrastWarnings` con il colore
+ * principale del tema e questa sola superficie cambiata: le altre superfici
+ * dell'admin non entrano nel conto, altrimenti un tema che ha gia' un avviso
+ * renderebbe illeggibile qualunque suggerimento.
+ */
+export function surfaceSuggestions(theme: AppTheme, mode: PaletteMode, key: SurfaceKey): SurfaceSuggestion[] {
+  const fallback = FIXED_PALETTES[mode][SURFACE_TOKENS[key][0]]
+  const seed = themeSeed(theme)
+  const base = hexToOklch(fallback)
+  const readable = (color: string) => themeContrastWarnings({
+    primaryColor: seed,
+    surfaces: { light: {}, dark: {}, [mode]: { [key]: color } },
+  }).length === 0
+
+  const suggestions: SurfaceSuggestion[] = [{ id: 'default', color: fallback }]
+  const candidates: { id: SurfaceSuggestionId; c: number; h: number }[] = [
+    { id: 'cool', c: SUGGESTION_GREY_CHROMA, h: COOL_HUE },
+    { id: 'warm', c: SUGGESTION_GREY_CHROMA, h: WARM_HUE },
+    { id: 'neutral', c: 0, h: 0 },
+    { id: 'tint', c: SUGGESTION_TINT_CHROMA, h: hexToOklch(seed).h },
+  ]
+  for (const candidate of candidates) {
+    for (const offset of SUGGESTION_OFFSETS) {
+      const l = Math.min(1, Math.max(0, base.l + offset))
+      const color = oklchToHex({ l, c: candidate.c, h: candidate.h })
+      if (suggestions.some(s => s.color === color) || !readable(color)) continue
+      suggestions.push({ id: candidate.id, color })
+      break
+    }
+  }
+  return suggestions
+}
