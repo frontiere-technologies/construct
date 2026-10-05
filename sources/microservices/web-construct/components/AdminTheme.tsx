@@ -55,7 +55,6 @@ export const AdminTheme: React.FC<{ savedColor: string }> = ({ savedColor }) => 
   const [color, setColor] = useState(savedColor)
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
-  const derived = derivePrimary(color) ?? derivePrimary(DEFAULT_PRIMARY)!
 
   // Solo un colore diverso da quello salvato ha bisogno dell'anteprima; a pari
   // colore resta il <style> del layout (che dopo un salvataggio e' gia' aggiornato).
@@ -109,7 +108,7 @@ export const AdminTheme: React.FC<{ savedColor: string }> = ({ savedColor }) => 
 
       <SettingsSection icon={Eye} title={t('theme.preview.title')}>
         <PalettePreview
-          derived={derived}
+          theme={{ primaryColor: color, surfaces: { light: {}, dark: {} } }}
           labels={{
             light: t('theme.preview.light'),
             dark: t('theme.preview.dark'),
@@ -118,6 +117,11 @@ export const AdminTheme: React.FC<{ savedColor: string }> = ({ savedColor }) => 
             surface: t('theme.preview.swatch.surface'),
             background: t('theme.preview.swatch.background'),
             sidebar: t('theme.preview.swatch.sidebar'),
+            modeLight: t('theme.mode.light'),
+            modeDark: t('theme.mode.dark'),
+            customised: t('theme.preview.customised'),
+            cellName: ({ customised, ...params }) =>
+              t(customised ? 'theme.preview.cell_label_customised' : 'theme.preview.cell_label', params),
           }}
         />
       </SettingsSection>

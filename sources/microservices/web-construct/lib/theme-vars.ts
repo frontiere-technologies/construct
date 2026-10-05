@@ -320,6 +320,20 @@ export function themeContrastWarnings(theme: AppTheme): ContrastWarning[] {
   return warnings
 }
 
+/**
+ * Il colore principale che il tema mostra davvero, per modo: la variante
+ * leggibile sulle superfici del tema, oppure il colore scelto cosi' com'e' in
+ * un modo che non ne ha nessuna (l'admin ha salvato dopo l'avviso). Un valore
+ * che non e' `#rrggbb` ripiega sul predefinito.
+ */
+export function themePrimary(theme: AppTheme): DerivedPrimary {
+  const seed = isHex(theme.primaryColor) ? theme.primaryColor.toLowerCase() : DEFAULT_PRIMARY
+  const pair = (mode: PaletteMode) =>
+    fitPrimary(seed, effectivePalette(mode, theme.surfaces?.[mode]), mode === 'light' ? -1 : 1)
+    ?? { primary: seed, foreground: primaryForeground(seed) }
+  return { light: pair('light'), dark: pair('dark') }
+}
+
 /** Le variabili che il tema scrive per ogni modo, nell'ordine in cui compaiono nel CSS. */
 const THEME_CSS_TOKENS: PaletteToken[] = ['background', 'card', 'popover', 'accent', 'sidebar-accent', 'sidebar']
 
@@ -337,10 +351,10 @@ const THEME_CSS_TOKENS: PaletteToken[] = ['background', 'card', 'popover', 'acce
  * dopo l'avviso) resta il colore scelto, cosi' com'e'.
  */
 export function themeCss(theme: AppTheme, selectorSuffix = ''): string {
-  const seed = isHex(theme.primaryColor) ? theme.primaryColor.toLowerCase() : DEFAULT_PRIMARY
+  const primary = themePrimary(theme)
   const block = (mode: PaletteMode) => {
     const palette = effectivePalette(mode, theme.surfaces?.[mode])
-    const pair = fitPrimary(seed, palette, mode === 'light' ? -1 : 1) ?? { primary: seed, foreground: primaryForeground(seed) }
+    const pair = primary[mode]
     const surfaces = THEME_CSS_TOKENS.map(token => `--${token}:${palette[token]}`).join(';')
     return `--primary:${pair.primary};--primary-foreground:${pair.foreground};${surfaces}`
   }

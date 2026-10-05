@@ -4,7 +4,7 @@ import postcss from 'postcss'
 import { describe, it, expect } from 'vitest'
 import {
   DARK_PALETTE, DEFAULT_APP_THEME, DEFAULT_PRIMARY, LIGHT_PALETTE, PRIMARY_PRESETS,
-  derivePrimary, effectivePalette, primaryForeground, themeContrastWarnings, themeCss,
+  derivePrimary, effectivePalette, primaryForeground, themeContrastWarnings, themeCss, themePrimary,
   type AppTheme, type PrimaryPair,
 } from './theme-vars'
 
@@ -331,6 +331,22 @@ describe('derivePrimary on custom surfaces', () => {
     for (const surface of ['#334155', '#1e293b']) {
       expect(ratio(derived.dark.primary, surface)).toBeGreaterThanOrEqual(4.5)
     }
+  })
+})
+
+describe('themePrimary', () => {
+  it('is derivePrimary on the effective palettes when both modes have a readable variant', () => {
+    const theme = withSurfaces({ dark: { card: '#334155' } })
+    expect(themePrimary(theme)).toEqual(derivePrimary(DEFAULT_PRIMARY, {
+      light: LIGHT_PALETTE, dark: effectivePalette('dark', { card: '#334155' }),
+    }))
+  })
+
+  it('keeps the chosen colour in a mode with no readable variant, and the variant in the other', () => {
+    const theme: AppTheme = { primaryColor: '#6366f1', surfaces: { light: { card: '#000000' }, dark: {} } }
+    const pair = themePrimary(theme)
+    expect(pair.light).toEqual({ primary: '#6366f1', foreground: primaryForeground('#6366f1') })
+    expect(pair.dark).toEqual(derivePrimary('#6366f1')!.dark)
   })
 })
 
