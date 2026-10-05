@@ -360,8 +360,14 @@ async function runDatabaseCommand(command, argument) {
         update users set id_language = null, theme_mode = 'system', text_scale = 100
         where email = any(${emails})
       `
-      await sql`update app_theme set primary_color = '#4f46e5', date_mod = now()`
-      console.log(`reset language and appearance for ${result.count} E2E fixture user(s) and the app colour`)
+      // Anche le quattro superfici per modo (0033): null vuol dire «il valore fisso».
+      await sql`
+        update app_theme set primary_color = '#4f46e5',
+          background_light = null, card_light = null, accent_light = null, sidebar_light = null,
+          background_dark = null, card_dark = null, accent_dark = null, sidebar_dark = null,
+          date_mod = now()
+      `
+      console.log(`reset language and appearance for ${result.count} E2E fixture user(s) and the app theme`)
     } else if (command === 'test-delete-user') {
       const email = process.env.E2E_REGISTER_EMAIL
       if (!email) throw new Error('E2E_REGISTER_EMAIL is required')

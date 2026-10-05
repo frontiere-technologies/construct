@@ -54,9 +54,11 @@
    LIGHT_PALETTE e DARK_PALETTE in lib/theme-vars.ts: lib/theme-vars.test.ts
    confronta le due copie token per token.
 
-   --primary e --primary-foreground qui sono solo una riserva. Il valore vero
-   arriva dal <style id="app-primary"> che app/layout.tsx scrive dal colore in
-   app_theme, con selettori (html:root, html.dark) che pesano piu' di questi. */
+   --primary e --primary-foreground qui sono solo una riserva, e lo sono anche
+   le quattro superfici che l'admin puo' cambiare (DEC-9: --background, --card e
+   --popover, --accent e --sidebar-accent, --sidebar). Il valore vero arriva dal
+   <style id="app-primary"> che app/layout.tsx scrive da app_theme, con
+   selettori (html:root, html.dark) che pesano piu' di questi. */
 :root {
   --primary: #4f46e5;
   --primary-foreground: #ffffff;

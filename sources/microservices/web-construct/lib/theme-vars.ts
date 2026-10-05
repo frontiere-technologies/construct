@@ -83,6 +83,52 @@ export const DARK_PALETTE: Record<PaletteToken, string> = {
   'sidebar-accent-foreground': '#ffffff',
 }
 
+export type PaletteMode = 'light' | 'dark'
+
+/** Le due tavolozze fisse, per modo. */
+export const FIXED_PALETTES: Record<PaletteMode, Record<PaletteToken, string>> = {
+  light: LIGHT_PALETTE,
+  dark: DARK_PALETTE,
+}
+
+/**
+ * Le quattro superfici che l'admin puo' cambiare, per modo (DEC-9, che riapre
+ * la DEC-3 solo per queste). Testi e bordi restano quelli della tavolozza fissa.
+ */
+export type SurfaceKey = 'background' | 'card' | 'accent' | 'sidebar'
+
+export const SURFACE_KEYS: readonly SurfaceKey[] = ['background', 'card', 'accent', 'sidebar']
+
+/** Le variabili che ogni superficie veste: la superficie anche i popover, il passaggio anche la voce attiva. */
+export const SURFACE_TOKENS: Record<SurfaceKey, readonly PaletteToken[]> = {
+  background: ['background'],
+  card: ['card', 'popover'],
+  accent: ['accent', 'sidebar-accent'],
+  sidebar: ['sidebar'],
+}
+
+/** Le superfici cambiate di un modo; una chiave assente vuol dire «il valore fisso». */
+export type SurfaceOverrides = Partial<Record<SurfaceKey, string>>
+
+export interface AppTheme {
+  primaryColor: string
+  surfaces: Record<PaletteMode, SurfaceOverrides>
+}
+
+/**
+ * La tavolozza di un modo con le superfici cambiate al posto di quelle fisse.
+ * Un valore che non e' `#rrggbb` si ignora: resta il fisso.
+ */
+export function effectivePalette(mode: PaletteMode, overrides: SurfaceOverrides = {}): Record<PaletteToken, string> {
+  const palette = { ...FIXED_PALETTES[mode] }
+  for (const key of SURFACE_KEYS) {
+    const value = overrides[key]
+    if (typeof value !== 'string' || !isHex(value)) continue
+    for (const token of SURFACE_TOKENS[key]) palette[token] = value.toLowerCase()
+  }
+  return palette
+}
+
 /**
  * Le superfici su cui `--primary` compare. La soglia e' quella del testo (4,5)
  * e non quella dei componenti (3), perche' `--primary` veste anche testo: la
@@ -91,6 +137,8 @@ export const DARK_PALETTE: Record<PaletteToken, string> = {
 const PRIMARY_SURFACES: PaletteToken[] = ['background', 'card', 'popover', 'accent', 'sidebar', 'sidebar-accent']
 
 export const DEFAULT_PRIMARY = '#4f46e5'
+
+export const DEFAULT_APP_THEME: AppTheme = { primaryColor: DEFAULT_PRIMARY, surfaces: { light: {}, dark: {} } }
 
 export const PRIMARY_PRESETS = [
   { id: 'indigo', color: '#4f46e5' },
@@ -195,24 +243,106 @@ function fitPrimary(seed: string, palette: Record<PaletteToken, string>, directi
 }
 
 /**
- * Le varianti chiaro e scuro di un colore scelto (specifica §3). `null` per un
- * valore che non e' `#rrggbb`, o se un modo non ha nessuna variante leggibile.
+ * Le varianti chiaro e scuro di un colore scelto (specifica §3), misurate sulle
+ * tavolozze date — quelle fisse se non se ne passano altre, quelle con le
+ * superfici dell'admin per il tema salvato. `null` per un valore che non e'
+ * `#rrggbb`, o se un modo non ha nessuna variante leggibile.
  */
-export function derivePrimary(seed: string): DerivedPrimary | null {
+export function derivePrimary(
+  seed: string,
+  palettes: Record<PaletteMode, Record<PaletteToken, string>> = FIXED_PALETTES,
+): DerivedPrimary | null {
   if (!isHex(seed)) return null
   const color = seed.toLowerCase()
-  const light = fitPrimary(color, LIGHT_PALETTE, -1)
-  const dark = fitPrimary(color, DARK_PALETTE, 1)
+  const light = fitPrimary(color, palettes.light, -1)
+  const dark = fitPrimary(color, palettes.dark, 1)
   return light && dark ? { light, dark } : null
 }
 
+/** I testi che si misurano contro le superfici. Il colore principale ha una regola sua. */
+export type TextToken =
+  | 'foreground' | 'foreground-secondary' | 'muted-foreground' | 'foreground-faint'
+  | 'sidebar-foreground' | 'sidebar-accent-foreground'
+
 /**
- * Il CSS che `app/layout.tsx` scrive nel `<style>` della pagina. I selettori
- * `html:root` e `html.dark` pesano (0,1,1) e battono il `:root` di
- * `globals.css` (0,1,0) qualunque sia l'ordine dei due fogli nel documento.
+ * Un testo che su una superficie scende sotto `CONTRAST_FLOOR`. Per il colore
+ * principale (`text: 'primary'`) superficie e rapporto sono `null`: il problema
+ * non e' una coppia, e' che nessuna variante si legge su tutte le superfici.
  */
-export function primaryCss(seed: string): string {
-  const derived = derivePrimary(seed) ?? derivePrimary(DEFAULT_PRIMARY)!
-  const block = (pair: PrimaryPair) => `--primary:${pair.primary};--primary-foreground:${pair.foreground}`
-  return `html:root{${block(derived.light)}}html.dark{${block(derived.dark)}}`
+export interface ContrastWarning {
+  mode: PaletteMode
+  text: TextToken | 'primary'
+  surface: PaletteToken | null
+  ratio: number | null
+}
+
+/** Ogni testo con le superfici su cui compare. */
+const TEXT_RULES: { text: TextToken; surfaces: PaletteToken[] }[] = [
+  ...(['foreground', 'foreground-secondary', 'muted-foreground', 'foreground-faint'] as const).map(text => ({
+    text, surfaces: ['background', 'card', 'popover', 'accent'] as PaletteToken[],
+  })),
+  { text: 'sidebar-foreground', surfaces: ['sidebar', 'sidebar-accent'] },
+  { text: 'sidebar-accent-foreground', surfaces: ['sidebar-accent'] },
+]
+
+/** La superficie dell'admin che decide il colore di una variabile: serve a non ripetere un problema. */
+const SURFACE_OF_TOKEN: Partial<Record<PaletteToken, SurfaceKey>> = Object.fromEntries(
+  SURFACE_KEYS.flatMap(key => SURFACE_TOKENS[key].map(token => [token, key])),
+)
+
+/**
+ * Dove il tema salvato si legge male (DEC-9). Non rifiuta niente: l'azione di
+ * salvataggio mostra l'elenco e lascia decidere l'admin. Ogni problema compare
+ * una volta per modo, testo e superficie dell'admin: una superficie scura veste
+ * `--card` e `--popover`, ma e' un problema solo.
+ */
+export function themeContrastWarnings(theme: AppTheme): ContrastWarning[] {
+  const warnings: ContrastWarning[] = []
+  const palettes = { light: effectivePalette('light', theme.surfaces.light), dark: effectivePalette('dark', theme.surfaces.dark) }
+  const seed = isHex(theme.primaryColor) ? theme.primaryColor.toLowerCase() : DEFAULT_PRIMARY
+  for (const mode of ['light', 'dark'] as const) {
+    const palette = palettes[mode]
+    const seen = new Set<string>()
+    for (const rule of TEXT_RULES) {
+      for (const surface of rule.surfaces) {
+        const ratio = contrastRatio(palette[rule.text], palette[surface])
+        if (ratio >= CONTRAST_FLOOR) continue
+        const key = `${rule.text}|${SURFACE_OF_TOKEN[surface] ?? surface}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        warnings.push({ mode, text: rule.text, surface, ratio })
+      }
+    }
+    if (!fitPrimary(seed, palette, mode === 'light' ? -1 : 1)) {
+      warnings.push({ mode, text: 'primary', surface: null, ratio: null })
+    }
+  }
+  return warnings
+}
+
+/** Le variabili che il tema scrive per ogni modo, nell'ordine in cui compaiono nel CSS. */
+const THEME_CSS_TOKENS: PaletteToken[] = ['background', 'card', 'popover', 'accent', 'sidebar-accent', 'sidebar']
+
+/**
+ * Il CSS del tema: colore principale e superfici, per tutti e due i modi.
+ *
+ * Senza suffisso e' quello che `app/layout.tsx` scrive nel `<style>` della
+ * pagina: `html:root` e `html.dark` pesano (0,1,1) e battono il `:root` di
+ * `globals.css` (0,1,0) qualunque sia l'ordine dei due fogli. Con il suffisso
+ * `[data-theme-mode]` e' l'anteprima della pagina admin, che pesa (0,2,1) e
+ * batte a sua volta il layout.
+ *
+ * Esce solo `#rrggbb`: un valore che non lo e' ripiega sul predefinito. Se un
+ * modo non ha un colore principale leggibile (l'admin ha salvato lo stesso,
+ * dopo l'avviso) resta il colore scelto, cosi' com'e'.
+ */
+export function themeCss(theme: AppTheme, selectorSuffix = ''): string {
+  const seed = isHex(theme.primaryColor) ? theme.primaryColor.toLowerCase() : DEFAULT_PRIMARY
+  const block = (mode: PaletteMode) => {
+    const palette = effectivePalette(mode, theme.surfaces?.[mode])
+    const pair = fitPrimary(seed, palette, mode === 'light' ? -1 : 1) ?? { primary: seed, foreground: primaryForeground(seed) }
+    const surfaces = THEME_CSS_TOKENS.map(token => `--${token}:${palette[token]}`).join(';')
+    return `--primary:${pair.primary};--primary-foreground:${pair.foreground};${surfaces}`
+  }
+  return `html:root${selectorSuffix}{${block('light')}}html.dark${selectorSuffix}{${block('dark')}}`
 }

@@ -3,9 +3,9 @@ import { resolve } from 'node:path'
 import postcss from 'postcss'
 import { describe, it, expect } from 'vitest'
 import {
-  DARK_PALETTE, DEFAULT_PRIMARY, LIGHT_PALETTE, PRIMARY_PRESETS,
-  derivePrimary, primaryCss, primaryForeground,
-  type PrimaryPair,
+  DARK_PALETTE, DEFAULT_APP_THEME, DEFAULT_PRIMARY, LIGHT_PALETTE, PRIMARY_PRESETS,
+  derivePrimary, effectivePalette, primaryForeground, themeContrastWarnings, themeCss,
+  type AppTheme, type PrimaryPair,
 } from './theme-vars'
 
 describe('primaryForeground', () => {
@@ -230,18 +230,158 @@ describe('derivePrimary', () => {
   })
 })
 
-describe('primaryCss', () => {
+/** Un tema con le sole superfici date, sul colore predefinito. */
+const withSurfaces = (surfaces: Partial<AppTheme['surfaces']>): AppTheme => ({
+  primaryColor: DEFAULT_PRIMARY,
+  surfaces: { light: {}, dark: {}, ...surfaces },
+})
+
+describe('effectivePalette', () => {
+  it('is the fixed palette when nothing is overridden', () => {
+    expect(effectivePalette('light', {})).toEqual(LIGHT_PALETTE)
+    expect(effectivePalette('dark', {})).toEqual(DARK_PALETTE)
+  })
+
+  it('maps each surface onto the variables it drives, and nothing else', () => {
+    const palette = effectivePalette('light', {
+      background: '#fefefe', card: '#fafafa', accent: '#eeeeee', sidebar: '#f0f0f0',
+    })
+    expect(palette).toEqual({
+      ...LIGHT_PALETTE,
+      'background': '#fefefe',
+      'card': '#fafafa',
+      'popover': '#fafafa',
+      'accent': '#eeeeee',
+      'sidebar-accent': '#eeeeee',
+      'sidebar': '#f0f0f0',
+    })
+  })
+
+  it('ignores a value that is not a colour and lower-cases a valid one', () => {
+    const palette = effectivePalette('dark', { card: 'nope', background: '#ABCDEF' })
+    expect(palette.card).toBe(DARK_PALETTE.card)
+    expect(palette.background).toBe('#abcdef')
+  })
+})
+
+describe('themeContrastWarnings', () => {
+  it('has nothing to say about the shipped defaults', () => {
+    expect(themeContrastWarnings(DEFAULT_APP_THEME)).toEqual([])
+  })
+
+  it('names every text level that a dark card in light mode makes unreadable, with its ratio', () => {
+    const warnings = themeContrastWarnings(withSurfaces({ light: { card: '#1f2937' } }))
+    const onCard = warnings.filter(w => w.mode === 'light' && w.surface === 'card')
+    expect(onCard.map(w => w.text).sort()).toEqual(
+      ['foreground', 'foreground-faint', 'foreground-secondary', 'muted-foreground'],
+    )
+    const foreground = onCard.find(w => w.text === 'foreground')!
+    expect(foreground.ratio).toBeCloseTo(1.21, 2)
+    expect(warnings.every(w => w.mode === 'light')).toBe(true)
+  })
+
+  it('reports a failing pair once, even when one surface drives two variables', () => {
+    // La superficie veste --card e --popover: lo stesso testo sullo stesso colore e' un problema solo.
+    const warnings = themeContrastWarnings(withSurfaces({ light: { card: '#1f2937' } }))
+    const keys = warnings.map(w => `${w.mode}|${w.text}|${w.surface === 'popover' ? 'card' : w.surface}`)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('checks the sidebar text on a custom sidebar', () => {
+    const warnings = themeContrastWarnings(withSurfaces({ dark: { sidebar: '#9ca3af' } }))
+    expect(warnings).toContainEqual(expect.objectContaining({ mode: 'dark', text: 'sidebar-foreground', surface: 'sidebar' }))
+    expect(warnings.some(w => w.text === 'foreground')).toBe(false)
+  })
+
+  it('checks the active-item text on a custom hover surface', () => {
+    const warnings = themeContrastWarnings(withSurfaces({ dark: { accent: '#e5e7eb' } }))
+    expect(warnings).toContainEqual(
+      expect.objectContaining({ mode: 'dark', text: 'sidebar-accent-foreground', surface: 'sidebar-accent' }),
+    )
+  })
+
+  it('warns about the primary when no variant reads on every surface of a mode', () => {
+    // Uno sfondo bianco e una superficie nera: nessun colore arriva a 4,5 su entrambi.
+    const warnings = themeContrastWarnings(withSurfaces({ light: { card: '#000000' } }))
+    expect(warnings).toContainEqual({ mode: 'light', text: 'primary', surface: null, ratio: null })
+  })
+})
+
+describe('derivePrimary on custom surfaces', () => {
+  const luminance = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16)
+    const channel = (v: number) => {
+      const c = v / 255
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255)
+  }
+  const ratio = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+
+  it('keeps the primary at 4.5:1 on the surfaces the admin chose', () => {
+    const light = effectivePalette('light', { background: '#e0e7ff', card: '#eef2ff', accent: '#c7d2fe' })
+    const dark = effectivePalette('dark', { card: '#334155', sidebar: '#1e293b' })
+    const derived = derivePrimary('#6366f1', { light, dark })!
+    for (const surface of ['#e0e7ff', '#eef2ff', '#c7d2fe']) {
+      expect(ratio(derived.light.primary, surface)).toBeGreaterThanOrEqual(4.5)
+    }
+    for (const surface of ['#334155', '#1e293b']) {
+      expect(ratio(derived.dark.primary, surface)).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+})
+
+describe('themeCss', () => {
   it('writes both modes with selectors that beat the :root fallback in globals.css', () => {
     // html:root e html.dark pesano (0,1,1), :root di globals.css (0,1,0): vincono qualunque sia
     // l'ordine in cui il browser incontra il <style> del layout e il foglio di globals.css.
-    const css = primaryCss(DEFAULT_PRIMARY)
-    expect(css).toContain('html:root{--primary:#4f46e5;--primary-foreground:#ffffff}')
-    expect(css).toMatch(/html\.dark\{--primary:#[0-9a-f]{6};--primary-foreground:#[0-9a-f]{6}\}/)
+    const css = themeCss(DEFAULT_APP_THEME)
+    expect(css).toMatch(/^html:root\{--primary:#4f46e5;--primary-foreground:#ffffff;/)
+    expect(css).toMatch(/html\.dark\{--primary:#[0-9a-f]{6};--primary-foreground:#[0-9a-f]{6};/)
     expect(css.indexOf('html:root')).toBeLessThan(css.indexOf('html.dark'))
+    expect(css).toContain(`--card:${LIGHT_PALETTE.card}`)
+    expect(css).toContain(`--sidebar:${DARK_PALETTE.sidebar}`)
   })
 
-  it('falls back to the default for a value that is not a colour', () => {
-    expect(primaryCss('nope')).toBe(primaryCss(DEFAULT_PRIMARY))
+  it('appends a selector suffix for the live preview, which must outweigh the layout', () => {
+    const css = themeCss(DEFAULT_APP_THEME, '[data-theme-mode]')
+    expect(css).toMatch(/^html:root\[data-theme-mode\]\{/)
+    expect(css).toContain('}html.dark[data-theme-mode]{')
+  })
+
+  it('writes the overridden surfaces of each mode into that mode only', () => {
+    const css = themeCss(withSurfaces({
+      light: { card: '#fafafa', accent: '#eeeeee' },
+      dark: { background: '#000000', sidebar: '#0b1220' },
+    }))
+    const [light, dark] = css.split('html.dark')
+    expect(light).toContain('--card:#fafafa;--popover:#fafafa')
+    expect(light).toContain('--accent:#eeeeee;--sidebar-accent:#eeeeee')
+    expect(light).toContain(`--background:${LIGHT_PALETTE.background}`)
+    expect(dark).toContain('--background:#000000')
+    expect(dark).toContain('--sidebar:#0b1220')
+    expect(dark).toContain(`--card:${DARK_PALETTE.card}`)
+  })
+
+  it('falls back to the defaults for values that are not colours, and writes only hex', () => {
+    const garbage = {
+      primaryColor: 'nope',
+      surfaces: { light: { card: 'red;}body{display:none' }, dark: { sidebar: 'url(x)' } },
+    } as AppTheme
+    const css = themeCss(garbage)
+    expect(css).toBe(themeCss(DEFAULT_APP_THEME))
+    for (const value of css.matchAll(/:([^;{}]+)[;}]/g)) {
+      if (value[1].startsWith('root')) continue
+      expect(value[1]).toMatch(/^#[0-9a-f]{6}$/)
+    }
+  })
+
+  it('falls back to the chosen colour when no readable primary exists for a mode', () => {
+    const css = themeCss({ primaryColor: '#6366f1', surfaces: { light: { card: '#000000' }, dark: {} } })
+    expect(css).toMatch(/^html:root\{--primary:#6366f1;/)
   })
 })
 
