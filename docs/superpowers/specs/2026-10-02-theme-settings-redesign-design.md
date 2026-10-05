@@ -45,7 +45,8 @@ Dopo questo lavoro:
 - **DEC-2 — Preferenze personali in una pagina propria**, `/settings`, aperta dal pannello utente
   della sidebar. Non è una voce di menu.
 - **DEC-3 — I 29 colori fini si eliminano.** Non c'è una sezione "Avanzate". I temi salvati oggi
-  non si migrano: li vedeva solo chi li aveva salvati.
+  non si migrano: li vedeva solo chi li aveva salvati. *Riaperta per quattro sfondi dalla DEC-9
+  (2026-10-05).*
 - **DEC-4 — Colore scelto fra 5 preset più uno personalizzato.**
 - **DEC-5 — Le varianti si calcolano con codice nostro in OKLCH**, senza dipendenze nuove
   (approccio A). La libreria Material 3 e l'uso del colore senza aggiustamenti sono stati scartati.
@@ -55,6 +56,29 @@ Dopo questo lavoro:
 - **DEC-8 — In database si salva solo il colore scelto.** Le varianti chiaro/scuro si ricalcolano
   a ogni richiesta con una funzione pura, così un miglioramento del calcolo non richiede di
   toccare i dati.
+- **DEC-9 — DEC-3 riaperta per quattro sfondi (2026-10-05).** Dopo aver provato la pagina il
+  proprietario del progetto ha chiesto di poter cambiare gli sfondi. La DEC-3 si riapre solo per
+  quattro superfici, separate per chiaro e scuro (8 colori, globali come il colore principale):
+
+  | Etichetta | Chiave | Variabili |
+  |---|---|---|
+  | Sfondo | `background` | `--background` |
+  | Superficie | `card` | `--card` e `--popover` |
+  | Passaggio | `accent` | `--accent` e `--sidebar-accent` |
+  | Sidebar | `sidebar` | `--sidebar` |
+
+  Testi e bordi restano fissi. Il contrasto non si garantisce più per costruzione: al salvataggio
+  il server lo misura sulla tavolozza effettiva (fissa più superfici cambiate) e, se qualcosa
+  scende sotto 4,5, non salva e restituisce un elenco di avvisi. L'admin può tornare indietro
+  oppure confermare con «Salva comunque»: è un avviso, non un rifiuto. Le regole, per modo:
+  - `foreground`, `foreground-secondary`, `muted-foreground`, `foreground-faint` contro
+    `background`, `card`, `popover`, `accent`;
+  - `sidebar-foreground` contro `sidebar` e `sidebar-accent`;
+  - `sidebar-accent-foreground` contro `sidebar-accent`;
+  - il colore principale: `derivePrimary` gira sulla tavolozza effettiva; se un modo non ha
+    nessuna variante leggibile, l'avviso nomina il colore principale.
+
+  I predefiniti non producono avvisi (lo fissano i test della tavolozza).
 
 ## 2. Dati
 
@@ -72,6 +96,24 @@ grant select, update on table public.app_theme to construct_runtime;
 
 La chiave booleana con `check (id)` permette una sola riga. Il colore si salva sempre in
 minuscolo.
+
+*Aggiunto con la DEC-9 (migrazione additiva `0033`).* Otto colonne per le superfici, tutte
+nullable: null vuol dire «il valore fisso di `globals.css`».
+
+```sql
+alter table public.app_theme
+  add column background_light varchar(7) check (background_light ~ '^#[0-9a-f]{6}$'),
+  add column card_light       varchar(7) check (card_light ~ '^#[0-9a-f]{6}$'),
+  add column accent_light     varchar(7) check (accent_light ~ '^#[0-9a-f]{6}$'),
+  add column sidebar_light    varchar(7) check (sidebar_light ~ '^#[0-9a-f]{6}$'),
+  add column background_dark  varchar(7) check (background_dark ~ '^#[0-9a-f]{6}$'),
+  add column card_dark        varchar(7) check (card_dark ~ '^#[0-9a-f]{6}$'),
+  add column accent_dark      varchar(7) check (accent_dark ~ '^#[0-9a-f]{6}$'),
+  add column sidebar_dark     varchar(7) check (sidebar_dark ~ '^#[0-9a-f]{6}$');
+```
+
+I privilegi della `0031` coprono già le colonne nuove. Il contrasto non è un vincolo del
+database: lo controlla l'azione server, che avvisa.
 
 ### 2.2 `users`
 
@@ -149,13 +191,24 @@ Le superfici fisse diventano costanti TypeScript esportate da `lib/theme-vars.ts
 modo chiaro e una per lo scuro. Le leggono sia il calcolo sia un test che le confronta con
 `globals.css`, così non possono divergere.
 
+*Aggiornato con la DEC-9.* `derivePrimary(seed, palettes?)` misura sulle tavolozze date, che per
+il tema salvato sono quelle effettive di `effectivePalette(mode, overrides)` (fissa più superfici
+cambiate); senza il secondo argomento restano le fisse. Il caso «nessuna variante leggibile» non
+è più teorico: con superfici scelte dall'admin può succedere. Non rifiuta il salvataggio, produce
+un avviso per il colore principale (`themeContrastWarnings`), e il CSS mostra in quel modo il
+colore scelto così com'è (`themePrimary`). `themeContrastWarnings(theme)` applica anche le regole
+dei testi della DEC-9 e riporta ogni problema una volta per modo, testo e superficie dell'admin
+(una superficie scura veste `--card` e `--popover`, ma è un problema solo).
+
 ## 4. Applicazione delle variabili
 
 - **`app/layout.tsx`** legge `app_theme` e le preferenze (§2.3). Ciascuna lettura è una query per
   richiesta, deduplicata con `cache()` di React. Poi scrive:
   - su `<html>`: `data-theme-mode="<mode>"` e `style="font-size: <scale>%"`;
   - un `<style>` con `:root{--primary:…;--primary-foreground:…}` e
-    `.dark{--primary:…;--primary-foreground:…}`.
+    `.dark{--primary:…;--primary-foreground:…}`. *Con la DEC-9* lo scrive `themeCss(theme)`, che
+    aggiunge per ogni modo le sei variabili delle superfici (`--background`, `--card`,
+    `--popover`, `--accent`, `--sidebar-accent`, `--sidebar`), cambiate o fisse.
 - **La classe `dark` non la scrive React**: la mette uno script inline in `<head>`, sempre
   presente, che gira prima che la pagina compaia. Legge `data-theme-mode`:
   - `dark` mette la classe;
@@ -193,7 +246,11 @@ modo chiaro e una per lo scuro. Le leggono sia il calcolo sia un test che le con
 
 ## 5. Azioni server
 
-- **`saveAppPrimaryColor(color)`** in `lib/theme-actions.ts`:
+- **`saveAppPrimaryColor(color)`** in `lib/theme-actions.ts` (*sostituita con la DEC-9 da
+  `saveAppTheme(theme, { acknowledgeWarnings? })`*: stessa guardia `requireAdmin()`, Zod su
+  colore principale e superfici, nessun rifiuto per contrasto; se `themeContrastWarnings` trova
+  problemi e manca la conferma restituisce `{ saved: false, error: null, warnings }` senza
+  scrivere, altrimenti aggiorna le nove colonne e restituisce `{ saved: true }`):
   - richiede un admin con `requireAdmin()` (`lib/rbac/auth-guard.ts`), che verifica i ruoli sul
     database e non si fida del JWT;
   - valida il valore con Zod (`/^#[0-9a-f]{6}$/i`, poi lo porta in minuscolo);
@@ -236,9 +293,23 @@ per ogni impostazione.
 - **Anteprima**: due strisce, "Chiaro" e "Scuro". Ognuna mostra i colori reali di quel modo:
   principale (con la sua scritta), passaggio del mouse (`--accent`), superficie (`--card`), sfondo
   (`--background`) e sidebar (`--sidebar`).
+  - *Con la DEC-9* le celle Passaggio, Superficie, Sfondo e Sidebar di tutte e due le strisce sono
+    bottoni: un click (o Invio / Spazio) apre il selettore nativo, come il pallino
+    "Personalizzato" (`<input type="color">` nascosto). La cella "Principale" resta dei pallini.
+    Sotto le strisce c'è il suggerimento "Clicca uno sfondo per cambiarne il colore.".
+  - Una superficie cambiata mostra un pallino e il suo nome accessibile lo dice ("Superficie,
+    chiaro: #ffffff — personalizzato, modifica").
+  - Le modifiche entrano subito nell'anteprima dal vivo (`<style id="app-primary-preview">`, ora
+    scritto da `themeCss` con le superfici). "Valori di Default" rimette il colore principale e
+    tutte e otto le superfici.
 - **Fondo pagina**: come oggi, cioè nota "Ricordati di salvare", "Valori di Default" e "Salva".
   - Durante il salvataggio pallini e pulsanti sono disattivati.
   - Esito: "Tema salvato" oppure un errore. Il rifiuto per contrasto usa `role="alert"`.
+    *Sostituito con la DEC-9*: il rifiuto per contrasto non c'è più. Se il server restituisce
+    avvisi si apre `ConfirmModal` (non distruttivo) con l'elenco dei problemi, "Salva comunque"
+    e "Annulla". "Salva comunque" rimanda lo stesso tema con la conferma e il server salva;
+    "Annulla" chiude e non salva niente. La chiave `theme.status.unreadable` resta in database
+    senza più nessun uso, da cancellare in una prossima migrazione distruttiva.
 - **Accesso**: invariato (redirect se non admin). In più c'è il controllo nell'azione server.
 
 ### 6.2 Impostazioni (`/settings`)
@@ -379,3 +450,9 @@ Le chiavi nuove entrano nella migrazione additiva `0031`; quelle obsolete si can
 - [✅] ID=UI-4, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Pannello utente della sidebar, Fix description=Togliere interruttore e `LanguageSwitcher`, aggiungere il link "Impostazioni" (§6.3).
 - [✅] ID=I18N-1, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Traduzioni, Fix description=Chiavi nuove (it/en) in `0031`, cancellazione delle obsolete in `0032` (§7); `npm run test:i18n-keys` verde.
 - [✅] ID=E2E-1, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Test E2E, Fix description=Riscrivere `test_admin_theme.py`, creare `test_settings.py`, aggiornare `test_sidebar.py`, con ripristino dello stato in ogni test (§8.2).
+- [ ] ID=SURF-1, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Colonne delle superfici, Fix description=Migrazione additiva `0033` con le otto colonne nullable di `app_theme` (DEC-9, §2.1) e le chiavi di traduzione nuove (it/en); `lib/db/schema.ts`, `schema.sql`, `db.mjs test-reset-e2e` che azzera anche le superfici; applicata al database E2E, da applicare a dev e produzione con il rilascio.
+- [ ] ID=SURF-2, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Tavolozza effettiva e avvisi di contrasto, Fix description=`effectivePalette`, `derivePrimary` sulle tavolozze date, `themePrimary`, `themeContrastWarnings` e `themeCss` (che sostituisce `primaryCss`) in `lib/theme-vars.ts`; `getAppTheme` in `lib/theme-server.ts`; `app/layout.tsx` scrive le superfici (§3, §4).
+- [ ] ID=SURF-3, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Salvataggio con avviso, Fix description=`saveAppTheme(theme, { acknowledgeWarnings })` al posto di `saveAppPrimaryColor`: avvisi senza scrivere finche' manca la conferma, poi salvataggio delle nove colonne (§5).
+- [ ] ID=SURF-4, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Anteprima modificabile e dialogo di avviso, Fix description=Celle delle superfici come bottoni con selettore nativo in `PalettePreview`, segno e nome accessibile per le superfici cambiate, anteprima dal vivo delle superfici, "Valori di Default" che le azzera, `ConfirmModal` con `children` per l'elenco degli avvisi (§6.1).
+- [ ] ID=SURF-5, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Test E2E delle superfici, Fix description=In `test_admin_theme.py`: una superficie leggibile salvata resta dopo il ricaricamento (`--card` e segno); una superficie scura apre l'avviso e "Annulla" non salva niente; ripristino dei predefiniti in `finally`.
+- [ ] ID=SURF-6, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Chiave obsoleta, Fix description=Cancellare `theme.status.unreadable` in una migrazione distruttiva successiva, applicata dopo il codice che ha smesso di usarla.
