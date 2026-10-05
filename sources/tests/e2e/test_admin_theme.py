@@ -26,6 +26,19 @@ def _primary_var(page):
     return _css_var(page, "--primary")
 
 
+def _wait_css_var(page, name, value, *, equal=True, timeout=5_000):
+    """Wait until --name on <html> is (or is no longer) value: the live preview is written by a
+    React effect after the click, so a one-shot read right after an action can see the old value."""
+    page.wait_for_function(
+        """([name, value, equal]) => {
+            const current = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+            return equal ? current === value : current !== value;
+        }""",
+        arg=[name, value, equal],
+        timeout=timeout,
+    )
+
+
 def _set_color_input(page, test_id, value):
     page.get_by_test_id(test_id).evaluate(
         """(el, val) => {
@@ -91,7 +104,8 @@ def test_swatch_applies_live_and_is_dropped_on_leaving(logged_in_page, base_url)
     page.get_by_test_id("theme-swatch-green").click()
     expect(page.get_by_test_id("theme-swatch-green")).to_have_attribute("aria-checked", "true")
     expect(_hex(page)).to_have_text(re.compile(GREEN, re.I))
-    assert _primary_var(page) != saved, "the chosen colour must apply before Save"
+    # The chosen colour must apply before Save.
+    _wait_css_var(page, "--primary", saved, equal=False)
     assert page.locator("#app-primary-preview").count() == 1, "the preview is a <style> element"
 
     # Leaving by a client-side navigation (no reload) runs the unmount cleanup:
@@ -106,7 +120,7 @@ def test_swatch_applies_live_and_is_dropped_on_leaving(logged_in_page, base_url)
     page.wait_for_url("**/user-management", timeout=5_000)
     assert page.evaluate("window.__stayedInTheSameDocument === true"), "must be a client-side navigation"
     expect(page.locator("#app-primary-preview")).to_have_count(0)
-    assert _primary_var(page) == saved
+    _wait_css_var(page, "--primary", saved)
 
 
 def test_custom_colour_applies_live(logged_in_page, base_url):
@@ -114,7 +128,7 @@ def test_custom_colour_applies_live(logged_in_page, base_url):
     nav(page, f"{base_url}/admin/theme")
     _set_custom_color(page, CUSTOM)
     expect(page.get_by_test_id("theme-swatch-custom")).to_have_attribute("aria-checked", "true")
-    assert _primary_var(page) == CUSTOM
+    _wait_css_var(page, "--primary", CUSTOM)
 
 
 def test_reset_returns_to_the_default(logged_in_page, base_url):
@@ -124,7 +138,7 @@ def test_reset_returns_to_the_default(logged_in_page, base_url):
     page.get_by_role("button", name="Valori di Default", exact=True).click()
     expect(page.get_by_test_id("theme-swatch-indigo")).to_have_attribute("aria-checked", "true")
     expect(_hex(page)).to_have_text(re.compile(PRIMARY_DEFAULT, re.I))
-    assert _primary_var(page) == PRIMARY_DEFAULT
+    _wait_css_var(page, "--primary", PRIMARY_DEFAULT)
 
 
 def test_save_persists_after_reload(logged_in_page, base_url):
@@ -136,7 +150,7 @@ def test_save_persists_after_reload(logged_in_page, base_url):
 
         nav(page, f"{base_url}/admin/theme")
         expect(_hex(page)).to_have_text(re.compile(CUSTOM, re.I))
-        assert _primary_var(page) == CUSTOM
+        _wait_css_var(page, "--primary", CUSTOM)
     finally:
         _restore_default(page, base_url)
 
@@ -149,7 +163,7 @@ def test_saved_colour_reaches_every_user(logged_in_page, non_admin_page, base_ur
         _save(admin)
 
         nav(non_admin_page, f"{base_url}/")
-        assert _primary_var(non_admin_page) == CUSTOM
+        _wait_css_var(non_admin_page, "--primary", CUSTOM)
     finally:
         _restore_default(admin, base_url)
 
@@ -187,8 +201,8 @@ def test_custom_surface_persists_after_reload(logged_in_page, base_url):
 
         nav(page, f"{base_url}/admin/theme")
         # The browser is in light mode (theme_mode "system", no dark emulation): --card is the light one.
-        assert _css_var(page, "--card") == READABLE_SURFACE
-        assert _css_var(page, "--popover") == READABLE_SURFACE
+        _wait_css_var(page, "--card", READABLE_SURFACE)
+        _wait_css_var(page, "--popover", READABLE_SURFACE)
         expect(page.get_by_test_id("theme-cell-light-card-marker")).to_be_visible()
         expect(page.get_by_test_id("theme-cell-light-card")).to_have_attribute(
             "aria-label", re.compile(rf"^Superficie, chiaro: {READABLE_SURFACE} — personalizzato")
@@ -220,7 +234,7 @@ def test_unreadable_surface_asks_before_saving_and_cancel_saves_nothing(logged_i
         expect(page.locator("text=Theme saved.")).to_have_count(0)
 
         nav(page, f"{base_url}/admin/theme")
-        assert _css_var(page, "--card") == saved_card
+        _wait_css_var(page, "--card", saved_card)
         expect(page.get_by_test_id("theme-cell-light-card-marker")).to_have_count(0)
     finally:
         _restore_default(page, base_url)
@@ -254,10 +268,10 @@ def test_suggested_surface_applies_live_and_use_default_resets_it(logged_in_page
     chosen = page.get_by_test_id("theme-panel-hex").inner_text().strip().lower()
     assert chosen != saved_card
     # The browser is in light mode, so the light --card is the one in use.
-    assert _css_var(page, "--card") == chosen
+    _wait_css_var(page, "--card", chosen)
     expect(page.get_by_test_id("theme-cell-light-card-marker")).to_be_visible()
 
     page.get_by_test_id("theme-use-default").click()
     expect(page.get_by_test_id("theme-cell-light-card-marker")).to_have_count(0)
     expect(page.get_by_test_id("theme-swatch-default")).to_have_attribute("aria-checked", "true")
-    assert _css_var(page, "--card") == saved_card
+    _wait_css_var(page, "--card", saved_card)
