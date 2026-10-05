@@ -59,7 +59,9 @@ const cellCls = 'relative flex h-12 min-w-0 flex-1 items-center justify-center t
  * La cella selezionata: lo stesso segno della voce attiva della sidebar, un anello
  * del colore principale, ma fuori dalla cella e staccato di 2px, cosi' si vede
  * anche sulla cella «Principale». Il fuoco da tastiera e' un contorno interno,
- * perche' l'anello e' gia' preso dalla selezione e i due devono convivere.
+ * perche' l'anello e' gia' preso dalla selezione e i due devono convivere; e'
+ * del colore del testo della cella (`outline-current`), che sul suo sfondo si
+ * legge sempre, mentre `--ring` sparirebbe sulla cella «Principale».
  */
 const selectedCls = 'ring-2 ring-primary ring-offset-2 ring-offset-card'
 
@@ -71,7 +73,7 @@ const selectedCls = 'ring-2 ring-primary ring-offset-2 ring-offset-card'
  */
 const buttonCls = cn(
   cellCls,
-  'focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
+  'focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-current',
   'enabled:hover:transform-none enabled:hover:filter-none disabled:filter-none',
 )
 
@@ -79,7 +81,7 @@ interface PalettePreviewProps {
   theme: AppTheme
   labels: PalettePreviewLabels
   disabled?: boolean
-  /** La cella selezionata; con piu' celle per lo stesso bersaglio, tutte. */
+  /** La cella selezionata: una sola, in tutte e due le strisce. */
   selected?: ThemeTarget
   /** Senza, l'anteprima e' in sola lettura. */
   onSelect?: (target: ThemeTarget) => void

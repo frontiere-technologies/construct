@@ -238,6 +238,20 @@ describe('AdminTheme', () => {
     expect(preview()?.textContent).toBe(themeCss(DEFAULT_APP_THEME, '[data-theme-mode]'))
   })
 
+  it('stores "Automatico" as no choice at all, so the dark primary keeps following the light one', async () => {
+    vi.mocked(saveAppTheme).mockResolvedValue({ saved: true, error: null })
+    render(DEFAULT_APP_THEME)
+    select('primary-dark')
+    act(() => (byTestId('theme-swatch-green') as HTMLButtonElement).click())
+    expect(byTestId('theme-cell-primary-dark-marker')).not.toBeNull()
+    act(() => (byTestId('theme-swatch-auto') as HTMLButtonElement).click())
+    expect(byTestId('theme-swatch-auto')?.getAttribute('aria-checked')).toBe('true')
+    expect(byTestId('theme-cell-primary-dark-marker')).toBeNull()
+    expect(byTestId('theme-use-default')).toBeNull()
+    await act(async () => button('common.actions.save').click())
+    expect(saveAppTheme).toHaveBeenCalledWith(expect.objectContaining({ primaryDark: null }), { acknowledgeWarnings: false })
+  })
+
   it('resets the primary colour and every surface on "Valori di Default"', () => {
     render(themeWith('#16a34a', { light: { card: '#fafafa' }, dark: { sidebar: '#0b1220' } }, '#fbbf24'))
     expect(document.querySelectorAll('[data-testid$="-marker"]')).toHaveLength(3)

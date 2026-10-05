@@ -141,6 +141,16 @@ describe('PalettePreview selection', () => {
     expect(strip.className.split(/\s+/)).toEqual(expect.arrayContaining(['gap-2', 'p-1']))
   })
 
+  it('draws the keyboard focus inside the cell in its own text colour, readable on any cell', () => {
+    render()
+    for (const id of ['primary-light', 'light-card']) {
+      expect(cell(id).className.split(/\s+/)).toEqual(expect.arrayContaining([
+        'focus-visible:outline-2', 'focus-visible:-outline-offset-4', 'focus-visible:outline-current',
+      ]))
+      expect(cell(id).className).not.toContain('outline-ring')
+    }
+  })
+
   it('switches off the global hover lift and the disabled fade, which would fake another colour', () => {
     render()
     for (const id of ['light-card', 'primary-light']) {

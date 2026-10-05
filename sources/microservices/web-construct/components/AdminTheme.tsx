@@ -235,7 +235,13 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
           groupLabel: t('theme.panel.swatches_primary_dark'),
           value: theme.primaryDark ?? darkSuggestions[0]?.color ?? theme.primaryColor,
           options: darkSuggestions.map(s => ({ id: s.id, color: s.color, label: t(PRIMARY_DARK_LABEL_KEYS[s.id]) })),
-          onChange: (color: string) => setTheme(prev => ({ ...prev, primaryDark: color })),
+          // «Automatico» non e' una scelta: vale null, cosi' lo scuro continua a seguire il chiaro.
+          // ColorSwatches riporta solo il colore; il pallino automatico e' il primo, con id 'auto'.
+          onChange: (color: string) => {
+            const auto = darkSuggestions[0]
+            const isAuto = auto?.id === 'auto' && auto.color === color
+            setTheme(prev => ({ ...prev, primaryDark: isAuto ? null : color }))
+          },
           onUseDefault: typeof theme.primaryDark === 'string'
             ? () => setTheme(prev => ({ ...prev, primaryDark: null }))
             : undefined,
