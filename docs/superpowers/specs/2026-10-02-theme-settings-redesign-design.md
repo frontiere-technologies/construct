@@ -302,6 +302,27 @@ per ogni impostazione.
   - Le modifiche entrano subito nell'anteprima dal vivo (`<style id="app-primary-preview">`, ora
     scritto da `themeCss` con le superfici). "Valori di Default" rimette il colore principale e
     tutte e otto le superfici.
+- *Corretto dopo la prova della pagina (2026-10-05).* La disposizione cambia; dati, salvataggio e
+  avviso di contrasto restano quelli della DEC-9.
+  - **In alto l'anteprima**, con le due strisce "Chiaro" e "Scuro". Ogni cella è un bottone a due
+    stati (`aria-pressed`), "Principale" compresa, e non apre più il selettore: sceglie cosa cambiare.
+    La cella selezionata ha un contorno interno del colore del suo testo. All'apertura è selezionato
+    "Principale"; le due celle "Principale" scelgono lo stesso colore e risultano selezionate insieme.
+    Il segno delle superfici cambiate resta. Sotto le strisce: "Scegli una cella per cambiarne il
+    colore." (valore aggiornato dalla `0034`).
+  - **Sotto, un solo pannello di scelta** con l'aspetto dei pallini di prima (`ColorSwatches`): il
+    titolo dice cosa si sta cambiando ("Colore principale" oppure "Superficie · Chiaro"), poi cinque
+    pallini suggeriti, il pallino "Personalizzato" con il selettore nativo e il codice esadecimale.
+    Per una superficie personalizzata compare anche "Usa il predefinito", che rimette solo quella
+    superficie di quel modo. La sezione "Colore principale" separata in cima non c'è più.
+  - **Colori suggeriti.** Per il colore principale, i cinque preset. Per ogni superficie di ogni
+    modo, cinque colori da `surfaceSuggestions(theme, mode, key)` in `lib/theme-vars.ts`, costruiti
+    in OKLCH alla luminosità del predefinito: il predefinito fisso, un grigio freddo (tinta
+    azzurrina, croma 0,012), uno caldo (tinta beige, croma 0,012), uno neutro (croma 0) e una tinta
+    leggera del colore principale attuale (croma 0,03). Un candidato che ripete un colore già in
+    elenco o che, applicato da solo con il colore principale del tema, darebbe un avviso di
+    contrasto si sposta di luminosità a passi di 0,01 finché non va. I nomi: Predefinito, Grigio
+    freddo, Grigio caldo, Grigio neutro, Tinta del colore principale.
 - **Fondo pagina**: come oggi, cioè nota "Ricordati di salvare", "Valori di Default" e "Salva".
   - Durante il salvataggio pallini e pulsanti sono disattivati.
   - Esito: "Tema salvato" oppure un errore. Il rifiuto per contrasto usa `role="alert"`.
@@ -456,3 +477,4 @@ Le chiavi nuove entrano nella migrazione additiva `0031`; quelle obsolete si can
 - [✅] ID=SURF-4, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Anteprima modificabile e dialogo di avviso, Fix description=Celle delle superfici come bottoni con selettore nativo in `PalettePreview`, segno e nome accessibile per le superfici cambiate, anteprima dal vivo delle superfici, "Valori di Default" che le azzera, `ConfirmModal` con `children` per l'elenco degli avvisi (§6.1).
 - [✅] ID=SURF-5, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Test E2E delle superfici, Fix description=In `test_admin_theme.py`: una superficie leggibile salvata resta dopo il ricaricamento (`--card` e segno); una superficie scura apre l'avviso e "Annulla" non salva niente; ripristino dei predefiniti in `finally`.
 - [ ] ID=SURF-6, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Chiave obsoleta, Fix description=Cancellare `theme.status.unreadable` in una migrazione distruttiva successiva, applicata dopo il codice che ha smesso di usarla.
+- [ ] ID=SURF-7, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Anteprima selezionabile e pannello di scelta, Fix description=Nuova disposizione di §6.1 (corretta il 2026-10-05): celle dell'anteprima a due stati che scelgono il bersaglio, un solo pannello `ColorSwatches` con i preset o i cinque `surfaceSuggestions`, "Usa il predefinito" per la superficie selezionata, etichette nella `0034` (applicata a dev ed E2E), test unitari ed E2E aggiornati.
