@@ -14,7 +14,7 @@ const labels: PalettePreviewLabels = {
   surface: 'Superficie', background: 'Sfondo', sidebar: 'Sidebar',
   modeLight: 'chiaro', modeDark: 'scuro', customised: 'Personalizzato',
   cellName: ({ surface, mode, color, customised }) =>
-    `${surface}, ${mode}: ${color}${customised ? ' — personalizzato' : ''}, modifica`,
+    `${surface}, ${mode}: ${color}${customised ? ' — personalizzato' : ''}`,
 }
 
 const themeWith = (surfaces: Partial<AppTheme['surfaces']>): AppTheme => ({
@@ -99,14 +99,14 @@ describe('PalettePreview selection', () => {
 
   it('names each cell with its label, mode and colour', () => {
     render()
-    expect(cell('light-card').getAttribute('aria-label')).toBe('Superficie, chiaro: #ffffff, modifica')
-    expect(cell('dark-sidebar').getAttribute('aria-label')).toBe('Sidebar, scuro: #111827, modifica')
-    expect(cell('primary-light').getAttribute('aria-label')).toBe('Principale, chiaro: #4f46e5, modifica')
+    expect(cell('light-card').getAttribute('aria-label')).toBe('Superficie, chiaro: #ffffff')
+    expect(cell('dark-sidebar').getAttribute('aria-label')).toBe('Sidebar, scuro: #111827')
+    expect(cell('primary-light').getAttribute('aria-label')).toBe('Principale, chiaro: #4f46e5')
   })
 
   it('marks a changed surface and says so in its name', () => {
     render(PRIMARY_TARGET, themeWith({ light: { card: '#fafafa' } }))
-    expect(cell('light-card').getAttribute('aria-label')).toBe('Superficie, chiaro: #fafafa — personalizzato, modifica')
+    expect(cell('light-card').getAttribute('aria-label')).toBe('Superficie, chiaro: #fafafa — personalizzato')
     expect(container!.querySelector('[data-testid="theme-cell-light-card-marker"]')).not.toBeNull()
     expect(container!.querySelector('[data-testid="theme-cell-dark-card-marker"]')).toBeNull()
     expect(container!.querySelector('[data-testid="theme-cell-light-background-marker"]')).toBeNull()
