@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, Palette } from 'lucide-react'
 import { saveAppTheme } from '@/lib/theme-actions'
 import {
-  DEFAULT_APP_THEME, FIXED_PALETTES, PRIMARY_PRESETS, surfaceSuggestions, themeCss,
+  DEFAULT_APP_THEME, PRIMARY_PRESETS, surfaceDefault, surfaceSuggestions, themeCss,
   type AppTheme, type ContrastWarning, type PaletteMode, type PaletteToken, type SurfaceKey,
   type SurfaceSuggestionId, type TextToken,
 } from '@/lib/theme-vars'
@@ -126,6 +126,24 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
   const [warnings, setWarnings] = useState<ContrastWarning[] | null>(null)
   // La cella selezionata nell'anteprima: cosa cambia il pannello di scelta sotto.
   const [target, setTarget] = useState<ThemeTarget>(PRIMARY_TARGET)
+  const panelRef = useRef<HTMLDivElement>(null)
+  // «Usa il predefinito» sparisce mentre ha il fuoco: dopo il render il fuoco va sul pallino scelto.
+  const focusCheckedAfterRender = useRef(false)
+
+  useEffect(() => {
+    if (!focusCheckedAfterRender.current) return
+    focusCheckedAfterRender.current = false
+    panelRef.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus()
+  }, [theme])
+
+  // I suggerimenti dipendono solo dalla cella e dal colore principale, non dalle altre superfici.
+  const { primaryColor } = theme
+  const suggestions = useMemo(
+    () => (target.kind === 'surface'
+      ? surfaceSuggestions({ ...DEFAULT_APP_THEME, primaryColor }, target.mode, target.key)
+      : []),
+    [primaryColor, target],
+  )
 
   // Solo un tema diverso da quello salvato ha bisogno dell'anteprima; a pari CSS
   // resta il <style> del layout (che dopo un salvataggio e' gia' aggiornato).
@@ -196,9 +214,8 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
         title: t('theme.panel.title_surface', { surface: t(SURFACE_CELL_KEYS[target.key]), mode: t(MODE_TITLE_KEYS[target.mode]) }),
         hint: t('theme.panel.surface_hint'),
         groupLabel: t('theme.panel.swatches_surface', { surface: t(SURFACE_CELL_KEYS[target.key]), mode: t(MODE_KEYS[target.mode]) }),
-        value: theme.surfaces[target.mode][target.key] ?? FIXED_PALETTES[target.mode][target.key],
-        options: surfaceSuggestions(theme, target.mode, target.key)
-          .map(s => ({ id: s.id, color: s.color, label: t(SUGGESTION_LABEL_KEYS[s.id]) })),
+        value: theme.surfaces[target.mode][target.key] ?? surfaceDefault(target.mode, target.key),
+        options: suggestions.map(s => ({ id: s.id, color: s.color, label: t(SUGGESTION_LABEL_KEYS[s.id]) })),
         customised: theme.surfaces[target.mode][target.key] !== undefined,
         onChange: (color: string) => setSurface(target.mode, target.key, color),
       }
@@ -231,7 +248,7 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
 
       <SettingsSection icon={Palette} title={panel.title} titleTestId="theme-panel-title">
         <SettingsRow hint={panel.hint}>
-          <div className="flex flex-wrap items-center gap-3">
+          <div ref={panelRef} className="flex flex-wrap items-center gap-3">
             {/* La chiave azzera il gruppo a ogni cambio di cella: fuoco e selezione ripartono da capo. */}
             <ColorSwatches
               key={panel.id}
@@ -248,7 +265,10 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
                 size="sm"
                 data-testid="theme-use-default"
                 disabled={saving}
-                onClick={() => setSurface(target.mode, target.key, null)}
+                onClick={() => {
+                  focusCheckedAfterRender.current = true
+                  setSurface(target.mode, target.key, null)
+                }}
               >
                 {t('theme.panel.use_default')}
               </Button>

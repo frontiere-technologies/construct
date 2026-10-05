@@ -184,6 +184,18 @@ describe('AdminTheme', () => {
     expect(preview()?.textContent).toContain(themeCss(themeWith('#16a34a', { light: { sidebar: '#f0f0f0' } }), '[data-theme-mode]'))
   })
 
+  it('moves the focus to the checked "Predefinito" dot after "Usa il predefinito", not to the page', () => {
+    render(themeWith('#16a34a', { light: { card: '#fafafa' } }))
+    select('light-card')
+    const useDefault = byTestId('theme-use-default') as HTMLButtonElement
+    act(() => useDefault.focus())
+    act(() => useDefault.click())
+    const dot = byTestId('theme-swatch-default')
+    expect(dot?.getAttribute('aria-checked')).toBe('true')
+    expect(document.activeElement).toBe(dot)
+    expect(document.activeElement).not.toBe(document.body)
+  })
+
   it('resets the primary colour and every surface on "Valori di Default"', () => {
     render(themeWith('#16a34a', { light: { card: '#fafafa' }, dark: { sidebar: '#0b1220' } }))
     expect(document.querySelectorAll('[data-testid$="-marker"]')).toHaveLength(2)
