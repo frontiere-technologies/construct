@@ -58,10 +58,19 @@ interface SurfaceCellProps {
 }
 
 /**
- * Una superficie modificabile: un bottone che apre il selettore nativo, come il
- * pallino «Personalizzato» di `ColorSwatches`. Solo un'attivazione vera lo apre
- * (un click del puntatore, oppure Invio / Spazio): il click sintetico al rilascio
- * di Spazio ha `detail` 0 e non deve aprirlo una seconda volta.
+ * Una superficie modificabile: un bottone che apre il selettore nativo. Qualunque
+ * click lo apre, anche quello sintetico (`detail` 0) con cui lettori di schermo e
+ * comandi vocali attivano un bottone, e quello di Invio / Spazio. Il filtro del
+ * pallino «Personalizzato» di `ColorSwatches` serve solo li', dove le frecce di
+ * Radix cliccano l'elemento che ricevono il fuoco: qui non c'e' nessun gruppo.
+ *
+ * Gli stili globali dei bottoni (`globals.css`, `@layer base`) alzano e schiariscono
+ * un bottone al passaggio e lo sbiadiscono quando e' disattivato: su una cella che
+ * mostra un colore vorrebbe dire mostrarne un altro, e spostarla dentro la
+ * striscia. Qui si spengono; da disattivata resta il cursore `not-allowed`.
+ *
+ * L'`<input type="color">` nascosto e' `aria-hidden`: il controllo e' il bottone, e
+ * un lettore di schermo deve trovarne uno solo per colore.
  */
 function SurfaceCell({ cell, testId, label, name, customised, customisedLabel, disabled, onChange }: SurfaceCellProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -74,15 +83,12 @@ function SurfaceCell({ cell, testId, label, name, customised, customisedLabel, d
         aria-label={name}
         title={name}
         disabled={disabled}
-        onClick={event => {
-          if (event.detail > 0) openPicker()
-        }}
-        onKeyDown={event => {
-          if (event.repeat || (event.key !== 'Enter' && event.key !== ' ')) return
-          event.preventDefault()
-          openPicker()
-        }}
-        className={cn(cellCls, 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring')}
+        onClick={openPicker}
+        className={cn(
+          cellCls,
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+          'enabled:hover:transform-none enabled:hover:filter-none disabled:filter-none',
+        )}
         style={{ backgroundColor: cell.bg, color: cell.fg }}
       >
         {label}
@@ -103,7 +109,7 @@ function SurfaceCell({ cell, testId, label, name, customised, customisedLabel, d
         onChange={e => onChange(e.target.value.toLowerCase())}
         disabled={disabled}
         tabIndex={-1}
-        aria-label={name}
+        aria-hidden="true"
         data-testid={`${testId}-input`}
         className="sr-only"
       />

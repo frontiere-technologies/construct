@@ -105,7 +105,8 @@ export function ColorSwatches({ options, value, groupLabel, customLabel, disable
         onChange={e => onChange(e.target.value.toLowerCase())}
         disabled={disabled}
         tabIndex={-1}
-        aria-label={customLabel}
+        // Il controllo e' il pallino «Personalizzato»: un lettore di schermo deve trovarne uno solo.
+        aria-hidden="true"
         data-testid="theme-custom-color"
         className="sr-only"
       />

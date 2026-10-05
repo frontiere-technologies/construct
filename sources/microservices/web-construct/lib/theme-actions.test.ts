@@ -91,6 +91,21 @@ describe('saveAppTheme', () => {
     expect(mocks.set).toHaveBeenCalledWith(expect.objectContaining({ cardLight: '#1f2937' }))
   })
 
+  it.each([
+    ['null', null],
+    ['the string "false"', { acknowledgeWarnings: 'false' }],
+    ['the string "true"', { acknowledgeWarnings: 'true' }],
+    ['a number', { acknowledgeWarnings: 1 }],
+  ])('does not take %s as an acknowledgement, and does not throw', async (_name, options) => {
+    const result = await saveAppTheme(unreadable, options as unknown as { acknowledgeWarnings?: boolean })
+    expect(result).toMatchObject({ saved: false, error: null })
+    expect(mocks.set).not.toHaveBeenCalled()
+  })
+
+  it('saves a readable theme with null options', async () => {
+    expect(await saveAppTheme(theme('#123456'), null as unknown as undefined)).toEqual({ saved: true, error: null })
+  })
+
   it('reports a database failure instead of throwing', async () => {
     mocks.set.mockRejectedValue(new Error('boom'))
     expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'failed' })

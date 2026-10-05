@@ -112,6 +112,13 @@ describe('ColorSwatches', () => {
     expect(click).not.toHaveBeenCalled()
   })
 
+  it('keeps the hidden picker out of the accessibility tree, one control for the custom colour', () => {
+    render('#4f46e5')
+    expect(pickerInput().getAttribute('aria-hidden')).toBe('true')
+    expect(pickerInput().tabIndex).toBe(-1)
+    expect(pickerInput().hasAttribute('aria-label')).toBe(false)
+  })
+
   it('disables every swatch and the picker while disabled', () => {
     container = document.createElement('div')
     document.body.append(container)

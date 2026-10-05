@@ -117,24 +117,31 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
   /**
    * Il server decide il contrasto. Se qualcosa si legge male non salva e manda
    * l'elenco: si apre il dialogo, e «Salva comunque» richiama con la conferma.
+   * Un'azione che lancia (rete giu', server che risponde male) vale come un
+   * salvataggio fallito: il dialogo si chiude e i controlli tornano attivi.
    */
   const save = async (acknowledgeWarnings: boolean) => {
     setSaving(true)
     setSaveStatus('idle')
-    const result = await saveAppTheme(theme, { acknowledgeWarnings })
-    setSaving(false)
-    if (result.saved) {
-      setWarnings(null)
-      setSaveStatus('success')
-      // Riscrive il <style> del layout con il tema appena salvato.
-      router.refresh()
-    } else if (result.error === null) {
-      setWarnings(result.warnings)
-      return
-    } else {
-      setWarnings(null)
-      setSaveStatus('error')
+    let status: SaveStatus = 'error'
+    try {
+      const result = await saveAppTheme(theme, { acknowledgeWarnings })
+      if (!result.saved && result.error === null) {
+        setWarnings(result.warnings)
+        return
+      }
+      if (result.saved) {
+        status = 'success'
+        // Riscrive il <style> del layout con il tema appena salvato.
+        router.refresh()
+      }
+    } catch {
+      // L'esito per l'utente e' lo stesso di un 'failed'; il server ha gia' lasciato traccia di cio' che sa.
+    } finally {
+      setSaving(false)
     }
+    setWarnings(null)
+    setSaveStatus(status)
     setTimeout(() => setSaveStatus('idle'), 3000)
   }
 

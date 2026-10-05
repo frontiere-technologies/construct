@@ -63,8 +63,12 @@ export type SaveThemeResult = ThemeSaved | ThemeRefused | ThemeNeedsAcknowledgem
  */
 export async function saveAppTheme(
   theme: AppTheme,
-  options: { acknowledgeWarnings?: boolean } = {},
+  options?: { acknowledgeWarnings?: boolean },
 ): Promise<SaveThemeResult> {
+  // Un'azione server riceve quello che il client manda, non quello che dice il tipo:
+  // vale come conferma solo un `true` vero, e un null non deve far lanciare.
+  const acknowledged = options?.acknowledgeWarnings === true
+
   try {
     await requireAdmin()
   } catch (err) {
@@ -81,7 +85,7 @@ export async function saveAppTheme(
   const dark = present(surfaces.dark)
 
   const warnings = themeContrastWarnings({ primaryColor, surfaces: { light, dark } })
-  if (warnings.length > 0 && !options.acknowledgeWarnings) return { saved: false, error: null, warnings }
+  if (warnings.length > 0 && !acknowledged) return { saved: false, error: null, warnings }
 
   try {
     const rows = await db.update(appTheme).set({

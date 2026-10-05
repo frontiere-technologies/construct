@@ -67,8 +67,6 @@ describe('PalettePreview editing', () => {
 
   const cell = (id: string) => container!.querySelector(`[data-testid="theme-preview-${id}"]`) as HTMLButtonElement
   const input = (id: string) => container!.querySelector(`[data-testid="theme-preview-${id}-input"]`) as HTMLInputElement
-  const keydown = (el: Element, key: string) =>
-    act(() => { el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })) })
 
   it('makes the four surfaces of both modes buttons, and leaves the primary alone', () => {
     render()
@@ -93,14 +91,25 @@ describe('PalettePreview editing', () => {
     expect(click).toHaveBeenCalledTimes(1)
   })
 
-  it('opens the native picker on Enter and exactly once on Space', () => {
+  it('opens the native picker on a click without pointer, as screen readers and voice control send', () => {
+    // Invio e Spazio su un <button> producono anche loro un click con detail 0.
     render()
     const click = vi.spyOn(input('dark-background'), 'click')
-    keydown(cell('dark-background'), 'Enter')
-    keydown(cell('dark-background'), ' ')
-    // Il click sintetico al rilascio di Spazio ha detail 0 e non apre una seconda volta.
     act(() => cell('dark-background').click())
-    expect(click).toHaveBeenCalledTimes(2)
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the hidden picker out of the accessibility tree, one control per colour', () => {
+    render()
+    expect(input('light-surface').getAttribute('aria-hidden')).toBe('true')
+    expect(input('light-surface').tabIndex).toBe(-1)
+    expect(input('light-surface').hasAttribute('aria-label')).toBe(false)
+  })
+
+  it('switches off the global hover lift and the disabled fade, which would fake another colour', () => {
+    render()
+    const classes = cell('light-surface').className.split(/\s+/)
+    expect(classes).toEqual(expect.arrayContaining(['enabled:hover:transform-none', 'enabled:hover:filter-none', 'disabled:filter-none']))
   })
 
   it('reports the picked colour in lower case with its mode and surface', () => {

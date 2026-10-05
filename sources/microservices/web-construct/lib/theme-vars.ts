@@ -242,6 +242,20 @@ function fitPrimary(seed: string, palette: Record<PaletteToken, string>, directi
   return null
 }
 
+/** Verso dove si sposta la luminosita' per rendere leggibile il colore: piu' scuro in chiaro, piu' chiaro in scuro. */
+const directionOf = (mode: PaletteMode): -1 | 1 => (mode === 'light' ? -1 : 1)
+
+/** Il colore scelto di un tema, in minuscolo; il predefinito se non e' `#rrggbb`. */
+const themeSeed = (theme: AppTheme): string =>
+  isHex(theme.primaryColor) ? theme.primaryColor.toLowerCase() : DEFAULT_PRIMARY
+
+/**
+ * Il colore principale mostrato in un modo: la variante leggibile sulla
+ * tavolozza, oppure il colore scelto cosi' com'e' se non ce n'e' nessuna.
+ */
+const modePrimary = (seed: string, palette: Record<PaletteToken, string>, mode: PaletteMode): PrimaryPair =>
+  fitPrimary(seed, palette, directionOf(mode)) ?? { primary: seed, foreground: primaryForeground(seed) }
+
 /**
  * Le varianti chiaro e scuro di un colore scelto (specifica §3), misurate sulle
  * tavolozze date — quelle fisse se non se ne passano altre, quelle con le
@@ -254,8 +268,8 @@ export function derivePrimary(
 ): DerivedPrimary | null {
   if (!isHex(seed)) return null
   const color = seed.toLowerCase()
-  const light = fitPrimary(color, palettes.light, -1)
-  const dark = fitPrimary(color, palettes.dark, 1)
+  const light = fitPrimary(color, palettes.light, directionOf('light'))
+  const dark = fitPrimary(color, palettes.dark, directionOf('dark'))
   return light && dark ? { light, dark } : null
 }
 
@@ -299,7 +313,7 @@ const SURFACE_OF_TOKEN: Partial<Record<PaletteToken, SurfaceKey>> = Object.fromE
 export function themeContrastWarnings(theme: AppTheme): ContrastWarning[] {
   const warnings: ContrastWarning[] = []
   const palettes = { light: effectivePalette('light', theme.surfaces.light), dark: effectivePalette('dark', theme.surfaces.dark) }
-  const seed = isHex(theme.primaryColor) ? theme.primaryColor.toLowerCase() : DEFAULT_PRIMARY
+  const seed = themeSeed(theme)
   for (const mode of ['light', 'dark'] as const) {
     const palette = palettes[mode]
     const seen = new Set<string>()
@@ -313,7 +327,7 @@ export function themeContrastWarnings(theme: AppTheme): ContrastWarning[] {
         warnings.push({ mode, text: rule.text, surface, ratio })
       }
     }
-    if (!fitPrimary(seed, palette, mode === 'light' ? -1 : 1)) {
+    if (!fitPrimary(seed, palette, directionOf(mode))) {
       warnings.push({ mode, text: 'primary', surface: null, ratio: null })
     }
   }
@@ -327,11 +341,11 @@ export function themeContrastWarnings(theme: AppTheme): ContrastWarning[] {
  * che non e' `#rrggbb` ripiega sul predefinito.
  */
 export function themePrimary(theme: AppTheme): DerivedPrimary {
-  const seed = isHex(theme.primaryColor) ? theme.primaryColor.toLowerCase() : DEFAULT_PRIMARY
-  const pair = (mode: PaletteMode) =>
-    fitPrimary(seed, effectivePalette(mode, theme.surfaces?.[mode]), mode === 'light' ? -1 : 1)
-    ?? { primary: seed, foreground: primaryForeground(seed) }
-  return { light: pair('light'), dark: pair('dark') }
+  const seed = themeSeed(theme)
+  return {
+    light: modePrimary(seed, effectivePalette('light', theme.surfaces.light), 'light'),
+    dark: modePrimary(seed, effectivePalette('dark', theme.surfaces.dark), 'dark'),
+  }
 }
 
 /** Le variabili che il tema scrive per ogni modo, nell'ordine in cui compaiono nel CSS. */
@@ -351,10 +365,11 @@ const THEME_CSS_TOKENS: PaletteToken[] = ['background', 'card', 'popover', 'acce
  * dopo l'avviso) resta il colore scelto, cosi' com'e'.
  */
 export function themeCss(theme: AppTheme, selectorSuffix = ''): string {
-  const primary = themePrimary(theme)
+  const seed = themeSeed(theme)
   const block = (mode: PaletteMode) => {
-    const palette = effectivePalette(mode, theme.surfaces?.[mode])
-    const pair = primary[mode]
+    // Una tavolozza sola per modo: la stessa misura il colore principale e scrive le superfici.
+    const palette = effectivePalette(mode, theme.surfaces[mode])
+    const pair = modePrimary(seed, palette, mode)
     const surfaces = THEME_CSS_TOKENS.map(token => `--${token}:${palette[token]}`).join(';')
     return `--primary:${pair.primary};--primary-foreground:${pair.foreground};${surfaces}`
   }

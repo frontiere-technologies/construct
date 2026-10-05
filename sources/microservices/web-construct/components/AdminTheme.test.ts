@@ -152,6 +152,15 @@ describe('AdminTheme', () => {
     expect(mocks.refresh).toHaveBeenCalledOnce()
   })
 
+  it('re-enables the controls and reports the failure when the save throws', async () => {
+    vi.mocked(saveAppTheme).mockRejectedValueOnce(new Error('network down'))
+    render(DEFAULT_APP_THEME)
+    await act(async () => button('common.actions.save').click())
+    expect(button('common.actions.save').disabled).toBe(false)
+    expect(button('theme.actions.reset_defaults').disabled).toBe(false)
+    expect(document.querySelector('[role="status"]')?.textContent).toBe('theme.status.save_failed')
+  })
+
   describe('contrast warning', () => {
     const warnings: ContrastWarning[] = [
       { mode: 'light', text: 'foreground', surface: 'card', ratio: 1.2085 },
@@ -187,6 +196,24 @@ describe('AdminTheme', () => {
       expect(mocks.refresh).not.toHaveBeenCalled()
       // L'anteprima resta: l'admin torna a modificare i colori.
       expect(preview()?.textContent).toContain('--card:#1f2937')
+    })
+
+    it('closes the dialog and reports the failure when "Salva comunque" fails', async () => {
+      await saveWithWarnings()
+      vi.mocked(saveAppTheme).mockResolvedValueOnce({ saved: false, error: 'failed' })
+      await act(async () => button('theme.warning.confirm').click())
+      expect(document.querySelector('[role="dialog"]')).toBeNull()
+      expect(document.querySelector('[role="status"]')?.textContent).toBe('theme.status.save_failed')
+      expect(mocks.refresh).not.toHaveBeenCalled()
+    })
+
+    it('closes the dialog and re-enables the controls when "Salva comunque" throws', async () => {
+      await saveWithWarnings()
+      vi.mocked(saveAppTheme).mockRejectedValueOnce(new Error('network down'))
+      await act(async () => button('theme.warning.confirm').click())
+      expect(document.querySelector('[role="dialog"]')).toBeNull()
+      expect(button('common.actions.save').disabled).toBe(false)
+      expect(document.querySelector('[role="status"]')?.textContent).toBe('theme.status.save_failed')
     })
 
     it('saves with the acknowledgement on "Salva comunque"', async () => {
