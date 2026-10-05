@@ -118,9 +118,16 @@ function sourceFiles(dir, found = []) {
  * Scanning literals also catches indirections — `ERROR_KEYS` in
  * `components/Login.tsx` maps error codes to keys and never appears inside a
  * `t()` call — at the price of a few false positives, handled by NOT_A_KEY
- * below. It is safe because no `t()` call builds its key from a template
- * literal: `grep -rn 't(\`'` returns nothing, so no reference is invisible to a
- * textual scan.
+ * below.
+ *
+ * A key built from a template literal is not a literal, so it is collected
+ * apart as a pattern. `NavigationTree.tsx` asks for
+ * `functionalities.tree.dnd.over_${ind.pos}`, which is read here as
+ * /^functionalities\.tree\.dnd\.over_[a-z0-9_]+$/: every seeded key it matches
+ * counts as referenced. Only templates that open with a static key prefix — at
+ * least one dot before the first `${` — and keep their static parts inside the
+ * key alphabet are read, so `${ns}.${key}` or a class-name template never turns
+ * into a pattern broad enough to keep the whole catalogue alive.
  *
  * Test files are scanned separately and never make the guard fail. They
  * legitimately invent keys — `a.b`, `nope.nothing`, `welcome.message` in
@@ -133,22 +140,39 @@ function sourceFiles(dir, found = []) {
 function referencedKeys(keyPattern) {
   const production = new Map()
   const tests = new Map()
+  const templates = new Map()
   for (const dir of SOURCE_DIRS) {
     for (const path of sourceFiles(resolve(appDir, dir))) {
       const file = path.slice(appDir.length + 1)
-      const target = /\.test\.tsx?$/.test(path) ? tests : production
-      for (const literal of readFileSync(path, 'utf8').matchAll(/['"]([a-z0-9_]+(?:\.[a-z0-9_]+)+)['"]/g)) {
+      const isTest = /\.test\.tsx?$/.test(path)
+      const target = isTest ? tests : production
+      const source = readFileSync(path, 'utf8')
+      for (const literal of source.matchAll(/['"]([a-z0-9_]+(?:\.[a-z0-9_]+)+)['"]/g)) {
         if (!keyPattern.test(literal[1])) continue
         if (!target.has(literal[1])) target.set(literal[1], new Set())
         target.get(literal[1]).add(file)
       }
+      if (isTest) continue
+      for (const template of source.matchAll(/`([a-z0-9_]+\.[a-z0-9_.]*\$\{[^`]*)`/g)) {
+        const parts = template[1].split(/\$\{[^}]*\}/)
+        if (!parts.every(part => /^[a-z0-9_.]*$/.test(part))) continue
+        if (isExcluded(template[1], [file])) continue
+        const pattern = `^${parts.map(part => part.replaceAll('.', '\\.')).join('[a-z0-9_]+')}$`
+        if (!templates.has(pattern)) templates.set(pattern, { regex: new RegExp(pattern), files: new Set() })
+        templates.get(pattern).files.add(file)
+      }
     }
   }
-  return { production, tests }
+  const isReferenced = key => production.has(key) || [...templates.values()].some(({ regex }) => regex.test(key))
+  return { production, tests, templates, isReferenced }
 }
 
 /**
  * Literals that have the shape of a translation key but a different meaning.
+ *
+ * Templates go through the same list, matched against their raw text
+ * (`i18n.${event}`), so an excluded template neither fails the guard nor keeps
+ * a seeded key alive.
  *
  * Each entry is scoped to the file that owns it, so the exclusion cannot spread:
  * a real key named `language.something` inside a component would still fail.
@@ -162,6 +186,8 @@ const NOT_A_KEY = [
   // i18n audit event names. Same shape as a key, emitted into the log stream.
   { file: 'lib/i18n/language-actions.ts', pattern: /^language\./, why: 'audit event names' },
   { file: 'lib/i18n/translation-actions.ts', pattern: /^translation_(key|value)\./, why: 'audit event names' },
+  // The log message of the same audit events, built as a template: `i18n.${event}`.
+  { file: 'lib/i18n/audit.ts', pattern: /^i18n\./, why: 'audit log message template' },
   // A CSS length that happens to be lowercase digits around a dot.
   { file: 'components/grid/data-grid-config.ts', pattern: /^0\.875rem$/, why: 'ag-grid font size in rem' },
 ]
@@ -223,26 +249,42 @@ test('every key referenced by the source is seeded by a migration', () => {
     : undefined)
 })
 
+test('every key template in the source matches at least one seeded key', () => {
+  // The hard direction, for templates. A pattern that matches nothing means
+  // every key it can build degrades to itself at runtime.
+  const { keys: seeded } = seededKeys()
+  const { templates } = referencedKeys(translationKeyPattern())
+
+  const unmatched = [...templates]
+    .filter(([, { regex }]) => ![...seeded].some(key => regex.test(key)))
+    .map(([pattern, { files }]) => `  /${pattern}/  <- ${[...files].sort().join(', ')}`)
+    .sort()
+
+  assert.deepEqual(unmatched, [], unmatched.length
+    ? `these key templates match no seeded key, so t() renders the key itself:\n${unmatched.join('\n')}`
+    : undefined)
+})
+
 test('inventory: keys seeded and never referenced', () => {
   const { keys: seeded } = seededKeys()
-  const { production, tests } = referencedKeys(translationKeyPattern())
+  const { production, tests, isReferenced } = referencedKeys(translationKeyPattern())
 
-  const orphans = [...seeded].filter(key => !production.has(key)).sort()
+  const orphans = [...seeded].filter(key => !isReferenced(key)).sort()
   console.log(`\n${orphans.length} seeded keys are never referenced by the application source:`)
   for (const key of orphans) {
     const onlyInTests = tests.has(key) ? `  (only in ${[...tests.get(key)].sort().join(', ')})` : ''
     const note = ANNOTATED_ORPHANS[key] ? `\n      note: ${ANNOTATED_ORPHANS[key]}` : ''
     console.log(`  ${key}${onlyInTests}${note}`)
   }
-  console.log('\nThis list is informative. Review it, do not delete rows: apply_translation_seed is')
-  console.log('additive and 0001_baseline.sql is immutable, so removing a key from a seed removes it')
-  console.log('from nothing that is already provisioned.\n')
+  console.log('\nThis list is informative. To retire a key, add a migration that deletes it (as 0012')
+  console.log('and 0039 do); do not edit the seed: apply_translation_seed is additive and an applied')
+  console.log('migration is immutable, so removing a key from a seed removes it from nothing.\n')
 
   // The annotations must stay true. If an annotated key gets wired up, the note
   // is stale and has to be removed together with the reasoning it carries.
   for (const key of Object.keys(ANNOTATED_ORPHANS)) {
     assert.ok(seeded.has(key), `${key} is annotated as a seeded orphan but is no longer seeded`)
-    assert.ok(!production.has(key),
+    assert.ok(!isReferenced(key),
       `${key} is now referenced by ${[...(production.get(key) ?? [])].join(', ')} — `
       + 'remove its entry from ANNOTATED_ORPHANS and revisit the decision it records')
   }
