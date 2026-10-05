@@ -64,7 +64,7 @@ Dopo questo lavoro:
   |---|---|---|
   | Sfondo | `background` | `--background` |
   | Superficie | `card` | `--card` e `--popover` |
-  | Passaggio | `accent` | `--accent` e `--sidebar-accent` |
+  | Hover (era «Passaggio», rinominata il 2026-10-05, migrazione 0036) | `accent` | `--accent` e `--sidebar-accent` |
   | Sidebar | `sidebar` | `--sidebar` |
 
   Testi e bordi restano fissi. Il contrasto non si garantisce più per costruzione: al salvataggio
@@ -295,7 +295,7 @@ per ogni impostazione.
 - **Anteprima**: due strisce, "Chiaro" e "Scuro". Ognuna mostra i colori reali di quel modo:
   principale (con la sua scritta), passaggio del mouse (`--accent`), superficie (`--card`), sfondo
   (`--background`) e sidebar (`--sidebar`).
-  - *Con la DEC-9* le celle Passaggio, Superficie, Sfondo e Sidebar di tutte e due le strisce sono
+  - *Con la DEC-9* le celle Hover, Superficie, Sfondo e Sidebar di tutte e due le strisce sono
     bottoni: un click (o Invio / Spazio) apre il selettore nativo, come il pallino
     "Personalizzato" (`<input type="color">` nascosto). La cella "Principale" resta dei pallini.
     Sotto le strisce c'è il suggerimento "Clicca uno sfondo per cambiarne il colore.".

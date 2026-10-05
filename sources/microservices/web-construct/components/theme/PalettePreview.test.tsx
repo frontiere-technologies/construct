@@ -10,7 +10,7 @@ import { PalettePreview, PRIMARY_TARGET, type PalettePreviewLabels, type ThemeTa
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const labels: PalettePreviewLabels = {
-  light: 'Chiaro', dark: 'Scuro', primary: 'Principale', hover: 'Passaggio',
+  light: 'Chiaro', dark: 'Scuro', primary: 'Principale', hover: 'Hover',
   surface: 'Superficie', background: 'Sfondo', sidebar: 'Sidebar',
   modeLight: 'chiaro', modeDark: 'scuro', customised: 'Personalizzato',
   cellName: ({ surface, mode, color, customised }) =>
