@@ -351,15 +351,17 @@ def test_the_language_picker_fills_the_new_language_fields(logged_in_page, base_
     page.get_by_role("button", name="Nuova lingua").click()
     dialog = page.get_by_role("dialog")
 
-    # Searched by its name in the interface language (Italian here).
+    # Searched by its name in the interface language (Italian here). Swedish and not Dutch:
+    # test_deactivating_a_language_removes_it_from_the_switcher creates and deletes `nl`, and
+    # run right after it the picker can still list Dutch as "già presente" (not choosable).
     picker = dialog.get_by_role("combobox")
-    picker.fill("olan")
-    dialog.get_by_role("option", name=re.compile(r"^Olandese")).click()
+    picker.fill("svede")
+    dialog.get_by_role("option", name=re.compile(r"^Svedese")).click()
 
-    expect(dialog.get_by_label("Codice")).to_have_value("nl")
-    expect(dialog.get_by_label("Locale")).to_have_value("nl-NL")
-    expect(dialog.get_by_label("Nome", exact=True)).to_have_value("Olandese")
-    expect(dialog.get_by_label("Nome nativo")).to_have_value("Nederlands")
+    expect(dialog.get_by_label("Codice")).to_have_value("sv")
+    expect(dialog.get_by_label("Locale")).to_have_value("sv-SE")
+    expect(dialog.get_by_label("Nome", exact=True)).to_have_value("Svedese")
+    expect(dialog.get_by_label("Nome nativo")).to_have_value("Svenska")
 
     # Cancel, never save: the E2E database keeps only it/en.
     dialog.get_by_role("button", name="Annulla", exact=True).click()
