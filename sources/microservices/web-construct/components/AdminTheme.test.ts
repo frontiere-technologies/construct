@@ -110,7 +110,7 @@ describe('AdminTheme', () => {
   const button = (label: string) =>
     Array.from(document.querySelectorAll('button')).find(b => b.textContent === label) as HTMLButtonElement
   const byTestId = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement | null
-  const useDefaultButton = () => byTestId('theme-use-default') as HTMLButtonElement
+  const resetCellButton = () => byTestId('theme-use-default') as HTMLButtonElement
   const select = (cellId: string) => act(() => (byTestId(`theme-cell-${cellId}`) as HTMLButtonElement).click())
   /** Un colore personalizzato dal pannello, per la cella selezionata. */
   const pickCustom = (value: string) => pick('theme-custom-color', value)
@@ -144,7 +144,7 @@ describe('AdminTheme', () => {
       `theme.panel.title_primary ${JSON.stringify({ mode: 'theme.preview.light' })}`,
     )
     expect(byTestId('theme-swatch-indigo')).not.toBeNull()
-    expect(useDefaultButton().disabled).toBe(true)
+    expect(resetCellButton().disabled).toBe(true)
   })
 
   it('switches the panel heading and options to the selected surface', () => {
@@ -180,12 +180,12 @@ describe('AdminTheme', () => {
   it('enables "Usa il predefinito" only on a customised surface, and resets that one only', () => {
     render(themeWith('#16a34a', { light: { card: '#fafafa', sidebar: '#f0f0f0' } }))
     select('light-background')
-    expect(useDefaultButton().disabled).toBe(true)
+    expect(resetCellButton().disabled).toBe(true)
     select('light-card')
     act(() => (byTestId('theme-use-default') as HTMLButtonElement).click())
     expect(byTestId('theme-cell-light-card-marker')).toBeNull()
     expect(byTestId('theme-cell-light-sidebar-marker')).not.toBeNull()
-    expect(useDefaultButton().disabled).toBe(true)
+    expect(resetCellButton().disabled).toBe(true)
     expect(preview()?.textContent).toContain(themeCss(themeWith('#16a34a', { light: { sidebar: '#f0f0f0' } }), '[data-theme-mode]'))
   })
 
@@ -212,7 +212,7 @@ describe('AdminTheme', () => {
     expect(suggestions[0].id).toBe('auto')
     for (const s of suggestions) expect(byTestId(`theme-swatch-${s.id}`)).not.toBeNull()
     expect(byTestId('theme-swatch-auto')?.getAttribute('aria-checked')).toBe('true')
-    expect(useDefaultButton().disabled).toBe(true)
+    expect(resetCellButton().disabled).toBe(true)
   })
 
   it('previews a dark primary chosen in the panel in html.dark only, and marks the dark cell', () => {
@@ -224,7 +224,7 @@ describe('AdminTheme', () => {
     expect(dark).toContain(`--primary:${green};`)
     expect(light).toContain('--primary:#4f46e5;')
     expect(byTestId('theme-cell-primary-dark-marker')).not.toBeNull()
-    expect(useDefaultButton().disabled).toBe(false)
+    expect(resetCellButton().disabled).toBe(false)
   })
 
   it('puts the dark primary back to automatic with "Usa il predefinito", focusing the automatic dot', () => {
@@ -234,7 +234,7 @@ describe('AdminTheme', () => {
     act(() => useDefault.focus())
     act(() => useDefault.click())
     expect(byTestId('theme-cell-primary-dark-marker')).toBeNull()
-    expect(useDefaultButton().disabled).toBe(true)
+    expect(resetCellButton().disabled).toBe(true)
     expect(document.activeElement).toBe(byTestId('theme-swatch-auto'))
     expect(preview()?.textContent).toBe(themeCss(DEFAULT_APP_THEME, '[data-theme-mode]'))
   })
@@ -248,7 +248,7 @@ describe('AdminTheme', () => {
     act(() => (byTestId('theme-swatch-auto') as HTMLButtonElement).click())
     expect(byTestId('theme-swatch-auto')?.getAttribute('aria-checked')).toBe('true')
     expect(byTestId('theme-cell-primary-dark-marker')).toBeNull()
-    expect(useDefaultButton().disabled).toBe(true)
+    expect(resetCellButton().disabled).toBe(true)
     await act(async () => button('common.actions.save').click())
     expect(saveAppTheme).toHaveBeenCalledWith(expect.objectContaining({ primaryDark: null }), { acknowledgeWarnings: false })
   })
@@ -259,21 +259,21 @@ describe('AdminTheme', () => {
       'dark-accent', 'dark-card', 'dark-background', 'dark-sidebar']
     for (const id of cells) {
       select(id)
-      expect(useDefaultButton(), id).not.toBeNull()
-      expect(useDefaultButton().textContent).toBe('theme.panel.use_default')
-      expect(useDefaultButton().className).toContain('border-border')
-      expect(useDefaultButton().disabled, id).toBe(id !== 'dark-sidebar')
+      expect(resetCellButton(), id).not.toBeNull()
+      expect(resetCellButton().textContent).toBe('theme.panel.use_default')
+      expect(resetCellButton().className).toContain('border-border')
+      expect(resetCellButton().disabled, id).toBe(id !== 'dark-sidebar')
     }
   })
 
   it('puts the light primary back to the default colour, focusing its dot', () => {
     render(themeWith('#16a34a'))
-    expect(useDefaultButton().disabled).toBe(false)
-    act(() => useDefaultButton().focus())
-    act(() => useDefaultButton().click())
+    expect(resetCellButton().disabled).toBe(false)
+    act(() => resetCellButton().focus())
+    act(() => resetCellButton().click())
     expect(byTestId('theme-swatch-indigo')?.getAttribute('aria-checked')).toBe('true')
     expect(document.activeElement).toBe(byTestId('theme-swatch-indigo'))
-    expect(useDefaultButton().disabled).toBe(true)
+    expect(resetCellButton().disabled).toBe(true)
     expect(preview()?.textContent).toBe(themeCss(DEFAULT_APP_THEME, '[data-theme-mode]'))
   })
 
@@ -282,7 +282,7 @@ describe('AdminTheme', () => {
     vi.mocked(saveAppTheme).mockReturnValue(new Promise(resolve => { finish = resolve }))
     render(themeWith('#16a34a'))
     act(() => button('common.actions.save').click())
-    expect(useDefaultButton().disabled).toBe(true)
+    expect(resetCellButton().disabled).toBe(true)
     await act(async () => finish({ saved: true, error: null }))
   })
 
