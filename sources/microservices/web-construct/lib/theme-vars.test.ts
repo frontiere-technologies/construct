@@ -4,7 +4,7 @@ import postcss from 'postcss'
 import { describe, it, expect } from 'vitest'
 import {
   DARK_PALETTE, DEFAULT_APP_THEME, DEFAULT_PRIMARY, LIGHT_PALETTE, PRIMARY_PRESETS,
-  SURFACE_KEYS, derivePrimary, effectivePalette, primaryForeground, surfaceSuggestions, themeContrastWarnings,
+  SURFACE_KEYS, derivePrimary, effectivePalette, primaryForeground, surfaceDefault, surfaceSuggestions, themeContrastWarnings,
   themeCss, themePrimary,
   type AppTheme, type PaletteMode, type PrimaryPair,
 } from './theme-vars'
@@ -379,6 +379,67 @@ describe('surfaceSuggestions', () => {
         }
       }
     }
+  })
+
+  /** sRGB -> OKLab, riscritto qui come l'aritmetica del contrasto: misura senza il codice sotto test. */
+  const oklab = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16)
+    const lin = (v: number) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }
+    const [r, g, b] = [lin((n >> 16) & 255), lin((n >> 8) & 255), lin(n & 255)]
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+    const q = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+    return [
+      0.2104542553 * l + 0.793617785 * m - 0.0040720468 * q,
+      1.9779984951 * l - 2.428592205 * m + 0.4505937099 * q,
+      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * q,
+    ]
+  }
+  const deltaE = (a: string, b: string) => Math.hypot(...oklab(a).map((v, i) => v - oklab(b)[i]))
+
+  it('keeps any two suggestions of a list visibly apart (OKLab distance at least 0.01)', () => {
+    for (const primaryColor of PRIMARIES) {
+      for (const mode of MODES) {
+        for (const key of SURFACE_KEYS) {
+          const colors = surfaceSuggestions({ ...DEFAULT_APP_THEME, primaryColor }, mode, key).map(s => s.color)
+          for (let i = 0; i < colors.length; i++) {
+            for (let j = i + 1; j < colors.length; j++) {
+              expect(deltaE(colors[i], colors[j]), `${primaryColor} ${mode} ${key} ${colors[i]} ${colors[j]}`).toBeGreaterThanOrEqual(0.01)
+            }
+          }
+        }
+      }
+    }
+  })
+
+  it('steps the near-white surfaces down, so their suggestions are not four whites', () => {
+    for (const key of ['card', 'sidebar', 'background'] as const) {
+      const [, ...others] = surfaceSuggestions(DEFAULT_APP_THEME, 'light', key)
+      for (const { color } of others) {
+        const [l] = oklab(color)
+        expect(l, `${key} ${color}`).toBeGreaterThanOrEqual(0.94)
+        expect(l, `${key} ${color}`).toBeLessThanOrEqual(0.975)
+      }
+    }
+  })
+
+  it.each(['#ffff00', '#808080', '#ffffff', '#000000'])('always returns five distinct readable colours, even for the primary %s', primaryColor => {
+    for (const mode of MODES) {
+      for (const key of SURFACE_KEYS) {
+        const suggestions = surfaceSuggestions({ ...DEFAULT_APP_THEME, primaryColor }, mode, key)
+        expect(suggestions, `${mode} ${key}`).toHaveLength(5)
+        expect(new Set(suggestions.map(s => s.color)).size).toBe(5)
+        for (const { color } of suggestions) {
+          expect(themeContrastWarnings({ ...withSurfaces({ [mode]: { [key]: color } }), primaryColor }), `${mode} ${key} ${color}`).toEqual([])
+        }
+      }
+    }
+  })
+
+  it('starts from surfaceDefault, the fixed value of the surface in that mode', () => {
+    expect(surfaceDefault('light', 'card')).toBe(LIGHT_PALETTE.card)
+    expect(surfaceDefault('dark', 'accent')).toBe(DARK_PALETTE.accent)
+    expect(surfaceSuggestions(DEFAULT_APP_THEME, 'dark', 'sidebar')[0].color).toBe(surfaceDefault('dark', 'sidebar'))
   })
 
   it('tints the last suggestion with the hue of the current primary colour', () => {

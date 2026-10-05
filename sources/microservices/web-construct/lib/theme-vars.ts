@@ -391,19 +391,42 @@ const COOL_HUE = degrees(250)
 const WARM_HUE = degrees(75)
 
 /**
- * Gli spostamenti di luminosita' provati per ogni suggerimento, dal piu' vicino
- * al predefinito in poi: 0, -0,01, +0,01, -0,02, ... Il primo che da' un colore
- * nuovo e leggibile vince. Allo 0 il bianco della superficie chiara non ha
- * spazio per nessuna croma, quindi i grigi partono dal primo passo sotto.
+ * Sopra questa luminosita' (il bianco della card e della sidebar, il quasi
+ * bianco dello sfondo chiaro) la croma non ha spazio: i suggerimenti partono da
+ * `NEAR_WHITE_START`, un gradino sotto, e si distinguono a occhio.
+ */
+const NEAR_WHITE_LIGHTNESS = 0.97
+const NEAR_WHITE_START = 0.96
+
+/** La distanza OKLab minima fra due suggerimenti della stessa lista: sotto, sembrano lo stesso colore. */
+const SUGGESTION_MIN_DISTANCE = 0.01
+
+/**
+ * Gli spostamenti di luminosita' provati per ogni suggerimento, dal punto di
+ * partenza in poi: 0, -0,01, +0,01, -0,02, ... fino a ±0,5.
  */
 const SUGGESTION_OFFSETS = Array.from({ length: 101 }, (_, i) => (i % 2 === 1 ? -1 : 1) * Math.ceil(i / 2) * 0.01)
 
+/** Il valore fisso di una superficie in un modo: quello di `globals.css`. */
+export function surfaceDefault(mode: PaletteMode, key: SurfaceKey): string {
+  return FIXED_PALETTES[mode][SURFACE_TOKENS[key][0]]
+}
+
+const oklabDistance = (a: string, b: string) => {
+  const [x, y] = [hexToOklch(a), hexToOklch(b)]
+  return Math.hypot(x.l - y.l, x.c * Math.cos(x.h) - y.c * Math.cos(y.h), x.c * Math.sin(x.h) - y.c * Math.sin(y.h))
+}
+
 /**
- * I cinque colori suggeriti per una superficie di un modo (pagina Tema, scelta
- * sotto l'anteprima): il predefinito fisso, un grigio freddo, uno caldo, uno
- * neutro e una tinta leggera del colore principale attuale. Tutti alla
- * luminosita' del predefinito, in OKLCH; un candidato che si legge male o che
- * ripete un colore gia' in elenco si sposta di luminosita' finche' non va.
+ * I cinque colori suggeriti per una superficie di un modo (pagina Tema, pannello
+ * di scelta): il predefinito fisso, un grigio freddo, uno caldo, uno neutro e
+ * una tinta leggera del colore principale attuale. In OKLCH, alla luminosita'
+ * del predefinito, o un gradino sotto se il predefinito e' (quasi) bianco.
+ *
+ * Un candidato si sposta di luminosita' finche' non si legge e non dista almeno
+ * `SUGGESTION_MIN_DISTANCE` da ogni colore gia' in lista. Se a quella croma non
+ * ci riesce mai, riprova con meta' croma e poi con croma zero: la lista ha
+ * sempre cinque colori.
  *
  * «Si legge» vuol dire nessun avviso di `themeContrastWarnings` con il colore
  * principale del tema e questa sola superficie cambiata: le altre superfici
@@ -411,15 +434,18 @@ const SUGGESTION_OFFSETS = Array.from({ length: 101 }, (_, i) => (i % 2 === 1 ? 
  * renderebbe illeggibile qualunque suggerimento.
  */
 export function surfaceSuggestions(theme: AppTheme, mode: PaletteMode, key: SurfaceKey): SurfaceSuggestion[] {
-  const fallback = FIXED_PALETTES[mode][SURFACE_TOKENS[key][0]]
+  const fallback = surfaceDefault(mode, key)
   const seed = themeSeed(theme)
   const base = hexToOklch(fallback)
+  const start = base.l > NEAR_WHITE_LIGHTNESS ? NEAR_WHITE_START : base.l
   const readable = (color: string) => themeContrastWarnings({
     primaryColor: seed,
     surfaces: { light: {}, dark: {}, [mode]: { [key]: color } },
   }).length === 0
 
   const suggestions: SurfaceSuggestion[] = [{ id: 'default', color: fallback }]
+  const fits = (color: string) =>
+    suggestions.every(s => oklabDistance(s.color, color) >= SUGGESTION_MIN_DISTANCE) && readable(color)
   const candidates: { id: SurfaceSuggestionId; c: number; h: number }[] = [
     { id: 'cool', c: SUGGESTION_GREY_CHROMA, h: COOL_HUE },
     { id: 'warm', c: SUGGESTION_GREY_CHROMA, h: WARM_HUE },
@@ -427,12 +453,13 @@ export function surfaceSuggestions(theme: AppTheme, mode: PaletteMode, key: Surf
     { id: 'tint', c: SUGGESTION_TINT_CHROMA, h: hexToOklch(seed).h },
   ]
   for (const candidate of candidates) {
-    for (const offset of SUGGESTION_OFFSETS) {
-      const l = Math.min(1, Math.max(0, base.l + offset))
-      const color = oklchToHex({ l, c: candidate.c, h: candidate.h })
-      if (suggestions.some(s => s.color === color) || !readable(color)) continue
-      suggestions.push({ id: candidate.id, color })
-      break
+    search: for (const chroma of [candidate.c, candidate.c / 2, 0]) {
+      for (const offset of SUGGESTION_OFFSETS) {
+        const color = oklchToHex({ l: Math.min(1, Math.max(0, start + offset)), c: chroma, h: candidate.h })
+        if (!fits(color)) continue
+        suggestions.push({ id: candidate.id, color })
+        break search
+      }
     }
   }
   return suggestions
