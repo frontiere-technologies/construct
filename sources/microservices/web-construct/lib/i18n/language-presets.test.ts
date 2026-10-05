@@ -38,6 +38,22 @@ describe('languagePresetOptions', () => {
     expect(languagePresetOptions('en-US').find(o => o.code === 'de')?.name).toBe('German')
   })
 
+  it('capitalises a native name that its own language writes in lowercase', () => {
+    const byCode = new Map(languagePresetOptions('it-IT').map(o => [o.code, o.nativeName]))
+    expect(byCode.get('es')).toBe('Español')
+    expect(byCode.get('fr')).toBe('Français')
+    expect(byCode.get('tr')).toBe('Türkçe')
+    expect(byCode.get('it')).toBe('Italiano')
+  })
+
+  it('degrades to the code, without throwing, for an unusable interface locale', () => {
+    const options = languagePresetOptions('not a locale!!')
+    expect(options).toHaveLength(LANGUAGE_PRESETS.length)
+    for (const option of options) expect(option.name).toBe(option.code)
+    // The native names do not depend on the interface locale.
+    expect(options.find(o => o.code === 'de')?.nativeName).toBe('Deutsch')
+  })
+
   it('sorts by the interface-language name', () => {
     const names = languagePresetOptions('it-IT').map(o => o.name)
     const collator = new Intl.Collator('it-IT')
