@@ -4,7 +4,8 @@ import postcss from 'postcss'
 import { describe, it, expect } from 'vitest'
 import {
   DARK_PALETTE, DEFAULT_APP_THEME, DEFAULT_PRIMARY, LIGHT_PALETTE, PRIMARY_PRESETS,
-  SURFACE_KEYS, derivePrimary, effectivePalette, primaryForeground, surfaceDefault, surfaceSuggestions, themeContrastWarnings,
+  SURFACE_KEYS, derivePrimary, effectivePalette, primaryDarkSuggestions, primaryForeground, surfaceDefault, surfaceSuggestions,
+  themeContrastWarnings,
   themeCss, themePrimary,
   type AppTheme, type PaletteMode, type PrimaryPair,
 } from './theme-vars'
@@ -447,6 +448,87 @@ describe('surfaceSuggestions', () => {
       surfaceSuggestions({ ...DEFAULT_APP_THEME, primaryColor }, 'light', 'background').find(s => s.id === 'tint')!.color
     expect(tint('#059669')).not.toBe(tint('#db2777'))
   })
+})
+
+describe('primary colour per mode (DEC-10)', () => {
+  const luminance = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16)
+    const channel = (v: number) => {
+      const c = v / 255
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255)
+  }
+  const ratio = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+  const darkSurfaces = [DARK_PALETTE.background, DARK_PALETTE.card, DARK_PALETTE.popover, DARK_PALETTE.accent, DARK_PALETTE.sidebar, DARK_PALETTE['sidebar-accent']]
+  const readableOnDark = (color: string) => darkSurfaces.every(s => ratio(color, s) >= 4.5)
+
+  it('derives the dark primary from the light one while primaryDark is not set', () => {
+    expect(themePrimary({ ...DEFAULT_APP_THEME, primaryDark: null })).toEqual(derivePrimary(DEFAULT_PRIMARY))
+  })
+
+  it('keeps a readable dark primary exactly as chosen, and leaves the light one alone', () => {
+    const pair = themePrimary({ ...DEFAULT_APP_THEME, primaryDark: '#FBBF24' })
+    expect(pair.dark).toEqual({ primary: '#fbbf24', foreground: primaryForeground('#fbbf24') })
+    expect(pair.light.primary).toBe(DEFAULT_PRIMARY)
+  })
+
+  it('adjusts an unreadable dark primary, like the light one', () => {
+    expect(readableOnDark('#1e3a8a')).toBe(false)
+    const pair = themePrimary({ ...DEFAULT_APP_THEME, primaryDark: '#1e3a8a' })
+    expect(pair.dark.primary).not.toBe('#1e3a8a')
+    expect(readableOnDark(pair.dark.primary)).toBe(true)
+  })
+
+  it('warns about the dark primary when no variant of it reads on the dark surfaces', () => {
+    // Uno sfondo scuro e una superficie bianca: nessun colore arriva a 4,5 su entrambi.
+    const theme: AppTheme = { ...withSurfaces({ dark: { card: '#ffffff' } }), primaryDark: '#7a85f7' }
+    expect(themeContrastWarnings(theme)).toContainEqual({ mode: 'dark', text: 'primary', surface: null, ratio: null })
+    expect(themeContrastWarnings(theme)).not.toContainEqual(expect.objectContaining({ mode: 'light', text: 'primary' }))
+  })
+
+  it('writes the dark primary into html.dark only', () => {
+    const css = themeCss({ ...DEFAULT_APP_THEME, primaryDark: '#fbbf24' })
+    const [light, dark] = css.split('html.dark')
+    expect(dark).toContain('--primary:#fbbf24;')
+    expect(light).toContain(`--primary:${DEFAULT_PRIMARY};`)
+  })
+
+  it('ignores a dark primary that is not a colour', () => {
+    expect(themeCss({ ...DEFAULT_APP_THEME, primaryDark: 'nope' })).toBe(themeCss(DEFAULT_APP_THEME))
+  })
+
+  it('suggests the automatic dark value first, then the presets made readable on the dark palette', () => {
+    const suggestions = primaryDarkSuggestions(DEFAULT_APP_THEME)
+    expect(suggestions).toHaveLength(5)
+    expect(suggestions[0]).toEqual({ id: 'auto', color: derivePrimary(DEFAULT_PRIMARY)!.dark.primary })
+    expect(new Set(suggestions.map(s => s.color)).size).toBe(5)
+    for (const { color } of suggestions) {
+      expect(color).toMatch(/^#[0-9a-f]{6}$/)
+      expect(readableOnDark(color), color).toBe(true)
+    }
+  })
+
+  it('follows the light primary for the automatic suggestion', () => {
+    const auto = (primaryColor: string) => primaryDarkSuggestions({ ...DEFAULT_APP_THEME, primaryColor })[0].color
+    expect(auto('#059669')).toBe(derivePrimary('#059669')!.dark.primary)
+    expect(auto('#123456')).not.toBe(auto('#db2777'))
+  })
+
+  it.each([DEFAULT_PRIMARY, ...PRIMARY_PRESETS.map(p => p.color), '#ffff00', '#808080'])(
+    'always offers five distinct dark suggestions for the light primary %s, also with custom dark surfaces',
+    primaryColor => {
+      for (const surfaces of [{}, { card: '#334155', sidebar: '#0b1220' }]) {
+        const list = primaryDarkSuggestions({ ...withSurfaces({ dark: surfaces }), primaryColor })
+        expect(list).toHaveLength(5)
+        expect(new Set(list.map(s => s.color)).size).toBe(5)
+        expect(new Set(list.map(s => s.id)).size).toBe(5)
+      }
+    },
+  )
 })
 
 describe('themeCss', () => {

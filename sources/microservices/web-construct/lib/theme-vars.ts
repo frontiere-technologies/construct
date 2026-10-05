@@ -112,6 +112,11 @@ export type SurfaceOverrides = Partial<Record<SurfaceKey, string>>
 
 export interface AppTheme {
   primaryColor: string
+  /**
+   * Il colore principale scelto per il modo scuro (DEC-10). Assente o `null`:
+   * si ricava da `primaryColor`, come prima.
+   */
+  primaryDark?: string | null
   surfaces: Record<PaletteMode, SurfaceOverrides>
 }
 
@@ -138,7 +143,7 @@ const PRIMARY_SURFACES: PaletteToken[] = ['background', 'card', 'popover', 'acce
 
 export const DEFAULT_PRIMARY = '#4f46e5'
 
-export const DEFAULT_APP_THEME: AppTheme = { primaryColor: DEFAULT_PRIMARY, surfaces: { light: {}, dark: {} } }
+export const DEFAULT_APP_THEME: AppTheme = { primaryColor: DEFAULT_PRIMARY, primaryDark: null, surfaces: { light: {}, dark: {} } }
 
 export const PRIMARY_PRESETS = [
   { id: 'indigo', color: '#4f46e5' },
@@ -250,6 +255,15 @@ const themeSeed = (theme: AppTheme): string =>
   isHex(theme.primaryColor) ? theme.primaryColor.toLowerCase() : DEFAULT_PRIMARY
 
 /**
+ * Il colore scelto per un modo (DEC-10): nello scuro `primaryDark` se c'e' ed e'
+ * un colore, altrimenti lo stesso del chiaro, da cui la variante scura si ricava.
+ */
+const modeSeed = (theme: AppTheme, mode: PaletteMode): string =>
+  mode === 'dark' && typeof theme.primaryDark === 'string' && isHex(theme.primaryDark)
+    ? theme.primaryDark.toLowerCase()
+    : themeSeed(theme)
+
+/**
  * Il colore principale mostrato in un modo: la variante leggibile sulla
  * tavolozza, oppure il colore scelto cosi' com'e' se non ce n'e' nessuna.
  */
@@ -313,7 +327,6 @@ const SURFACE_OF_TOKEN: Partial<Record<PaletteToken, SurfaceKey>> = Object.fromE
 export function themeContrastWarnings(theme: AppTheme): ContrastWarning[] {
   const warnings: ContrastWarning[] = []
   const palettes = { light: effectivePalette('light', theme.surfaces.light), dark: effectivePalette('dark', theme.surfaces.dark) }
-  const seed = themeSeed(theme)
   for (const mode of ['light', 'dark'] as const) {
     const palette = palettes[mode]
     const seen = new Set<string>()
@@ -327,7 +340,7 @@ export function themeContrastWarnings(theme: AppTheme): ContrastWarning[] {
         warnings.push({ mode, text: rule.text, surface, ratio })
       }
     }
-    if (!fitPrimary(seed, palette, directionOf(mode))) {
+    if (!fitPrimary(modeSeed(theme, mode), palette, directionOf(mode))) {
       warnings.push({ mode, text: 'primary', surface: null, ratio: null })
     }
   }
@@ -341,10 +354,9 @@ export function themeContrastWarnings(theme: AppTheme): ContrastWarning[] {
  * che non e' `#rrggbb` ripiega sul predefinito.
  */
 export function themePrimary(theme: AppTheme): DerivedPrimary {
-  const seed = themeSeed(theme)
   return {
-    light: modePrimary(seed, effectivePalette('light', theme.surfaces.light), 'light'),
-    dark: modePrimary(seed, effectivePalette('dark', theme.surfaces.dark), 'dark'),
+    light: modePrimary(modeSeed(theme, 'light'), effectivePalette('light', theme.surfaces.light), 'light'),
+    dark: modePrimary(modeSeed(theme, 'dark'), effectivePalette('dark', theme.surfaces.dark), 'dark'),
   }
 }
 
@@ -365,11 +377,10 @@ const THEME_CSS_TOKENS: PaletteToken[] = ['background', 'card', 'popover', 'acce
  * dopo l'avviso) resta il colore scelto, cosi' com'e'.
  */
 export function themeCss(theme: AppTheme, selectorSuffix = ''): string {
-  const seed = themeSeed(theme)
   const block = (mode: PaletteMode) => {
     // Una tavolozza sola per modo: la stessa misura il colore principale e scrive le superfici.
     const palette = effectivePalette(mode, theme.surfaces[mode])
-    const pair = modePrimary(seed, palette, mode)
+    const pair = modePrimary(modeSeed(theme, mode), palette, mode)
     const surfaces = THEME_CSS_TOKENS.map(token => `--${token}:${palette[token]}`).join(';')
     return `--primary:${pair.primary};--primary-foreground:${pair.foreground};${surfaces}`
   }
@@ -462,5 +473,36 @@ export function surfaceSuggestions(theme: AppTheme, mode: PaletteMode, key: Surf
       }
     }
   }
+  return suggestions
+}
+
+export type PrimaryDarkSuggestionId = 'auto' | (typeof PRIMARY_PRESETS)[number]['id']
+
+export interface PrimaryDarkSuggestion {
+  id: PrimaryDarkSuggestionId
+  color: string
+}
+
+/**
+ * I cinque colori suggeriti per il colore principale del modo scuro (DEC-10):
+ * per primo quello automatico, la variante scura del colore del chiaro, che e'
+ * anche cio' a cui torna «Usa il predefinito»; poi le varianti scure dei preset,
+ * leggibili sulla tavolozza scura del tema, senza ripetizioni. Se una tavolozza
+ * scura personalizzata lascia meno di cinque varianti leggibili, si completa con
+ * i preset cosi' come sono: la lista ha sempre cinque colori diversi, e uno che
+ * si legge male lo dira' l'avviso al salvataggio.
+ */
+export function primaryDarkSuggestions(theme: AppTheme): PrimaryDarkSuggestion[] {
+  const palette = effectivePalette('dark', theme.surfaces.dark)
+  const seed = themeSeed(theme)
+  const suggestions: PrimaryDarkSuggestion[] = []
+  const add = (id: PrimaryDarkSuggestionId, color: string | undefined) => {
+    // Un id una volta sola: e' la chiave e il data-testid del pallino.
+    if (!color || suggestions.length >= 5 || suggestions.some(s => s.color === color || s.id === id)) return
+    suggestions.push({ id, color })
+  }
+  add('auto', modePrimary(seed, palette, 'dark').primary)
+  for (const preset of PRIMARY_PRESETS) add(preset.id, fitPrimary(preset.color, palette, directionOf('dark'))?.primary)
+  for (const preset of PRIMARY_PRESETS) add(preset.id, preset.color)
   return suggestions
 }
