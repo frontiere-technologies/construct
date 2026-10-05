@@ -22,6 +22,8 @@ const surfacesSchema = z.object({
 
 const themeSchema = z.object({
   primaryColor: hexSchema,
+  /** Assente o null: il colore del modo scuro si ricava dal chiaro (DEC-10). */
+  primaryDark: hexSchema.nullish(),
   surfaces: z.object({ light: surfacesSchema, dark: surfacesSchema }),
 })
 
@@ -81,15 +83,17 @@ export async function saveAppTheme(
   const parsed = themeSchema.safeParse(theme)
   if (!parsed.success) return { saved: false, error: 'invalid' }
   const { primaryColor, surfaces } = parsed.data
+  const primaryDark = parsed.data.primaryDark ?? null
   const light = present(surfaces.light)
   const dark = present(surfaces.dark)
 
-  const warnings = themeContrastWarnings({ primaryColor, surfaces: { light, dark } })
+  const warnings = themeContrastWarnings({ primaryColor, primaryDark, surfaces: { light, dark } })
   if (warnings.length > 0 && !acknowledged) return { saved: false, error: null, warnings }
 
   try {
     const rows = await db.update(appTheme).set({
       primaryColor,
+      primaryDark,
       backgroundLight: light.background ?? null,
       cardLight: light.card ?? null,
       accentLight: light.accent ?? null,

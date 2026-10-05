@@ -17,6 +17,7 @@ const { DEFAULT_APP_THEME } = await import('./theme-vars')
 
 const row = {
   primaryColor: '#059669',
+  primaryDark: '#34d399',
   backgroundLight: null, cardLight: '#fafafa', accentLight: null, sidebarLight: null,
   backgroundDark: '#000000', cardDark: null, accentDark: null, sidebarDark: '#0b1220',
 }
@@ -31,8 +32,14 @@ describe('getAppTheme', () => {
     mocks.rows.mockResolvedValue([row])
     expect(await getAppTheme()).toEqual({
       primaryColor: '#059669',
+      primaryDark: '#34d399',
       surfaces: { light: { card: '#fafafa' }, dark: { background: '#000000', sidebar: '#0b1220' } },
     })
+  })
+
+  it('reads a missing dark primary as null: derived from the light one', async () => {
+    mocks.rows.mockResolvedValue([{ ...row, primaryDark: null }])
+    expect((await getAppTheme()).primaryDark).toBeNull()
   })
 
   it('falls back to the defaults when the row is missing', async () => {

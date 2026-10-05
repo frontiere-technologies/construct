@@ -67,6 +67,8 @@ export const users = pgTable('users', {
 export const appTheme = pgTable('app_theme', {
   id: boolean('id').primaryKey().default(true),
   primaryColor: varchar('primary_color', { length: 7 }).notNull(),
+  // Il colore principale scelto per il modo scuro (DEC-10, 0038): null vuol dire «ricavato dal chiaro».
+  primaryDark: varchar('primary_dark', { length: 7 }),
   // Le quattro superfici per modo (DEC-9, 0033): null vuol dire «il valore fisso».
   backgroundLight: varchar('background_light', { length: 7 }),
   cardLight: varchar('card_light', { length: 7 }),

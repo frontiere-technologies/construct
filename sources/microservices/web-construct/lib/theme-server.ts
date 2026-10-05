@@ -12,7 +12,8 @@ function overrides(values: Record<keyof SurfaceOverrides, string | null>): Surfa
 }
 
 /**
- * Il tema dell'app (DEC-1, DEC-9): il colore principale e le superfici cambiate
+ * Il tema dell'app (DEC-1, DEC-9, DEC-10): il colore principale, quello del modo
+ * scuro se scelto, e le superfici cambiate
  * dall'admin. Un database irraggiungibile non deve impedire di disegnare la
  * pagina: si ripiega sui predefiniti. Vale anche per un database a cui manca
  * ancora la 0033: la query nomina le colonne nuove e fallisce tutta, quindi
@@ -22,6 +23,7 @@ export const getAppTheme = cache(async (): Promise<AppTheme> => {
   try {
     const [row] = await db.select({
       primaryColor: appTheme.primaryColor,
+      primaryDark: appTheme.primaryDark,
       backgroundLight: appTheme.backgroundLight,
       cardLight: appTheme.cardLight,
       accentLight: appTheme.accentLight,
@@ -34,6 +36,7 @@ export const getAppTheme = cache(async (): Promise<AppTheme> => {
     if (!row) return DEFAULT_APP_THEME
     return {
       primaryColor: row.primaryColor,
+      primaryDark: row.primaryDark ?? null,
       surfaces: {
         light: overrides({ background: row.backgroundLight, card: row.cardLight, accent: row.accentLight, sidebar: row.sidebarLight }),
         dark: overrides({ background: row.backgroundDark, card: row.cardDark, accent: row.accentDark, sidebar: row.sidebarDark }),

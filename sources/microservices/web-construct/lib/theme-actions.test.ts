@@ -24,6 +24,7 @@ const theme = (primaryColor: string, surfaces: Partial<AppTheme['surfaces']> = {
 const unreadable = theme('#4f46e5', { light: { card: '#1f2937' } })
 
 const allNull = {
+  primaryDark: null,
   backgroundLight: null, cardLight: null, accentLight: null, sidebarLight: null,
   backgroundDark: null, cardDark: null, accentDark: null, sidebarDark: null,
 }
@@ -73,6 +74,29 @@ describe('saveAppTheme', () => {
       cardLight: '#f8fafc',
       sidebarDark: '#0b1220',
     }))
+  })
+
+  it('stores the dark primary in lower case', async () => {
+    expect(await saveAppTheme({ ...theme('#4f46e5'), primaryDark: '#FBBF24' })).toEqual({ saved: true, error: null })
+    expect(mocks.set).toHaveBeenCalledWith(expect.objectContaining({ primaryColor: '#4f46e5', primaryDark: '#fbbf24' }))
+  })
+
+  it('clears the dark primary with null, so it is derived from the light one again', async () => {
+    expect(await saveAppTheme({ ...theme('#4f46e5'), primaryDark: null })).toEqual({ saved: true, error: null })
+    expect(mocks.set).toHaveBeenCalledWith(expect.objectContaining({ primaryDark: null }))
+  })
+
+  it.each(['red', '#fff', 'url(x)'])('refuses the dark primary %j', async value => {
+    expect(await saveAppTheme({ ...theme('#4f46e5'), primaryDark: value })).toEqual({ saved: false, error: 'invalid' })
+    expect(mocks.set).not.toHaveBeenCalled()
+  })
+
+  it('warns about a dark primary that no variant makes readable, and writes nothing', async () => {
+    const result = await saveAppTheme({ ...theme('#4f46e5', { dark: { card: '#ffffff' } }), primaryDark: '#7a85f7' })
+    expect(result).toMatchObject({ saved: false, error: null, warnings: expect.arrayContaining([
+      { mode: 'dark', text: 'primary', surface: null, ratio: null },
+    ]) })
+    expect(mocks.set).not.toHaveBeenCalled()
   })
 
   it('returns the warnings and writes nothing when the colours read badly', async () => {

@@ -360,9 +360,10 @@ async function runDatabaseCommand(command, argument) {
         update users set id_language = null, theme_mode = 'system', text_scale = 100
         where email = any(${emails})
       `
-      // Anche le quattro superfici per modo (0033): null vuol dire «il valore fisso».
+      // Anche il colore del modo scuro (0038) e le quattro superfici per modo (0033): null vuol dire
+      // «ricavato dal chiaro» e «il valore fisso».
       await sql`
-        update app_theme set primary_color = '#4f46e5',
+        update app_theme set primary_color = '#4f46e5', primary_dark = null,
           background_light = null, card_light = null, accent_light = null, sidebar_light = null,
           background_dark = null, card_dark = null, accent_dark = null, sidebar_dark = null,
           date_mod = now()
