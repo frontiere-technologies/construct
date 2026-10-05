@@ -10,16 +10,24 @@ PRIMARY_DEFAULT = "#4f46e5"
 GREEN = "#059669"
 # Already readable on every light surface, so the light variant is the colour itself.
 CUSTOM = "#123456"
+# A light surface every text level still reads on (faint text stays above 4.5:1): no warning.
+READABLE_SURFACE = "#f8fafc"
+# A dark surface under the dark text of the light mode: the save asks first.
+UNREADABLE_SURFACE = "#1f2937"
 
 
-def _primary_var(page):
+def _css_var(page, name):
     return page.evaluate(
-        "getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()"
+        "name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()", name
     )
 
 
-def _set_custom_color(page, value):
-    page.locator('[data-testid="theme-custom-color"]').evaluate(
+def _primary_var(page):
+    return _css_var(page, "--primary")
+
+
+def _set_color_input(page, test_id, value):
+    page.get_by_test_id(test_id).evaluate(
         """(el, val) => {
             const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
             nativeSetter.call(el, val);
@@ -29,16 +37,31 @@ def _set_custom_color(page, value):
     )
 
 
+def _set_custom_color(page, value):
+    _set_color_input(page, "theme-custom-color", value)
+
+
 def _save(page):
     page.get_by_role("button", name="Salva", exact=True).click()
     page.locator("text=Theme saved.").wait_for(state="visible", timeout=10_000)
 
 
+def _save_confirming_warnings(page):
+    """Save, and if the contrast warning opens, confirm it: only for putting things back."""
+    page.get_by_role("button", name="Salva", exact=True).click()
+    saved = page.locator("text=Theme saved.")
+    confirm = page.get_by_role("button", name="Salva comunque", exact=True)
+    saved.or_(confirm).first.wait_for(state="visible", timeout=10_000)
+    if confirm.is_visible():
+        confirm.click()
+        saved.wait_for(state="visible", timeout=10_000)
+
+
 def _restore_default(page, base_url):
-    """The app colour is global: a test that leaves it changed repaints every later test."""
+    """The app theme is global: a test that leaves it changed repaints every later test."""
     nav(page, f"{base_url}/admin/theme")
     page.get_by_role("button", name="Valori di Default", exact=True).click()
-    _save(page)
+    _save_confirming_warnings(page)
 
 
 def _hex(page):
@@ -143,3 +166,51 @@ def test_controls_disabled_while_saving(logged_in_page, base_url):
     expect(page.get_by_role("button", name="Valori di Default", exact=True)).to_be_disabled()
     page.locator("text=Theme saved.").wait_for(state="visible", timeout=10_000)
     expect(swatch).to_be_enabled()
+
+
+def test_custom_surface_persists_after_reload(logged_in_page, base_url):
+    page = logged_in_page
+    try:
+        nav(page, f"{base_url}/admin/theme")
+        _set_color_input(page, "theme-preview-light-surface-input", READABLE_SURFACE)
+        expect(page.get_by_test_id("theme-preview-light-surface-marker")).to_be_visible()
+        _save(page)
+
+        nav(page, f"{base_url}/admin/theme")
+        # The browser is in light mode (theme_mode "system", no dark emulation): --card is the light one.
+        assert _css_var(page, "--card") == READABLE_SURFACE
+        assert _css_var(page, "--popover") == READABLE_SURFACE
+        expect(page.get_by_test_id("theme-preview-light-surface-marker")).to_be_visible()
+        expect(page.get_by_test_id("theme-preview-light-surface")).to_have_attribute(
+            "aria-label", re.compile(rf"^Superficie, chiaro: {READABLE_SURFACE} — personalizzato")
+        )
+        expect(page.get_by_test_id("theme-preview-dark-surface-marker")).to_have_count(0)
+    finally:
+        _restore_default(page, base_url)
+
+
+def test_unreadable_surface_asks_before_saving_and_cancel_saves_nothing(logged_in_page, base_url):
+    page = logged_in_page
+    try:
+        nav(page, f"{base_url}/admin/theme")
+        saved_card = _css_var(page, "--card")
+        _set_color_input(page, "theme-preview-light-surface-input", UNREADABLE_SURFACE)
+        page.get_by_role("button", name="Salva", exact=True).click()
+
+        dialog = page.get_by_role("dialog")
+        expect(dialog).to_be_visible(timeout=10_000)
+        expect(dialog).to_contain_text("Alcuni testi si leggono male")
+        expect(dialog.get_by_test_id("theme-contrast-warnings").get_by_role("listitem").first).to_contain_text(
+            "Superficie"
+        )
+        expect(dialog.get_by_role("button", name="Salva comunque", exact=True)).to_be_visible()
+
+        dialog.get_by_role("button", name="Annulla", exact=True).click()
+        expect(dialog).to_have_count(0)
+        expect(page.locator("text=Theme saved.")).to_have_count(0)
+
+        nav(page, f"{base_url}/admin/theme")
+        assert _css_var(page, "--card") == saved_card
+        expect(page.get_by_test_id("theme-preview-light-surface-marker")).to_have_count(0)
+    finally:
+        _restore_default(page, base_url)
