@@ -102,6 +102,16 @@ export function LanguagePresetPicker({ id, existingCodes, chosen, onChoose }: La
   }
 
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    // An input method (Japanese, Chinese, …) uses Enter, Escape and the arrows
+    // to compose the text: they belong to it until the composition ends.
+    // keyCode 229 too: Safari reports isComposing false on the keydown that
+    // commits the composition. No preventDefault, which would break the
+    // composition; stopPropagation keeps a composing key (Escape above all)
+    // from reaching AccessibleDialog, which would close the dialog.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+      e.stopPropagation()
+      return
+    }
     if (e.key === 'Escape') {
       // With the list open Escape closes only the list; closed, it reaches
       // AccessibleDialog and closes the dialog, as from any other field.
@@ -109,9 +119,6 @@ export function LanguagePresetPicker({ id, existingCodes, chosen, onChoose }: La
       return
     }
     if (e.key === 'Tab') { setOpen(false); return }
-    // An input method (Japanese, Chinese, …) uses Enter and the arrows to
-    // compose the text: they belong to it until the composition ends.
-    if (e.nativeEvent.isComposing) return
     // The arrows step over "già presente" entries, which cannot be chosen.
     if (e.key === 'ArrowDown') {
       e.preventDefault()
@@ -156,6 +163,14 @@ export function LanguagePresetPicker({ id, existingCodes, chosen, onChoose }: La
         aria-hidden
         className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
       />
+      {/* Always mounted, empty unless the open list has no match: a live
+          region is announced when its text changes, not when it appears, and
+          a list that opens straight onto no results (a paste, a first "q")
+          would otherwise mount already filled. The visible copy below is
+          aria-hidden so the message is read once. */}
+      <p role="status" className="sr-only">
+        {open && !hasMatches ? t('language.form.preset_no_results') : ''}
+      </p>
       {open && (
         <div
           // Keeps focus on the field while scrolling or clicking inside the
@@ -163,12 +178,11 @@ export function LanguagePresetPicker({ id, existingCodes, chosen, onChoose }: La
           onMouseDown={e => e.preventDefault()}
           className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-border bg-popover p-1 shadow-lg"
         >
-          {/* Mounted for as long as the list is open, empty when there are
-              matches: a live region is announced when its text changes, not
-              when it appears. */}
-          <p role="status" className={cn('text-sm text-muted-foreground', !hasMatches && 'px-3 py-2')}>
-            {hasMatches ? '' : t('language.form.preset_no_results')}
-          </p>
+          {!hasMatches && (
+            <p aria-hidden className="px-3 py-2 text-sm text-muted-foreground">
+              {t('language.form.preset_no_results')}
+            </p>
+          )}
           <ul id={listboxId} role="listbox" aria-label={t('language.form.preset')} className="max-h-60 overflow-y-auto">
             {entries.map((entry, index) => (
               <li

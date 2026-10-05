@@ -200,6 +200,30 @@ describe('LanguageFormModal language picker', () => {
     expect(input.getAttribute('aria-activedescendant')).toBe(option('language.form.preset_other').id)
   })
 
+  it('treats keyCode 229 as composing, Escape included', () => {
+    const { onClose } = render(null)
+    const input = picker()!
+    type(input, 'olan')
+    // Safari reports isComposing false on the keydown that commits the text.
+    press(input, 'Enter', { keyCode: 229 })
+    expect(fields()).toEqual(['', '', '', ''])
+    press(input, 'Escape', { keyCode: 229 })
+    press(input, 'Escape', { isComposing: true })
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('announces "no results" even when the list opens straight onto none', () => {
+    render(null)
+    const input = picker()!
+    const line = status()
+    expect(line).not.toBeNull()
+    expect(line!.textContent).toBe('')
+    type(input, 'zzzz')
+    expect(status()).toBe(line)
+    expect(line!.textContent).toBe('language.form.preset_no_results')
+  })
+
   it('keeps the status line mounted while the list is open, so "no results" is announced', () => {
     render(null)
     const input = picker()!
