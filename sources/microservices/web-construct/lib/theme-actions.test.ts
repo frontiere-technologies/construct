@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AppTheme } from '@/lib/theme-vars'
 
 const mocks = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
@@ -11,15 +12,23 @@ vi.mock('@/lib/db', () => ({
   db: { update: () => ({ set: (values: unknown) => ({ returning: () => mocks.set(values) }) }) },
 }))
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: mocks.logError }) }))
-vi.mock('@/lib/theme-vars', async importOriginal => {
-  const actual = await importOriginal<typeof import('@/lib/theme-vars')>()
-  return { ...actual, derivePrimary: vi.fn(actual.derivePrimary) }
+
+const { saveAppTheme } = await import('./theme-actions')
+
+const theme = (primaryColor: string, surfaces: Partial<AppTheme['surfaces']> = {}): AppTheme => ({
+  primaryColor,
+  surfaces: { light: {}, dark: {}, ...surfaces },
 })
 
-const { saveAppPrimaryColor } = await import('./theme-actions')
-const { derivePrimary } = await import('@/lib/theme-vars')
+/** Una superficie scura nel modo chiaro: tutti i testi scuri si leggono male. */
+const unreadable = theme('#4f46e5', { light: { card: '#1f2937' } })
 
-describe('saveAppPrimaryColor', () => {
+const allNull = {
+  backgroundLight: null, cardLight: null, accentLight: null, sidebarLight: null,
+  backgroundDark: null, cardDark: null, accentDark: null, sidebarDark: null,
+}
+
+describe('saveAppTheme', () => {
   beforeEach(() => {
     mocks.requireAdmin.mockReset().mockResolvedValue({ userId: 'admin-1', roleIds: [1] })
     mocks.set.mockReset().mockResolvedValue([{ id: 1 }])
@@ -28,42 +37,68 @@ describe('saveAppPrimaryColor', () => {
 
   it('refuses anyone requireAdmin refuses', async () => {
     mocks.requireAdmin.mockRejectedValue(new Error('Unauthorized'))
-    expect(await saveAppPrimaryColor('#123456')).toEqual({ error: 'unauthorized' })
+    expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'unauthorized' })
     expect(mocks.set).not.toHaveBeenCalled()
     expect(mocks.logError).not.toHaveBeenCalled()
   })
 
   it('logs a failure that is not a refusal, still answering unauthorized', async () => {
     mocks.requireAdmin.mockRejectedValue(new Error('connection refused'))
-    expect(await saveAppPrimaryColor('#123456')).toEqual({ error: 'unauthorized' })
+    expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'unauthorized' })
     expect(mocks.logError).toHaveBeenCalledOnce()
     expect(mocks.set).not.toHaveBeenCalled()
   })
 
-  it.each(['red', '#fff', '#12345g', ''])('refuses %j', async value => {
-    expect(await saveAppPrimaryColor(value)).toEqual({ error: 'invalid' })
+  it.each(['red', '#fff', '#12345g', ''])('refuses the primary colour %j', async value => {
+    expect(await saveAppTheme(theme(value))).toEqual({ saved: false, error: 'invalid' })
     expect(mocks.set).not.toHaveBeenCalled()
   })
 
-  it('refuses a colour with no readable variant', async () => {
-    vi.mocked(derivePrimary).mockReturnValueOnce(null)
-    expect(await saveAppPrimaryColor('#123456')).toEqual({ error: 'unreadable' })
+  it.each(['red', '#fff', 'url(x)'])('refuses the surface %j', async value => {
+    expect(await saveAppTheme(theme('#4f46e5', { dark: { sidebar: value } }))).toEqual({ saved: false, error: 'invalid' })
     expect(mocks.set).not.toHaveBeenCalled()
   })
 
-  it('stores the colour in lower case', async () => {
-    expect(await saveAppPrimaryColor('#ABCDEF')).toEqual({ error: null })
-    expect(mocks.set).toHaveBeenCalledWith(expect.objectContaining({ primaryColor: '#abcdef' }))
+  it('refuses a payload that is not a theme', async () => {
+    expect(await saveAppTheme('#4f46e5' as unknown as AppTheme)).toEqual({ saved: false, error: 'invalid' })
+    expect(mocks.set).not.toHaveBeenCalled()
+  })
+
+  it('stores every colour in lower case, and null for a surface left unchanged', async () => {
+    const result = await saveAppTheme(theme('#ABCDEF', { light: { card: '#F8FAFC' }, dark: { sidebar: '#0B1220' } }))
+    expect(result).toEqual({ saved: true, error: null })
+    expect(mocks.set).toHaveBeenCalledWith(expect.objectContaining({
+      ...allNull,
+      primaryColor: '#abcdef',
+      cardLight: '#f8fafc',
+      sidebarDark: '#0b1220',
+    }))
+  })
+
+  it('returns the warnings and writes nothing when the colours read badly', async () => {
+    const result = await saveAppTheme(unreadable)
+    expect(result.saved).toBe(false)
+    expect(result.error).toBeNull()
+    expect(result.saved === false && result.error === null && result.warnings.length).toBeGreaterThan(0)
+    expect(result).toMatchObject({ warnings: expect.arrayContaining([
+      expect.objectContaining({ mode: 'light', text: 'foreground', surface: 'card' }),
+    ]) })
+    expect(mocks.set).not.toHaveBeenCalled()
+  })
+
+  it('writes the same colours once the admin acknowledges the warnings', async () => {
+    expect(await saveAppTheme(unreadable, { acknowledgeWarnings: true })).toEqual({ saved: true, error: null })
+    expect(mocks.set).toHaveBeenCalledWith(expect.objectContaining({ cardLight: '#1f2937' }))
   })
 
   it('reports a database failure instead of throwing', async () => {
     mocks.set.mockRejectedValue(new Error('boom'))
-    expect(await saveAppPrimaryColor('#123456')).toEqual({ error: 'failed' })
+    expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'failed' })
   })
 
   it('reports failure when no row was updated', async () => {
     mocks.set.mockResolvedValue([])
-    expect(await saveAppPrimaryColor('#123456')).toEqual({ error: 'failed' })
+    expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'failed' })
     expect(mocks.logError).toHaveBeenCalledOnce()
   })
 })

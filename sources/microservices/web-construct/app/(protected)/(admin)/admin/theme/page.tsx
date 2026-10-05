@@ -7,5 +7,5 @@ export default async function ThemePage() {
   const session = await auth()
   if (!session?.user?.isAdmin) redirect('/')
 
-  return <AdminTheme savedColor={(await getAppTheme()).primaryColor} />
+  return <AdminTheme savedTheme={await getAppTheme()} />
 }
