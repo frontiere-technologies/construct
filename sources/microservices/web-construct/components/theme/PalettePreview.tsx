@@ -23,15 +23,16 @@ export interface PalettePreviewLabels {
 
 /** Cio' che il pannello di scelta sotto l'anteprima sta cambiando. */
 export type ThemeTarget =
-  | { kind: 'primary' }
+  | { kind: 'primary'; mode: PaletteMode }
   | { kind: 'surface'; mode: PaletteMode; key: SurfaceKey }
 
-/** Il colore principale e' uno solo: le due celle «Principale» selezionano lo stesso bersaglio. */
-export const PRIMARY_TARGET: ThemeTarget = { kind: 'primary' }
+/** La cella selezionata all'apertura: il colore principale del modo chiaro. */
+export const PRIMARY_TARGET: ThemeTarget = { kind: 'primary', mode: 'light' }
 
+/** Ogni cella e' un bersaglio a se': le due «Principale» hanno ciascuna il proprio colore (DEC-10). */
 export function sameTarget(a: ThemeTarget, b: ThemeTarget): boolean {
-  if (a.kind === 'primary' || b.kind === 'primary') return a.kind === b.kind
-  return a.mode === b.mode && a.key === b.key
+  if (a.kind !== b.kind || a.mode !== b.mode) return false
+  return a.kind === 'primary' || (b.kind === 'surface' && a.key === b.key)
 }
 
 /** L'etichetta di cella di ogni superficie, nell'ordine della striscia. */
@@ -51,7 +52,16 @@ interface Cell {
   customised: boolean
 }
 
-const cellCls = 'relative flex h-12 min-w-0 flex-1 items-center justify-center truncate px-1'
+/** Celle separate, ognuna con i suoi angoli e un bordo sottile sempre visibile. */
+const cellCls = 'relative flex h-12 min-w-0 flex-1 items-center justify-center truncate rounded-md border border-border px-1'
+
+/**
+ * La cella selezionata: lo stesso segno della voce attiva della sidebar, un anello
+ * del colore principale, ma fuori dalla cella e staccato di 2px, cosi' si vede
+ * anche sulla cella «Principale». Il fuoco da tastiera e' un contorno interno,
+ * perche' l'anello e' gia' preso dalla selezione e i due devono convivere.
+ */
+const selectedCls = 'ring-2 ring-primary ring-offset-2 ring-offset-card'
 
 /**
  * Gli stili globali dei bottoni (`globals.css`, `@layer base`) alzano e
@@ -61,7 +71,7 @@ const cellCls = 'relative flex h-12 min-w-0 flex-1 items-center justify-center t
  */
 const buttonCls = cn(
   cellCls,
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+  'focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
   'enabled:hover:transform-none enabled:hover:filter-none disabled:filter-none',
 )
 
@@ -81,9 +91,9 @@ interface PalettePreviewProps {
  * scuro anche mentre la pagina e' in chiaro.
  *
  * Con `onSelect` ogni cella e' un bottone a due stati (`aria-pressed`) che
- * sceglie cosa cambiare nel pannello sotto: il colore principale, oppure una
- * superficie di un modo. La cella selezionata ha un contorno interno del colore del
- * suo testo, che sul suo sfondo si vede per costruzione.
+ * sceglie cosa cambiare nel pannello sotto: il colore principale di un modo,
+ * oppure una superficie di un modo. Una sola cella e' selezionata alla volta, e
+ * porta l'anello del colore principale (`selectedCls`).
  */
 export function PalettePreview({ theme, labels, disabled, selected, onSelect }: PalettePreviewProps) {
   const primary = themePrimary(theme)
@@ -91,8 +101,10 @@ export function PalettePreview({ theme, labels, disabled, selected, onSelect }: 
     const palette = effectivePalette(mode, theme.surfaces[mode])
     const cells: Cell[] = [
       {
-        testId: `theme-cell-primary-${mode}`, target: PRIMARY_TARGET, label: labels.primary,
-        bg: primary[mode].primary, fg: primary[mode].foreground, customised: false,
+        testId: `theme-cell-primary-${mode}`, target: { kind: 'primary', mode }, label: labels.primary,
+        bg: primary[mode].primary, fg: primary[mode].foreground,
+        // Solo lo scuro puo' essere scelto a parte; il chiaro e' sempre «il» colore principale.
+        customised: mode === 'dark' && typeof theme.primaryDark === 'string',
       },
       ...SURFACE_CELLS.map(({ key, label }) => ({
         testId: `theme-cell-${mode}-${key}`,
@@ -115,7 +127,8 @@ export function PalettePreview({ theme, labels, disabled, selected, onSelect }: 
       {rows.map(row => (
         <div key={row.mode} data-testid={`theme-preview-${row.mode}`}>
           <p className="mb-1 text-xs text-muted-foreground">{row.title}</p>
-          <div className="flex overflow-hidden rounded-lg border border-border text-xs font-medium">
+          {/* Niente overflow-hidden e un po' di spazio intorno: l'anello della selezione sta fuori dalla cella. */}
+          <div className="flex gap-2 p-1 text-xs font-medium">
             {row.cells.map(cell => {
               const marker = cell.customised && (
                 <span
@@ -146,14 +159,8 @@ export function PalettePreview({ theme, labels, disabled, selected, onSelect }: 
                   title={name}
                   disabled={disabled}
                   onClick={() => onSelect(cell.target)}
-                  className={buttonCls}
-                  style={{
-                    backgroundColor: cell.bg,
-                    color: cell.fg,
-                    // Un contorno e non un'ombra: l'anello del fuoco (ring) e' gia' un'ombra, e i due devono convivere.
-                    outline: isSelected ? `3px solid ${cell.fg}` : undefined,
-                    outlineOffset: isSelected ? '-3px' : undefined,
-                  }}
+                  className={cn(buttonCls, isSelected && selectedCls)}
+                  style={{ backgroundColor: cell.bg, color: cell.fg }}
                 >
                   {cell.label}
                   {marker}

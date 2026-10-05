@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Eye, Palette } from 'lucide-react'
 import { saveAppTheme } from '@/lib/theme-actions'
 import {
-  DEFAULT_APP_THEME, PRIMARY_PRESETS, surfaceDefault, surfaceSuggestions, themeCss,
+  DEFAULT_APP_THEME, PRIMARY_PRESETS, primaryDarkSuggestions, surfaceDefault, surfaceSuggestions, themeCss,
   type AppTheme, type ContrastWarning, type PaletteMode, type PaletteToken, type SurfaceKey,
-  type SurfaceSuggestionId, type TextToken,
+  type PrimaryDarkSuggestionId, type SurfaceSuggestionId, type TextToken,
 } from '@/lib/theme-vars'
 import type { TranslateFn } from '@/lib/i18n/types'
 import { PageContainer } from '@/components/shared/PageContainer'
@@ -25,6 +25,11 @@ const PRESET_LABEL_KEYS: Record<(typeof PRIMARY_PRESETS)[number]['id'], string> 
   pink: 'theme.preset.pink',
   orange: 'theme.preset.orange',
   sky: 'theme.preset.sky',
+}
+
+const PRIMARY_DARK_LABEL_KEYS: Record<PrimaryDarkSuggestionId, string> = {
+  auto: 'theme.suggestion.auto',
+  ...PRESET_LABEL_KEYS,
 }
 
 const SUGGESTION_LABEL_KEYS: Record<SurfaceSuggestionId, string> = {
@@ -144,6 +149,14 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
       : []),
     [primaryColor, target],
   )
+  // Quelli del colore principale scuro: dal colore del chiaro e dalle superfici scure.
+  const darkSurfaces = theme.surfaces.dark
+  const darkSuggestions = useMemo(
+    () => (target.kind === 'primary' && target.mode === 'dark'
+      ? primaryDarkSuggestions({ ...DEFAULT_APP_THEME, primaryColor, surfaces: { light: {}, dark: darkSurfaces } })
+      : []),
+    [primaryColor, darkSurfaces, target],
+  )
 
   // Solo un tema diverso da quello salvato ha bisogno dell'anteprima; a pari CSS
   // resta il <style> del layout (che dopo un salvataggio e' gia' aggiornato).
@@ -198,27 +211,47 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
     })
   }
 
-  const panel = target.kind === 'primary'
+  /**
+   * Cosa mostra il pannello per la cella selezionata. `onUseDefault` c'e' solo
+   * quando la cella ha un colore scelto da togliere: una superficie cambiata, o
+   * il colore principale scuro scelto a parte (DEC-10).
+   */
+  const panel = target.kind === 'primary' && target.mode === 'light'
     ? {
-        id: 'primary',
-        title: t('theme.section.primary_color'),
+        id: 'primary-light',
+        title: t('theme.panel.title_primary', { mode: t(MODE_TITLE_KEYS.light) }),
         hint: t('theme.field.primary_color_hint'),
         groupLabel: t('theme.field.swatches'),
         value: theme.primaryColor,
         options: PRIMARY_PRESETS.map(preset => ({ id: preset.id, color: preset.color, label: t(PRESET_LABEL_KEYS[preset.id]) })),
-        customised: false,
         onChange: (color: string) => setTheme(prev => ({ ...prev, primaryColor: color })),
+        onUseDefault: undefined,
       }
-    : {
-        id: `${target.mode}-${target.key}`,
-        title: t('theme.panel.title_surface', { surface: t(SURFACE_CELL_KEYS[target.key]), mode: t(MODE_TITLE_KEYS[target.mode]) }),
-        hint: t('theme.panel.surface_hint'),
-        groupLabel: t('theme.panel.swatches_surface', { surface: t(SURFACE_CELL_KEYS[target.key]), mode: t(MODE_KEYS[target.mode]) }),
-        value: theme.surfaces[target.mode][target.key] ?? surfaceDefault(target.mode, target.key),
-        options: suggestions.map(s => ({ id: s.id, color: s.color, label: t(SUGGESTION_LABEL_KEYS[s.id]) })),
-        customised: theme.surfaces[target.mode][target.key] !== undefined,
-        onChange: (color: string) => setSurface(target.mode, target.key, color),
-      }
+    : target.kind === 'primary'
+      ? {
+          id: 'primary-dark',
+          title: t('theme.panel.title_primary', { mode: t(MODE_TITLE_KEYS.dark) }),
+          hint: t('theme.panel.primary_dark_hint'),
+          groupLabel: t('theme.panel.swatches_primary_dark'),
+          value: theme.primaryDark ?? darkSuggestions[0]?.color ?? theme.primaryColor,
+          options: darkSuggestions.map(s => ({ id: s.id, color: s.color, label: t(PRIMARY_DARK_LABEL_KEYS[s.id]) })),
+          onChange: (color: string) => setTheme(prev => ({ ...prev, primaryDark: color })),
+          onUseDefault: typeof theme.primaryDark === 'string'
+            ? () => setTheme(prev => ({ ...prev, primaryDark: null }))
+            : undefined,
+        }
+      : {
+          id: `${target.mode}-${target.key}`,
+          title: t('theme.panel.title_surface', { surface: t(SURFACE_CELL_KEYS[target.key]), mode: t(MODE_TITLE_KEYS[target.mode]) }),
+          hint: t('theme.panel.surface_hint'),
+          groupLabel: t('theme.panel.swatches_surface', { surface: t(SURFACE_CELL_KEYS[target.key]), mode: t(MODE_KEYS[target.mode]) }),
+          value: theme.surfaces[target.mode][target.key] ?? surfaceDefault(target.mode, target.key),
+          options: suggestions.map(s => ({ id: s.id, color: s.color, label: t(SUGGESTION_LABEL_KEYS[s.id]) })),
+          onChange: (color: string) => setSurface(target.mode, target.key, color),
+          onUseDefault: theme.surfaces[target.mode][target.key] !== undefined
+            ? () => setSurface(target.mode, target.key, null)
+            : undefined,
+        }
 
   return (
     <PageContainer title={t('theme.page.title')} subtitle={t('theme.page.subtitle')}>
@@ -259,7 +292,7 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
               disabled={saving}
               onChange={panel.onChange}
             />
-            {target.kind === 'surface' && panel.customised && (
+            {panel.onUseDefault && (
               <Button
                 variant="link"
                 size="sm"
@@ -267,7 +300,7 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
                 disabled={saving}
                 onClick={() => {
                   focusCheckedAfterRender.current = true
-                  setSurface(target.mode, target.key, null)
+                  panel.onUseDefault?.()
                 }}
               >
                 {t('theme.panel.use_default')}

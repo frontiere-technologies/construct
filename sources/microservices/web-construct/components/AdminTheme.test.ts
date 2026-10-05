@@ -4,7 +4,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  DEFAULT_APP_THEME, DARK_PALETTE, LIGHT_PALETTE, surfaceSuggestions, themeCss,
+  DEFAULT_APP_THEME, DARK_PALETTE, LIGHT_PALETTE, primaryDarkSuggestions, surfaceSuggestions, themeCss,
   type AppTheme, type ContrastWarning,
 } from '@/lib/theme-vars'
 import { saveAppTheme } from '@/lib/theme-actions'
@@ -134,11 +134,14 @@ describe('AdminTheme', () => {
     expect(preview()).toBeNull()
   })
 
-  it('starts on the primary colour: both primary cells pressed, the presets in the panel', () => {
+  it('starts on the light primary colour: one pressed cell, the presets in the panel', () => {
     render(DEFAULT_APP_THEME)
     expect(byTestId('theme-cell-primary-light')?.getAttribute('aria-pressed')).toBe('true')
-    expect(byTestId('theme-cell-primary-dark')?.getAttribute('aria-pressed')).toBe('true')
-    expect(byTestId('theme-panel-title')?.textContent).toBe('theme.section.primary_color')
+    expect(byTestId('theme-cell-primary-dark')?.getAttribute('aria-pressed')).toBe('false')
+    expect(document.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1)
+    expect(byTestId('theme-panel-title')?.textContent).toBe(
+      `theme.panel.title_primary ${JSON.stringify({ mode: 'theme.preview.light' })}`,
+    )
     expect(byTestId('theme-swatch-indigo')).not.toBeNull()
     expect(byTestId('theme-use-default')).toBeNull()
   })
@@ -197,9 +200,47 @@ describe('AdminTheme', () => {
     expect(document.activeElement).not.toBe(document.body)
   })
 
+  it('selects the dark primary on its own, with the automatic value and the dark presets in the panel', () => {
+    render(DEFAULT_APP_THEME)
+    select('primary-dark')
+    expect(document.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1)
+    expect(byTestId('theme-panel-title')?.textContent).toBe(
+      `theme.panel.title_primary ${JSON.stringify({ mode: 'theme.preview.dark' })}`,
+    )
+    const suggestions = primaryDarkSuggestions(DEFAULT_APP_THEME)
+    expect(suggestions[0].id).toBe('auto')
+    for (const s of suggestions) expect(byTestId(`theme-swatch-${s.id}`)).not.toBeNull()
+    expect(byTestId('theme-swatch-auto')?.getAttribute('aria-checked')).toBe('true')
+    expect(byTestId('theme-use-default')).toBeNull()
+  })
+
+  it('previews a dark primary chosen in the panel in html.dark only, and marks the dark cell', () => {
+    render(DEFAULT_APP_THEME)
+    select('primary-dark')
+    const green = primaryDarkSuggestions(DEFAULT_APP_THEME).find(s => s.id === 'green')!.color
+    act(() => (byTestId('theme-swatch-green') as HTMLButtonElement).click())
+    const [light, dark] = preview()!.textContent!.split('html.dark')
+    expect(dark).toContain(`--primary:${green};`)
+    expect(light).toContain('--primary:#4f46e5;')
+    expect(byTestId('theme-cell-primary-dark-marker')).not.toBeNull()
+    expect(byTestId('theme-use-default')).not.toBeNull()
+  })
+
+  it('puts the dark primary back to automatic with "Usa il predefinito", focusing the automatic dot', () => {
+    render(themeWith('#4f46e5', {}, '#fbbf24'))
+    select('primary-dark')
+    const useDefault = byTestId('theme-use-default') as HTMLButtonElement
+    act(() => useDefault.focus())
+    act(() => useDefault.click())
+    expect(byTestId('theme-cell-primary-dark-marker')).toBeNull()
+    expect(byTestId('theme-use-default')).toBeNull()
+    expect(document.activeElement).toBe(byTestId('theme-swatch-auto'))
+    expect(preview()?.textContent).toBe(themeCss(DEFAULT_APP_THEME, '[data-theme-mode]'))
+  })
+
   it('resets the primary colour and every surface on "Valori di Default"', () => {
-    render(themeWith('#16a34a', { light: { card: '#fafafa' }, dark: { sidebar: '#0b1220' } }))
-    expect(document.querySelectorAll('[data-testid$="-marker"]')).toHaveLength(2)
+    render(themeWith('#16a34a', { light: { card: '#fafafa' }, dark: { sidebar: '#0b1220' } }, '#fbbf24'))
+    expect(document.querySelectorAll('[data-testid$="-marker"]')).toHaveLength(3)
     act(() => button('theme.actions.reset_defaults').click())
     expect(document.querySelectorAll('[data-testid$="-marker"]')).toHaveLength(0)
     expect(preview()?.textContent).toContain(`--card:${LIGHT_PALETTE.card}`)

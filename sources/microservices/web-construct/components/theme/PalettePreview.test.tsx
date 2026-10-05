@@ -79,9 +79,13 @@ describe('PalettePreview selection', () => {
     expect(container!.querySelector('input')).toBeNull()
   })
 
-  it('shows the one primary colour selected in both strips', () => {
+  it('selects the two primary cells separately: one pressed cell in total', () => {
     render(PRIMARY_TARGET)
-    expect(pressed()).toEqual(['theme-cell-primary-light', 'theme-cell-primary-dark'])
+    expect(pressed()).toEqual(['theme-cell-primary-light'])
+    act(() => root?.unmount())
+    container?.remove()
+    render({ kind: 'primary', mode: 'dark' })
+    expect(pressed()).toEqual(['theme-cell-primary-dark'])
   })
 
   it('shows a selected surface in its own strip only', () => {
@@ -94,6 +98,8 @@ describe('PalettePreview selection', () => {
     act(() => cell('light-card').click())
     expect(onSelect).toHaveBeenLastCalledWith({ kind: 'surface', mode: 'light', key: 'card' })
     act(() => cell('primary-dark').click())
+    expect(onSelect).toHaveBeenLastCalledWith({ kind: 'primary', mode: 'dark' })
+    act(() => cell('primary-light').click())
     expect(onSelect).toHaveBeenLastCalledWith(PRIMARY_TARGET)
   })
 
@@ -110,6 +116,29 @@ describe('PalettePreview selection', () => {
     expect(container!.querySelector('[data-testid="theme-cell-light-card-marker"]')).not.toBeNull()
     expect(container!.querySelector('[data-testid="theme-cell-dark-card-marker"]')).toBeNull()
     expect(container!.querySelector('[data-testid="theme-cell-light-background-marker"]')).toBeNull()
+  })
+
+  it('marks the dark primary cell when the dark primary is chosen', () => {
+    render(PRIMARY_TARGET, { ...DEFAULT_APP_THEME, primaryDark: '#fbbf24' })
+    expect(container!.querySelector('[data-testid="theme-cell-primary-dark-marker"]')).not.toBeNull()
+    expect(container!.querySelector('[data-testid="theme-cell-primary-light-marker"]')).toBeNull()
+    expect(cell('primary-dark').getAttribute('aria-label')).toBe('Principale, scuro: #fbbf24 — personalizzato')
+  })
+
+  it('draws every cell as a separate bordered button, and the selected one with an outer primary ring', () => {
+    render({ kind: 'surface', mode: 'light', key: 'card' })
+    for (const id of ['primary-light', 'light-card', 'dark-sidebar']) {
+      const classes = cell(id).className.split(/\s+/)
+      expect(classes).toEqual(expect.arrayContaining(['rounded-md', 'border', 'border-border']))
+      expect(cell(id).style.outline).toBe('')
+    }
+    const selectedClasses = ['ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-card']
+    expect(cell('light-card').className.split(/\s+/)).toEqual(expect.arrayContaining(selectedClasses))
+    for (const c of selectedClasses) expect(cell('primary-light').className.split(/\s+/)).not.toContain(c)
+    // Il contenitore non taglia l'anello: niente overflow-hidden, e spazio intorno alle celle.
+    const strip = cell('light-card').parentElement!
+    expect(strip.className).not.toContain('overflow-hidden')
+    expect(strip.className.split(/\s+/)).toEqual(expect.arrayContaining(['gap-2', 'p-1']))
   })
 
   it('switches off the global hover lift and the disabled fade, which would fake another colour', () => {
