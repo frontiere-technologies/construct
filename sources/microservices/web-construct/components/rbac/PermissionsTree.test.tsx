@@ -88,6 +88,22 @@ describe('PermissionsTree, interruttore delle cartelle', () => {
     expect(toggle('nodo-4').getAttribute('title')).toBe('roles.detail.empty_container_hint')
   })
 
+  // Il `title` si scopre solo passando sopra con il mouse, e in tema scuro l'interruttore
+  // disabilitato si distingue poco dagli altri: la riga lo dice anche a parole, accanto al nome.
+  it('il contenitore senza foglie mostra accanto al nome che è vuoto', () => {
+    draw(new Map())
+    const badges = Array.from(container?.querySelectorAll('[data-testid="perm-empty-badge"]') ?? [])
+    expect(badges).toHaveLength(1)
+    expect(badges[0].textContent).toBe('roles.detail.empty_container_badge')
+    expect(badges[0].previousElementSibling?.textContent).toBe('nodo-4')
+  })
+
+  it('il contenitore con foglie non porta l\'etichetta', () => {
+    draw(new Map())
+    const row = toggle('nodo-5').parentElement
+    expect(row?.querySelector('[data-testid="perm-empty-badge"]')).toBeNull()
+  })
+
   it('la foglia resta un interruttore a due stati', () => {
     draw(new Map([[6, true]]))
     expect(toggle('nodo-6').getAttribute('aria-checked')).toBe('true')

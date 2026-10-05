@@ -23,6 +23,8 @@ interface DndConfig {
 interface NavigationTreeProps {
   nodes: UserNavigationTreeDto[]
   renderTrailing?: (node: UserNavigationTreeDto) => React.ReactNode
+  /** Qualcosa da mostrare subito dopo il nome, non in coda alla riga (per esempio «vuota»). */
+  renderNameSuffix?: (node: UserNavigationTreeDto) => React.ReactNode
   expandedByDefault?: boolean
   dnd?: DndConfig
 }
@@ -31,6 +33,7 @@ interface RowProps {
   node: UserNavigationTreeDto
   depth: number
   renderTrailing?: (node: UserNavigationTreeDto) => React.ReactNode
+  renderNameSuffix?: (node: UserNavigationTreeDto) => React.ReactNode
   expandedByDefault: boolean
   dnd?: DndConfig
   activeId: number | null
@@ -48,12 +51,13 @@ export function typeIcon(node: Pick<UserNavigationTreeDto, 'type' | 'functionali
   }
 }
 
-const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDefault, dnd, activeId, indicator }) => {
+const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, renderNameSuffix, expandedByDefault, dnd, activeId, indicator }) => {
   const { t } = useI18n()
   const isCategory = node.type === 'CATEGORY'
   const hasChildren = node.children.length > 0
   const [open, setOpen] = useState(expandedByDefault)
   const canDrag = dnd ? dnd.canDrag(node) : false
+  const nameSuffix = renderNameSuffix?.(node)
 
   const drag = useDraggable({ id: `item-${node.id}`, disabled: !canDrag })
   // One droppable per row; before/after/into is derived from the pointer position in onDragOver.
@@ -147,19 +151,30 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
             e un figlio flex con `min-width: auto` si rifiuta di stringersi sotto
             il proprio contenuto -- allargherebbe la riga e spingerebbe fuori le
             azioni in coda invece di andare in puntini. */}
-        <span className={`flex-1 min-w-0 truncate text-sm ${isCategory ? 'font-medium' : ''}`}>
-          {node.name}
-        </span>
+        {nameSuffix == null ? (
+          <span className={`flex-1 min-w-0 truncate text-sm ${isCategory ? 'font-medium' : ''}`}>
+            {node.name}
+          </span>
+        ) : (
+          // Con un suffisso il nome resta quello che va in puntini, e il suffisso gli sta accanto
+          // invece di finire in coda alla riga: `flex-1` passa al contenitore dei due.
+          <span className="flex flex-1 min-w-0 items-center gap-2">
+            <span className={`min-w-0 truncate text-sm ${isCategory ? 'font-medium' : ''}`}>
+              {node.name}
+            </span>
+            {nameSuffix}
+          </span>
+        )}
         {renderTrailing?.(node)}
       </div>
       {hasChildren && open && node.children.map(c => (
-        <TreeRow key={c.id} node={c} depth={depth + 1} renderTrailing={renderTrailing} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
+        <TreeRow key={c.id} node={c} depth={depth + 1} renderTrailing={renderTrailing} renderNameSuffix={renderNameSuffix} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
       ))}
     </div>
   )
 }
 
-export default function NavigationTree({ nodes, renderTrailing, expandedByDefault = true, dnd }: NavigationTreeProps) {
+export default function NavigationTree({ nodes, renderTrailing, renderNameSuffix, expandedByDefault = true, dnd }: NavigationTreeProps) {
   const { t } = useI18n()
   const [activeId, setActiveId] = useState<number | null>(null)
   // Se una pressione precedente ha gia' collocato il puntatore virtuale. Non e'
@@ -331,7 +346,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
   const tree = (
     <div className="rounded-lg border border-border-subtle">
       {nodes.map(n => (
-        <TreeRow key={n.id} node={n} depth={0} renderTrailing={renderTrailing} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
+        <TreeRow key={n.id} node={n} depth={0} renderTrailing={renderTrailing} renderNameSuffix={renderNameSuffix} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
       ))}
     </div>
   )

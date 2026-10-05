@@ -56,6 +56,17 @@ export default function PermissionsTree({ trees, map, onChange, editable }: Perm
   return (
     <NavigationTree
       nodes={trees}
+      // Il `title` dell'interruttore disabilitato si scopre solo passandoci sopra, e in tema
+      // scuro l'interruttore spento si distingue poco: la riga lo dice anche a parole.
+      renderNameSuffix={node =>
+        node.type === 'CATEGORY' && folderState(node, map) === 'empty' ? (
+          <span
+            data-testid="perm-empty-badge"
+            className="shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground"
+          >
+            {t('roles.detail.empty_container_badge')}
+          </span>
+        ) : null}
       renderTrailing={node => {
         if (node.type === 'CATEGORY') {
           const state = folderState(node, map)
