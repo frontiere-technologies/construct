@@ -272,7 +272,9 @@ per ogni impostazione.
 ### 6.1 Admin → Theme & Styles (`/admin/theme`)
 
 - **Titolo e sottotitolo**: come oggi.
-- **Sezione "Colore principale"** (icona `Palette`):
+- **Sezione "Colore principale"** (icona `Palette`): *sostituita con la correzione del 2026-10-05
+  (sotto)*: non c'è più una sezione a sé; i pallini sono quelli del pannello di scelta quando è
+  selezionata una cella "Principale".
   - Spiegazione: "Pulsanti, icone attive e bordo di selezione. Le varianti per chiaro e scuro
     sono calcolate in automatico".
   - **Pallini**:
@@ -297,8 +299,12 @@ per ogni impostazione.
     bottoni: un click (o Invio / Spazio) apre il selettore nativo, come il pallino
     "Personalizzato" (`<input type="color">` nascosto). La cella "Principale" resta dei pallini.
     Sotto le strisce c'è il suggerimento "Clicca uno sfondo per cambiarne il colore.".
+    *Sostituito con la correzione del 2026-10-05 (sotto)*: ogni cella, "Principale" compresa,
+    seleziona soltanto cosa cambiare nel pannello di scelta, e il suggerimento è "Scegli una cella
+    per cambiarne il colore." (`0034`).
   - Una superficie cambiata mostra un pallino e il suo nome accessibile lo dice ("Superficie,
-    chiaro: #ffffff — personalizzato, modifica").
+    chiaro: #ffffff — personalizzato, modifica"). *Sostituito con la `0035`*: la cella non apre più
+    niente, e il nome resta senza verbo ("Superficie, chiaro: #ffffff — personalizzato").
   - Le modifiche entrano subito nell'anteprima dal vivo (`<style id="app-primary-preview">`, ora
     scritto da `themeCss` con le superfici). "Valori di Default" rimette il colore principale e
     tutte e otto le superfici.
