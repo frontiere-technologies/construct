@@ -24,14 +24,17 @@ interface ColorSwatchesProps {
   onChange: (color: string) => void
 }
 
+// Il bordo serve ai colori chiari: un pallino bianco su una card bianca altrimenti non si vede.
 const swatchCls = cn(
-  'relative flex h-8 w-8 items-center justify-center rounded-full',
+  'relative flex h-8 w-8 items-center justify-center rounded-full border border-border',
   'ring-offset-2 ring-offset-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
   'data-[state=checked]:ring-2 data-[state=checked]:ring-foreground',
 )
 
 /**
- * I pallini del colore principale (specifica §6.1). La primitiva `RadioGroup`
+ * I pallini del pannello di scelta della pagina Tema (specifica §6.1): i preset
+ * del colore principale, oppure i colori suggeriti della superficie selezionata.
+ * Le opzioni e il nome del gruppo li decide chi lo usa. La primitiva `RadioGroup`
  * di radix-ui, non il `radio-group` di shadcn: quello disegna sempre il proprio
  * cerchietto con indicatore e non lascia posto a un pallino colorato (§6.4).
  *
@@ -90,7 +93,7 @@ export function ColorSwatches({ options, value, groupLabel, customLabel, disable
             event.preventDefault()
             openPicker()
           }}
-          className={cn(swatchCls, 'border border-border')}
+          className={swatchCls}
           style={customSelected ? { backgroundColor: value } : undefined}
         >
           {customSelected
@@ -110,7 +113,7 @@ export function ColorSwatches({ options, value, groupLabel, customLabel, disable
         data-testid="theme-custom-color"
         className="sr-only"
       />
-      <span className="w-16 font-mono text-xs uppercase text-muted-foreground" data-testid="theme-primary-hex">{value}</span>
+      <span className="w-16 font-mono text-xs uppercase text-muted-foreground" data-testid="theme-panel-hex">{value}</span>
     </div>
   )
 }

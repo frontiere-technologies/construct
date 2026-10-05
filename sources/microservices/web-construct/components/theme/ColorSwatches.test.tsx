@@ -45,7 +45,7 @@ describe('ColorSwatches', () => {
     render('#123456')
     expect(swatch('custom').getAttribute('aria-checked')).toBe('true')
     expect(swatch('custom').style.backgroundColor).toBe('rgb(18, 52, 86)')
-    expect(container!.querySelector('[data-testid="theme-primary-hex"]')?.textContent).toBe('#123456')
+    expect(container!.querySelector('[data-testid="theme-panel-hex"]')?.textContent).toBe('#123456')
   })
 
   it('reports the colour of a clicked preset', () => {
@@ -117,6 +117,29 @@ describe('ColorSwatches', () => {
     expect(pickerInput().getAttribute('aria-hidden')).toBe('true')
     expect(pickerInput().tabIndex).toBe(-1)
     expect(pickerInput().hasAttribute('aria-label')).toBe(false)
+  })
+
+  it('works with any option list, such as the suggested colours of a surface', () => {
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    const onChange = vi.fn()
+    const surface: SwatchOption[] = [
+      { id: 'default', color: '#ffffff', label: 'Predefinito' },
+      { id: 'cool', color: '#f9fcff', label: 'Grigio freddo' },
+    ]
+    act(() => root?.render(
+      <ColorSwatches options={surface} value="#ffffff" groupLabel="Scegli il colore: Superficie, chiaro" customLabel="Personalizzato" onChange={onChange} />,
+    ))
+    expect(container.querySelector('[role="radiogroup"]')?.getAttribute('aria-label')).toBe('Scegli il colore: Superficie, chiaro')
+    expect(swatch('default').getAttribute('aria-checked')).toBe('true')
+    act(() => swatch('cool').click())
+    expect(onChange).toHaveBeenCalledWith('#f9fcff')
+  })
+
+  it('outlines every swatch, so a white one shows on a white card', () => {
+    render('#4f46e5')
+    expect(swatch('indigo').className).toContain('border-border')
   })
 
   it('disables every swatch and the picker while disabled', () => {

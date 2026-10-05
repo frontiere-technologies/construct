@@ -3,7 +3,10 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_APP_THEME, LIGHT_PALETTE, themeCss, type AppTheme, type ContrastWarning } from '@/lib/theme-vars'
+import {
+  DEFAULT_APP_THEME, DARK_PALETTE, LIGHT_PALETTE, surfaceSuggestions, themeCss,
+  type AppTheme, type ContrastWarning,
+} from '@/lib/theme-vars'
 import { saveAppTheme } from '@/lib/theme-actions'
 import { AdminTheme, applyThemePreview } from './AdminTheme'
 
@@ -105,6 +108,10 @@ describe('AdminTheme', () => {
 
   const button = (label: string) =>
     Array.from(document.querySelectorAll('button')).find(b => b.textContent === label) as HTMLButtonElement
+  const byTestId = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement | null
+  const select = (cellId: string) => act(() => (byTestId(`theme-cell-${cellId}`) as HTMLButtonElement).click())
+  /** Un colore personalizzato dal pannello, per la cella selezionata. */
+  const pickCustom = (value: string) => pick('theme-custom-color', value)
   const pick = (testId: string, value: string) => {
     const input = document.querySelector(`[data-testid="${testId}"]`) as HTMLInputElement
     act(() => {
@@ -126,11 +133,55 @@ describe('AdminTheme', () => {
     expect(preview()).toBeNull()
   })
 
-  it('previews a surface picked in the strip, live', () => {
+  it('starts on the primary colour: both primary cells pressed, the presets in the panel', () => {
     render(DEFAULT_APP_THEME)
-    pick('theme-preview-light-surface-input', '#F8FAFC')
+    expect(byTestId('theme-cell-primary-light')?.getAttribute('aria-pressed')).toBe('true')
+    expect(byTestId('theme-cell-primary-dark')?.getAttribute('aria-pressed')).toBe('true')
+    expect(byTestId('theme-panel-title')?.textContent).toBe('theme.section.primary_color')
+    expect(byTestId('theme-swatch-indigo')).not.toBeNull()
+    expect(byTestId('theme-use-default')).toBeNull()
+  })
+
+  it('switches the panel heading and options to the selected surface', () => {
+    render(DEFAULT_APP_THEME)
+    select('dark-sidebar')
+    expect(byTestId('theme-cell-dark-sidebar')?.getAttribute('aria-pressed')).toBe('true')
+    expect(byTestId('theme-cell-primary-light')?.getAttribute('aria-pressed')).toBe('false')
+    expect(byTestId('theme-panel-title')?.textContent).toBe(
+      `theme.panel.title_surface ${JSON.stringify({ surface: 'theme.preview.swatch.sidebar', mode: 'theme.preview.dark' })}`,
+    )
+    expect(byTestId('theme-swatch-indigo')).toBeNull()
+    for (const id of ['default', 'cool', 'warm', 'neutral', 'tint']) expect(byTestId(`theme-swatch-${id}`)).not.toBeNull()
+    expect(byTestId('theme-swatch-default')?.getAttribute('aria-checked')).toBe('true')
+    expect(byTestId('theme-panel-hex')?.textContent).toBe(DARK_PALETTE.sidebar)
+  })
+
+  it('previews a suggested colour chosen for the selected surface, live', () => {
+    render(DEFAULT_APP_THEME)
+    select('light-card')
+    act(() => (byTestId('theme-swatch-cool') as HTMLButtonElement).click())
+    const cool = surfaceSuggestions(DEFAULT_APP_THEME, 'light', 'card').find(s => s.id === 'cool')!.color
+    expect(preview()?.textContent).toContain(`--card:${cool};--popover:${cool}`)
+    expect(byTestId('theme-cell-light-card-marker')).not.toBeNull()
+  })
+
+  it('previews a custom colour chosen for the selected surface, live', () => {
+    render(DEFAULT_APP_THEME)
+    select('light-card')
+    pickCustom('#F8FAFC')
     expect(preview()?.textContent).toContain('--card:#f8fafc;--popover:#f8fafc')
-    expect(document.querySelector('[data-testid="theme-preview-light-surface-marker"]')).not.toBeNull()
+  })
+
+  it('offers "Usa il predefinito" only on a customised surface, and resets that one only', () => {
+    render(themeWith('#16a34a', { light: { card: '#fafafa', sidebar: '#f0f0f0' } }))
+    select('light-background')
+    expect(byTestId('theme-use-default')).toBeNull()
+    select('light-card')
+    act(() => (byTestId('theme-use-default') as HTMLButtonElement).click())
+    expect(byTestId('theme-cell-light-card-marker')).toBeNull()
+    expect(byTestId('theme-cell-light-sidebar-marker')).not.toBeNull()
+    expect(byTestId('theme-use-default')).toBeNull()
+    expect(preview()?.textContent).toContain(themeCss(themeWith('#16a34a', { light: { sidebar: '#f0f0f0' } }), '[data-theme-mode]'))
   })
 
   it('resets the primary colour and every surface on "Valori di Default"', () => {
@@ -144,7 +195,8 @@ describe('AdminTheme', () => {
   it('saves straight away when nothing reads badly, then refreshes the layout style', async () => {
     vi.mocked(saveAppTheme).mockResolvedValue({ saved: true, error: null })
     render(DEFAULT_APP_THEME)
-    pick('theme-preview-light-surface-input', '#f8fafc')
+    select('light-card')
+    pickCustom('#f8fafc')
     await act(async () => button('common.actions.save').click())
     expect(saveAppTheme).toHaveBeenCalledWith(themeWith('#4f46e5', { light: { card: '#f8fafc' } }), { acknowledgeWarnings: false })
     expect(document.querySelector('[role="dialog"]')).toBeNull()
@@ -170,7 +222,8 @@ describe('AdminTheme', () => {
     async function saveWithWarnings() {
       vi.mocked(saveAppTheme).mockResolvedValueOnce({ saved: false, error: null, warnings })
       render(DEFAULT_APP_THEME)
-      pick('theme-preview-light-surface-input', '#1f2937')
+      select('light-card')
+      pickCustom('#1f2937')
       await act(async () => button('common.actions.save').click())
       return document.querySelector('[role="dialog"]')
     }

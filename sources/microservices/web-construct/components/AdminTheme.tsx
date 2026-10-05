@@ -5,15 +5,16 @@ import { useRouter } from 'next/navigation'
 import { Eye, Palette } from 'lucide-react'
 import { saveAppTheme } from '@/lib/theme-actions'
 import {
-  DEFAULT_APP_THEME, PRIMARY_PRESETS, themeCss,
-  type AppTheme, type ContrastWarning, type PaletteMode, type PaletteToken, type SurfaceKey, type TextToken,
+  DEFAULT_APP_THEME, FIXED_PALETTES, PRIMARY_PRESETS, surfaceSuggestions, themeCss,
+  type AppTheme, type ContrastWarning, type PaletteMode, type PaletteToken, type SurfaceKey,
+  type SurfaceSuggestionId, type TextToken,
 } from '@/lib/theme-vars'
 import type { TranslateFn } from '@/lib/i18n/types'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { SettingsRow, SettingsSection } from '@/components/settings/SettingsSection'
 import { ColorSwatches } from '@/components/theme/ColorSwatches'
-import { PalettePreview } from '@/components/theme/PalettePreview'
+import { PalettePreview, PRIMARY_TARGET, type ThemeTarget } from '@/components/theme/PalettePreview'
 import { useI18n } from '@/context/I18nContext'
 import { Button } from '@/components/ui/button'
 
@@ -24,6 +25,28 @@ const PRESET_LABEL_KEYS: Record<(typeof PRIMARY_PRESETS)[number]['id'], string> 
   pink: 'theme.preset.pink',
   orange: 'theme.preset.orange',
   sky: 'theme.preset.sky',
+}
+
+const SUGGESTION_LABEL_KEYS: Record<SurfaceSuggestionId, string> = {
+  default: 'theme.suggestion.default',
+  cool: 'theme.suggestion.cool',
+  warm: 'theme.suggestion.warm',
+  neutral: 'theme.suggestion.neutral',
+  tint: 'theme.suggestion.tint',
+}
+
+/** Il nome di cella di ogni superficie, lo stesso dell'anteprima. */
+const SURFACE_CELL_KEYS: Record<SurfaceKey, string> = {
+  background: 'theme.preview.swatch.background',
+  card: 'theme.preview.swatch.surface',
+  accent: 'theme.preview.swatch.hover',
+  sidebar: 'theme.preview.swatch.sidebar',
+}
+
+/** Il modo con la maiuscola, come nel titolo delle strisce: «Chiaro», «Scuro». */
+const MODE_TITLE_KEYS: Record<PaletteMode, string> = {
+  light: 'theme.preview.light',
+  dark: 'theme.preview.dark',
 }
 
 const MODE_KEYS: Record<PaletteMode, string> = {
@@ -101,6 +124,8 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   // I problemi di contrasto dell'ultimo «Salva»: finche' ci sono, il dialogo e' aperto.
   const [warnings, setWarnings] = useState<ContrastWarning[] | null>(null)
+  // La cella selezionata nell'anteprima: cosa cambia il pannello di scelta sotto.
+  const [target, setTarget] = useState<ThemeTarget>(PRIMARY_TARGET)
 
   // Solo un tema diverso da quello salvato ha bisogno dell'anteprima; a pari CSS
   // resta il <style> del layout (che dopo un salvataggio e' gia' aggiornato).
@@ -145,36 +170,47 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
     setTimeout(() => setSaveStatus('idle'), 3000)
   }
 
-  const handleSurfaceChange = (mode: PaletteMode, key: SurfaceKey, color: string) => {
-    setTheme(prev => ({ ...prev, surfaces: { ...prev.surfaces, [mode]: { ...prev.surfaces[mode], [key]: color } } }))
+  /** Un colore per una superficie di un modo; `null` la rimette al predefinito fisso. */
+  const setSurface = (mode: PaletteMode, key: SurfaceKey, color: string | null) => {
+    setTheme(prev => {
+      const next = { ...prev.surfaces[mode] }
+      if (color === null) delete next[key]
+      else next[key] = color
+      return { ...prev, surfaces: { ...prev.surfaces, [mode]: next } }
+    })
   }
 
-  const options = PRIMARY_PRESETS.map(preset => ({
-    id: preset.id,
-    color: preset.color,
-    label: t(PRESET_LABEL_KEYS[preset.id]),
-  }))
+  const panel = target.kind === 'primary'
+    ? {
+        id: 'primary',
+        title: t('theme.section.primary_color'),
+        hint: t('theme.field.primary_color_hint'),
+        groupLabel: t('theme.field.swatches'),
+        value: theme.primaryColor,
+        options: PRIMARY_PRESETS.map(preset => ({ id: preset.id, color: preset.color, label: t(PRESET_LABEL_KEYS[preset.id]) })),
+        customised: false,
+        onChange: (color: string) => setTheme(prev => ({ ...prev, primaryColor: color })),
+      }
+    : {
+        id: `${target.mode}-${target.key}`,
+        title: t('theme.panel.title_surface', { surface: t(SURFACE_CELL_KEYS[target.key]), mode: t(MODE_TITLE_KEYS[target.mode]) }),
+        hint: t('theme.panel.surface_hint'),
+        groupLabel: t('theme.panel.swatches_surface', { surface: t(SURFACE_CELL_KEYS[target.key]), mode: t(MODE_KEYS[target.mode]) }),
+        value: theme.surfaces[target.mode][target.key] ?? FIXED_PALETTES[target.mode][target.key],
+        options: surfaceSuggestions(theme, target.mode, target.key)
+          .map(s => ({ id: s.id, color: s.color, label: t(SUGGESTION_LABEL_KEYS[s.id]) })),
+        customised: theme.surfaces[target.mode][target.key] !== undefined,
+        onChange: (color: string) => setSurface(target.mode, target.key, color),
+      }
 
   return (
     <PageContainer title={t('theme.page.title')} subtitle={t('theme.page.subtitle')}>
-      <SettingsSection icon={Palette} title={t('theme.section.primary_color')}>
-        <SettingsRow hint={t('theme.field.primary_color_hint')}>
-          <ColorSwatches
-            options={options}
-            value={theme.primaryColor}
-            groupLabel={t('theme.field.swatches')}
-            customLabel={t('theme.preset.custom')}
-            disabled={saving}
-            onChange={next => setTheme(prev => ({ ...prev, primaryColor: next }))}
-          />
-        </SettingsRow>
-      </SettingsSection>
-
       <SettingsSection icon={Eye} title={t('theme.preview.title')}>
         <PalettePreview
           theme={theme}
           disabled={saving}
-          onSurfaceChange={handleSurfaceChange}
+          selected={target}
+          onSelect={setTarget}
           labels={{
             light: t('theme.preview.light'),
             dark: t('theme.preview.dark'),
@@ -191,6 +227,34 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
           }}
         />
         <p className="mt-2 text-xs text-muted-foreground">{t('theme.preview.edit_hint')}</p>
+      </SettingsSection>
+
+      <SettingsSection icon={Palette} title={panel.title} titleTestId="theme-panel-title">
+        <SettingsRow hint={panel.hint}>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* La chiave azzera il gruppo a ogni cambio di cella: fuoco e selezione ripartono da capo. */}
+            <ColorSwatches
+              key={panel.id}
+              options={panel.options}
+              value={panel.value}
+              groupLabel={panel.groupLabel}
+              customLabel={t('theme.preset.custom')}
+              disabled={saving}
+              onChange={panel.onChange}
+            />
+            {target.kind === 'surface' && panel.customised && (
+              <Button
+                variant="link"
+                size="sm"
+                data-testid="theme-use-default"
+                disabled={saving}
+                onClick={() => setSurface(target.mode, target.key, null)}
+              >
+                {t('theme.panel.use_default')}
+              </Button>
+            )}
+          </div>
+        </SettingsRow>
       </SettingsSection>
 
       <div className="pt-4 border-t border-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
