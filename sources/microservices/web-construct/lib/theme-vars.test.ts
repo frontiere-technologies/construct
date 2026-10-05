@@ -518,6 +518,23 @@ describe('primary colour per mode (DEC-10)', () => {
     expect(auto('#123456')).not.toBe(auto('#db2777'))
   })
 
+  it.each([...PRIMARY_PRESETS.map(p => p.color), '#123456', '#ffff00', '#808080'])(
+    'on the default dark palette offers five readable dark suggestions for the light primary %s, the automatic one first',
+    primaryColor => {
+      const list = primaryDarkSuggestions({ ...DEFAULT_APP_THEME, primaryColor })
+      expect(list[0]).toEqual({ id: 'auto', color: derivePrimary(primaryColor)!.dark.primary })
+      for (const { color } of list) expect(readableOnDark(color), `${primaryColor} ${color}`).toBe(true)
+      // Le varianti leggibili dei preset, nell'ordine dei preset: nessun preset grezzo di riserva.
+      const presetIds = PRIMARY_PRESETS.map(p => p.id) as string[]
+      const ids = list.slice(1).map(s => s.id)
+      expect(ids).toEqual([...ids].sort((a, b) => presetIds.indexOf(a) - presetIds.indexOf(b)))
+      for (const s of list.slice(1)) {
+        const preset = PRIMARY_PRESETS.find(p => p.id === s.id)!
+        expect(s.color).toBe(derivePrimary(preset.color)!.dark.primary)
+      }
+    },
+  )
+
   it.each([DEFAULT_PRIMARY, ...PRIMARY_PRESETS.map(p => p.color), '#ffff00', '#808080'])(
     'always offers five distinct dark suggestions for the light primary %s, also with custom dark surfaces',
     primaryColor => {
