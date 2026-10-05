@@ -27,8 +27,9 @@ globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {
 
 const preview = () => document.getElementById('app-primary-preview')
 
-const themeWith = (primaryColor: string, surfaces: Partial<AppTheme['surfaces']> = {}): AppTheme => ({
+const themeWith = (primaryColor: string, surfaces: Partial<AppTheme['surfaces']> = {}, primaryDark: string | null = null): AppTheme => ({
   primaryColor,
+  primaryDark,
   surfaces: { light: {}, dark: {}, ...surfaces },
 })
 
