@@ -345,7 +345,9 @@ per ogni impostazione.
     titolo dice cosa si sta cambiando ("Colore principale" oppure "Superficie · Chiaro"), poi cinque
     pallini suggeriti, il pallino "Personalizzato" con il selettore nativo e il codice esadecimale.
     Per una superficie personalizzata compare anche "Usa il predefinito", che rimette solo quella
-    superficie di quel modo. La sezione "Colore principale" separata in cima non c'è più.
+    superficie di quel modo. *Sostituito con la correzione del
+    2026-10-05 su "Usa il predefinito" (sotto)*: il bottone c'è sempre. La sezione "Colore principale" separata in
+    cima non c'è più.
   - **Colori suggeriti.** Per il colore principale, i cinque preset. Per ogni superficie di ogni
     modo, cinque colori da `surfaceSuggestions(theme, mode, key)` in `lib/theme-vars.ts`, costruiti
     in OKLCH alla luminosità del predefinito: il predefinito fisso, un grigio freddo (tinta
@@ -365,6 +367,8 @@ per ogni impostazione.
     tavolozza scura del tema, senza ripetizioni e sempre cinque — più "Personalizzato" e il codice.
     Con `primaryDark` impostato la cella mostra il segno di colore personalizzato e il pannello offre
     "Usa il predefinito", che lo rimette a null (torna "Automatico", con il fuoco su quel pallino).
+    *Sostituito con la correzione del 2026-10-05 su "Usa il predefinito" (sotto)*: il bottone c'è
+    sempre, acceso solo con `primaryDark` impostato.
   - **Aspetto delle celle.** Ogni cella è un bottone a sé, con uno spazio fra le celle
     (`gap-2`), angoli propri e un bordo sottile sempre visibile (`border border-border`). La cella
     selezionata porta lo stesso segno della voce attiva della sidebar, un anello del colore
@@ -373,6 +377,14 @@ per ogni impostazione.
     del testo non c'è più; il fuoco da tastiera è un contorno interno (`outline-ring`), perché
     l'anello è già della selezione. La striscia non ha più `overflow-hidden` e ha un po' di spazio
     intorno, perché l'anello non venga tagliato.
+- *Corretto il 2026-10-05: "Usa il predefinito" sempre presente.* Compariva solo per una cella
+  personalizzata, e i pallini si spostavano a sinistra quando appariva. Ora è sempre nel pannello,
+  come vero bottone (`Button` `variant="outline"` `size="sm"`, la stessa famiglia di "Valori di
+  Default"), e si accende solo quando la cella selezionata è lontana dal suo predefinito: una
+  superficie cambiata, `primaryDark` impostato per "Principale · Scuro", oppure, per "Principale ·
+  Chiaro", un colore diverso da `#4f46e5`, che il bottone rimette. Altrimenti, e durante il
+  salvataggio, è disattivato. Dopo il clic il fuoco va sul pallino del predefinito, che risulta
+  scelto: il bottone appena spento non lo può tenere.
 - **Fondo pagina**: come oggi, cioè nota "Ricordati di salvare", "Valori di Default" e "Salva".
   - Durante il salvataggio pallini e pulsanti sono disattivati.
   - Esito: "Tema salvato" oppure un errore. Il rifiuto per contrasto usa `role="alert"`.
