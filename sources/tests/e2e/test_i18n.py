@@ -345,6 +345,27 @@ def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, ba
         _delete_language(page, base_url, "Nederlands")
 
 
+def test_the_language_picker_fills_the_new_language_fields(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/admin/languages")
+    page.get_by_role("button", name="Nuova lingua").click()
+    dialog = page.get_by_role("dialog")
+
+    # Searched by its name in the interface language (Italian here).
+    picker = dialog.get_by_role("combobox")
+    picker.fill("olan")
+    dialog.get_by_role("option", name=re.compile(r"^Olandese")).click()
+
+    expect(dialog.get_by_label("Codice")).to_have_value("nl")
+    expect(dialog.get_by_label("Locale")).to_have_value("nl-NL")
+    expect(dialog.get_by_label("Nome", exact=True)).to_have_value("Olandese")
+    expect(dialog.get_by_label("Nome nativo")).to_have_value("Nederlands")
+
+    # Cancel, never save: the E2E database keeps only it/en.
+    dialog.get_by_role("button", name="Annulla", exact=True).click()
+    expect(dialog).to_have_count(0)
+
+
 # ---------------------------------------------------------------- §18.3
 
 def test_concurrent_edits_are_detected_instead_of_overwritten(browser, base_url, admin_storage_state):
