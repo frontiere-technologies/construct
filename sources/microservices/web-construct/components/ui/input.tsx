@@ -14,7 +14,9 @@ export const inputBaseClasses =
   'focus:outline-none focus:ring-2 focus:ring-primary/50 ' +
   'disabled:bg-accent disabled:text-foreground-faint disabled:cursor-not-allowed'
 
-export type InputProps = React.InputHTMLAttributes<HTMLInputElement>
+// `ComponentPropsWithRef`, as in button.tsx: on React 19 `ref` is a plain prop,
+// and the spread below hands it to the native input.
+export type InputProps = React.ComponentPropsWithRef<'input'>
 
 export function Input({ className, ...props }: InputProps) {
   return <input className={cn(inputBaseClasses, className)} {...props} />

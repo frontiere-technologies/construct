@@ -13,6 +13,12 @@ export interface LanguagePresetPickerProps {
   id: string
   /** Codes already in app_language: shown as "già presente" and not choosable (the code is unique). */
   existingCodes: readonly string[]
+  /**
+   * The preset the form's four fields still match, or `null`. The field shows
+   * its name; once the administrator edits a field by hand it no longer does,
+   * and the field empties instead of naming a language the form doesn't hold.
+   */
+  chosen: LanguagePresetOption | null
   /** A preset to copy into the form, or `null` for "Altra lingua…" (fill the fields by hand). */
   onChoose: (preset: LanguagePresetOption | null) => void
 }
@@ -32,11 +38,13 @@ type Entry =
  * the dialog focuses this field first, and a list unfolded on arrival would
  * cover the fields the administrator may want to fill by hand.
  */
-export function LanguagePresetPicker({ id, existingCodes, onChoose }: LanguagePresetPickerProps) {
+export function LanguagePresetPicker({ id, existingCodes, chosen, onChoose }: LanguagePresetPickerProps) {
   const { t, locale } = useI18n()
-  // What the field shows, and what the list is filtered by. They part ways
-  // after a choice: the field reads "Tedesco", the list reopens complete.
-  const [text, setText] = useState('')
+  // What was typed (`null` once a choice is made: the field then shows
+  // `chosen`), and what the list is filtered by. They part ways after a
+  // choice: the field reads "Tedesco", the list reopens complete.
+  const [typed, setTyped] = useState<string | null>(null)
+  const text = typed ?? chosen?.name ?? ''
   const [filter, setFilter] = useState('')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState<number | null>(null)
@@ -58,6 +66,16 @@ export function LanguagePresetPicker({ id, existingCodes, onChoose }: LanguagePr
   const optionId = (entry: Entry) => `${listboxId}-${entry.kind === 'preset' ? entry.option.code : 'other'}`
   const highlightedId = open && highlighted !== null ? optionId(entries[highlighted]) : undefined
 
+  // The next choosable entry from `from`, stepping by `step` and wrapping.
+  // "Altra lingua…" is never disabled, so there always is one.
+  const nextChoosable = (from: number, step: 1 | -1) => {
+    for (let i = 1; i <= entries.length; i++) {
+      const index = (((from + step * i) % entries.length) + entries.length) % entries.length
+      if (!entries[index].disabled) return index
+    }
+    return entries.length - 1
+  }
+
   useEffect(() => {
     if (!highlightedId) return
     // Optional call: jsdom has no scrollIntoView.
@@ -66,7 +84,7 @@ export function LanguagePresetPicker({ id, existingCodes, onChoose }: LanguagePr
 
   const choose = (entry: Entry) => {
     if (entry.disabled) return
-    setText(entry.kind === 'preset' ? entry.option.name : '')
+    setTyped(null)
     setFilter('')
     setOpen(false)
     setActive(null)
@@ -74,7 +92,7 @@ export function LanguagePresetPicker({ id, existingCodes, onChoose }: LanguagePr
   }
 
   const handleType = (next: string) => {
-    setText(next)
+    setTyped(next)
     setFilter(next)
     setOpen(true)
     // Typing narrows to what you mean: the first choosable match is ready for
@@ -91,16 +109,20 @@ export function LanguagePresetPicker({ id, existingCodes, onChoose }: LanguagePr
       return
     }
     if (e.key === 'Tab') { setOpen(false); return }
+    // An input method (Japanese, Chinese, …) uses Enter and the arrows to
+    // compose the text: they belong to it until the composition ends.
+    if (e.nativeEvent.isComposing) return
+    // The arrows step over "già presente" entries, which cannot be chosen.
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      if (!open) { setOpen(true); setActive(0); return }
-      setActive(highlighted === null ? 0 : (highlighted + 1) % entries.length)
+      setOpen(true)
+      setActive(nextChoosable(!open || highlighted === null ? -1 : highlighted, 1))
       return
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault()
-      if (!open) { setOpen(true); setActive(entries.length - 1); return }
-      setActive(highlighted === null ? entries.length - 1 : (highlighted - 1 + entries.length) % entries.length)
+      setOpen(true)
+      setActive(nextChoosable(!open || highlighted === null ? 0 : highlighted, -1))
       return
     }
     if (e.key === 'Enter' && open && highlighted !== null) {
@@ -141,11 +163,12 @@ export function LanguagePresetPicker({ id, existingCodes, onChoose }: LanguagePr
           onMouseDown={e => e.preventDefault()}
           className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-border bg-popover p-1 shadow-lg"
         >
-          {!hasMatches && (
-            <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
-              {t('language.form.preset_no_results')}
-            </p>
-          )}
+          {/* Mounted for as long as the list is open, empty when there are
+              matches: a live region is announced when its text changes, not
+              when it appears. */}
+          <p role="status" className={cn('text-sm text-muted-foreground', !hasMatches && 'px-3 py-2')}>
+            {hasMatches ? '' : t('language.form.preset_no_results')}
+          </p>
           <ul id={listboxId} role="listbox" aria-label={t('language.form.preset')} className="max-h-60 overflow-y-auto">
             {entries.map((entry, index) => (
               <li
@@ -155,8 +178,9 @@ export function LanguagePresetPicker({ id, existingCodes, onChoose }: LanguagePr
                 aria-selected={index === highlighted}
                 aria-disabled={entry.disabled || undefined}
                 onMouseEnter={() => setActive(index)}
-                // mousedown, not click: it lands before the field could lose focus.
-                onMouseDown={() => choose(entry)}
+                // mousedown, not click: it lands before the field could lose
+                // focus. Primary button only: a right click opens a menu.
+                onMouseDown={e => { if (e.button === 0) choose(entry) }}
                 className={cn(
                   'flex items-baseline gap-2 rounded px-3 py-2 text-sm',
                   entry.disabled ? 'cursor-not-allowed text-foreground-faint' : 'cursor-pointer text-foreground-secondary',

@@ -49,13 +49,15 @@ function type(input: HTMLInputElement, text: string) {
   })
 }
 
-function press(input: HTMLInputElement, key: string) {
-  act(() => { input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })) })
+function press(input: HTMLInputElement, key: string, init: KeyboardEventInit = {}) {
+  act(() => { input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })) })
 }
 
-function choose(element: HTMLElement) {
-  act(() => { element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })) })
+function choose(element: HTMLElement, button = 0) {
+  act(() => { element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button })) })
 }
+
+const status = () => document.querySelector<HTMLElement>('[role="status"]')
 
 afterEach(() => {
   act(() => root?.unmount())
@@ -143,6 +145,83 @@ describe('LanguageFormModal language picker', () => {
     type(picker()!, 'zzzz')
     expect(options().map(o => o.textContent)).toEqual(['language.form.preset_other'])
     expect(document.body.textContent).toContain('language.form.preset_no_results')
+  })
+
+  it('chooses only with the primary mouse button', () => {
+    render(null)
+    type(picker()!, 'tede')
+    choose(option('Tedesco'), 2)
+    expect(fields()).toEqual(['', '', '', ''])
+    choose(option('Tedesco'))
+    expect(fields()).toEqual(['de', 'de-DE', 'Tedesco', 'Deutsch'])
+  })
+
+  it('ignores Enter and the arrows while an input method is composing', () => {
+    render(null)
+    const input = picker()!
+    type(input, 'olan')
+    const before = input.getAttribute('aria-activedescendant')
+    press(input, 'ArrowDown', { isComposing: true })
+    expect(input.getAttribute('aria-activedescendant')).toBe(before)
+    press(input, 'Enter', { isComposing: true })
+    expect(fields()).toEqual(['', '', '', ''])
+  })
+
+  it('moves the arrows past a language already present', () => {
+    // With "ese" the matches open with Cinese and Danese: both present, so
+    // every arrow has to step over them.
+    render(null, ['zh', 'da'])
+    const input = picker()!
+    act(() => { input.click() })
+    press(input, 'Escape')
+    press(input, 'ArrowDown')
+    const first = options().find(o => o.getAttribute('aria-disabled') !== 'true')!
+    expect(input.getAttribute('aria-activedescendant')).toBe(first.id)
+
+    type(input, 'ese')
+    const shown = options()
+    expect(shown[0].textContent).toContain('Cinese')
+    expect(shown[1].textContent).toContain('Danese')
+    expect(input.getAttribute('aria-activedescendant')).toBe(shown[2].id)
+    press(input, 'ArrowUp')
+    // Up from the first choosable entry skips the two present ones and wraps to "Altra lingua…".
+    expect(input.getAttribute('aria-activedescendant')).toBe(option('language.form.preset_other').id)
+    press(input, 'ArrowDown')
+    expect(input.getAttribute('aria-activedescendant')).toBe(shown[2].id)
+  })
+
+  it('lands on "Altra lingua…" when every match is already present', () => {
+    render(null, ['it', 'en', 'de'])
+    const input = picker()!
+    type(input, 'tede')
+    press(input, 'ArrowDown')
+    expect(input.getAttribute('aria-activedescendant')).toBe(option('language.form.preset_other').id)
+    press(input, 'ArrowDown')
+    expect(input.getAttribute('aria-activedescendant')).toBe(option('language.form.preset_other').id)
+  })
+
+  it('keeps the status line mounted while the list is open, so "no results" is announced', () => {
+    render(null)
+    const input = picker()!
+    type(input, 'tede')
+    const line = status()
+    expect(line).not.toBeNull()
+    expect(line!.textContent).toBe('')
+    type(input, 'zzzz')
+    expect(status()).toBe(line)
+    expect(line!.textContent).toBe('language.form.preset_no_results')
+  })
+
+  it('clears the picker once the fields no longer match the chosen language', () => {
+    render(null)
+    const input = picker()!
+    type(input, 'portog')
+    choose(option('Portoghese'))
+    expect(input.value).toBe('Portoghese')
+    type(field('lang-locale'), 'pt-BR')
+    expect(input.value).toBe('')
+    type(field('lang-locale'), 'pt-PT')
+    expect(input.value).toBe('Portoghese')
   })
 
   it('closes only the list on Escape, keeping the dialog open', () => {

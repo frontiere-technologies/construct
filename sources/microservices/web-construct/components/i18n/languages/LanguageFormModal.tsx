@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useId, useState } from 'react'
+import React, { useId, useRef, useState } from 'react'
 import { useI18n } from '@/context/I18nContext'
 import { createLanguage, updateLanguage } from '@/lib/i18n/language-actions'
 import type { LanguagePresetOption } from '@/lib/i18n/language-presets'
@@ -26,17 +26,28 @@ export default function LanguageFormModal({ language, existingCodes, onClose }: 
   const [isActive, setIsActive] = useState(language?.isActive ?? true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [preset, setPreset] = useState<LanguagePresetOption | null>(null)
   const titleId = useId()
+  const codeRef = useRef<HTMLInputElement>(null)
 
   // The picker overwrites all four fields; "Altra lingua…" (null) empties them
   // and hands the keyboard to Codice, the first one to fill by hand.
-  const applyPreset = (preset: LanguagePresetOption | null) => {
-    setCode(preset?.code ?? '')
-    setLocale(preset?.locale ?? '')
-    setName(preset?.name ?? '')
-    setNativeName(preset?.nativeName ?? '')
-    if (!preset) document.getElementById('lang-code')?.focus()
+  const applyPreset = (next: LanguagePresetOption | null) => {
+    setPreset(next)
+    setCode(next?.code ?? '')
+    setLocale(next?.locale ?? '')
+    setName(next?.name ?? '')
+    setNativeName(next?.nativeName ?? '')
+    if (!next) codeRef.current?.focus()
   }
+
+  // Derived, not stored: the picker names the preset only while the four
+  // fields still hold it, so a hand edit (pt-PT -> pt-BR) empties it.
+  const chosen = preset
+    && preset.code === code && preset.locale === locale
+    && preset.name === name && preset.nativeName === nativeName
+    ? preset
+    : null
 
   const save = async () => {
     setSaving(true)
@@ -63,12 +74,12 @@ export default function LanguageFormModal({ language, existingCodes, onClose }: 
           {!language && (
             <div>
               <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-preset">{t('language.form.preset')}</label>
-              <LanguagePresetPicker id="lang-preset" existingCodes={existingCodes} onChoose={applyPreset} />
+              <LanguagePresetPicker id="lang-preset" existingCodes={existingCodes} chosen={chosen} onChoose={applyPreset} />
             </div>
           )}
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-code">{t('language.form.code')}</label>
-            <Input data-dialog-initial-focus={language ? true : undefined} id="lang-code" value={code} onChange={e => setCode(e.target.value)} placeholder="it" />
+            <Input ref={codeRef} data-dialog-initial-focus={language ? true : undefined} id="lang-code" value={code} onChange={e => setCode(e.target.value)} placeholder="it" />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-locale">{t('language.form.locale')}</label>
