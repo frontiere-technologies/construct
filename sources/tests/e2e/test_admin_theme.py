@@ -256,7 +256,9 @@ def test_primary_cell_is_selected_on_load_and_a_surface_switches_the_panel(logge
     for suggestion in ("default", "cool", "warm", "neutral", "tint"):
         expect(page.get_by_test_id(f"theme-swatch-{suggestion}")).to_be_visible()
     expect(page.get_by_test_id("theme-swatch-default")).to_have_attribute("aria-checked", "true")
-    expect(page.get_by_test_id("theme-use-default")).to_have_count(0)
+    # Always there, so the dots do not move; disabled while the cell is on its default.
+    expect(page.get_by_test_id("theme-use-default")).to_be_visible()
+    expect(page.get_by_test_id("theme-use-default")).to_be_disabled()
 
 
 def test_suggested_surface_applies_live_and_use_default_resets_it(logged_in_page, base_url):
@@ -273,7 +275,9 @@ def test_suggested_surface_applies_live_and_use_default_resets_it(logged_in_page
     _wait_css_var(page, "--card", chosen)
     expect(page.get_by_test_id("theme-cell-light-card-marker")).to_be_visible()
 
+    expect(page.get_by_test_id("theme-use-default")).to_be_enabled()
     page.get_by_test_id("theme-use-default").click()
+    expect(page.get_by_test_id("theme-use-default")).to_be_disabled()
     expect(page.get_by_test_id("theme-cell-light-card-marker")).to_have_count(0)
     expect(page.get_by_test_id("theme-swatch-default")).to_have_attribute("aria-checked", "true")
     _wait_css_var(page, "--card", saved_card)
@@ -292,7 +296,7 @@ def test_dark_primary_saved_applies_in_dark_mode_only(logged_in_page, browser, b
         expect(page.get_by_test_id("theme-swatch-green")).to_have_attribute("aria-checked", "true")
         chosen = page.get_by_test_id("theme-panel-hex").inner_text().strip().lower()
         expect(page.get_by_test_id("theme-cell-primary-dark-marker")).to_be_visible()
-        expect(page.get_by_test_id("theme-use-default")).to_be_visible()
+        expect(page.get_by_test_id("theme-use-default")).to_be_enabled()
         _save(page)
 
         # The fixture user follows the system (theme_mode "system"): a dark context puts html.dark on.

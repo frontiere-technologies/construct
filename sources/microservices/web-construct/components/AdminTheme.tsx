@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Eye, Palette } from 'lucide-react'
 import { saveAppTheme } from '@/lib/theme-actions'
 import {
-  DEFAULT_APP_THEME, PRIMARY_PRESETS, primaryDarkSuggestions, surfaceDefault, surfaceSuggestions, themeCss,
+  DEFAULT_APP_THEME, DEFAULT_PRIMARY, PRIMARY_PRESETS, primaryDarkSuggestions, surfaceDefault, surfaceSuggestions, themeCss,
   type AppTheme, type ContrastWarning, type PaletteMode, type PaletteToken, type SurfaceKey,
   type PrimaryDarkSuggestionId, type SurfaceSuggestionId, type TextToken,
 } from '@/lib/theme-vars'
@@ -213,8 +213,9 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
 
   /**
    * Cosa mostra il pannello per la cella selezionata. `onUseDefault` c'e' solo
-   * quando la cella ha un colore scelto da togliere: una superficie cambiata, o
-   * il colore principale scuro scelto a parte (DEC-10).
+   * quando la cella si allontana dal suo predefinito: il colore principale chiaro
+   * diverso da `DEFAULT_PRIMARY`, quello scuro scelto a parte (DEC-10), una
+   * superficie cambiata. Senza, «Usa il predefinito» resta al suo posto ma spento.
    */
   const panel = target.kind === 'primary' && target.mode === 'light'
     ? {
@@ -225,7 +226,9 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
         value: theme.primaryColor,
         options: PRIMARY_PRESETS.map(preset => ({ id: preset.id, color: preset.color, label: t(PRESET_LABEL_KEYS[preset.id]) })),
         onChange: (color: string) => setTheme(prev => ({ ...prev, primaryColor: color })),
-        onUseDefault: undefined,
+        onUseDefault: theme.primaryColor !== DEFAULT_PRIMARY
+          ? () => setTheme(prev => ({ ...prev, primaryColor: DEFAULT_PRIMARY }))
+          : undefined,
       }
     : target.kind === 'primary'
       ? {
@@ -298,20 +301,20 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
               disabled={saving}
               onChange={panel.onChange}
             />
-            {panel.onUseDefault && (
-              <Button
-                variant="link"
-                size="sm"
-                data-testid="theme-use-default"
-                disabled={saving}
-                onClick={() => {
-                  focusCheckedAfterRender.current = true
-                  panel.onUseDefault?.()
-                }}
-              >
-                {t('theme.panel.use_default')}
-              </Button>
-            )}
+            {/* Sempre presente, cosi' i pallini non si spostano quando compare; spento quando non c'e' niente da rimettere. */}
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="theme-use-default"
+              disabled={saving || !panel.onUseDefault}
+              onClick={() => {
+                // Il bottone si spegne con il clic: il fuoco va sul pallino scelto, non sul <body>.
+                focusCheckedAfterRender.current = true
+                panel.onUseDefault?.()
+              }}
+            >
+              {t('theme.panel.use_default')}
+            </Button>
           </div>
         </SettingsRow>
       </SettingsSection>
