@@ -243,9 +243,11 @@ def test_unreadable_surface_asks_before_saving_and_cancel_saves_nothing(logged_i
 def test_primary_cell_is_selected_on_load_and_a_surface_switches_the_panel(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/admin/theme")
+    # The two Principale cells are separate targets (DEC-10): only the light one is selected on load.
     expect(page.get_by_test_id("theme-cell-primary-light")).to_have_attribute("aria-pressed", "true")
-    expect(page.get_by_test_id("theme-cell-primary-dark")).to_have_attribute("aria-pressed", "true")
-    expect(page.get_by_test_id("theme-panel-title")).to_have_text("Colore principale")
+    expect(page.get_by_test_id("theme-cell-primary-dark")).to_have_attribute("aria-pressed", "false")
+    expect(page.locator('[aria-pressed="true"]')).to_have_count(1)
+    expect(page.get_by_test_id("theme-panel-title")).to_have_text("Colore principale · Chiaro")
     expect(page.get_by_test_id("theme-swatch-indigo")).to_be_visible()
 
     _select_cell(page, "dark-sidebar")
@@ -275,3 +277,39 @@ def test_suggested_surface_applies_live_and_use_default_resets_it(logged_in_page
     expect(page.get_by_test_id("theme-cell-light-card-marker")).to_have_count(0)
     expect(page.get_by_test_id("theme-swatch-default")).to_have_attribute("aria-checked", "true")
     _wait_css_var(page, "--card", saved_card)
+
+
+def test_dark_primary_saved_applies_in_dark_mode_only(logged_in_page, browser, base_url, admin_storage_state):
+    page = logged_in_page
+    try:
+        nav(page, f"{base_url}/admin/theme")
+        _select_cell(page, "primary-dark")
+        expect(page.locator('[aria-pressed="true"]')).to_have_count(1)
+        expect(page.get_by_test_id("theme-panel-title")).to_have_text("Colore principale · Scuro")
+        expect(page.get_by_test_id("theme-swatch-auto")).to_have_attribute("aria-checked", "true")
+        # The green preset made readable on the dark palette: the dark mode shows it as it is.
+        page.get_by_test_id("theme-swatch-green").click()
+        expect(page.get_by_test_id("theme-swatch-green")).to_have_attribute("aria-checked", "true")
+        chosen = page.get_by_test_id("theme-panel-hex").inner_text().strip().lower()
+        expect(page.get_by_test_id("theme-cell-primary-dark-marker")).to_be_visible()
+        expect(page.get_by_test_id("theme-use-default")).to_be_visible()
+        _save(page)
+
+        # The fixture user follows the system (theme_mode "system"): a dark context puts html.dark on.
+        dark_ctx = browser.new_context(
+            viewport={"width": 1440, "height": 900}, storage_state=admin_storage_state, color_scheme="dark"
+        )
+        try:
+            dark = dark_ctx.new_page()
+            nav(dark, f"{base_url}/admin/theme")
+            dark.wait_for_function("document.documentElement.classList.contains('dark')", timeout=5_000)
+            _wait_css_var(dark, "--primary", chosen)
+            expect(dark.get_by_test_id("theme-cell-primary-dark-marker")).to_be_visible()
+        finally:
+            dark_ctx.close()
+
+        # The light mode keeps its own primary colour.
+        nav(page, f"{base_url}/admin/theme")
+        _wait_css_var(page, "--primary", PRIMARY_DEFAULT)
+    finally:
+        _restore_default(page, base_url)
