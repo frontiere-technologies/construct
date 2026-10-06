@@ -1,5 +1,6 @@
 import re
 
+import pytest
 from playwright.sync_api import expect
 from helpers import nav
 
@@ -317,3 +318,44 @@ def test_dark_primary_saved_applies_in_dark_mode_only(logged_in_page, browser, b
         _wait_css_var(page, "--primary", PRIMARY_DEFAULT)
     finally:
         _restore_default(page, base_url)
+
+
+def _overlaps(a, b):
+    return a["x"] < b["x"] + b["width"] and b["x"] < a["x"] + a["width"] \
+        and a["y"] < b["y"] + b["height"] and b["y"] < a["y"] + a["height"]
+
+
+@pytest.mark.parametrize("width", [825, 375])
+def test_theme_page_fits_a_narrow_card(logged_in_page, base_url, width):
+    """With the sidebar open the card is far narrower than the window: the six dots, the hex and
+    "Usa il predefinito" used to stay on one line beside the hint, squeezing it to zero width under them;
+    the preview cells shrank until their names were cut, and Salva stuck out of the card."""
+    page = logged_in_page
+    page.set_viewport_size({"width": width, "height": 900})
+    nav(page, f"{base_url}/admin/theme")
+    hint = page.get_by_test_id("theme-panel-hint")
+    controls = page.get_by_test_id("theme-panel-controls")
+    expect(controls).to_be_visible()
+
+    hint_box, controls_box = hint.bounding_box(), controls.bounding_box()
+    assert hint_box["width"] > 100, f"the hint is squeezed to {hint_box['width']}px"
+    assert not _overlaps(hint_box, controls_box), "the colour dots cover the hint"
+    for test_id in ("theme-swatch-custom", "theme-panel-hex", "theme-use-default"):
+        right = page.get_by_test_id(test_id).bounding_box()
+        assert right["x"] + right["width"] <= controls_box["x"] + controls_box["width"] + 1, \
+            f"{test_id} sticks out of the panel at {width}px"
+
+    truncated = page.evaluate(
+        """() => [...document.querySelectorAll('[data-testid^="theme-cell-"]')]
+            .filter(c => c.scrollWidth > c.clientWidth).map(c => c.dataset.testid)"""
+    )
+    assert truncated == [], f"preview cells cut at {width}px: {truncated}"
+    sticking_out = page.evaluate(
+        """() => {
+            const card = document.querySelector('[data-testid="theme-panel-hint"]').closest('.bg-card')
+            const right = card.getBoundingClientRect().right
+            return [...card.querySelectorAll('button')]
+                .filter(b => b.getBoundingClientRect().right > right + 1).map(b => b.textContent.trim())
+        }"""
+    )
+    assert sticking_out == [], f"buttons sticking out of the card at {width}px: {sticking_out}"

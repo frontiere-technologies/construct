@@ -129,8 +129,9 @@ export function PalettePreview({ theme, labels, disabled, selected, onSelect }: 
       {rows.map(row => (
         <div key={row.mode} data-testid={`theme-preview-${row.mode}`}>
           <p className="mb-1 text-xs text-muted-foreground">{row.title}</p>
-          {/* Niente overflow-hidden e un po' di spazio intorno: l'anello della selezione sta fuori dalla cella. */}
-          <div className="flex gap-2 p-1 text-xs font-medium">
+          {/* Niente overflow-hidden e un po' di spazio intorno: l'anello della selezione sta fuori dalla cella.
+              Griglia e non riga: in una card stretta le celle vanno a capo invece di troncare il nome. */}
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-2 p-1 text-xs font-medium">
             {row.cells.map(cell => {
               const marker = cell.customised && (
                 <span

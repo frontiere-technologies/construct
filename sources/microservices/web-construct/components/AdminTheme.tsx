@@ -12,7 +12,7 @@ import {
 import type { TranslateFn } from '@/lib/i18n/types'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
-import { SettingsRow, SettingsSection } from '@/components/settings/SettingsSection'
+import { SettingsSection } from '@/components/settings/SettingsSection'
 import { ColorSwatches } from '@/components/theme/ColorSwatches'
 import { PalettePreview, PRIMARY_TARGET, type ThemeTarget } from '@/components/theme/PalettePreview'
 import { useI18n } from '@/context/I18nContext'
@@ -289,8 +289,11 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
       </SettingsSection>
 
       <SettingsSection icon={Palette} title={panel.title} titleTestId="theme-panel-title">
-        <SettingsRow hint={panel.hint}>
-          <div ref={panelRef} className="flex flex-wrap items-center gap-3">
+        {/* Testo sopra e pallini sotto, non affiancati come in SettingsRow: la fila di pallini e' troppo
+            larga per stare accanto al testo quando la barra laterale stringe la card. */}
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground" data-testid="theme-panel-hint">{panel.hint}</p>
+          <div ref={panelRef} className="flex flex-wrap items-center gap-3" data-testid="theme-panel-controls">
             {/* La chiave azzera il gruppo a ogni cambio di cella: fuoco e selezione ripartono da capo. */}
             <ColorSwatches
               key={panel.id}
@@ -316,7 +319,7 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
               {t('theme.panel.use_default')}
             </Button>
           </div>
-        </SettingsRow>
+        </div>
       </SettingsSection>
 
       <div className="pt-4 border-t border-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -331,7 +334,7 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
             <span className="text-sm text-destructive-muted-foreground">{t('theme.status.save_failed')}</span>
           )}
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <Button variant="outline" onClick={() => setTheme(DEFAULT_APP_THEME)} disabled={saving}>
             {t('theme.actions.reset_defaults')}
           </Button>

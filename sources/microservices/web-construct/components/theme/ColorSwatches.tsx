@@ -51,7 +51,7 @@ export function ColorSwatches({ options, value, groupLabel, customLabel, disable
   const openPicker = () => colorInputRef.current?.click()
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       <RadioGroup.Root
         value={selectedId}
         onValueChange={id => {
@@ -61,7 +61,7 @@ export function ColorSwatches({ options, value, groupLabel, customLabel, disable
         aria-label={groupLabel}
         orientation="horizontal"
         disabled={disabled}
-        className="flex items-center gap-3"
+        className="flex flex-wrap items-center gap-3"
       >
         {options.map(option => (
           <RadioGroup.Item
