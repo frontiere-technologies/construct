@@ -268,6 +268,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   // Collapse state per sub-column, keyed by its 1-based column number (col2, col3, col4, ...)
   const [subCollapsed, setSubCollapsed] = useState<Record<number, boolean>>({})
   const [masterCollapsed, setMasterCollapsed] = useState<boolean>(false)
+  // False until the saved state has been read back: saving before that would write the initial
+  // state over the saved one, and under Strict Mode the second mount would then read it back.
+  const [collapseRestored, setCollapseRestored] = useState(false)
 
   const isSubCollapsed = useCallback((depth: number) => subCollapsed[depth] ?? false, [subCollapsed])
   const toggleSubCollapsed = useCallback(
@@ -282,15 +285,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
       if (readCollapse(`col${depth + 1}`, false)) restored[depth] = true
     }
     setSubCollapsed(restored)
+    setCollapseRestored(true)
   }, [])
 
   useEffect(() => {
+    if (!collapseRestored) return
     try {
       const cols: Record<string, boolean> = { col1: col1Collapsed, master: masterCollapsed }
       for (const [depth, collapsed] of Object.entries(subCollapsed)) cols[`col${Number(depth) + 1}`] = collapsed
       localStorage.setItem(COLLAPSE_KEY, JSON.stringify(cols))
     } catch { /* ignore quota errors */ }
-  }, [col1Collapsed, subCollapsed, masterCollapsed])
+  }, [collapseRestored, col1Collapsed, subCollapsed, masterCollapsed])
 
   // Hover-preview overlay for the collapsed rail: hovering it (with a short
   // debounce) shows the full sidebar as a floating overlay instead of
