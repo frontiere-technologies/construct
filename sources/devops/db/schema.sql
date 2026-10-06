@@ -2522,3 +2522,472 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- Migration: 0029_navigation_tree_keyboard_drag_announcements.sql
+-- A11Y-3. La maniglia di trascinamento dell'albero di navigazione ora funziona da
+-- tastiera, e un trascinamento da tastiera senza annunci e' meta' lavoro: chi usa un
+-- lettore di schermo non vede la linea di rilascio, quindi senza queste frasi non ha
+-- alcun modo di sapere dove l'elemento andra' a finire.
+--
+-- Le prime due sono i due modi di dire la stessa cosa che dnd-kit chiama
+-- `screenReaderInstructions` (lette al fuoco) e l'annuncio di sollevamento; le tre
+-- `over_*` rispecchiano una per una le tre posizioni del modello di rilascio.
+--
+-- Additiva, come ogni seme: apply_translation_seed inserisce on conflict do nothing,
+-- quindi rieseguirla non cambia niente.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"functionalities.tree.dnd.instructions","namespace":"functionalities","module":"rbac","description":"Navigation tree drag: instructions read when the drag handle takes focus","it":"Premi Invio o Spazio per sollevare l'elemento. Usa le frecce Su e Giù per scegliere dove inserirlo, Destra per annidarlo nella categoria, Sinistra per tirarlo fuori. Invio per rilasciare, Escape per annullare.","en":"Press Enter or Space to lift the item. Use Up and Down to choose where to insert it, Right to nest it inside the category, Left to pull it back out. Enter to drop, Escape to cancel."},
+    {"key":"functionalities.tree.dnd.lifted","namespace":"functionalities","module":"rbac","description":"Navigation tree drag: announced when an item is lifted","it":"Sollevato {name}.","en":"Lifted {name}."},
+    {"key":"functionalities.tree.dnd.over_before","namespace":"functionalities","module":"rbac","description":"Navigation tree drag: announced when the drop position is above the hovered row","it":"{name} verrà inserito prima di {target}.","en":"{name} will be placed before {target}."},
+    {"key":"functionalities.tree.dnd.over_after","namespace":"functionalities","module":"rbac","description":"Navigation tree drag: announced when the drop position is below the hovered row","it":"{name} verrà inserito dopo {target}.","en":"{name} will be placed after {target}."},
+    {"key":"functionalities.tree.dnd.over_into","namespace":"functionalities","module":"rbac","description":"Navigation tree drag: announced when the drop position nests the item inside a category","it":"{name} verrà annidato dentro {target}.","en":"{name} will be nested inside {target}."},
+    {"key":"functionalities.tree.dnd.dropped","namespace":"functionalities","module":"rbac","description":"Navigation tree drag: announced when the item is dropped","it":"{name} spostato.","en":"{name} moved."},
+    {"key":"functionalities.tree.dnd.cancelled","namespace":"functionalities","module":"rbac","description":"Navigation tree drag: announced when the drag is cancelled or dropped nowhere","it":"Spostamento di {name} annullato.","en":"Moving {name} cancelled."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0030_navigation_tree_dnd_placeholder_syntax.sql
+-- Correzione della 0029, che ha seminato i segnaposto con una graffa sola --
+-- `{name}` invece di `{{name}}`. Il risultato non era un valore mancante ma un
+-- valore sbagliato: il lettore di schermo annunciava alla lettera "Sollevato
+-- {name}." Un seme non si corregge riscrivendo la migrazione che l'ha inserito
+-- (e' gia' applicata e ha un checksum registrato), e nemmeno riseminando:
+-- apply_translation_seed inserisce `on conflict do nothing`, quindi su una
+-- chiave che esiste gia' non cambierebbe niente. Serve un aggiornamento.
+--
+-- Solo le sette chiavi della 0029, e solo dove il valore e' ancora quello
+-- sbagliato: se qualcuno l'ha gia' corretto dal pannello Traduzioni, questa
+-- migrazione non glielo sovrascrive.
+update translation_value tv
+set value = replace(replace(tv.value, '{name}', '{{name}}'), '{target}', '{{target}}'),
+    updated_at = now()
+from translation_key tk
+where tk.id_translation_key = tv.id_translation_key
+  and tk.key like 'functionalities.tree.dnd.%'
+  and (tv.value like '%{name}%' or tv.value like '%{target}%');
+
+-- Migration: 0031_theme_settings.sql
+-- Nuova pagina Tema & Stili e pagina Impostazioni personali (specifica del 2026-10-02).
+--
+-- SOLO ADDITIVA, come la 0024: users.theme_config resta finche' il codice la legge. Il DROP di
+-- quella colonna e la cancellazione delle chiavi di traduzione obsolete sono la 0032, da
+-- applicare dopo il codice che smette di usarle.
+
+-- 1. Il colore principale dell'app, uno per tutti (DEC-1). Una riga sola: la chiave booleana con
+--    `check (id)` ammette soltanto `true`, quindi un secondo insert viola la chiave primaria.
+--    In tabella c'e' solo il colore scelto; le varianti chiaro/scuro si ricalcolano a ogni
+--    richiesta (DEC-8). Il colore si salva sempre in minuscolo, e il vincolo lo pretende.
+create table public.app_theme (
+  id            boolean primary key default true check (id),
+  primary_color varchar(7) not null check (primary_color ~ '^#[0-9a-f]{6}$'),
+  date_mod      timestamptz not null default now()
+);
+insert into public.app_theme (primary_color) values ('#4f46e5');
+
+-- 2. Privilegi e RLS nella forma della 0024: le privilegi di default della 0002 non coprono una
+--    tabella creata da una migrazione successiva. Solo select e update: la riga esiste gia' e
+--    non si cancella.
+alter table public.app_theme enable row level security;
+grant select, update on table public.app_theme to construct_runtime;
+create policy construct_runtime_server_access on public.app_theme
+  for all to construct_runtime using (true) with check (true);
+
+-- 3. Le preferenze personali (DEC-1, DEC-2). `system` come predefinito: chi non ha mai scelto
+--    segue il sistema operativo, che e' l'unica scelta che rispetta una preferenza gia' espressa.
+alter table public.users
+  add column theme_mode varchar(6) not null default 'system'
+    check (theme_mode in ('light', 'dark', 'system')),
+  add column text_scale smallint not null default 100
+    check (text_scale in (90, 100, 110, 120, 130));
+
+-- 4. Le etichette delle due pagine e del link nel pannello utente.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"theme.section.primary_color","namespace":"theme","module":"rbac","description":"Theme admin: primary colour section title","it":"Colore principale","en":"Primary colour"},
+    {"key":"theme.field.primary_color_hint","namespace":"theme","module":"rbac","description":"Theme admin: what the primary colour is used for","it":"Pulsanti, icone attive e bordo di selezione. Le varianti per chiaro e scuro sono calcolate in automatico.","en":"Buttons, active icons and the focus ring. The light and dark variants are worked out automatically."},
+    {"key":"theme.field.swatches","namespace":"theme","module":"rbac","description":"Theme admin: accessible name of the colour swatch group","it":"Scegli il colore principale","en":"Choose the primary colour"},
+    {"key":"theme.preset.indigo","namespace":"theme","module":"rbac","description":"Theme admin: indigo preset swatch","it":"Indaco","en":"Indigo"},
+    {"key":"theme.preset.green","namespace":"theme","module":"rbac","description":"Theme admin: green preset swatch","it":"Verde","en":"Green"},
+    {"key":"theme.preset.pink","namespace":"theme","module":"rbac","description":"Theme admin: pink preset swatch","it":"Rosa","en":"Pink"},
+    {"key":"theme.preset.orange","namespace":"theme","module":"rbac","description":"Theme admin: orange preset swatch","it":"Arancio","en":"Orange"},
+    {"key":"theme.preset.sky","namespace":"theme","module":"rbac","description":"Theme admin: sky blue preset swatch","it":"Azzurro","en":"Sky blue"},
+    {"key":"theme.preset.custom","namespace":"theme","module":"rbac","description":"Theme admin: custom colour swatch that opens the colour picker","it":"Personalizzato","en":"Custom"},
+    {"key":"theme.preview.title","namespace":"theme","module":"rbac","description":"Theme admin: palette preview section title","it":"Anteprima","en":"Preview"},
+    {"key":"theme.preview.light","namespace":"theme","module":"rbac","description":"Theme admin: light-mode preview strip label","it":"Chiaro","en":"Light"},
+    {"key":"theme.preview.dark","namespace":"theme","module":"rbac","description":"Theme admin: dark-mode preview strip label","it":"Scuro","en":"Dark"},
+    {"key":"theme.preview.swatch.primary","namespace":"theme","module":"rbac","description":"Theme admin: preview cell for the primary colour","it":"Principale","en":"Primary"},
+    {"key":"theme.preview.swatch.hover","namespace":"theme","module":"rbac","description":"Theme admin: preview cell for the hover surface","it":"Passaggio","en":"Hover"},
+    {"key":"theme.preview.swatch.surface","namespace":"theme","module":"rbac","description":"Theme admin: preview cell for the card surface","it":"Superficie","en":"Surface"},
+    {"key":"theme.preview.swatch.background","namespace":"theme","module":"rbac","description":"Theme admin: preview cell for the page background","it":"Sfondo","en":"Background"},
+    {"key":"theme.preview.swatch.sidebar","namespace":"theme","module":"rbac","description":"Theme admin: preview cell for the sidebar","it":"Sidebar","en":"Sidebar"},
+    {"key":"theme.status.unreadable","namespace":"theme","module":"rbac","description":"Theme admin: save refused because no readable variant of the colour exists","it":"Questo colore non si può rendere leggibile né in chiaro né in scuro e non è stato salvato.","en":"This colour cannot be made readable in light or dark mode and was not saved."},
+    {"key":"settings.page.title","namespace":"settings","module":"core","description":"Personal settings page title","it":"Impostazioni","en":"Settings"},
+    {"key":"settings.page.subtitle","namespace":"settings","module":"core","description":"Personal settings page subtitle","it":"Lingua e aspetto dell'applicazione, solo per te","en":"Language and appearance of the application, just for you"},
+    {"key":"settings.section.language_region","namespace":"settings","module":"core","description":"Settings: language and region section title","it":"Lingua e regione","en":"Language and region"},
+    {"key":"settings.field.language","namespace":"settings","module":"core","description":"Settings: language row label","it":"Lingua","en":"Language"},
+    {"key":"settings.field.language_hint","namespace":"settings","module":"core","description":"Settings: language row hint","it":"Interfaccia, date e numeri si aggiornano subito","en":"Interface, dates and numbers update right away"},
+    {"key":"settings.field.date_format","namespace":"settings","module":"core","description":"Settings: read-only date and number format example","it":"Formato data","en":"Date format"},
+    {"key":"settings.section.appearance","namespace":"settings","module":"core","description":"Settings: appearance section title","it":"Aspetto","en":"Appearance"},
+    {"key":"settings.field.theme","namespace":"settings","module":"core","description":"Settings: theme mode row label","it":"Tema","en":"Theme"},
+    {"key":"settings.field.theme_hint","namespace":"settings","module":"core","description":"Settings: theme mode row hint","it":"Segue il sistema operativo oppure scegli tu","en":"Follow the operating system, or choose yourself"},
+    {"key":"settings.theme.light","namespace":"settings","module":"core","description":"Settings: light theme option","it":"Chiaro","en":"Light"},
+    {"key":"settings.theme.system","namespace":"settings","module":"core","description":"Settings: automatic theme option that follows the operating system","it":"Automatico","en":"Automatic"},
+    {"key":"settings.theme.dark","namespace":"settings","module":"core","description":"Settings: dark theme option","it":"Scuro","en":"Dark"},
+    {"key":"settings.field.text_size","namespace":"settings","module":"core","description":"Settings: text size row label","it":"Dimensione testo","en":"Text size"},
+    {"key":"settings.field.text_size_hint","namespace":"settings","module":"core","description":"Settings: text size row hint","it":"Ingrandisce o riduce tutta l'interfaccia","en":"Makes the whole interface larger or smaller"},
+    {"key":"settings.status.save_failed","namespace":"settings","module":"core","description":"Settings: a preference could not be saved and was reverted","it":"Impossibile salvare la preferenza. Riprova.","en":"Could not save the preference. Please try again."},
+    {"key":"nav.settings","namespace":"nav","module":"core","description":"Sidebar user panel: link to the personal settings page","it":"Impostazioni","en":"Settings"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0032_theme_settings_cleanup.sql
+-- Seconda meta' della specifica del 2026-10-02: la parte distruttiva, applicata dopo il codice che
+-- ha smesso di leggere users.theme_config (Task 9) e di chiamare le chiavi qui sotto.
+--
+-- I temi salvati non si migrano (DEC-3): erano per singolo admin e li vedeva solo chi li aveva
+-- salvati. Il colore dell'app vive in app_theme dalla 0031.
+alter table public.users drop column theme_config;
+
+-- Le etichette dei 29 colori fini, del vecchio rifiuto per contrasto e dell'interruttore
+-- chiaro/scuro della sidebar. La forma `delete from translation_key where key in (...)` e' quella
+-- che sources/devops/i18n-key-inventory.test.mjs riconosce, come nella 0012.
+do $$
+declare
+  v_keys_before integer;
+  v_keys_after  integer;
+begin
+  select count(*) into v_keys_before from translation_key;
+
+  delete from translation_key
+   where key in (
+     'theme.section.global',
+     'theme.section.backgrounds',
+     'theme.section.border',
+     'theme.section.text',
+     'theme.section.sidebar',
+     'theme.field.primary_color',
+     'theme.field.page_background',
+     'theme.field.surface',
+     'theme.field.surface_overlay',
+     'theme.field.surface_hover',
+     'theme.field.border',
+     'theme.field.border_subtle',
+     'theme.field.foreground',
+     'theme.field.foreground_secondary',
+     'theme.field.foreground_muted',
+     'theme.field.foreground_faint',
+     'theme.field.sidebar_bg',
+     'theme.field.sidebar_text',
+     'theme.field.active_item_bg',
+     'theme.field.active_item_text',
+     'theme.token.light',
+     'theme.token.dark',
+     'theme.status.contrast_rejected',
+     'nav.theme_mode',
+     'nav.theme_to_dark',
+     'nav.theme_to_light'
+   );
+
+  select count(*) into v_keys_after from translation_key;
+  raise notice 'removed % obsolete theme translation keys', v_keys_before - v_keys_after;
+end $$;
+
+-- Migration: 0033_theme_surfaces.sql
+-- Quattro sfondi personalizzabili nella pagina Tema & Stili (specifica del 2026-10-02, DEC-9).
+--
+-- La DEC-3 aveva tolto i colori fini: sfondi, bordi, testi e sidebar erano diventati fissi. Dopo
+-- aver provato la pagina il proprietario del progetto ha chiesto di poter cambiare almeno gli
+-- sfondi, e la DEC-3 si riapre per quattro superfici soltanto, separate per chiaro e scuro:
+-- sfondo (--background), superficie (--card e --popover), passaggio (--accent e
+-- --sidebar-accent) e sidebar (--sidebar). Testi e bordi restano fissi.
+--
+-- SOLO ADDITIVA: otto colonne che ammettono null, dove null vuol dire «il valore fisso di
+-- globals.css». Il controllo del contrasto non e' un vincolo del database: l'azione server avvisa
+-- e l'admin puo' salvare lo stesso. I privilegi della 0031 (select, update) coprono gia' le
+-- colonne nuove.
+
+-- 1. Gli sfondi, sempre in minuscolo come primary_color.
+alter table public.app_theme
+  add column background_light varchar(7) check (background_light ~ '^#[0-9a-f]{6}$'),
+  add column card_light       varchar(7) check (card_light ~ '^#[0-9a-f]{6}$'),
+  add column accent_light     varchar(7) check (accent_light ~ '^#[0-9a-f]{6}$'),
+  add column sidebar_light    varchar(7) check (sidebar_light ~ '^#[0-9a-f]{6}$'),
+  add column background_dark  varchar(7) check (background_dark ~ '^#[0-9a-f]{6}$'),
+  add column card_dark        varchar(7) check (card_dark ~ '^#[0-9a-f]{6}$'),
+  add column accent_dark      varchar(7) check (accent_dark ~ '^#[0-9a-f]{6}$'),
+  add column sidebar_dark     varchar(7) check (sidebar_dark ~ '^#[0-9a-f]{6}$');
+
+-- 2. Le etichette dell'anteprima modificabile e dell'avviso di contrasto.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"theme.preview.edit_hint","namespace":"theme","module":"rbac","description":"Theme admin: hint under the preview, the surface cells open a colour picker","it":"Clicca uno sfondo per cambiarne il colore.","en":"Click a surface to change its colour."},
+    {"key":"theme.preview.customised","namespace":"theme","module":"rbac","description":"Theme admin: tooltip of the marker on a surface the admin changed","it":"Personalizzato","en":"Customised"},
+    {"key":"theme.preview.cell_label","namespace":"theme","module":"rbac","description":"Theme admin: accessible name of a preview surface cell. {{surface}} = surface name, {{mode}} = light/dark, {{color}} = hex","it":"{{surface}}, {{mode}}: {{color}}, modifica","en":"{{surface}}, {{mode}}: {{color}}, edit"},
+    {"key":"theme.preview.cell_label_customised","namespace":"theme","module":"rbac","description":"Theme admin: accessible name of a preview surface cell the admin changed. {{surface}} = surface name, {{mode}} = light/dark, {{color}} = hex","it":"{{surface}}, {{mode}}: {{color}} — personalizzato, modifica","en":"{{surface}}, {{mode}}: {{color}} — customised, edit"},
+    {"key":"theme.mode.light","namespace":"theme","module":"rbac","description":"Theme admin: light mode, lower case, inside a sentence","it":"chiaro","en":"light"},
+    {"key":"theme.mode.dark","namespace":"theme","module":"rbac","description":"Theme admin: dark mode, lower case, inside a sentence","it":"scuro","en":"dark"},
+    {"key":"theme.text.foreground","namespace":"theme","module":"rbac","description":"Theme admin: main text colour, in a contrast warning","it":"Testo principale","en":"Main text"},
+    {"key":"theme.text.foreground_secondary","namespace":"theme","module":"rbac","description":"Theme admin: secondary text colour, in a contrast warning","it":"Testo secondario","en":"Secondary text"},
+    {"key":"theme.text.muted_foreground","namespace":"theme","module":"rbac","description":"Theme admin: muted text colour, in a contrast warning","it":"Testo tenue","en":"Muted text"},
+    {"key":"theme.text.foreground_faint","namespace":"theme","module":"rbac","description":"Theme admin: faint text colour, in a contrast warning","it":"Testo debole","en":"Faint text"},
+    {"key":"theme.text.sidebar_foreground","namespace":"theme","module":"rbac","description":"Theme admin: sidebar text colour, in a contrast warning","it":"Testo della sidebar","en":"Sidebar text"},
+    {"key":"theme.text.sidebar_accent_foreground","namespace":"theme","module":"rbac","description":"Theme admin: text of the active sidebar item, in a contrast warning","it":"Testo della voce attiva","en":"Active item text"},
+    {"key":"theme.warning.title","namespace":"theme","module":"rbac","description":"Theme admin: title of the dialog listing contrast problems before saving","it":"Alcuni testi si leggono male","en":"Some text is hard to read"},
+    {"key":"theme.warning.message","namespace":"theme","module":"rbac","description":"Theme admin: body of the contrast warning dialog","it":"Con questi colori il contrasto scende sotto il minimo di 4,5:1. Puoi tornare indietro e cambiarli, oppure salvare comunque.","en":"With these colours the contrast drops below the 4.5:1 minimum. You can go back and change them, or save anyway."},
+    {"key":"theme.warning.confirm","namespace":"theme","module":"rbac","description":"Theme admin: confirm button of the contrast warning dialog","it":"Salva comunque","en":"Save anyway"},
+    {"key":"theme.warning.item","namespace":"theme","module":"rbac","description":"Theme admin: one contrast problem. {{text}} = text colour, {{surface}} = surface name, {{mode}} = light/dark, {{ratio}} = contrast ratio","it":"{{text}} su {{surface}} ({{mode}}): contrasto {{ratio}}:1","en":"{{text}} on {{surface}} ({{mode}}): contrast {{ratio}}:1"},
+    {"key":"theme.warning.primary","namespace":"theme","module":"rbac","description":"Theme admin: no variant of the primary colour is readable on every surface of a mode. {{text}} = primary colour label, {{mode}} = light/dark","it":"{{text}} ({{mode}}): nessuna variante si legge su tutti gli sfondi","en":"{{text}} ({{mode}}): no variant is readable on every surface"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0034_theme_choice_panel.sql
+-- Nuova disposizione della pagina Tema & Stili (specifica del 2026-10-02, §6.1, corretta dopo la
+-- prova della pagina il 2026-10-05): l'anteprima in alto, dove ogni cella si seleziona, e sotto un
+-- solo pannello di scelta con i colori suggeriti per la cella selezionata.
+--
+-- SOLO ADDITIVA, piu' un aggiornamento di valore. Nessuna colonna nuova: dati e salvataggio sono
+-- quelli della 0033.
+
+-- 1. Le etichette del pannello di scelta e dei cinque colori suggeriti per ogni superficie.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"theme.panel.title_surface","namespace":"theme","module":"rbac","description":"Theme admin: heading of the choice panel while a surface cell is selected. {{surface}} = surface name, {{mode}} = Light/Dark","it":"{{surface}} · {{mode}}","en":"{{surface}} · {{mode}}"},
+    {"key":"theme.panel.swatches_surface","namespace":"theme","module":"rbac","description":"Theme admin: accessible name of the suggested colours of a surface. {{surface}} = surface name, {{mode}} = light/dark","it":"Scegli il colore: {{surface}}, {{mode}}","en":"Choose the colour: {{surface}}, {{mode}}"},
+    {"key":"theme.panel.surface_hint","namespace":"theme","module":"rbac","description":"Theme admin: hint of the choice panel while a surface cell is selected","it":"I colori suggeriti si leggono bene con i testi. Uno personalizzato può dare un avviso al salvataggio.","en":"The suggested colours read well with the text. A custom one may raise a warning when you save."},
+    {"key":"theme.panel.use_default","namespace":"theme","module":"rbac","description":"Theme admin: puts back the fixed default of the selected surface only","it":"Usa il predefinito","en":"Use the default"},
+    {"key":"theme.suggestion.default","namespace":"theme","module":"rbac","description":"Theme admin: suggested surface colour, the fixed default","it":"Predefinito","en":"Default"},
+    {"key":"theme.suggestion.cool","namespace":"theme","module":"rbac","description":"Theme admin: suggested surface colour, a bluish grey","it":"Grigio freddo","en":"Cool grey"},
+    {"key":"theme.suggestion.warm","namespace":"theme","module":"rbac","description":"Theme admin: suggested surface colour, a beige grey","it":"Grigio caldo","en":"Warm grey"},
+    {"key":"theme.suggestion.neutral","namespace":"theme","module":"rbac","description":"Theme admin: suggested surface colour, a grey with no hue","it":"Grigio neutro","en":"Neutral grey"},
+    {"key":"theme.suggestion.tint","namespace":"theme","module":"rbac","description":"Theme admin: suggested surface colour, a light tint of the primary colour","it":"Tinta del colore principale","en":"Primary colour tint"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- 2. Il suggerimento sotto l'anteprima: ora si seleziona anche la cella del colore principale, non
+--    solo uno sfondo. apply_translation_seed non riscrive un valore che esiste gia', quindi serve un
+--    aggiornamento, come nella 0030; e solo dove il valore e' ancora quello della 0033, per non
+--    sovrascrivere una correzione fatta dal pannello Traduzioni.
+update translation_value tv
+set value = case l.code
+      when 'it' then 'Scegli una cella per cambiarne il colore.'
+      else 'Choose a cell to change its colour.'
+    end,
+    updated_at = now()
+from translation_key tk, app_language l
+where tk.id_translation_key = tv.id_translation_key
+  and l.id_language = tv.id_language
+  and tk.key = 'theme.preview.edit_hint'
+  and ((l.code = 'it' and tv.value = 'Clicca uno sfondo per cambiarne il colore.')
+    or (l.code = 'en' and tv.value = 'Click a surface to change its colour.'));
+
+-- Migration: 0035_theme_cell_labels.sql
+-- Le celle dell'anteprima della pagina Tema & Stili non aprono piu' il selettore: scelgono cosa
+-- cambiare nel pannello sotto (0034). Il nome accessibile finiva con ", modifica", che prometteva
+-- un'azione che la cella non fa piu'; diventa una descrizione senza verbo. E la descrizione di
+-- theme.preview.edit_hint parlava ancora delle superfici che aprono il selettore.
+--
+-- Come nella 0030 e nella 0034: apply_translation_seed non riscrive un valore esistente, quindi
+-- serve un aggiornamento, e solo dove il valore e' ancora quello della 0033, per non sovrascrivere
+-- una correzione fatta dal pannello Traduzioni.
+
+update translation_value tv
+set value = case tv.value
+      when '{{surface}}, {{mode}}: {{color}}, modifica' then '{{surface}}, {{mode}}: {{color}}'
+      when '{{surface}}, {{mode}}: {{color}}, edit' then '{{surface}}, {{mode}}: {{color}}'
+      when '{{surface}}, {{mode}}: {{color}} — personalizzato, modifica' then '{{surface}}, {{mode}}: {{color}} — personalizzato'
+      when '{{surface}}, {{mode}}: {{color}} — customised, edit' then '{{surface}}, {{mode}}: {{color}} — customised'
+    end,
+    updated_at = now()
+from translation_key tk
+where tk.id_translation_key = tv.id_translation_key
+  and tk.key in ('theme.preview.cell_label', 'theme.preview.cell_label_customised')
+  and tv.value in (
+    '{{surface}}, {{mode}}: {{color}}, modifica',
+    '{{surface}}, {{mode}}: {{color}}, edit',
+    '{{surface}}, {{mode}}: {{color}} — personalizzato, modifica',
+    '{{surface}}, {{mode}}: {{color}} — customised, edit'
+  );
+
+update translation_key set description = case key
+    when 'theme.preview.cell_label' then 'Theme admin: accessible name of a preview cell, which selects what the choice panel edits. {{surface}} = cell name, {{mode}} = light/dark, {{color}} = hex'
+    when 'theme.preview.cell_label_customised' then 'Theme admin: accessible name of a preview surface cell the admin changed. {{surface}} = cell name, {{mode}} = light/dark, {{color}} = hex'
+    when 'theme.preview.edit_hint' then 'Theme admin: hint under the preview, a cell selects what the choice panel below edits'
+  end
+where key in ('theme.preview.cell_label', 'theme.preview.cell_label_customised', 'theme.preview.edit_hint');
+
+-- Migration: 0036_theme_hover_label.sql
+-- La cella «Passaggio» dell'anteprima di Tema & Stili si chiama «Hover» anche in italiano, su
+-- richiesta del proprietario del progetto (2026-10-05): e' il nome con cui la conosce chi lavora
+-- sull'interfaccia, e «Passaggio» non si capiva.
+--
+-- Come nella 0030 e nella 0035: apply_translation_seed non riscrive un valore esistente, quindi
+-- serve un aggiornamento, e solo dove il valore e' ancora quello della 0031, per non sovrascrivere
+-- una correzione fatta dal pannello Traduzioni.
+update translation_value tv
+set value = 'Hover',
+    updated_at = now()
+from translation_key tk, app_language al
+where tk.id_translation_key = tv.id_translation_key
+  and al.id_language = tv.id_language
+  and tk.key = 'theme.preview.swatch.hover'
+  and al.code = 'it'
+  and tv.value = 'Passaggio';
+
+-- Migration: 0037_empty_container_badge.sql
+-- L'etichetta accanto al nome di un contenitore vuoto nell'albero di Ruoli & permessi. Il motivo
+-- dell'interruttore disabilitato stava solo nel `title` (0026), che si scopre passando sopra con il
+-- mouse; in tema scuro l'interruttore spento si distingue poco dagli altri, e il proprietario del
+-- progetto non capiva perche' non potesse selezionare la voce (2026-10-05).
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"roles.detail.empty_container_badge","namespace":"roles","module":"rbac","description":"Role detail: small label next to the name of a folder that holds no functionality to grant (its switch is disabled)","it":"vuota","en":"empty"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0038_theme_primary_dark.sql
+-- Un colore principale per il modo scuro (specifica del 2026-10-02, DEC-10).
+--
+-- Fino a qui il colore principale era uno: quello del modo scuro si ricavava dal chiaro (DEC-8).
+-- Dopo aver provato la pagina il proprietario del progetto ha chiesto di poter scegliere anche
+-- quello del modo scuro. La colonna ammette null, e null vuol dire «come prima»: la variante scura
+-- si ricava dal colore del chiaro. Un colore scelto si rende leggibile allo stesso modo del chiaro,
+-- e se non ci si riesce l'azione server avvisa (DEC-9).
+--
+-- SOLO ADDITIVA. I privilegi della 0031 (select, update) coprono gia' la colonna nuova.
+
+-- 1. Il colore scelto per il modo scuro, sempre in minuscolo come primary_color.
+alter table public.app_theme
+  add column primary_dark varchar(7) check (primary_dark ~ '^#[0-9a-f]{6}$');
+
+-- 2. Le etichette del pannello di scelta per il colore principale di ciascun modo.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"theme.panel.title_primary","namespace":"theme","module":"rbac","description":"Theme admin: heading of the choice panel while a primary cell is selected. {{mode}} = Light/Dark","it":"Colore principale · {{mode}}","en":"Primary colour · {{mode}}"},
+    {"key":"theme.panel.swatches_primary_dark","namespace":"theme","module":"rbac","description":"Theme admin: accessible name of the suggested primary colours of the dark mode","it":"Scegli il colore principale del modo scuro","en":"Choose the primary colour of the dark mode"},
+    {"key":"theme.panel.primary_dark_hint","namespace":"theme","module":"rbac","description":"Theme admin: hint of the choice panel while the dark primary cell is selected","it":"Se non lo scegli, il colore del modo scuro si ricava da quello del chiaro e si rende leggibile da solo.","en":"If you do not choose it, the dark mode colour is worked out from the light one and made readable automatically."},
+    {"key":"theme.suggestion.auto","namespace":"theme","module":"rbac","description":"Theme admin: suggested dark primary colour worked out from the light one","it":"Automatico","en":"Automatic"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0039_dead_translation_keys.sql
+-- Ventiquattro chiavi di traduzione seminate e non lette da nessuno. La guardia
+-- sources/devops/i18n-key-inventory.test.mjs le riportava come «seeded but never
+-- referenced», che e' un report e non un errore: nessun controllo le avrebbe
+-- mai tolte di mezzo. Vanno tolte qui, come 0012 ha fatto per le `home.*`.
+--
+-- Prima di cancellarle la guardia e' stata corretta: leggeva solo chiavi
+-- scritte per intero, e le tre `functionalities.tree.dnd.over_*` che
+-- components/rbac/NavigationTree.tsx compone con un template literal
+-- comparivano come orfane senza esserlo. Restano, e la guardia ora le vede.
+--
+-- Lasciate da funzioni rimosse (la storia di git lo conferma):
+--   functionalities.locale.*         i nomi delle lingue arrivano da app_language;
+--                                    TranslationsAccordion.test.tsx verifica che
+--                                    `functionalities.locale.en` non compaia
+--   icon_picker.empty,
+--   icon_picker.select_placeholder   il vecchio trigger del selettore (8cdb4b8)
+--   roles.detail.tab_operations,
+--   roles.detail.tab_sections        l'albero delle concessioni rifatto (5709cbd)
+--   translation.filter.*_only        etichette di stato semplificate (601fc98);
+--                                    translation-status-filter.test.ts verifica
+--                                    che non vengano richieste
+--   theme.status.unreadable          il tema si salva con un avviso invece di
+--                                    essere rifiutato (b823a84)
+--
+-- Generiche, mai collegate a nulla:
+--   common.labels.actions, common.states.no_results, common.states.saved,
+--   errors.bad_request, errors.unauthorized,
+--   validation.invalid_format, validation.required, validation.too_long
+--
+-- Resta seminata di proposito `auth.login.error_password_not_set` (I18N-2):
+-- mostrarla direbbe a un attaccante che l'indirizzo esiste ed e' un invito in
+-- attesa di password. La guardia la porta annotata in ANNOTATED_ORPHANS.
+--
+-- Fix-forward, non modifica di 0001_baseline.sql ne' delle migrazioni che
+-- hanno seminato queste chiavi: una migrazione gia' applicata non si tocca
+-- (README, «Migration checksums»).
+--
+-- La cancellazione si porta dietro i valori in tutte le lingue:
+-- translation_value.id_translation_key e' `on delete cascade`. Non serve
+-- toccare `dictionary_version`: il trigger di statement
+-- translation_key_bump_versions la incrementa per ogni lingua, cosi' i client
+-- rileggono il dizionario da soli.
+--
+-- Idempotente: rieseguirla su un database gia' ripulito cancella zero righe.
+do $$
+declare
+  v_keys_before bigint;
+  v_deleted     bigint;
+begin
+  select count(*) into v_keys_before from translation_key;
+
+  delete from translation_key
+   where key in (
+     'common.labels.actions',
+     'common.states.no_results',
+     'common.states.saved',
+     'errors.bad_request',
+     'errors.unauthorized',
+     'functionalities.locale.de',
+     'functionalities.locale.en',
+     'functionalities.locale.es',
+     'functionalities.locale.fr',
+     'functionalities.locale.it',
+     'functionalities.locale.nl',
+     'functionalities.locale.pt',
+     'functionalities.locale.ro',
+     'functionalities.locale.sk',
+     'icon_picker.empty',
+     'icon_picker.select_placeholder',
+     'roles.detail.tab_operations',
+     'roles.detail.tab_sections',
+     'theme.status.unreadable',
+     'translation.filter.complete_only',
+     'translation.filter.missing_only',
+     'validation.invalid_format',
+     'validation.required',
+     'validation.too_long'
+   );
+  get diagnostics v_deleted = row_count;
+
+  raise notice 'dead translation keys cleanup: % keys deleted (% before, % after)',
+    v_deleted, v_keys_before, v_keys_before - v_deleted;
+end $$;
+
+-- Migration: 0040_language_preset_picker.sql
+-- Le etichette del selettore "Lingua" in Admin -> Lingue -> Nuova lingua. Definire una lingua a mano
+-- (codice, locale, nome, nome nativo) era troppo complicato: il selettore propone le lingue
+-- principali e riempie i quattro campi, che restano modificabili (2026-10-05). I nomi delle lingue
+-- non sono chiavi di traduzione: li calcola Intl.DisplayNames nella lingua dell'interfaccia
+-- (lib/i18n/language-presets.ts). Solo additiva.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"language.form.preset","namespace":"language","module":"i18n","description":"New-language modal: label of the searchable picker that fills code, locale, name and native name","it":"Lingua","en":"Language"},
+    {"key":"language.form.preset_placeholder","namespace":"language","module":"i18n","description":"New-language modal: placeholder of the language picker search field","it":"Cerca una lingua…","en":"Search a language…"},
+    {"key":"language.form.preset_other","namespace":"language","module":"i18n","description":"New-language modal: last picker entry, leaves the fields empty for a language not in the list","it":"Altra lingua…","en":"Other language…"},
+    {"key":"language.form.preset_already_added","namespace":"language","module":"i18n","description":"New-language modal: tag next to a picker entry whose code already exists (it cannot be chosen)","it":"già presente","en":"already added"},
+    {"key":"language.form.preset_no_results","namespace":"language","module":"i18n","description":"New-language modal: shown in the picker when no language matches the search","it":"Nessuna lingua trovata","en":"No language found"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;

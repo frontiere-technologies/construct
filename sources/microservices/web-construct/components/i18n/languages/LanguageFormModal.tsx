@@ -1,19 +1,23 @@
 'use client'
 
-import React, { useId, useState } from 'react'
+import React, { useId, useRef, useState } from 'react'
 import { useI18n } from '@/context/I18nContext'
 import { createLanguage, updateLanguage } from '@/lib/i18n/language-actions'
+import type { LanguagePresetOption } from '@/lib/i18n/language-presets'
 import type { LanguagePageItemDto } from '@/lib/i18n/types'
 import { AccessibleDialog } from '@/components/shared/AccessibleDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { LanguagePresetPicker } from './LanguagePresetPicker'
 
 interface Props {
   language: LanguagePageItemDto | null
+  /** Every code already in app_language, so the picker can mark them "già presente". */
+  existingCodes: readonly string[]
   onClose: (saved: boolean) => void
 }
 
-export default function LanguageFormModal({ language, onClose }: Props) {
+export default function LanguageFormModal({ language, existingCodes, onClose }: Props) {
   const { t } = useI18n()
   const [code, setCode] = useState(language?.code ?? '')
   const [locale, setLocale] = useState(language?.locale ?? '')
@@ -22,7 +26,28 @@ export default function LanguageFormModal({ language, onClose }: Props) {
   const [isActive, setIsActive] = useState(language?.isActive ?? true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [preset, setPreset] = useState<LanguagePresetOption | null>(null)
   const titleId = useId()
+  const codeRef = useRef<HTMLInputElement>(null)
+
+  // The picker overwrites all four fields; "Altra lingua…" (null) empties them
+  // and hands the keyboard to Codice, the first one to fill by hand.
+  const applyPreset = (next: LanguagePresetOption | null) => {
+    setPreset(next)
+    setCode(next?.code ?? '')
+    setLocale(next?.locale ?? '')
+    setName(next?.name ?? '')
+    setNativeName(next?.nativeName ?? '')
+    if (!next) codeRef.current?.focus()
+  }
+
+  // Derived, not stored: the picker names the preset only while the four
+  // fields still hold it, so a hand edit (pt-PT -> pt-BR) empties it.
+  const chosen = preset
+    && preset.code === code && preset.locale === locale
+    && preset.name === name && preset.nativeName === nativeName
+    ? preset
+    : null
 
   const save = async () => {
     setSaving(true)
@@ -46,9 +71,15 @@ export default function LanguageFormModal({ language, onClose }: Props) {
         </h2>
 
         <div className="space-y-3">
+          {!language && (
+            <div>
+              <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-preset">{t('language.form.preset')}</label>
+              <LanguagePresetPicker id="lang-preset" existingCodes={existingCodes} chosen={chosen} onChoose={applyPreset} />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-code">{t('language.form.code')}</label>
-            <Input data-dialog-initial-focus id="lang-code" value={code} onChange={e => setCode(e.target.value)} placeholder="it" />
+            <Input ref={codeRef} data-dialog-initial-focus={language ? true : undefined} id="lang-code" value={code} onChange={e => setCode(e.target.value)} placeholder="it" />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground-secondary mb-1" htmlFor="lang-locale">{t('language.form.locale')}</label>

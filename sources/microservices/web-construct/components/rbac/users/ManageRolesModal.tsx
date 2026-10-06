@@ -46,10 +46,10 @@ export default function ManageRolesModal(
       busy={busy}
       panelClassName="bg-popover rounded-xl p-5 w-full max-w-md"
     >
-        <div className="flex items-center justify-between mb-4">
-          <h2 id={titleId} className="text-lg font-semibold">{t('users.actions.manage_roles')} — {user.firstName ?? user.email}</h2>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <h2 id={titleId} className="min-w-0 break-words text-lg font-semibold">{t('users.actions.manage_roles')} — {user.firstName ?? user.email}</h2>
           <Button
-            variant="ghost" size="icon"
+            variant="ghost" size="icon" className="shrink-0"
             data-dialog-initial-focus data-dialog-close onClick={onClose} aria-label={t('common.actions.close')}
           ><X size={18} /></Button>
         </div>

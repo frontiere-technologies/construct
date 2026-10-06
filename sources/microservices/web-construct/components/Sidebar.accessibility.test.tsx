@@ -16,9 +16,6 @@ vi.mock('next/link', () => ({
     <a href={href} {...props}>{children}</a>
   ),
 }))
-vi.mock('@/context/UIContext', () => ({
-  useUI: () => ({ settings: { theme: 'light' }, setSettings: vi.fn() }),
-}))
 vi.mock('@/context/use-auth', () => ({
   useAuth: () => ({ user: { email: 'reviewer@example.com' }, signOut: vi.fn() }),
 }))

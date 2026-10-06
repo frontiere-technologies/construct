@@ -87,8 +87,8 @@ def _open_editor(page):
     populated. The editor's own test id is the real signal.
     """
     page.locator('[data-testid^="row-menu"]').first.click()
-    page.get_by_role("button", name="Modifica").or_(
-        page.get_by_role("button", name="Edit")).click()
+    page.get_by_role("menuitem", name="Modifica").or_(
+        page.get_by_role("menuitem", name="Edit")).click()
     page.wait_for_url(re.compile(r"/admin/translations/\d+/edit"), timeout=15_000)
     editor = page.locator('[data-testid="translation-editor"]')
     expect(editor).to_be_visible(timeout=15_000)
@@ -144,7 +144,7 @@ def _delete_translation_key(page, base_url, key) -> None:
         if rows.count() == 0:
             return
         rows.first.locator('[data-testid^="row-menu"]').click()
-        page.get_by_role("button", name="Elimina").click()  # row-menu item -> opens ConfirmModal
+        page.get_by_role("menuitem", name="Elimina").click()  # row-menu item -> opens ConfirmModal
         page.get_by_role("button", name="Elimina").click()  # ConfirmModal's confirm button
         page.wait_for_load_state("networkidle")
     except Exception as exc:  # pragma: no cover - best-effort cleanup
@@ -158,7 +158,7 @@ def _delete_language(page, base_url, native_name) -> None:
         if row.count() == 0:
             return
         row.locator('[data-testid^="row-menu"]').click()
-        page.get_by_role("button", name="Elimina").click()  # row-menu item -> opens ConfirmModal
+        page.get_by_role("menuitem", name="Elimina").click()  # row-menu item -> opens ConfirmModal
         page.get_by_role("button", name="Elimina").click()  # ConfirmModal's confirm button
         page.wait_for_load_state("networkidle")
     except Exception as exc:  # pragma: no cover - best-effort cleanup
@@ -312,24 +312,19 @@ def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, ba
 
         page.reload()
         page.wait_for_load_state("networkidle")
-        page.locator('[data-testid="sidebar-account-button"]').click()
+        nav(page, f"{base_url}/settings")
         page.locator('[data-testid="language-switcher"]').click()
         expect(page.locator(f'[data-testid="language-option-{code}"]')).to_be_visible()
+        # Escape closes the listbox; switch_language() navigates to /settings
+        # on its own, so there is no panel state to restore any more.
         page.keyboard.press("Escape")
-        # Escape only closes the language-switcher listbox itself (its own
-        # `open` state) — the account/user panel opened above stays open.
-        # `sidebar-account-button` toggles that panel, so `switch_language()`
-        # below would otherwise close it instead of opening it, hiding
-        # `language-switcher` and timing out. Close it explicitly first to
-        # restore the closed baseline `switch_language()` assumes.
-        page.locator('[data-testid="sidebar-account-button"]').click()
 
         # A user who had picked it falls back to the default once it is deactivated.
         switch_language(page, code)
         nav(page, f"{base_url}/admin/languages")
         row = _rows(page).filter(has_text="Nederlands")
         row.locator('[data-testid^="row-menu"]').click()
-        page.get_by_role("button", name="Disattiva").click()
+        page.get_by_role("menuitem", name="Disattiva").click()
         # Same `wait_for_load_state("networkidle")` no-op as above: it would
         # return immediately without waiting for `setLanguageActive()`'s
         # request to land. Wait for the grid's own "Attiva" cell to actually
@@ -339,7 +334,7 @@ def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, ba
 
         nav(page, f"{base_url}/profile")
         expect(page.get_by_role("button", name="Salva")).to_be_visible()   # back to Italian
-        page.locator('[data-testid="sidebar-account-button"]').click()
+        nav(page, f"{base_url}/settings")
         page.locator('[data-testid="language-switcher"]').click()
         expect(page.locator(f'[data-testid="language-option-{code}"]')).to_have_count(0)
         page.keyboard.press("Escape")
@@ -348,6 +343,29 @@ def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, ba
         # FK reference to it (ON DELETE SET NULL), so this alone restores both
         # the languages table and the profile's effective language.
         _delete_language(page, base_url, "Nederlands")
+
+
+def test_the_language_picker_fills_the_new_language_fields(logged_in_page, base_url):
+    page = logged_in_page
+    nav(page, f"{base_url}/admin/languages")
+    page.get_by_role("button", name="Nuova lingua").click()
+    dialog = page.get_by_role("dialog")
+
+    # Searched by its name in the interface language (Italian here). Swedish and not Dutch:
+    # test_deactivating_a_language_removes_it_from_the_switcher creates and deletes `nl`, and
+    # run right after it the picker can still list Dutch as "già presente" (not choosable).
+    picker = dialog.get_by_role("combobox")
+    picker.fill("svede")
+    dialog.get_by_role("option", name=re.compile(r"^Svedese")).click()
+
+    expect(dialog.get_by_label("Codice")).to_have_value("sv")
+    expect(dialog.get_by_label("Locale")).to_have_value("sv-SE")
+    expect(dialog.get_by_label("Nome", exact=True)).to_have_value("Svedese")
+    expect(dialog.get_by_label("Nome nativo")).to_have_value("Svenska")
+
+    # Cancel, never save: the E2E database keeps only it/en.
+    dialog.get_by_role("button", name="Annulla", exact=True).click()
+    expect(dialog).to_have_count(0)
 
 
 # ---------------------------------------------------------------- §18.3

@@ -134,6 +134,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
         <ConfirmModal
           title={t('common.actions.delete')}
           message={t('functionalities.tree.confirm_delete', { name: deleting.name })}
+          destructive
           confirmLabel={t('common.actions.delete')}
           onCancel={() => setDeleting(null)}
           onConfirm={async () => {

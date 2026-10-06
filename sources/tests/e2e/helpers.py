@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit
+
 from playwright.sync_api import expect
 
 
@@ -164,10 +166,11 @@ def l1_btn(l1, label: str):
 
 
 def switch_language(page, code: str) -> None:
-    """Open the sidebar account panel and pick a language by its code.
+    """Open the settings page and pick a language by its code.
 
-    The switcher lives in the account panel, which is only rendered once the
-    panel is open, and the sidebar's first column may be collapsed to icons.
+    The switcher moved from the sidebar account panel to /settings on
+    2026-10-02 (spec: docs/superpowers/specs/2026-10-02-theme-settings-redesign-design.md).
+    Navigating there is deliberate: every caller navigates on afterwards anyway.
 
     Waits for the switch to actually land, not for the network to go quiet.
     `wait_for_load_state("networkidle")` was the previous signal and it is the
@@ -182,13 +185,10 @@ def switch_language(page, code: str) -> None:
     every later test in the run rendered in the wrong language.
 
     The trigger renders the current language's native name, so that text is the
-    signal that the round trip finished and the RSC tree re-rendered. It is read
-    from the option itself instead of being mapped from the code, so this stays
-    correct for any language the suite adds.
+    signal that the round trip finished and the RSC tree re-rendered.
     """
-    l1 = page.locator("aside").first
-    ensure_l1_expanded(page, l1)
-    page.locator('[data-testid="sidebar-account-button"]').click()
+    parts = urlsplit(page.url)
+    nav(page, f"{parts.scheme}://{parts.netloc}/settings")
     switcher = page.locator('[data-testid="language-switcher"]')
     switcher.click()
     option = page.locator(f'[data-testid="language-option-{code}"]')

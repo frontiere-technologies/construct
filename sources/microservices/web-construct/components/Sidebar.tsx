@@ -5,15 +5,13 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { LogOut, Sun, Moon, CircleUser, User, ChevronLeft, ChevronRight, PanelLeftOpen, X } from 'lucide-react'
+import { LogOut, CircleUser, User, Settings, ChevronLeft, ChevronRight, PanelLeftOpen, X } from 'lucide-react'
 import clsx from 'clsx'
-import { useUI } from '@/context/UIContext'
 import { useAuth } from '@/context/use-auth'
 import { useI18n } from '@/context/I18nContext'
 import type { MenuItem } from '@/types/menu'
 import { activeAncestorIds, activeAncestorPath, togglePathAt, navHighlight, type NavHighlight } from '@/lib/sidebar-highlight'
 import { IconRenderer } from '@/components/shared/IconRenderer'
-import LanguageSwitcher from './LanguageSwitcher'
 import { resolveSidebarPresentation } from './sidebar-presentation'
 
 // One visual language for every column: the current page (and the sections holding it) carry
@@ -250,7 +248,6 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
-  const { settings, setSettings } = useUI()
   const { user: authUser, signOut } = useAuth()
   const { t } = useI18n()
   const pathname = usePathname()
@@ -271,6 +268,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
   // Collapse state per sub-column, keyed by its 1-based column number (col2, col3, col4, ...)
   const [subCollapsed, setSubCollapsed] = useState<Record<number, boolean>>({})
   const [masterCollapsed, setMasterCollapsed] = useState<boolean>(false)
+  // False until the saved state has been read back: saving before that would write the initial
+  // state over the saved one, and under Strict Mode the second mount would then read it back.
+  const [collapseRestored, setCollapseRestored] = useState(false)
 
   const isSubCollapsed = useCallback((depth: number) => subCollapsed[depth] ?? false, [subCollapsed])
   const toggleSubCollapsed = useCallback(
@@ -285,15 +285,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
       if (readCollapse(`col${depth + 1}`, false)) restored[depth] = true
     }
     setSubCollapsed(restored)
+    setCollapseRestored(true)
   }, [])
 
   useEffect(() => {
+    if (!collapseRestored) return
     try {
       const cols: Record<string, boolean> = { col1: col1Collapsed, master: masterCollapsed }
       for (const [depth, collapsed] of Object.entries(subCollapsed)) cols[`col${Number(depth) + 1}`] = collapsed
       localStorage.setItem(COLLAPSE_KEY, JSON.stringify(cols))
     } catch { /* ignore quota errors */ }
-  }, [col1Collapsed, subCollapsed, masterCollapsed])
+  }, [collapseRestored, col1Collapsed, subCollapsed, masterCollapsed])
 
   // Hover-preview overlay for the collapsed rail: hovering it (with a short
   // debounce) shows the full sidebar as a floating overlay instead of
@@ -473,9 +475,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
     setUserPanelOpen(prev => !prev)
   }, [])
 
-  const toggleTheme = () =>
-    setSettings(prev => ({ ...prev, theme: prev.theme === 'light' ? 'dark' : 'light' }))
-
   const userPanelItemCls = clsx(
     'w-full flex items-center rounded-lg py-2 px-3 transition-colors duration-200 text-sm',
     userPanelPresentation.columnCollapsed ? 'justify-center' : 'gap-3',
@@ -605,45 +604,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
               {!userPanelPresentation.columnCollapsed && <span className="min-w-0 truncate">{t('nav.profile')}</span>}
             </Link>
 
-            {/* Theme Mode */}
-            {userPanelPresentation.columnCollapsed ? (
-              <button
-                onClick={toggleTheme}
-                onMouseEnter={e => showTooltip(e, settings.theme === 'light' ? t('nav.theme_to_dark') : t('nav.theme_to_light'))}
-                onMouseLeave={hideTooltip}
-                role="switch"
-                aria-checked={settings.theme === 'dark'}
-                aria-label={t('nav.theme_mode')}
-                className={userPanelItemCls}
-              >
-                {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-              </button>
-            ) : (
-              <div className="flex items-center rounded-lg py-2 px-3 gap-3 text-sm text-sidebar-foreground">
-                {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-                <span className="flex-1 min-w-0 truncate">{t('nav.theme_mode')}</span>
-                <button
-                  onClick={toggleTheme}
-                  role="switch"
-                  aria-checked={settings.theme === 'dark'}
-                  aria-label={t('nav.theme_mode')}
-                  className={clsx(
-                    // Off-state track: bg-switch-off, not bg-input — see the
-                    // --switch-off comment in globals.css (task 14). Must stay
-                    // identical to the PermissionsTree.tsx toggle.
-                    'relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 flex-shrink-0',
-                    settings.theme === 'dark' ? 'bg-primary' : 'bg-switch-off'
-                  )}
-                >
-                  <span className={clsx(
-                    'inline-block h-3 w-3 rounded-full bg-white transition-transform duration-200',
-                    settings.theme === 'dark' ? 'translate-x-5' : 'translate-x-1'
-                  )} />
-                </button>
-              </div>
-            )}
-
-            <LanguageSwitcher collapsed={userPanelPresentation.columnCollapsed} itemClassName={userPanelItemCls} />
+            {/* Settings */}
+            <Link
+              href="/settings"
+              onMouseEnter={userPanelPresentation.columnCollapsed ? e => showTooltip(e, t('nav.settings')) : undefined}
+              onMouseLeave={userPanelPresentation.columnCollapsed ? hideTooltip : undefined}
+              aria-label={userPanelPresentation.columnCollapsed ? t('nav.settings') : undefined}
+              className={clsx(
+                userPanelItemCls,
+                pathname === '/settings' ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium ring-1 ring-inset ring-primary/70' : ''
+              )}
+            >
+              <Settings size={16} className={pathname === '/settings' ? 'text-primary' : ''} />
+              {!userPanelPresentation.columnCollapsed && <span className="min-w-0 truncate">{t('nav.settings')}</span>}
+            </Link>
           </div>
 
           {/* Logout — pinned to bottom, aligned with the user row in col1 */}

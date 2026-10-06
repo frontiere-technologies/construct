@@ -22,7 +22,10 @@ import type { LanguagePageItemDto } from '@/lib/i18n/types'
 import { createLanguagesDatasource } from './languages-datasource'
 import LanguageFormModal from './LanguageFormModal'
 
-type Props = LanguagesUrlParams
+interface Props extends LanguagesUrlParams {
+  /** Every language code in app_language, not just the grid's loaded rows. */
+  existingCodes: string[]
+}
 
 const LANGUAGE_TEXT_FILTER = TEXT_FILTER as Pick<ColDef<LanguagePageItemDto>, 'filter' | 'filterParams'>
 const LANGUAGE_NUMBER_FILTER = NUMBER_FILTER as Pick<ColDef<LanguagePageItemDto>, 'filter' | 'filterParams'>
@@ -145,6 +148,7 @@ export default function LanguagesTableClient(props: Props) {
       {(creating || editing) && (
         <LanguageFormModal
           language={editing}
+          existingCodes={props.existingCodes}
           onClose={saved => { setCreating(false); setEditing(null); if (saved) refresh() }}
         />
       )}
@@ -163,6 +167,7 @@ export default function LanguagesTableClient(props: Props) {
         <ConfirmModal
           title={t('language.confirm.delete_title')}
           message={t('language.confirm.delete_message', { name: deleting.name })}
+          destructive
           confirmLabel={t('common.actions.delete')}
           onCancel={() => setDeleting(null)}
           onConfirm={async () => { await run(() => deleteLanguage(deleting.id)); setDeleting(null) }}

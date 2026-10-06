@@ -8,6 +8,12 @@ import GridRowActionsMenu, { type GridRowActionsMenuParams } from './GridRowActi
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+// jsdom non implementa queste tre, e Radix (via Popper) le chiama all'apertura.
+// Sono impalcature del test, non un adattamento del componente.
+globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as never
+Element.prototype.hasPointerCapture ??= () => false
+Element.prototype.scrollIntoView ??= () => {}
+
 vi.mock('@/context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 
 interface Row { id: number }
@@ -32,9 +38,12 @@ function openMenu() {
 
   act(() => root?.render(<GridRowActionsMenu<Row> {...params} />))
   const trigger = container.querySelector<HTMLButtonElement>('[data-testid="row-menu-1"]')!
-  act(() => trigger.click())
-  // The menu is portalled to document.body, not into the cell.
-  return document.querySelector<HTMLElement>('.fixed.z-50')!
+  // Invio, non `.click()`: Radix apre su pointerdown o da tastiera, e il click
+  // sintetico di jsdom non e' ne' l'uno ne' l'altra. Che l'apertura da tastiera
+  // funzioni e' anche meta' di cio' che questo lavoro doveva ottenere.
+  act(() => { trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
+  // Il menu e' portato su document.body, non dentro la cella.
+  return { trigger, menu: document.querySelector<HTMLElement>('[role="menu"]')! }
 }
 
 afterEach(() => {
@@ -56,8 +65,8 @@ afterEach(() => {
  */
 describe('row actions menu truncation', () => {
   it('gives every label its own truncating box', () => {
-    const menu = openMenu()
-    const labels = Array.from(menu.querySelectorAll('button')).map(b => b.querySelector('span'))
+    const { menu } = openMenu()
+    const labels = Array.from(menu.querySelectorAll('[role="menuitem"]')).map(b => b.querySelector('span'))
 
     expect(labels.length).toBe(LABELS.length)
     for (const [i, span] of labels.entries()) {
@@ -68,7 +77,7 @@ describe('row actions menu truncation', () => {
   })
 
   it('caps the popup width instead of fixing it, so a longer translation fits', () => {
-    const menu = openMenu()
+    const { menu } = openMenu()
     const classes = Array.from(menu.classList)
 
     expect(classes.some(c => /^max-w-/.test(c)), 'il menu non ha un tetto di larghezza').toBe(true)

@@ -141,6 +141,7 @@ export default function RolesTableClient(props: Props) {
         <ConfirmModal
           title={t('roles.confirm.delete_title')}
           message={t('roles.confirm.delete_message', { name: deleting.description })}
+          destructive
           confirmLabel={t('common.actions.delete')}
           onCancel={() => setDeleting(null)}
           onConfirm={async () => {

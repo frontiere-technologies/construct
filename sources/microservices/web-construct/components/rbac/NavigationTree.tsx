@@ -3,13 +3,15 @@
 import React, { useState, useCallback, useRef } from 'react'
 import { ChevronDown, ChevronRight, GripVertical, FolderTree, Code, Globe, Link as LinkIcon, Circle, type LucideIcon } from 'lucide-react'
 import {
-  DndContext, DragOverlay, PointerSensor, useSensor, useSensors, pointerWithin,
+  DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors, pointerWithin,
   useDraggable, useDroppable, type DragStartEvent, type DragMoveEvent, type DragEndEvent,
+  type CollisionDetection, type KeyboardCoordinateGetter,
 } from '@dnd-kit/core'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/context/I18nContext'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
+import { nextKeyboardCoordinates, type KeyboardDragRow } from './navigation-tree-keyboard-drag'
 
 type DropPos = 'before' | 'after' | 'into'
 interface Indicator { id: number; pos: DropPos }
@@ -21,6 +23,8 @@ interface DndConfig {
 interface NavigationTreeProps {
   nodes: UserNavigationTreeDto[]
   renderTrailing?: (node: UserNavigationTreeDto) => React.ReactNode
+  /** Qualcosa da mostrare subito dopo il nome, non in coda alla riga (per esempio «vuota»). */
+  renderNameSuffix?: (node: UserNavigationTreeDto) => React.ReactNode
   expandedByDefault?: boolean
   dnd?: DndConfig
 }
@@ -29,6 +33,7 @@ interface RowProps {
   node: UserNavigationTreeDto
   depth: number
   renderTrailing?: (node: UserNavigationTreeDto) => React.ReactNode
+  renderNameSuffix?: (node: UserNavigationTreeDto) => React.ReactNode
   expandedByDefault: boolean
   dnd?: DndConfig
   activeId: number | null
@@ -46,12 +51,13 @@ export function typeIcon(node: Pick<UserNavigationTreeDto, 'type' | 'functionali
   }
 }
 
-const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDefault, dnd, activeId, indicator }) => {
+const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, renderNameSuffix, expandedByDefault, dnd, activeId, indicator }) => {
   const { t } = useI18n()
   const isCategory = node.type === 'CATEGORY'
   const hasChildren = node.children.length > 0
   const [open, setOpen] = useState(expandedByDefault)
   const canDrag = dnd ? dnd.canDrag(node) : false
+  const nameSuffix = renderNameSuffix?.(node)
 
   const drag = useDraggable({ id: `item-${node.id}`, disabled: !canDrag })
   // One droppable per row; before/after/into is derived from the pointer position in onDragOver.
@@ -145,21 +151,39 @@ const TreeRow: React.FC<RowProps> = ({ node, depth, renderTrailing, expandedByDe
             e un figlio flex con `min-width: auto` si rifiuta di stringersi sotto
             il proprio contenuto -- allargherebbe la riga e spingerebbe fuori le
             azioni in coda invece di andare in puntini. */}
-        <span className={`flex-1 min-w-0 truncate text-sm ${isCategory ? 'font-medium' : ''}`}>
-          {node.name}
-        </span>
+        {nameSuffix == null ? (
+          <span className={`flex-1 min-w-0 truncate text-sm ${isCategory ? 'font-medium' : ''}`}>
+            {node.name}
+          </span>
+        ) : (
+          // Con un suffisso il nome resta quello che va in puntini, e il suffisso gli sta accanto
+          // invece di finire in coda alla riga: `flex-1` passa al contenitore dei due.
+          <span className="flex flex-1 min-w-0 items-center gap-2">
+            <span className={`min-w-0 truncate text-sm ${isCategory ? 'font-medium' : ''}`}>
+              {node.name}
+            </span>
+            {nameSuffix}
+          </span>
+        )}
         {renderTrailing?.(node)}
       </div>
       {hasChildren && open && node.children.map(c => (
-        <TreeRow key={c.id} node={c} depth={depth + 1} renderTrailing={renderTrailing} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
+        <TreeRow key={c.id} node={c} depth={depth + 1} renderTrailing={renderTrailing} renderNameSuffix={renderNameSuffix} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
       ))}
     </div>
   )
 }
 
-export default function NavigationTree({ nodes, renderTrailing, expandedByDefault = true, dnd }: NavigationTreeProps) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+export default function NavigationTree({ nodes, renderTrailing, renderNameSuffix, expandedByDefault = true, dnd }: NavigationTreeProps) {
+  const { t } = useI18n()
   const [activeId, setActiveId] = useState<number | null>(null)
+  // Se una pressione precedente ha gia' collocato il puntatore virtuale. Non e'
+  // deducibile dalla sua posizione: nasce a (0,0), che e' dentro la prima riga
+  // ogni volta che l'albero comincia in cima alla finestra.
+  const keyboardPositioned = useRef(false)
+  const isKeyboardDrag = useRef(false)
+  // L'ultima posizione annunciata, per non ripetere la stessa frase a ogni pixel.
+  const lastAnnounced = useRef<string | null>(null)
   const [indicator, setIndicator] = useState<Indicator | null>(null)
   const indicatorRef = useRef<Indicator | null>(null)
   // Pointer Y at drag start; combined with the live delta it gives the exact pointer
@@ -183,18 +207,79 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
     return found
   }, [index])
 
+  /**
+   * A11Y-3. Il `KeyboardSensor` parte da coordinate (0,0) e vi somma quelle che
+   * questo getter restituisce, e `pointerStartY` resta 0 su un trascinamento da
+   * tastiera perche' un evento di tastiera non ha `clientY`. Restituendo
+   * coordinate *assolute* si guida quindi un puntatore virtuale che
+   * `handleDragMove` legge esattamente come quello vero: mouse e tastiera
+   * condividono una sola definizione di prima/dopo/dentro, invece di averne due
+   * che col tempo divergono.
+   */
+  const keyboardCoordinateGetter = useCallback<KeyboardCoordinateGetter>((event, { currentCoordinates, context }) => {
+    const activeNum = Number(String(context.active?.id ?? '').replace('item-', ''))
+    const rows: KeyboardDragRow[] = [...context.droppableRects.entries()]
+      .map(([id, rect]) => ({ id: Number(String(id).replace('row-', '')), rect }))
+      // La riga trascinata e i suoi discendenti non sono posizioni da cui passare.
+      .filter(r => r.id !== activeNum && !isInSubtree(activeNum, r.id))
+      .sort((a, b) => a.rect.top - b.rect.top)
+      .map(r => ({ id: r.id, top: r.rect.top, height: r.rect.height, isCategory: index.get(r.id)?.type === 'CATEGORY' }))
+
+    const initial = context.active?.rect.current.initial
+    const anchorY = initial ? initial.top + initial.height / 2 : 0
+
+    const next = nextKeyboardCoordinates(event.key, currentCoordinates, rows, {
+      positioned: keyboardPositioned.current,
+      anchorY,
+    })
+    if (!next) return currentCoordinates
+    keyboardPositioned.current = true
+    return next
+  }, [index, isInSubtree])
+
+  /**
+   * `pointerWithin` ha bisogno di coordinate del puntatore, e da tastiera dnd-kit
+   * non ne produce di utilizzabili: le sue `pointerCoordinates` valgono
+   * `(0,0) + traslazione`, cioe' uno scostamento, non una posizione sullo
+   * schermo. Restituirebbe sempre l'insieme vuoto. La riga sorvolata si trova
+   * invece sul rettangolo tradotto, il cui bordo alto e' esattamente la
+   * posizione che il getter ha chiesto.
+   */
+  const collisionDetection = useCallback<CollisionDetection>(args => {
+    if (!isKeyboardDrag.current) return pointerWithin(args)
+    const y = args.collisionRect.top
+    for (const [id, rect] of args.droppableRects) {
+      if (y >= rect.top && y < rect.top + rect.height) return [{ id }]
+    }
+    return []
+  }, [])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: keyboardCoordinateGetter }),
+  )
+
   // Mirror the indicator in a ref so onDragEnd reads the latest computed value even if
   // the pointer is released before React flushes the onDragMove state update (real race).
   const setInd = useCallback((v: Indicator | null) => { indicatorRef.current = v; setIndicator(v) }, [])
 
   const handleDragStart = useCallback((e: DragStartEvent) => {
     const ae = e.activatorEvent as { clientY?: number }
+    // Un evento di tastiera non ha `clientY`, e questo zero non e' un ripiego:
+    // e' cio' che rende le coordinate assolute del getter da tastiera leggibili
+    // qui sotto come `pointerStartY + delta`, esattamente come quelle del mouse.
     pointerStartY.current = ae?.clientY ?? 0
+    isKeyboardDrag.current = ae?.clientY === undefined
+    keyboardPositioned.current = false
     setActiveId(Number(String(e.active.id).replace('item-', '')))
   }, [])
 
-  // onDragMove (not onDragOver) so the indicator updates continuously as the pointer
-  // moves *within* the same row — onDragOver only fires when the over droppable changes.
+  // Col mouse serve onDragMove: onDragOver scatta solo quando cambia la riga
+  // sorvolata, mentre la posizione cambia anche muovendosi *dentro* la stessa
+  // riga. Da tastiera serve l'opposto — dnd-kit aggiorna la traslazione e
+  // ricalcola le collisioni, ma non emette onDragMove: misurato, non dedotto.
+  // Entrambi puntano qui, e chiamarlo due volte non costa niente perche' ricalcola
+  // lo stesso indicatore dagli stessi dati.
   const handleDragMove = useCallback((e: DragMoveEvent) => {
     const { active, over } = e
     if (!over) { setInd(null); return }
@@ -207,7 +292,14 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
     const overRect = over.rect
     if (!overNode) { setInd(null); return }
 
-    const pointerY = pointerStartY.current + e.delta.y
+    // Col mouse la Y e' quella del puntatore. Da tastiera un puntatore non c'e',
+    // e nemmeno un accumulo utilizzabile: il KeyboardSensor traduce di
+    // `ritorno - riferimento`, quindi cio' che il getter chiede si legge
+    // sull'unico posto dove arriva intatto — il bordo alto del rettangolo
+    // tradotto dell'elemento trascinato.
+    const pointerY = isKeyboardDrag.current
+      ? (active.rect.current.translated?.top ?? 0)
+      : pointerStartY.current + e.delta.y
     const rel = Math.min(1, Math.max(0, (pointerY - overRect.top) / overRect.height))
 
     let pos: DropPos
@@ -220,7 +312,11 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
     setInd({ id: overNum, pos })
   }, [index, isInSubtree, setInd])
 
-  const reset = useCallback(() => { setActiveId(null); setInd(null) }, [setInd])
+  const reset = useCallback(() => {
+    setActiveId(null); setInd(null)
+    keyboardPositioned.current = false
+    isKeyboardDrag.current = false
+  }, [setInd])
 
   const handleDragEnd = useCallback((e: DragEndEvent) => {
     const ind = indicatorRef.current
@@ -250,7 +346,7 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
   const tree = (
     <div className="rounded-lg border border-border-subtle">
       {nodes.map(n => (
-        <TreeRow key={n.id} node={n} depth={0} renderTrailing={renderTrailing} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
+        <TreeRow key={n.id} node={n} depth={0} renderTrailing={renderTrailing} renderNameSuffix={renderNameSuffix} expandedByDefault={expandedByDefault} dnd={dnd} activeId={activeId} indicator={indicator} />
       ))}
     </div>
   )
@@ -258,13 +354,55 @@ export default function NavigationTree({ nodes, renderTrailing, expandedByDefaul
   if (!dnd) return tree
 
   const activeNode = activeId != null ? index.get(activeId) : null
+  const nameOf = (id: number | null | undefined) => (id != null ? index.get(id)?.name : undefined) ?? ''
+  const draggedName = (id: string | number) => nameOf(Number(String(id).replace('item-', '')))
+
+  const announceDropPosition = ({ active }: { active: { id: string | number } }) => {
+    const ind = indicatorRef.current
+    const key = ind ? `${ind.id}:${ind.pos}` : null
+    if (key === lastAnnounced.current) return undefined
+    lastAnnounced.current = key
+    if (!ind) return undefined
+    return t(`functionalities.tree.dnd.over_${ind.pos}`, {
+      name: draggedName(active.id), target: nameOf(ind.id),
+    })
+  }
+
   return (
     <DndContext
       id="navigation-tree"
       sensors={sensors}
-      collisionDetection={pointerWithin}
+      collisionDetection={collisionDetection}
+      accessibility={{
+        screenReaderInstructions: { draggable: t('functionalities.tree.dnd.instructions') },
+        announcements: {
+          onDragStart: ({ active }) => t('functionalities.tree.dnd.lifted', { name: draggedName(active.id) }),
+          // Col mouse questo scatta a ogni pixel, quindi si annuncia solo quando la
+          // posizione cambia davvero: una zona viva che ripete se stessa e' rumore,
+          // e il rumore e' il modo piu' rapido per far spegnere un lettore di schermo.
+          // Le due sorgenti si dividono il lavoro esattamente come i due gestori
+          // qui sopra: col mouse arriva onDragMove, da tastiera onDragOver. Puntano
+          // alla stessa funzione, e il confronto con l'ultima frase detta impedisce
+          // di ripeterla — una zona viva che si ripete a ogni pixel e' rumore, e il
+          // rumore e' il modo piu' rapido per far spegnere un lettore di schermo.
+          onDragOver: announceDropPosition,
+          onDragMove: announceDropPosition,
+          onDragEnd: ({ active }) => {
+            const moved = indicatorRef.current != null
+            lastAnnounced.current = null
+            return t(moved ? 'functionalities.tree.dnd.dropped' : 'functionalities.tree.dnd.cancelled',
+              { name: draggedName(active.id) })
+          },
+          onDragCancel: ({ active }) => {
+            lastAnnounced.current = null
+            return t('functionalities.tree.dnd.cancelled', { name: draggedName(active.id) })
+          },
+        },
+      }}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
+      onDragOver={handleDragMove}
+
       onDragEnd={handleDragEnd}
       onDragCancel={reset}
     >

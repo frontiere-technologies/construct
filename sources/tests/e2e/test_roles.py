@@ -43,7 +43,7 @@ def _delete_role(page, base_url, name):
     expect(row).to_be_visible()
     row_menu = row.locator('[data-testid^="row-menu"]')
     row_menu.click()
-    page.get_by_role("button", name="Elimina").click()  # row-menu item -> opens ConfirmModal
+    page.get_by_role("menuitem", name="Elimina").click()  # row-menu item -> opens ConfirmModal
     confirm_modal(page, "Elimina")
     _search(page, base_url, name)
     expect(_rows(page).filter(has_text=name)).to_have_count(0)

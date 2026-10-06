@@ -85,15 +85,19 @@ function LoginForm() {
                prescribed colours (see its comment) — a dark card behind a
                button whose colours assume a white one would look broken,
                not themed.
-            2. UIProvider lives in the root layout, so `.dark` reaches
-               /login for anyone whose localStorage still carries
-               `theme: 'dark'` from a previous session — that is not a
-               preference this unauthenticated visitor expressed here, so
-               there is nothing to honour by repainting the page from it.
+            2. The root layout themes /login too, but for an anonymous visitor
+               it resolves the mode to `light` whatever the appearance cookie
+               says (`anonymousAppearance` in lib/appearance.ts): the mode of
+               the last user who changed a preference on this browser is not a
+               preference this visitor expressed here, so `.dark` no longer
+               reaches this page from the cookie. Only an OS-level dark scheme
+               paired with a `system` mode could have, and anonymous is never
+               `system`. The fixed foregrounds below stay as defence in depth.
 
             The bug this decision fixes: the surface (this bg-white) was
             already fixed, but the foregrounds sitting bare on top of it had
-            been tokenised, so a dark localStorage leftover made them
+            been tokenised, so a leftover dark appearance (which the
+            anonymous mode no longer lets through) made them
             unreadable — --foreground-secondary's dark value (#d1d5db) reads
             1.47:1 here, --muted-foreground's (#9ca3af) 2.54:1,
             --destructive-muted-foreground's (#fca5a5) 1.90:1 — all under

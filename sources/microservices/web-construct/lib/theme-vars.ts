@@ -1,39 +1,4 @@
-import { defaultThemeConfig, type ThemeConfig } from '@/types/menu'
-
 const isHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v)
-const safeColor = (v: string, fallback: string) => (isHex(v) ? v : fallback)
-
-interface PairedToken {
-  cssVar: string
-  lightKey: keyof ThemeConfig
-  darkKey: keyof ThemeConfig
-}
-
-/**
- * Il confine fra i due vocabolari del progetto.
- *
- * A sinistra i nomi shadcn, che sono gli unici che un componente scrive mai. A
- * destra i campi di ThemeConfig, che sono uno schema di dati: vivono sul
- * database, li modifica Admin -> Tema e nessuno li scrive in una className.
- * Rinominarli per farli somigliare ai token costerebbe una migration
- * distruttiva sulle configurazioni gia' salvate in cambio di niente.
- */
-const PAIRED_TOKENS: PairedToken[] = [
-  { cssVar: '--sidebar', lightKey: 'sidebarBgLight', darkKey: 'sidebarBgDark' },
-  { cssVar: '--sidebar-foreground', lightKey: 'sidebarTextLight', darkKey: 'sidebarTextDark' },
-  { cssVar: '--sidebar-accent', lightKey: 'activeItemBgLight', darkKey: 'activeItemBgDark' },
-  { cssVar: '--sidebar-accent-foreground', lightKey: 'activeItemTextLight', darkKey: 'activeItemTextDark' },
-  { cssVar: '--background', lightKey: 'pageLight', darkKey: 'pageDark' },
-  { cssVar: '--card', lightKey: 'surfaceLight', darkKey: 'surfaceDark' },
-  { cssVar: '--popover', lightKey: 'surfaceOverlayLight', darkKey: 'surfaceOverlayDark' },
-  { cssVar: '--accent', lightKey: 'surfaceHoverLight', darkKey: 'surfaceHoverDark' },
-  { cssVar: '--border', lightKey: 'borderLight', darkKey: 'borderDark' },
-  { cssVar: '--border-subtle', lightKey: 'borderSubtleLight', darkKey: 'borderSubtleDark' },
-  { cssVar: '--foreground', lightKey: 'foregroundLight', darkKey: 'foregroundDark' },
-  { cssVar: '--foreground-secondary', lightKey: 'foregroundSecondaryLight', darkKey: 'foregroundSecondaryDark' },
-  { cssVar: '--muted-foreground', lightKey: 'foregroundMutedLight', darkKey: 'foregroundMutedDark' },
-  { cssVar: '--foreground-faint', lightKey: 'foregroundFaintLight', darkKey: 'foregroundFaintDark' },
-]
 
 /** WCAG 2.1 relative luminance. */
 function relativeLuminance(hex: string): number {
@@ -52,119 +17,492 @@ function contrastRatio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
+/** La scritta scura sul colore principale: il testo principale del modo chiaro. */
+const DARK_LABEL = '#111827'
+
 /**
- * The label colour for anything filled with the primary colour.
+ * The label colour for anything filled with a primary colour: whichever of white
+ * and the darkest foreground contrasts better.
  *
- * Derived rather than authored, because `primaryColor` is administrator-editable
- * and the only validation is `safeColor`, which checks six hex digits and
- * nothing else. A fixed white label is a promise the panel cannot keep: pick a
- * pale primary and the label disappears. Choosing whichever of white and the
- * darkest foreground contrasts better is the strongest guarantee available
- * without rejecting the administrator's colour.
- *
- * It is not a total guarantee, and that limit is real: a mid-tone primary can
- * leave both options under 4.5:1. The shipped default was one — #6366f1 topped
- * out at 4.47:1 — which is why the default moved to #4f46e5 (6.29:1). Surfacing
- * a warning in Admin -> Theme when a chosen colour cannot reach 4.5:1 is the
- * natural follow-up; it is not part of this change.
+ * It does not guarantee 4.5:1 on its own, since a mid-tone colour can leave both
+ * options under it. `derivePrimary` supplies that guarantee: it only returns a
+ * primary whose label reaches `CONTRAST_FLOOR`, moving the lightness of the
+ * chosen colour when it has to.
  */
 export function primaryForeground(primary: string): string {
   const onWhite = contrastRatio('#ffffff', primary)
-  const onDark = contrastRatio(defaultThemeConfig.foregroundLight, primary)
-  return onWhite >= onDark ? '#ffffff' : defaultThemeConfig.foregroundLight
+  const onDark = contrastRatio(DARK_LABEL, primary)
+  return onWhite >= onDark ? '#ffffff' : DARK_LABEL
 }
 
 /** WCAG 2.1 AA per il testo normale. Il testo piccolo non ha una soglia piu' bassa. */
 const CONTRAST_FLOOR = 4.5
 
 /**
- * Le superfici che un testo puo' trovarsi sotto, tema per tema. Un livello di
- * testo si misura contro la *peggiore* delle proprie, non contro il bianco: e'
- * misurando su #ffffff che foregroundMutedLight passo' la revisione stando a
- * 4,39:1 su una superficie reale.
+ * La tavolozza fissa (DEC-3): sfondi, bordi, testi e sidebar non si configurano
+ * piu'. Sono i predefiniti di prima, gia' verificati per il contrasto da
+ * `lib/theme-vars.test.ts`, e devono coincidere con `:root` e `.dark` di
+ * `app/globals.css` — lo stesso file di test confronta le due copie.
  */
-const SURFACE_KEYS: { light: (keyof ThemeConfig)[]; dark: (keyof ThemeConfig)[] } = {
-  light: ['pageLight', 'surfaceLight', 'surfaceOverlayLight', 'surfaceHoverLight', 'sidebarBgLight', 'activeItemBgLight'],
-  dark: ['pageDark', 'surfaceDark', 'surfaceOverlayDark', 'surfaceHoverDark', 'sidebarBgDark', 'activeItemBgDark'],
+export type PaletteToken =
+  | 'background' | 'card' | 'popover' | 'accent' | 'border' | 'border-subtle'
+  | 'foreground' | 'foreground-secondary' | 'muted-foreground' | 'foreground-faint'
+  | 'sidebar' | 'sidebar-foreground' | 'sidebar-accent' | 'sidebar-accent-foreground'
+
+export const LIGHT_PALETTE: Record<PaletteToken, string> = {
+  'background': '#f9fafb',
+  'card': '#ffffff',
+  'popover': '#ffffff',
+  'accent': '#f3f4f6',
+  'border': '#e5e7eb',
+  'border-subtle': '#f3f4f6',
+  'foreground': '#111827',
+  'foreground-secondary': '#374151',
+  'muted-foreground': '#4b5563',
+  'foreground-faint': '#666f7d',
+  'sidebar': '#ffffff',
+  'sidebar-foreground': '#4b5563',
+  'sidebar-accent': '#f3f4f6',
+  'sidebar-accent-foreground': '#111827',
 }
 
-/** I quattro livelli di testo, che vanno provati su ogni superficie del loro tema. */
-const FOREGROUND_KEYS: { light: keyof ThemeConfig; dark: keyof ThemeConfig }[] = [
-  { light: 'foregroundLight', dark: 'foregroundDark' },
-  { light: 'foregroundSecondaryLight', dark: 'foregroundSecondaryDark' },
-  { light: 'foregroundMutedLight', dark: 'foregroundMutedDark' },
-  { light: 'foregroundFaintLight', dark: 'foregroundFaintDark' },
-]
+export const DARK_PALETTE: Record<PaletteToken, string> = {
+  'background': '#030712',
+  'card': '#1f2937',
+  'popover': '#111827',
+  'accent': '#1f2937',
+  'border': '#374151',
+  'border-subtle': '#1f2937',
+  'foreground': '#ffffff',
+  'foreground-secondary': '#d1d5db',
+  'muted-foreground': '#9ca3af',
+  'foreground-faint': '#8b919c',
+  'sidebar': '#111827',
+  'sidebar-foreground': '#9ca3af',
+  'sidebar-accent': '#1f2937',
+  'sidebar-accent-foreground': '#ffffff',
+}
 
-/**
- * I testi con un fondo definito: qui non c'e' un minimo da prendere, i fondi
- * possibili sono quelli elencati e nessun altro.
- */
-const EXACT_PAIRS: { text: keyof ThemeConfig; backgrounds: (keyof ThemeConfig)[] }[] = [
-  { text: 'sidebarTextLight', backgrounds: ['sidebarBgLight', 'activeItemBgLight'] },
-  { text: 'sidebarTextDark', backgrounds: ['sidebarBgDark', 'activeItemBgDark'] },
-  { text: 'activeItemTextLight', backgrounds: ['activeItemBgLight'] },
-  { text: 'activeItemTextDark', backgrounds: ['activeItemBgDark'] },
-]
+export type PaletteMode = 'light' | 'dark'
 
-export interface ContrastViolation {
-  key: keyof ThemeConfig
-  ratio: number
-  floor: number
+/** Le due tavolozze fisse, per modo. */
+export const FIXED_PALETTES: Record<PaletteMode, Record<PaletteToken, string>> = {
+  light: LIGHT_PALETTE,
+  dark: DARK_PALETTE,
 }
 
 /**
- * I colori di una configurazione che non arrivano alla soglia di contrasto.
- *
- * `lib/theme-vars.test.ts` fissa lo stesso pavimento su `defaultThemeConfig`,
- * cioe' sui valori spediti. Questa funzione lo applica a cio' che Admin -> Tema
- * scrive nel database, che e' l'unico posto dove il pavimento puo' cedere: il
- * valore salvato vince sul predefinito, e veste testo piccolo — `text-xs` in
- * `app/(protected)/error.tsx`, `text-[10px]` in `components/AdminTheme.tsx`, il
- * testo degli input disabilitati in `components/ui/input.tsx`.
- *
- * Si misura sui valori *efficaci*, quelli che `resolveThemeVars` produrrebbe:
- * un valore che non e' un hex a sei cifre non viene mai reso, quindi non e' una
- * violazione, e' un predefinito.
- *
- * Fuori perimetro di proposito: `primaryColor`. E' un colore di marchio, e il
- * progetto ne deriva l'etichetta meno peggio con `primaryForeground()` invece
- * di rifiutare la scelta di chi lo sceglie.
+ * Le quattro superfici che l'admin puo' cambiare, per modo (DEC-9, che riapre
+ * la DEC-3 solo per queste). Testi e bordi restano quelli della tavolozza fissa.
  */
-export function themeContrastViolations(config: ThemeConfig): ContrastViolation[] {
-  const effective = (key: keyof ThemeConfig) => safeColor(config[key], defaultThemeConfig[key])
-  const violations: ContrastViolation[] = []
+export type SurfaceKey = 'background' | 'card' | 'accent' | 'sidebar'
 
-  const record = (key: keyof ThemeConfig, ratio: number) => {
-    if (ratio < CONTRAST_FLOOR) violations.push({ key, ratio, floor: CONTRAST_FLOOR })
+export const SURFACE_KEYS: readonly SurfaceKey[] = ['background', 'card', 'accent', 'sidebar']
+
+/** Le variabili che ogni superficie veste: la superficie anche i popover, il passaggio anche la voce attiva. */
+export const SURFACE_TOKENS: Record<SurfaceKey, readonly PaletteToken[]> = {
+  background: ['background'],
+  card: ['card', 'popover'],
+  accent: ['accent', 'sidebar-accent'],
+  sidebar: ['sidebar'],
+}
+
+/** Le superfici cambiate di un modo; una chiave assente vuol dire «il valore fisso». */
+export type SurfaceOverrides = Partial<Record<SurfaceKey, string>>
+
+export interface AppTheme {
+  primaryColor: string
+  /**
+   * Il colore principale scelto per il modo scuro (DEC-10). Assente o `null`:
+   * si ricava da `primaryColor`, come prima.
+   */
+  primaryDark?: string | null
+  surfaces: Record<PaletteMode, SurfaceOverrides>
+}
+
+/**
+ * La tavolozza di un modo con le superfici cambiate al posto di quelle fisse.
+ * Un valore che non e' `#rrggbb` si ignora: resta il fisso.
+ */
+export function effectivePalette(mode: PaletteMode, overrides: SurfaceOverrides = {}): Record<PaletteToken, string> {
+  const palette = { ...FIXED_PALETTES[mode] }
+  for (const key of SURFACE_KEYS) {
+    const value = overrides[key]
+    if (typeof value !== 'string' || !isHex(value)) continue
+    for (const token of SURFACE_TOKENS[key]) palette[token] = value.toLowerCase()
   }
+  return palette
+}
 
-  for (const level of FOREGROUND_KEYS) {
-    for (const theme of ['light', 'dark'] as const) {
-      const text = effective(level[theme])
-      const worst = Math.min(...SURFACE_KEYS[theme].map(key => contrastRatio(text, effective(key))))
-      record(level[theme], worst)
+/**
+ * Le superfici su cui `--primary` compare. La soglia e' quella del testo (4,5)
+ * e non quella dei componenti (3), perche' `--primary` veste anche testo: la
+ * variante `link` di `components/ui/button.tsx`.
+ */
+const PRIMARY_SURFACES: PaletteToken[] = ['background', 'card', 'popover', 'accent', 'sidebar', 'sidebar-accent']
+
+export const DEFAULT_PRIMARY = '#4f46e5'
+
+export const DEFAULT_APP_THEME: AppTheme = { primaryColor: DEFAULT_PRIMARY, primaryDark: null, surfaces: { light: {}, dark: {} } }
+
+export const PRIMARY_PRESETS = [
+  { id: 'indigo', color: '#4f46e5' },
+  { id: 'green', color: '#059669' },
+  { id: 'pink', color: '#db2777' },
+  { id: 'orange', color: '#ea580c' },
+  { id: 'sky', color: '#0284c7' },
+] as const
+
+export interface PrimaryPair {
+  primary: string
+  foreground: string
+}
+
+export interface DerivedPrimary {
+  light: PrimaryPair
+  dark: PrimaryPair
+}
+
+/** OKLCH, con la tinta in radianti: serve solo dentro questo modulo. */
+interface Oklch {
+  l: number
+  c: number
+  h: number
+}
+
+const srgbToLinear = (v: number) => {
+  const c = v / 255
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+}
+const linearToSrgb = (v: number) => (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055)
+
+/** sRGB -> OKLab -> OKLCH, con le matrici di Björn Ottosson. */
+function hexToOklch(hex: string): Oklch {
+  const n = parseInt(hex.slice(1), 16)
+  const r = srgbToLinear((n >> 16) & 255)
+  const g = srgbToLinear((n >> 8) & 255)
+  const b = srgbToLinear(n & 255)
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+  const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s
+  const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s
+  const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
+  return { l: L, c: Math.hypot(A, B), h: Math.atan2(B, A) }
+}
+
+/** I tre canali sRGB lineari, non tagliati: fuori da [0, 1] il colore non e' rappresentabile. */
+function oklchToLinearRgb({ l, c, h }: Oklch): [number, number, number] {
+  const A = c * Math.cos(h)
+  const B = c * Math.sin(h)
+  const l3 = (l + 0.3963377774 * A + 0.2158037573 * B) ** 3
+  const m3 = (l - 0.1055613458 * A - 0.0638541728 * B) ** 3
+  const s3 = (l - 0.0894841775 * A - 1.291485548 * B) ** 3
+  return [
+    4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
+    -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
+    -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3,
+  ]
+}
+
+const inGamut = (rgb: number[]) => rgb.every(v => v >= -1e-4 && v <= 1 + 1e-4)
+
+/**
+ * OKLCH -> hex. Se il colore cade fuori da sRGB si riduce la saturazione, non la
+ * luminosita': la luminosita' e' cio' che il chiamante sta regolando.
+ */
+function oklchToHex(color: Oklch): string {
+  let chroma = color.c
+  let rgb = oklchToLinearRgb(color)
+  for (let i = 0; i < 60 && !inGamut(rgb); i++) {
+    chroma *= 0.9
+    rgb = oklchToLinearRgb({ ...color, c: chroma })
+  }
+  const byte = (v: number) => Math.round(Math.min(1, Math.max(0, linearToSrgb(v))) * 255)
+  return `#${rgb.map(v => byte(v).toString(16).padStart(2, '0')).join('')}`
+}
+
+function readableOn(primary: string, palette: Record<PaletteToken, string>): boolean {
+  return PRIMARY_SURFACES.every(token => contrastRatio(primary, palette[token]) >= CONTRAST_FLOOR)
+    && contrastRatio(primaryForeground(primary), primary) >= CONTRAST_FLOOR
+}
+
+const LIGHTNESS_STEP = 0.01
+
+/**
+ * Il colore scelto, se gia' si legge; altrimenti la stessa tinta e saturazione a
+ * luminosita' via via piu' bassa (chiaro, `direction = -1`) o piu' alta (scuro,
+ * `+1`), fermandosi al primo valore che si legge. Agli estremi c'e' sempre il
+ * nero o il bianco, che si leggono entrambi: `null` resta un caso di difesa.
+ */
+function fitPrimary(seed: string, palette: Record<PaletteToken, string>, direction: -1 | 1): PrimaryPair | null {
+  if (readableOn(seed, palette)) return { primary: seed, foreground: primaryForeground(seed) }
+  const start = hexToOklch(seed)
+  for (let step = 1; step <= 1 / LIGHTNESS_STEP; step++) {
+    const l = Math.min(1, Math.max(0, start.l + direction * step * LIGHTNESS_STEP))
+    const candidate = oklchToHex({ ...start, l })
+    if (readableOn(candidate, palette)) return { primary: candidate, foreground: primaryForeground(candidate) }
+    if (l === 0 || l === 1) break
+  }
+  return null
+}
+
+/** Verso dove si sposta la luminosita' per rendere leggibile il colore: piu' scuro in chiaro, piu' chiaro in scuro. */
+const directionOf = (mode: PaletteMode): -1 | 1 => (mode === 'light' ? -1 : 1)
+
+/** Il colore scelto di un tema, in minuscolo; il predefinito se non e' `#rrggbb`. */
+const themeSeed = (theme: AppTheme): string =>
+  isHex(theme.primaryColor) ? theme.primaryColor.toLowerCase() : DEFAULT_PRIMARY
+
+/**
+ * Il colore scelto per un modo (DEC-10): nello scuro `primaryDark` se c'e' ed e'
+ * un colore, altrimenti lo stesso del chiaro, da cui la variante scura si ricava.
+ */
+const modeSeed = (theme: AppTheme, mode: PaletteMode): string =>
+  mode === 'dark' && typeof theme.primaryDark === 'string' && isHex(theme.primaryDark)
+    ? theme.primaryDark.toLowerCase()
+    : themeSeed(theme)
+
+/**
+ * Il colore principale mostrato in un modo: la variante leggibile sulla
+ * tavolozza, oppure il colore scelto cosi' com'e' se non ce n'e' nessuna.
+ */
+const modePrimary = (seed: string, palette: Record<PaletteToken, string>, mode: PaletteMode): PrimaryPair =>
+  fitPrimary(seed, palette, directionOf(mode)) ?? { primary: seed, foreground: primaryForeground(seed) }
+
+/**
+ * Le varianti chiaro e scuro di un colore scelto (specifica §3), misurate sulle
+ * tavolozze date — quelle fisse se non se ne passano altre, quelle con le
+ * superfici dell'admin per il tema salvato. `null` per un valore che non e'
+ * `#rrggbb`, o se un modo non ha nessuna variante leggibile.
+ */
+export function derivePrimary(
+  seed: string,
+  palettes: Record<PaletteMode, Record<PaletteToken, string>> = FIXED_PALETTES,
+): DerivedPrimary | null {
+  if (!isHex(seed)) return null
+  const color = seed.toLowerCase()
+  const light = fitPrimary(color, palettes.light, directionOf('light'))
+  const dark = fitPrimary(color, palettes.dark, directionOf('dark'))
+  return light && dark ? { light, dark } : null
+}
+
+/** I testi che si misurano contro le superfici. Il colore principale ha una regola sua. */
+export type TextToken =
+  | 'foreground' | 'foreground-secondary' | 'muted-foreground' | 'foreground-faint'
+  | 'sidebar-foreground' | 'sidebar-accent-foreground'
+
+/**
+ * Un testo che su una superficie scende sotto `CONTRAST_FLOOR`. Per il colore
+ * principale (`text: 'primary'`) superficie e rapporto sono `null`: il problema
+ * non e' una coppia, e' che nessuna variante si legge su tutte le superfici.
+ */
+export interface ContrastWarning {
+  mode: PaletteMode
+  text: TextToken | 'primary'
+  surface: PaletteToken | null
+  ratio: number | null
+}
+
+/** Ogni testo con le superfici su cui compare. */
+const TEXT_RULES: { text: TextToken; surfaces: PaletteToken[] }[] = [
+  ...(['foreground', 'foreground-secondary', 'muted-foreground', 'foreground-faint'] as const).map(text => ({
+    text, surfaces: ['background', 'card', 'popover', 'accent'] as PaletteToken[],
+  })),
+  { text: 'sidebar-foreground', surfaces: ['sidebar', 'sidebar-accent'] },
+  { text: 'sidebar-accent-foreground', surfaces: ['sidebar-accent'] },
+]
+
+/** La superficie dell'admin che decide il colore di una variabile: serve a non ripetere un problema. */
+const SURFACE_OF_TOKEN: Partial<Record<PaletteToken, SurfaceKey>> = Object.fromEntries(
+  SURFACE_KEYS.flatMap(key => SURFACE_TOKENS[key].map(token => [token, key])),
+)
+
+/**
+ * Dove il tema salvato si legge male (DEC-9). Non rifiuta niente: l'azione di
+ * salvataggio mostra l'elenco e lascia decidere l'admin. Ogni problema compare
+ * una volta per modo, testo e superficie dell'admin: una superficie scura veste
+ * `--card` e `--popover`, ma e' un problema solo.
+ */
+export function themeContrastWarnings(theme: AppTheme): ContrastWarning[] {
+  const warnings: ContrastWarning[] = []
+  const palettes = { light: effectivePalette('light', theme.surfaces.light), dark: effectivePalette('dark', theme.surfaces.dark) }
+  for (const mode of ['light', 'dark'] as const) {
+    const palette = palettes[mode]
+    const seen = new Set<string>()
+    for (const rule of TEXT_RULES) {
+      for (const surface of rule.surfaces) {
+        const ratio = contrastRatio(palette[rule.text], palette[surface])
+        if (ratio >= CONTRAST_FLOOR) continue
+        const key = `${rule.text}|${SURFACE_OF_TOKEN[surface] ?? surface}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        warnings.push({ mode, text: rule.text, surface, ratio })
+      }
+    }
+    if (!fitPrimary(modeSeed(theme, mode), palette, directionOf(mode))) {
+      warnings.push({ mode, text: 'primary', surface: null, ratio: null })
     }
   }
-
-  for (const pair of EXACT_PAIRS) {
-    const text = effective(pair.text)
-    const worst = Math.min(...pair.backgrounds.map(key => contrastRatio(text, effective(key))))
-    record(pair.text, worst)
-  }
-
-  return violations
+  return warnings
 }
 
-export function resolveThemeVars(config: ThemeConfig, isDark: boolean): Record<string, string> {
-  const primary = safeColor(config.primaryColor, defaultThemeConfig.primaryColor)
-  const vars: Record<string, string> = {
-    '--primary': primary,
-    '--primary-foreground': primaryForeground(primary),
+/**
+ * Il colore principale che il tema mostra davvero, per modo: la variante
+ * leggibile sulle superfici del tema, oppure il colore scelto cosi' com'e' in
+ * un modo che non ne ha nessuna (l'admin ha salvato dopo l'avviso). Un valore
+ * che non e' `#rrggbb` ripiega sul predefinito.
+ */
+export function themePrimary(theme: AppTheme): DerivedPrimary {
+  return {
+    light: modePrimary(modeSeed(theme, 'light'), effectivePalette('light', theme.surfaces.light), 'light'),
+    dark: modePrimary(modeSeed(theme, 'dark'), effectivePalette('dark', theme.surfaces.dark), 'dark'),
   }
-  for (const token of PAIRED_TOKENS) {
-    const key = isDark ? token.darkKey : token.lightKey
-    vars[token.cssVar] = safeColor(config[key], defaultThemeConfig[key])
+}
+
+/** Le variabili che il tema scrive per ogni modo, nell'ordine in cui compaiono nel CSS. */
+const THEME_CSS_TOKENS: PaletteToken[] = ['background', 'card', 'popover', 'accent', 'sidebar-accent', 'sidebar']
+
+/**
+ * Il CSS del tema: colore principale e superfici, per tutti e due i modi.
+ *
+ * Senza suffisso e' quello che `app/layout.tsx` scrive nel `<style>` della
+ * pagina: `html:root` e `html.dark` pesano (0,1,1) e battono il `:root` di
+ * `globals.css` (0,1,0) qualunque sia l'ordine dei due fogli. Con il suffisso
+ * `[data-theme-mode]` e' l'anteprima della pagina admin, che pesa (0,2,1) e
+ * batte a sua volta il layout.
+ *
+ * Esce solo `#rrggbb`: un valore che non lo e' ripiega sul predefinito. Se un
+ * modo non ha un colore principale leggibile (l'admin ha salvato lo stesso,
+ * dopo l'avviso) resta il colore scelto, cosi' com'e'.
+ */
+export function themeCss(theme: AppTheme, selectorSuffix = ''): string {
+  const block = (mode: PaletteMode) => {
+    // Una tavolozza sola per modo: la stessa misura il colore principale e scrive le superfici.
+    const palette = effectivePalette(mode, theme.surfaces[mode])
+    const pair = modePrimary(modeSeed(theme, mode), palette, mode)
+    const surfaces = THEME_CSS_TOKENS.map(token => `--${token}:${palette[token]}`).join(';')
+    return `--primary:${pair.primary};--primary-foreground:${pair.foreground};${surfaces}`
   }
-  return vars
+  return `html:root${selectorSuffix}{${block('light')}}html.dark${selectorSuffix}{${block('dark')}}`
+}
+
+export type SurfaceSuggestionId = 'default' | 'cool' | 'warm' | 'neutral' | 'tint'
+
+export interface SurfaceSuggestion {
+  id: SurfaceSuggestionId
+  color: string
+}
+
+/** Croma dei grigi suggeriti e della tinta: quanto basta per vederli, non per farne colori. */
+const SUGGESTION_GREY_CHROMA = 0.012
+const SUGGESTION_TINT_CHROMA = 0.03
+const degrees = (value: number) => (value * Math.PI) / 180
+const COOL_HUE = degrees(250)
+const WARM_HUE = degrees(75)
+
+/**
+ * Sopra questa luminosita' (il bianco della card e della sidebar, il quasi
+ * bianco dello sfondo chiaro) la croma non ha spazio: i suggerimenti partono da
+ * `NEAR_WHITE_START`, un gradino sotto, e si distinguono a occhio.
+ */
+const NEAR_WHITE_LIGHTNESS = 0.97
+const NEAR_WHITE_START = 0.96
+
+/** La distanza OKLab minima fra due suggerimenti della stessa lista: sotto, sembrano lo stesso colore. */
+const SUGGESTION_MIN_DISTANCE = 0.01
+
+/**
+ * Gli spostamenti di luminosita' provati per ogni suggerimento, dal punto di
+ * partenza in poi: 0, -0,01, +0,01, -0,02, ... fino a ±0,5.
+ */
+const SUGGESTION_OFFSETS = Array.from({ length: 101 }, (_, i) => (i % 2 === 1 ? -1 : 1) * Math.ceil(i / 2) * 0.01)
+
+/** Il valore fisso di una superficie in un modo: quello di `globals.css`. */
+export function surfaceDefault(mode: PaletteMode, key: SurfaceKey): string {
+  return FIXED_PALETTES[mode][SURFACE_TOKENS[key][0]]
+}
+
+const oklabDistance = (a: string, b: string) => {
+  const [x, y] = [hexToOklch(a), hexToOklch(b)]
+  return Math.hypot(x.l - y.l, x.c * Math.cos(x.h) - y.c * Math.cos(y.h), x.c * Math.sin(x.h) - y.c * Math.sin(y.h))
+}
+
+/**
+ * I cinque colori suggeriti per una superficie di un modo (pagina Tema, pannello
+ * di scelta): il predefinito fisso, un grigio freddo, uno caldo, uno neutro e
+ * una tinta leggera del colore principale attuale. In OKLCH, alla luminosita'
+ * del predefinito, o un gradino sotto se il predefinito e' (quasi) bianco.
+ *
+ * Un candidato si sposta di luminosita' finche' non si legge e non dista almeno
+ * `SUGGESTION_MIN_DISTANCE` da ogni colore gia' in lista. Se a quella croma non
+ * ci riesce mai, riprova con meta' croma e poi con croma zero: la lista ha
+ * sempre cinque colori.
+ *
+ * «Si legge» vuol dire nessun avviso di `themeContrastWarnings` con il colore
+ * principale del tema e questa sola superficie cambiata: le altre superfici
+ * dell'admin non entrano nel conto, altrimenti un tema che ha gia' un avviso
+ * renderebbe illeggibile qualunque suggerimento.
+ */
+export function surfaceSuggestions(theme: AppTheme, mode: PaletteMode, key: SurfaceKey): SurfaceSuggestion[] {
+  const fallback = surfaceDefault(mode, key)
+  const seed = themeSeed(theme)
+  const base = hexToOklch(fallback)
+  const start = base.l > NEAR_WHITE_LIGHTNESS ? NEAR_WHITE_START : base.l
+  const readable = (color: string) => themeContrastWarnings({
+    primaryColor: seed,
+    surfaces: { light: {}, dark: {}, [mode]: { [key]: color } },
+  }).length === 0
+
+  const suggestions: SurfaceSuggestion[] = [{ id: 'default', color: fallback }]
+  const fits = (color: string) =>
+    suggestions.every(s => oklabDistance(s.color, color) >= SUGGESTION_MIN_DISTANCE) && readable(color)
+  const candidates: { id: SurfaceSuggestionId; c: number; h: number }[] = [
+    { id: 'cool', c: SUGGESTION_GREY_CHROMA, h: COOL_HUE },
+    { id: 'warm', c: SUGGESTION_GREY_CHROMA, h: WARM_HUE },
+    { id: 'neutral', c: 0, h: 0 },
+    { id: 'tint', c: SUGGESTION_TINT_CHROMA, h: hexToOklch(seed).h },
+  ]
+  for (const candidate of candidates) {
+    search: for (const chroma of [candidate.c, candidate.c / 2, 0]) {
+      for (const offset of SUGGESTION_OFFSETS) {
+        const color = oklchToHex({ l: Math.min(1, Math.max(0, start + offset)), c: chroma, h: candidate.h })
+        if (!fits(color)) continue
+        suggestions.push({ id: candidate.id, color })
+        break search
+      }
+    }
+  }
+  return suggestions
+}
+
+export type PrimaryDarkSuggestionId = 'auto' | (typeof PRIMARY_PRESETS)[number]['id']
+
+export interface PrimaryDarkSuggestion {
+  id: PrimaryDarkSuggestionId
+  color: string
+}
+
+/**
+ * I cinque colori suggeriti per il colore principale del modo scuro (DEC-10):
+ * per primo quello automatico, la variante scura del colore del chiaro, che e'
+ * anche cio' a cui torna «Usa il predefinito»; poi le varianti scure dei preset,
+ * leggibili sulla tavolozza scura del tema, senza ripetizioni. Se una tavolozza
+ * scura personalizzata lascia meno di cinque varianti leggibili, si completa con
+ * i preset cosi' come sono: la lista ha sempre cinque colori diversi, e uno che
+ * si legge male lo dira' l'avviso al salvataggio.
+ */
+export function primaryDarkSuggestions(theme: AppTheme): PrimaryDarkSuggestion[] {
+  const palette = effectivePalette('dark', theme.surfaces.dark)
+  const seed = themeSeed(theme)
+  const suggestions: PrimaryDarkSuggestion[] = []
+  const add = (id: PrimaryDarkSuggestionId, color: string | undefined) => {
+    // Un id una volta sola: e' la chiave e il data-testid del pallino.
+    if (!color || suggestions.length >= 5 || suggestions.some(s => s.color === color || s.id === id)) return
+    suggestions.push({ id, color })
+  }
+  add('auto', modePrimary(seed, palette, 'dark').primary)
+  for (const preset of PRIMARY_PRESETS) add(preset.id, fitPrimary(preset.color, palette, directionOf('dark'))?.primary)
+  for (const preset of PRIMARY_PRESETS) add(preset.id, preset.color)
+  return suggestions
 }

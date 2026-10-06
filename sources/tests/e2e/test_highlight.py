@@ -5,7 +5,8 @@ def test_active_route_highlight(logged_in_page, base_url):
     page = logged_in_page
     nav(page, f"{base_url}/admin/theme")
     ensure_l1_expanded(page, page.locator("aside").first)
-    ring_items = [el.inner_text().strip() for el in page.locator("[class*='ring-primary']").all()]
+    # Scoped to `aside`: the theme page rings its selected palette cell with ring-primary too.
+    ring_items = [el.inner_text().strip() for el in page.locator("aside [class*='ring-primary']").all()]
     assert len(ring_items) > 0, "No ring-primary highlight found"
     assert set(ring_items) == {"Admin", "Theme & Styles"}, \
         f"Expected {{Admin, Theme & Styles}}, got {ring_items}"

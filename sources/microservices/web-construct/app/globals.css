@@ -1,11 +1,12 @@
 @import "tailwindcss";
 @source "../**/*.{ts,tsx,js,jsx}";
 
-/* Bind `dark:` to the class UIContext puts on <html>, not to the OS preference.
+/* Bind `dark:` to the class THEME_MODE_SCRIPT (lib/appearance.ts) puts on <html>
+   before first paint, not to the OS preference: in `system` mode the script
+   itself follows the OS, so the two can never disagree.
    Tailwind v4 defaults the dark variant to @media (prefers-color-scheme: dark);
-   left at the default, `dark:` utilities would follow the OS setting while the
-   runtime-injected tokens follow the in-app toggle instead, so the two halves
-   of the theme could disagree. */
+   left at the default, `dark:` utilities would follow the OS setting even when
+   the person chose a mode in Settings. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* These are defaults, so they belong in a layer.
@@ -49,12 +50,15 @@
   display: none;
 }
 
-/* Fallbacks only. The real values arrive as inline custom properties from
-   resolveThemeVars() on every render, driven by the theme stored on the
-   database. They still have to agree with defaultThemeConfig in types/menu.ts —
-   before 2026-08-21 they did not: this said #2563eb while the default was
-   #6366f1, so the pre-hydration paint used a colour the app never otherwise
-   showed. `lib/theme-vars.test.ts` now asserts the two agree. */
+/* La tavolozza fissa (specifica del 2026-10-02, DEC-3). Deve coincidere con
+   LIGHT_PALETTE e DARK_PALETTE in lib/theme-vars.ts: lib/theme-vars.test.ts
+   confronta le due copie token per token.
+
+   --primary e --primary-foreground qui sono solo una riserva, e lo sono anche
+   le quattro superfici che l'admin puo' cambiare (DEC-9: --background, --card e
+   --popover, --accent e --sidebar-accent, --sidebar). Il valore vero arriva dal
+   <style id="app-primary"> che app/layout.tsx scrive da app_theme, con
+   selettori (html:root, html.dark) che pesano piu' di questi. */
 :root {
   --primary: #4f46e5;
   --primary-foreground: #ffffff;
@@ -73,9 +77,9 @@
   --muted-foreground: #4b5563;
   --foreground-faint: #666f7d;
 
-  /* Derivati, non configurabili: non hanno un campo in ThemeConfig e non
-     compaiono in Admin -> Tema. Esistono perche' i componenti importati con
-     `npx shadcn add` li citano, e senza di loro arriverebbero senza colore. */
+  /* Derivati, non configurabili: non compaiono in Admin -> Tema. Esistono
+     perche' i componenti importati con `npx shadcn add` li citano, e senza di
+     loro arriverebbero senza colore. */
   --ring: var(--primary);
   --input: var(--border);
   --secondary: var(--accent);
@@ -84,8 +88,25 @@
   --radius: 0.5rem;
 }
 
+.dark {
+  --sidebar: #111827;
+  --sidebar-foreground: #9ca3af;
+  --sidebar-accent: #1f2937;
+  --sidebar-accent-foreground: #ffffff;
+  --background: #030712;
+  --card: #1f2937;
+  --popover: #111827;
+  --accent: #1f2937;
+  --border: #374151;
+  --border-subtle: #1f2937;
+  --foreground: #ffffff;
+  --foreground-secondary: #d1d5db;
+  --muted-foreground: #9ca3af;
+  --foreground-faint: #8b919c;
+}
+
 /* Colori di stato: distruttivo, successo, avviso.
-   Deliberatamente NOT in ThemeConfig e NOT esposti in Admin -> Tema. Portano
+   Deliberatamente NOT configurable e NOT esposti in Admin -> Tema. Portano
    significato, non marchio — un cliente che ridipinge "pericolo" di verde
    renderebbe bugiardo un bottone di eliminazione.
 
@@ -134,7 +155,7 @@
   --warning-border: #f59e0b;
 }
 
-/* Switch off-track. Fixed, like the state colours above: NOT in ThemeConfig,
+/* Switch off-track. Fixed, like the state colours above: NOT configurable,
    NOT exposed in Admin -> Tema.
 
    Measured live in the browser (task 14): a switch's off state is read from

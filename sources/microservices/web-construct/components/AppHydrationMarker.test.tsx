@@ -13,9 +13,6 @@ vi.mock('next-auth/react', () => ({
 vi.mock('@/context/I18nContext', () => ({
   I18nProvider: ({ children }: { children: React.ReactNode }) => children,
 }))
-vi.mock('@/context/UIContext', () => ({
-  UIProvider: ({ children }: { children: React.ReactNode }) => children,
-}))
 
 let root: Root | undefined
 let container: HTMLDivElement | undefined

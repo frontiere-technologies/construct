@@ -59,9 +59,9 @@ export function isCamelCase(stem: string): boolean {
  * un commento che contiene `function Foo` non e' una dichiarazione, e un guard
  * che ci cascasse assolverebbe il file sbagliato.
  *
- * Conta la dichiarazione, non l'export: `context/UIContext.tsx` dichiara
- * `const UIContext = createContext(...)` e lo tiene privato, esportando
- * `UIProvider` e `useUI`. Il nome del file rispecchia comunque il simbolo che
+ * Conta la dichiarazione, non l'export: `context/I18nContext.tsx` dichiara
+ * `const I18nContext = createContext(...)` e lo tiene privato, esportando
+ * `I18nProvider` e `useI18n`. Il nome del file rispecchia comunque il simbolo che
  * lo giustifica, ed e' quello che questa regola verifica.
  */
 export function declaredNames(source: string): Set<string> {
