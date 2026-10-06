@@ -308,6 +308,8 @@ export const AdminTheme: React.FC<{ savedTheme: AppTheme }> = ({ savedTheme }) =
             <Button
               variant="outline"
               size="sm"
+              // In una card stretta l'etichetta va a capo invece di uscire dal pannello.
+              className="max-w-full whitespace-normal"
               data-testid="theme-use-default"
               disabled={saving || !panel.onUseDefault}
               onClick={() => {
