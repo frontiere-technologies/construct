@@ -4,13 +4,13 @@ import { db } from '@/lib/db'
 import { menuEntry, permission, role, roleFunctionality, rolePermission } from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
 
-vi.mock('@/lib/rbac/auth-guard', () => {
-  const admin = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
-  return {
-    requirePermission: async () => admin,
-    requireAdministrator: async () => admin,
-  }
-})
+const guard = vi.hoisted(() => ({
+  actor: { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() },
+}))
+vi.mock('@/lib/rbac/auth-guard', () => ({
+  requirePermission: async () => guard.actor,
+  requireAdministrator: async () => guard.actor,
+}))
 
 const { updateRolePermissions } = await import('./roles-actions')
 
@@ -170,5 +170,19 @@ describeIntegration('updateRolePermissions against the database', () => {
     })).rejects.toThrow()
 
     expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
+  })
+
+  it('refuses a limited actor granting a permission it does not hold (DEC-6)', async () => {
+    const roleId = await makeServiceRole()
+    const [perm] = await db.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'manage-menu'))
+    guard.actor = { userId: 'test', roleIds: [0], isAdmin: false, permissions: new Set(['grant-role-permissions']) }
+    try {
+      await expect(updateRolePermissions(roleId, {
+        operations: [{ idItem: perm.idPermission, authorization: true }],
+        functionalities: [],
+      })).rejects.toThrow(/manage-menu/)
+    } finally {
+      guard.actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+    }
   })
 })

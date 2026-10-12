@@ -4,6 +4,10 @@ import { eq, inArray, sql } from 'drizzle-orm'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { permission, menuEntry, role, roleType } from '@/lib/db/schema'
+import {
+  assertCanGrantFunctionalities, assertCanGrantPermissions,
+} from './grant-guards'
+import { functionalityIdsForRoles, permissionCodesByIds } from './grant-service'
 import type { RolePermissionDeltas, RoleType as RoleTypeStr } from './types'
 
 /** `{id_role, ids}` → il letterale di array che Postgres si aspetta. `drizzle-orm`'s `sql`
@@ -56,8 +60,22 @@ export async function renameRole(roleId: number, roleName: string): Promise<void
 }
 
 export async function updateRolePermissions(roleId: number, deltas: RolePermissionDeltas): Promise<void> {
-  await requirePermission('grant-role-permissions')
+  const actor = await requirePermission('grant-role-permissions')
   if ((await getRoleType(roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
+
+  // Non si concede ciò che non si possiede (DEC-6, DEC-29): vale per chi concede, non per chi
+  // revoca, e l'Amministratore ne è esente. Va prima della transazione perché è un rifiuto
+  // dell'intera chiamata, come il controllo sulle cartelle che segue.
+  if (!actor.isAdmin) {
+    const grantedOperations = deltas.operations.filter(d => d.authorization).map(d => d.idItem)
+    const grantedFunctionalities = deltas.functionalities.filter(d => d.authorization).map(d => d.idItem)
+    const [codes, visible] = await Promise.all([
+      permissionCodesByIds(grantedOperations),
+      functionalityIdsForRoles(actor.roleIds),
+    ])
+    assertCanGrantPermissions(actor, codes)
+    assertCanGrantFunctionalities(actor, visible, grantedFunctionalities)
+  }
 
   // Una cartella non riceve mai una riga di concessione (DEC-20). L'invariante viveva solo
   // nelle funzioni pure lato client, ed è la classe di errore che ha prodotto HOLE-5: una

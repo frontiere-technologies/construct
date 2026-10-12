@@ -4,6 +4,8 @@ import { and, eq, sql } from 'drizzle-orm'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { userRole } from '@/lib/db/schema'
+import { assertCanChangeRoles, assertCanChangeStatus, symmetricDifference } from './grant-guards'
+import { currentRoleIds, functionalityIdsForRoles, grantsForRoles } from './grant-service'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
 import { ROLE_ADMINISTRATOR, ROLE_REGISTERED, type UserStatusId } from './types'
 
@@ -44,6 +46,11 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
   })
 
   const finalRoleIds = Array.from(new Set<number>([ROLE_REGISTERED, ...roleIds]))
+  if (!actor.isAdmin) {
+    const touched = symmetricDifference(await currentRoleIds(userId), finalRoleIds)
+    const [visible, grants] = await Promise.all([functionalityIdsForRoles(actor.roleIds), grantsForRoles(touched)])
+    assertCanChangeRoles(actor, visible, grants)
+  }
   try {
     const roleIdsArray = `{${finalRoleIds.join(',')}}`
     await db.execute(sql`select public.replace_user_roles_guarded(${userId}, ${roleIdsArray}::bigint[])`)
@@ -64,6 +71,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
     targetIsAdmin: false,
     otherActiveAdminCount: 1,
   })
+  assertCanChangeStatus(actor, await userIsAdmin(userId))
 
   try {
     await db.execute(sql`select public.set_user_status_guarded(${userId}, ${status})`)
