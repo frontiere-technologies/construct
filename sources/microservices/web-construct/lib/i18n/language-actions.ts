@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
-import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { appLanguage } from '@/lib/db/schema'
 import { auditI18n } from './audit'
@@ -57,7 +57,7 @@ async function loadRow(id: number) {
 }
 
 export async function createLanguage(input: LanguageInput): Promise<ActionResult> {
-  await requireAdmin()
+  await requirePermission('manage-languages')
   const parsed = languageInputSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
@@ -83,7 +83,7 @@ export async function createLanguage(input: LanguageInput): Promise<ActionResult
 }
 
 export async function updateLanguage(id: number, input: LanguageInput): Promise<ActionResult> {
-  await requireAdmin()
+  await requirePermission('manage-languages')
   const parsed = languageInputSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
@@ -112,7 +112,7 @@ export async function updateLanguage(id: number, input: LanguageInput): Promise<
 }
 
 export async function setLanguageActive(id: number, isActive: boolean): Promise<ActionResult> {
-  await requireAdmin()
+  await requirePermission('manage-languages')
   try {
     const row = await loadRow(id)
     if (!isActive) assertCanDeactivate({ isDefault: row.isDefault, isActive: row.isActive, usageCount: 0 })
@@ -127,7 +127,7 @@ export async function setLanguageActive(id: number, isActive: boolean): Promise<
 }
 
 export async function setDefaultLanguage(id: number): Promise<ActionResult> {
-  await requireAdmin()
+  await requirePermission('manage-languages')
   try {
     const row = await loadRow(id)
     assertCanSetDefault({ isDefault: row.isDefault, isActive: row.isActive, usageCount: 0 })
@@ -145,7 +145,7 @@ export async function setDefaultLanguage(id: number): Promise<ActionResult> {
 }
 
 export async function deleteLanguage(id: number): Promise<ActionResult> {
-  await requireAdmin()
+  await requirePermission('manage-languages')
   try {
     const row = await loadRow(id)
     assertCanDelete({ isDefault: row.isDefault, isActive: row.isActive, usageCount: 0 })

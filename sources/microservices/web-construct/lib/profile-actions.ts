@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
 import { phoneSchema } from '@/lib/validations'
+import { allowSelfService } from '@/lib/rbac/access-declarations'
 
 export interface UserProfile {
   first_name: string | null
@@ -13,6 +14,7 @@ export interface UserProfile {
 }
 
 export async function saveProfile(profile: UserProfile): Promise<{ error: string | null }> {
+  allowSelfService()
   const session = await auth()
   if (!session?.user?.id) return { error: 'Not authenticated' }
 

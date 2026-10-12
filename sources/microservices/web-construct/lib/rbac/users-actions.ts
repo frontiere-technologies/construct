@@ -1,7 +1,7 @@
 'use server'
 
 import { and, eq, sql } from 'drizzle-orm'
-import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { userRole } from '@/lib/db/schema'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
@@ -30,7 +30,8 @@ function isLastAdministratorConflict(error: unknown): boolean {
 }
 
 export async function updateUserRoles(userId: string, roleIds: number[]): Promise<void> {
-  const { userId: currentUserId } = await requireAdmin()
+  const actor = await requirePermission('assign-user-roles')
+  const currentUserId = actor.userId
   const targetCurrentlyAdmin = await userIsAdmin(userId)
   assertRoleChangeAllowed({
     targetUserId: userId,
@@ -53,7 +54,8 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
 }
 
 export async function setUserStatus(userId: string, status: UserStatusId): Promise<void> {
-  const { userId: currentUserId } = await requireAdmin()
+  const actor = await requirePermission('set-user-status')
+  const currentUserId = actor.userId
   assertStatusChangeAllowed({
     targetUserId: userId,
     currentUserId,

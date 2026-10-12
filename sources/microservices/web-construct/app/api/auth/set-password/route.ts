@@ -5,10 +5,12 @@ import { db } from '@/lib/db'
 import { createLogger } from '@/lib/logger'
 import { passwordSchema } from '@/lib/validations'
 import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
+import { allowAnonymous } from '@/lib/rbac/access-declarations'
 
 const log = createLogger('auth:set-password')
 
 export async function POST(req: NextRequest) {
+  allowAnonymous()
   const body = await req.json().catch(() => null)
   const { token, password } = body ?? {}
 

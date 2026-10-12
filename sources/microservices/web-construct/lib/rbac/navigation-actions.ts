@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
-import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { menuEntry } from '@/lib/db/schema'
 import { toMenuEntryRow } from './nav-row-mapper'
@@ -89,7 +89,7 @@ async function reparent(
 }
 
 export async function createNavigationItem(input: CreateNavItemInput): Promise<{ id: number }> {
-  await requireAdmin()
+  await requirePermission('manage-menu')
   if (!input.name.trim()) throw new Error('Name is required')
   // Una categoria di menu non è un permesso: raggruppa voci, non protegge niente.
   const isCategory = input.idItemType === ITEM_TYPE_CATEGORY
@@ -153,7 +153,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
 // percorso di creazione, invece, idItemType è l'unica fonte e createNavigationItem lo
 // valida contro idFunctionalityType.
 export async function updateNavigationItem(id: number, input: UpdateNavItemInput): Promise<void> {
-  await requireAdmin()
+  await requirePermission('manage-menu')
   if (!input.name.trim()) throw new Error('Name is required')
   try {
     await db.transaction(async tx => {
@@ -210,7 +210,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
 }
 
 export async function moveNavigationItem(id: number, move: MoveInput): Promise<void> {
-  await requireAdmin()
+  await requirePermission('manage-menu')
   await db.transaction(async tx => {
     await lockNavigationWrites(tx)
     await assertMutable(id, tx)
@@ -221,7 +221,7 @@ export async function moveNavigationItem(id: number, move: MoveInput): Promise<v
 }
 
 export async function deleteNavigationItem(id: number): Promise<void> {
-  await requireAdmin()
+  await requirePermission('manage-menu')
   try {
     await db.transaction(async tx => {
       await lockNavigationWrites(tx)

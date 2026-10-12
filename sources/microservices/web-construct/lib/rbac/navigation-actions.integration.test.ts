@@ -6,7 +6,13 @@ import { permission, menuEntry, role, roleFunctionality } from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
 import type { CreateNavItemInput } from './types'
 
-vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdmin: async () => ({ userId: 'test', roleIds: [1] }) }))
+vi.mock('@/lib/rbac/auth-guard', () => {
+  const admin = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+  return {
+    requirePermission: async () => admin,
+    requireAdministrator: async () => admin,
+  }
+})
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
 
 const { createNavigationItem, deleteNavigationItem, moveNavigationItem, updateNavigationItem } = await import('./navigation-actions')

@@ -4,18 +4,14 @@ import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
-import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { requirePermission } from '@/lib/rbac/auth-guard'
 import { prepareInvitation, recordInvitationDelivery } from '@/lib/auth-invitations'
 
 const log = createLogger('admin:send-invite')
 
 export async function POST(req: NextRequest) {
-  let actor
-  try {
-    actor = await requireAdmin()
-  } catch {
-    return NextResponse.json({ error: 'Non autorizzato.' }, { status: 403 })
-  }
+  const actor = await requirePermission('invite-users').catch(() => null)
+  if (!actor) return NextResponse.json({ error: 'Non autorizzato.' }, { status: 403 })
 
   const body = await req.json().catch(() => null)
   const { userId } = body ?? {}

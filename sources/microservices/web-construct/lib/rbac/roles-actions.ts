@@ -1,7 +1,7 @@
 'use server'
 
 import { eq, inArray, sql } from 'drizzle-orm'
-import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { permission, menuEntry, role, roleType } from '@/lib/db/schema'
 import type { RolePermissionDeltas, RoleType as RoleTypeStr } from './types'
@@ -32,7 +32,7 @@ async function getRoleType(roleId: number): Promise<RoleTypeStr> {
 }
 
 export async function createRole(roleName: string): Promise<{ id: number }> {
-  await requireAdmin()
+  await requirePermission('manage-roles')
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
   try {
@@ -44,7 +44,7 @@ export async function createRole(roleName: string): Promise<{ id: number }> {
 }
 
 export async function renameRole(roleId: number, roleName: string): Promise<void> {
-  await requireAdmin()
+  await requirePermission('manage-roles')
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
   if ((await getRoleType(roleId)) !== 'SERVICE') throw new Error('This role cannot be renamed')
@@ -56,7 +56,7 @@ export async function renameRole(roleId: number, roleName: string): Promise<void
 }
 
 export async function updateRolePermissions(roleId: number, deltas: RolePermissionDeltas): Promise<void> {
-  await requireAdmin()
+  await requirePermission('grant-role-permissions')
   if ((await getRoleType(roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
 
   // Una cartella non riceve mai una riga di concessione (DEC-20). L'invariante viveva solo
@@ -116,7 +116,7 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
 }
 
 export async function deleteRole(roleId: number): Promise<void> {
-  await requireAdmin()
+  await requirePermission('manage-roles')
   if ((await getRoleType(roleId)) === 'SYSTEM') throw new Error('System roles cannot be deleted')
   try {
     await db.delete(role).where(eq(role.idRole, roleId))

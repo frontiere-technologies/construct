@@ -6,6 +6,7 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { appLanguage, users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
+import { allowSelfService } from '@/lib/rbac/access-declarations'
 import { listActiveLanguages } from './language-service'
 import { LANG_COOKIE, LANG_COOKIE_MAX_AGE, LANG_SESSION_COOKIE } from './types'
 import { shouldUseSecureCookies } from './cookie-security'
@@ -22,6 +23,7 @@ const log = createLogger('i18n-preference')
  * would always be in the wrong language.
  */
 export async function setPreferredLanguage(code: string): Promise<{ error: string | null }> {
+  allowSelfService()
   const languages = await listActiveLanguages()
   const language = languages.find(l => l.code === code)
   if (!language) return { error: 'Lingua non disponibile.' }
@@ -51,6 +53,7 @@ export async function setPreferredLanguage(code: string): Promise<{ error: strin
 
 /** The code currently stored on the authenticated user's profile, if any. */
 export async function getPreferredLanguage(): Promise<string | null> {
+  allowSelfService()
   const session = await auth()
   const userId = session?.user?.id
   if (!userId) return null

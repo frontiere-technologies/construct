@@ -7,10 +7,12 @@ import { users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { passwordSchema } from '@/lib/validations'
 import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
+import { allowSelfService } from '@/lib/rbac/access-declarations'
 
 const log = createLogger('auth:change-password')
 
 export async function POST(req: NextRequest) {
+  allowSelfService()
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Non autenticato.' }, { status: 401 })

@@ -2,14 +2,20 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { SaveTranslationsInput } from './types'
 import { cleanupTestData, describeIntegration, testKey, unique } from './test-support/db-fixtures'
 
-// Same rationale as the other integration specs: requireAdmin() and
+// Same rationale as the other integration specs: requirePermission() and
 // revalidatePath() are session-/request-bound and don't exist in a Vitest
 // process. saveTranslations/createTranslationKey are only used here as
 // fixtures to get real, trigger-versioned rows into the database — the
 // dictionary service itself takes no admin action and needs no mock.
-vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdmin: async () => ({ userId: 'test', roleIds: [1] }) }))
+vi.mock('@/lib/rbac/auth-guard', () => {
+  const admin = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+  return {
+    requirePermission: async () => admin,
+    requireAdministrator: async () => admin,
+  }
+})
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
-vi.mock('@/lib/auth', () => ({ auth: async () => ({ user: { id: 'test', isAdmin: true } }) }))
+vi.mock('@/lib/auth', () => ({ auth: async () => ({ user: { id: 'test' } }) }))
 
 const { createTranslationKey, saveTranslations } = await import('./translation-actions')
 const { getDictionary, getDictionaryBundle } = await import('./dictionary-service')

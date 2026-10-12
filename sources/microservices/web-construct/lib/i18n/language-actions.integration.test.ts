@@ -4,12 +4,18 @@ import { db } from '@/lib/db'
 import { appLanguage } from '@/lib/db/schema'
 import { cleanupTestData, describeIntegration, unique } from './test-support/db-fixtures'
 
-// The actions call requireAdmin() (session-bound) and revalidatePath() (request-bound);
+// The actions call requirePermission() (session-bound) and revalidatePath() (request-bound);
 // neither exists in a Vitest process, so both are stubbed. The authorization
 // path itself is covered by the E2E suite, which drives a real session.
-vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdmin: async () => ({ userId: 'test', roleIds: [1] }) }))
+vi.mock('@/lib/rbac/auth-guard', () => {
+  const admin = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+  return {
+    requirePermission: async () => admin,
+    requireAdministrator: async () => admin,
+  }
+})
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
-vi.mock('@/lib/auth', () => ({ auth: async () => ({ user: { id: 'test', isAdmin: true } }) }))
+vi.mock('@/lib/auth', () => ({ auth: async () => ({ user: { id: 'test' } }) }))
 
 const { createLanguage, deleteLanguage, setDefaultLanguage, setLanguageActive, updateLanguage } =
   await import('./language-actions')

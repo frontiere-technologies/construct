@@ -5,10 +5,12 @@ import { users, passwordSetTokens } from '@/lib/db/schema'
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
 import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
+import { allowAnonymous } from '@/lib/rbac/access-declarations'
 
 const log = createLogger('auth:forgot-password')
 
 export async function POST(req: NextRequest) {
+  allowAnonymous()
   const body = await req.json().catch(() => null)
   const { email } = body ?? {}
 

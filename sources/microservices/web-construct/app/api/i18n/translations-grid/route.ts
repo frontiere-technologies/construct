@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requirePermission } from '@/lib/rbac/auth-guard'
 import { listTranslations } from '@/lib/i18n/translation-service'
 import { listActiveLanguages } from '@/lib/i18n/language-service'
 import { translationsGridQuerySchema } from '@/lib/i18n/translations-grid-query-schema'
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session || !session.user.isAdmin) {
+  const actor = await requirePermission('read-translations').catch(() => null)
+  if (!actor) {
     return NextResponse.json({ error: 'Non autorizzato.' }, { status: 403 })
   }
 
