@@ -1,11 +1,9 @@
-import { redirect } from 'next/navigation'
-import { auth } from '@/lib/auth'
 import { getAppTheme } from '@/lib/theme-server'
 import { AdminTheme } from '@/components/AdminTheme'
+import { requireAdministratorPage } from '@/lib/rbac/auth-guard'
 
 export default async function ThemePage() {
-  const session = await auth()
-  if (!session?.user?.isAdmin) redirect('/')
+  await requireAdministratorPage()
 
   return <AdminTheme savedTheme={await getAppTheme()} />
 }

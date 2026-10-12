@@ -44,9 +44,3 @@ export async function requireAdministratorPage(): Promise<Actor> {
   if (!actor || !actor.isAdmin) redirect('/')
   return actor
 }
-
-/** Temporaneo: i chiamanti esistenti passano ancora da qui. Il Task 4 del piano 2026-10-12 lo rimuove. */
-export async function requireAdmin(): Promise<{ userId: string; roleIds: number[] }> {
-  const actor = await requireAdministrator()
-  return { userId: actor.userId, roleIds: actor.roleIds }
-}

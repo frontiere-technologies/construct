@@ -3,8 +3,10 @@ import { FUNCTIONALITY_ID_BY_TYPE } from '@/lib/rbac/types'
 import FunctionalityForm from '@/components/rbac/functionalities/FunctionalityForm'
 import { listLanguages } from '@/lib/i18n/language-service'
 import { toNavigationLocales } from '@/lib/rbac/navigation-locales'
+import { requirePagePermission } from '@/lib/rbac/auth-guard'
 
 export default async function EditFunctionalityPage({ params }: { params: Promise<{ funcId: string }> }) {
+  await requirePagePermission('manage-menu')
   const { funcId } = await params
   const id = Number(funcId)
   // getParentList(id) leaves out the item's own subtree, so a category can't become its own child.

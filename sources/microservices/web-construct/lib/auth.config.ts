@@ -5,7 +5,6 @@ export const authConfig = {
   callbacks: {
     session({ session, token }) {
       if (token.roleIds) (session.user as { roleIds?: number[] }).roleIds = token.roleIds as number[]
-      if (typeof token.isAdmin !== 'undefined') (session.user as { isAdmin?: boolean }).isAdmin = Boolean(token.isAdmin)
       if (typeof token.accountActive !== 'undefined') (session.user as { accountActive?: boolean }).accountActive = Boolean(token.accountActive)
       if (token.userId) (session.user as { id?: string }).id = token.userId as string
       if (token.provider) (session.user as { provider?: string }).provider = token.provider as string
@@ -30,11 +29,9 @@ export const authConfig = {
       if (isAuthenticated && isAuthOnlyRedirect) {
         return Response.redirect(new URL('/', nextUrl))
       }
-      const ADMIN_PATHS = ['/admin', '/user-management', '/functionalities', '/roles-permissions']
-      const needsAdmin = ADMIN_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
-      if (isAuthenticated && needsAdmin && !(session?.user as { isAdmin?: boolean })?.isAdmin) {
-        return Response.redirect(new URL('/', nextUrl))
-      }
+      // Nessun elenco di percorsi amministrativi qui: il middleware non legge il database, quindi
+      // non può sapere se chi ha `read-menu` può aprire /functionalities. Lo decide la pagina con
+      // requirePagePermission (DEC-27 del piano 2026-10-12, HOLE-2).
       return true
     },
   },

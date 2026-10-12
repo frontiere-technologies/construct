@@ -14,7 +14,7 @@ vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))
 // aprire una connessione. `auth-guard` da `./actor` usa solo `resolveActor` e il tipo `Actor`.
 vi.mock('./actor', () => ({ resolveActor: mocks.resolveActor }))
 
-const { requireAdmin, requireAdministrator, requireAdministratorPage, requirePagePermission, requirePermission } = await import('./auth-guard')
+const { requireAdministrator, requireAdministratorPage, requirePagePermission, requirePermission } = await import('./auth-guard')
 
 function actor(codes: PermissionCode[], isAdmin = false): Actor {
   return { userId: 'u1', roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, permissions: new Set(codes) }
@@ -91,23 +91,5 @@ describe('requireAdministrator', () => {
   it('redirects from a page instead of throwing', async () => {
     mocks.resolveActor.mockResolvedValue(actor([]))
     await expect(requireAdministratorPage()).rejects.toThrow('NEXT_REDIRECT /')
-  })
-})
-
-// Temporary (Task 4 of plan 2026-10-12 removes requireAdmin): keeps the contract the existing callers rely on.
-describe('requireAdmin (temporary)', () => {
-  beforeEach(() => {
-    mocks.auth.mockReset().mockResolvedValue({ user: { id: 'u1' } })
-    mocks.resolveActor.mockReset()
-  })
-
-  it('rejects a non-administrator with Unauthorized', async () => {
-    mocks.resolveActor.mockResolvedValue(actor(['read-menu']))
-    await expect(requireAdmin()).rejects.toThrow('Unauthorized')
-  })
-
-  it('returns the user id and the current database roles for the Administrator', async () => {
-    mocks.resolveActor.mockResolvedValue(actor([], true))
-    await expect(requireAdmin()).resolves.toEqual({ userId: 'u1', roleIds: [0, 1] })
   })
 })

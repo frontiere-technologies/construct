@@ -2,8 +2,10 @@ import RolesTableClient from '@/components/rbac/roles/RolesTableClient'
 import { parseRolesGridUrlParams } from '@/lib/rbac/roles-grid-query'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
+import { requirePagePermission } from '@/lib/rbac/auth-guard'
 
 export default async function RolesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  await requirePagePermission('read-roles')
   const sp = await searchParams
   const params = parseRolesGridUrlParams(sp)
   const { t } = await getI18n()

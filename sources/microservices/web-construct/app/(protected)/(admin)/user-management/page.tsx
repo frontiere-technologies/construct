@@ -3,8 +3,10 @@ import UsersTableClient from '@/components/rbac/users/UsersTableClient'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
 import { parseUsersGridUrlParams } from '@/lib/rbac/users-grid-query'
+import { requirePagePermission } from '@/lib/rbac/auth-guard'
 
 export default async function UserManagementPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  await requirePagePermission('read-users')
   const sp = await searchParams
   const allRolesRaw = await getAllRoles()
   const allRoles = allRolesRaw.map(r => ({ id: r.id, name: r.description }))

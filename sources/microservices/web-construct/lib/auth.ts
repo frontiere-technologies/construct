@@ -213,13 +213,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const authorization = await resolveUserAuthorization(userId, true)
           token.accountActive = authorization.accountActive
           token.roleIds = authorization.roleIds
-          token.isAdmin = authorization.isAdmin
         }
       } else if (token.userId) {
         const authorization = await resolveUserAuthorization(token.userId as string)
         token.accountActive = authorization.accountActive
         token.roleIds = authorization.roleIds
-        token.isAdmin = authorization.isAdmin
       }
       return token
     },
@@ -227,7 +225,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const accountActive = Boolean(token.accountActive)
       session.user.id = accountActive ? token.userId as string : ''
       session.user.roleIds = accountActive ? (token.roleIds as number[]) ?? [] : []
-      session.user.isAdmin = accountActive && Boolean(token.isAdmin)
       session.user.accountActive = accountActive
       session.user.provider = token.provider as string
       return session

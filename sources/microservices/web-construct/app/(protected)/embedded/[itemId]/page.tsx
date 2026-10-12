@@ -5,8 +5,10 @@ import { FUNCTYPE_EMBEDDED_PAGE } from '@/lib/rbac/types'
 import { checkEmbeddable } from '@/lib/rbac/embedded-check'
 import { EmbeddedFrame } from '@/components/EmbeddedFrame'
 import { EmbeddedBlockedNotice } from '@/components/EmbeddedBlockedNotice'
+import { allowAnyAuthenticated } from '@/lib/rbac/access-declarations'
 
 export default async function EmbeddedItemPage({ params }: { params: Promise<{ itemId: string }> }) {
+  allowAnyAuthenticated()
   const { itemId } = await params
   if (!/^\d+$/.test(itemId)) notFound()
   const idItem = Number(itemId)

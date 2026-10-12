@@ -5,8 +5,10 @@ import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
 import ProfileForm from '@/components/ProfileForm'
 import type { UserProfile } from '@/lib/profile-actions'
+import { allowAnyAuthenticated } from '@/lib/rbac/access-declarations'
 
 export default async function ProfilePage() {
+  allowAnyAuthenticated()
   const session = await auth()
   if (!session?.user?.id) redirect('/login')
 

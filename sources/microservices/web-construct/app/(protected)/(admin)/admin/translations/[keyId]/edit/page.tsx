@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getTranslationKeyRow, listModules, listNamespaces, toSerialisableTranslationRow } from '@/lib/i18n/translation-service'
 import { TranslationKeyForm } from '@/components/i18n/translations/TranslationKeyForm'
+import { requirePagePermission } from '@/lib/rbac/auth-guard'
 
 export default async function EditTranslationKeyPage(
   {
@@ -10,6 +11,7 @@ export default async function EditTranslationKeyPage(
     searchParams: Promise<Record<string, string | string[] | undefined>>
   },
 ) {
+  await requirePagePermission('edit-translations')
   const [{ keyId }, sp, namespaces, modules] = await Promise.all([
     params, searchParams, listNamespaces(), listModules(),
   ])
