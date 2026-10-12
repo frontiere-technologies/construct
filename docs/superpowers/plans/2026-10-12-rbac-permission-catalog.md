@@ -161,7 +161,7 @@ Tutti i percorsi senza prefisso sono relativi a `sources/microservices/web-const
 **Interfaces:**
 - Produces: `PERMISSION_CODES: readonly PermissionCode[]`, `type PermissionCode`, `isPermissionCode(value: string): value is PermissionCode` — usati da Task 2, 3, 4, 6, 7.
 
-- [ ] **Step 1: Scrivi la guardia che fallisce**
+- [✅] **Step 1: Scrivi la guardia che fallisce**
 
 `guards/permission-catalog.test.ts`:
 
@@ -209,12 +209,12 @@ describe('permission catalog', () => {
 })
 ```
 
-- [ ] **Step 2: Lanciala e verifica che fallisca**
+- [✅] **Step 2: Lanciala e verifica che fallisca**
 
 Run: `npx vitest run guards/permission-catalog.test.ts`
 Expected: FAIL, il modulo `@/lib/rbac/permission-catalog` non esiste.
 
-- [ ] **Step 3: Scrivi il catalogo**
+- [✅] **Step 3: Scrivi il catalogo**
 
 `lib/rbac/permission-catalog.ts`:
 
@@ -262,12 +262,12 @@ export function isPermissionCode(value: string): value is PermissionCode {
 }
 ```
 
-- [ ] **Step 4: Lancia la guardia: ora fallisce solo il terzo test**
+- [✅] **Step 4: Lancia la guardia: ora fallisce solo il terzo test**
 
 Run: `npx vitest run guards/permission-catalog.test.ts`
 Expected: i primi due PASS, `has every code inserted by some migration` FAIL con i 15 codici in `missing`.
 
-- [ ] **Step 5: Scrivi la migrazione**
+- [✅] **Step 5: Scrivi la migrazione**
 
 `sources/devops/db/migrations/0041_permission_catalog.sql`:
 
@@ -380,12 +380,12 @@ where origin = 'SOURCE' and kind = 'GRANT'
 on conflict do nothing;
 ```
 
-- [ ] **Step 6: Lancia la guardia: ora passa**
+- [✅] **Step 6: Lancia la guardia: ora passa**
 
 Run: `npx vitest run guards/permission-catalog.test.ts`
 Expected: PASS, 3 test.
 
-- [ ] **Step 7: Scrivi il test di integrazione**
+- [✅] **Step 7: Scrivi il test di integrazione**
 
 In fondo a `lib/rbac/permission-schema.integration.test.ts` (aggiungi `isNotNull`, `and`, `inArray` all'import da `drizzle-orm` se mancano, e importa `PERMISSION_CODES`):
 
@@ -433,7 +433,7 @@ describe('catalogo dei permessi (0041)', () => {
 })
 ```
 
-- [ ] **Step 8: Applica la migrazione al database di test e lancia il test**
+- [✅] **Step 8: Applica la migrazione al database di test e lancia il test**
 
 Run (dalla radice del repository):
 ```bash
@@ -445,7 +445,7 @@ npm run test:integration -- lib/rbac/permission-schema.integration.test.ts
 ```
 Expected: PASS. Se fallisce `concede all'Amministratore`, controlla che il punto 3 della migrazione sia stato eseguito dopo il punto 2.
 
-- [ ] **Step 9: Applica al database di sviluppo e rigenera `schema.sql`**
+- [✅] **Step 9: Applica al database di sviluppo e rigenera `schema.sql`**
 
 ```bash
 node sources/devops/db/db.mjs apply
@@ -454,7 +454,7 @@ node sources/devops/db/db.mjs schema-check
 ```
 Expected: `schema.sql matches ordered migrations`.
 
-- [ ] **Step 10: Commit**
+- [✅] **Step 10: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac/permission-catalog.ts \
@@ -492,7 +492,7 @@ git commit -m "feat(rbac): permission catalog with 15 codes (migration 0041)"
 Il messaggio `'Unauthorized'` resta identico a quello di `requireAdmin`: `theme-actions.ts` lo confronta
 per distinguere un rifiuto da un guasto del database.
 
-- [ ] **Step 1: Scrivi i test unitari di `buildActor` e `hasPermission`**
+- [✅] **Step 1: Scrivi i test unitari di `buildActor` e `hasPermission`**
 
 `lib/rbac/actor.test.ts`:
 
@@ -537,12 +537,12 @@ describe('hasPermission', () => {
 })
 ```
 
-- [ ] **Step 2: Lancia e verifica che fallisca**
+- [✅] **Step 2: Lancia e verifica che fallisca**
 
 Run: `npx vitest run lib/rbac/actor.test.ts`
 Expected: FAIL, `./actor` non esiste.
 
-- [ ] **Step 3: Scrivi `lib/rbac/actor.ts`**
+- [✅] **Step 3: Scrivi `lib/rbac/actor.ts`**
 
 ```ts
 import { cache } from 'react'
@@ -608,12 +608,12 @@ export const resolveActor = cache(async (userId: string): Promise<Actor | null> 
 })
 ```
 
-- [ ] **Step 4: Lancia i test unitari**
+- [✅] **Step 4: Lancia i test unitari**
 
 Run: `npx vitest run lib/rbac/actor.test.ts`
 Expected: PASS, 6 test.
 
-- [ ] **Step 5: Scrivi il test di integrazione di `resolveActor`**
+- [✅] **Step 5: Scrivi il test di integrazione di `resolveActor`**
 
 `lib/rbac/actor.integration.test.ts`:
 
@@ -676,12 +676,12 @@ Prima di scriverlo verifica in `lib/db/schema.ts` il nome esatto della colonna d
 Nota su `cache()`: fuori da una richiesta React, `cache` non memorizza, quindi ogni chiamata del test
 rilegge il database. È il comportamento che serve qui.
 
-- [ ] **Step 6: Lancia il test di integrazione**
+- [✅] **Step 6: Lancia il test di integrazione**
 
 Run: `npm run test:integration -- lib/rbac/actor.integration.test.ts`
 Expected: PASS, 3 test.
 
-- [ ] **Step 7: Scrivi i test di `auth-guard`**
+- [✅] **Step 7: Scrivi i test di `auth-guard`**
 
 Sostituisci interamente `lib/rbac/auth-guard.test.ts`:
 
@@ -783,12 +783,12 @@ describe('requireAdministrator', () => {
 })
 ```
 
-- [ ] **Step 8: Lancia e verifica che fallisca**
+- [✅] **Step 8: Lancia e verifica che fallisca**
 
 Run: `npx vitest run lib/rbac/auth-guard.test.ts`
 Expected: FAIL, `requirePermission` non è esportato.
 
-- [ ] **Step 9: Riscrivi `lib/rbac/auth-guard.ts`**
+- [✅] **Step 9: Riscrivi `lib/rbac/auth-guard.ts`**
 
 ```ts
 import { redirect } from 'next/navigation'
@@ -841,7 +841,7 @@ export async function requireAdministratorPage(): Promise<Actor> {
 
 `redirect` è tipizzato `never`, quindi dopo l'`if` TypeScript sa che `actor` non è nullo.
 
-- [ ] **Step 10: Scrivi `lib/rbac/access-declarations.ts`**
+- [✅] **Step 10: Scrivi `lib/rbac/access-declarations.ts`**
 
 ```ts
 /**
@@ -870,7 +870,7 @@ export function allowAnyAuthenticated(): void {
 }
 ```
 
-- [ ] **Step 11: Lancia i test di `auth-guard`**
+- [✅] **Step 11: Lancia i test di `auth-guard`**
 
 Run: `npx vitest run lib/rbac/auth-guard.test.ts lib/rbac/actor.test.ts`
 Expected: PASS.
@@ -897,7 +897,7 @@ La regola per tutto il task: **la dichiarazione è la prima istruzione del corpo
 accetta la chiamata anche dentro la prima istruzione (un `const`, un `try`, un `.catch`), ma non
 dopo.
 
-- [ ] **Step 1: Sostituisci `requireAdmin` nelle azioni server**
+- [✅] **Step 1: Sostituisci `requireAdmin` nelle azioni server**
 
 In ogni file cambia l'import da `requireAdmin` a `requirePermission` e la prima riga come da tabella:
 
@@ -912,7 +912,7 @@ In ogni file cambia l'import da `requireAdmin` a `requirePermission` e la prima 
 | `lib/i18n/translation-actions.ts` | `createTranslationKey`, `deleteTranslationKey` | `await requirePermission('manage-translation-keys')` |
 | | `saveTranslations` | `await requirePermission('edit-translations')` |
 
-- [ ] **Step 2: Il tema dell'app resta all'Amministratore (DEC-23)**
+- [✅] **Step 2: Il tema dell'app resta all'Amministratore (DEC-23)**
 
 In `lib/theme-actions.ts`, `saveAppTheme`: sposta il blocco `try { … } catch` **in cima** al corpo,
 prima di `const acknowledged = …`, e dentro chiama `requireAdministrator()` al posto di
@@ -938,7 +938,7 @@ export async function saveAppTheme(
   // … resto invariato
 ```
 
-- [ ] **Step 3: Esenzioni sulle azioni personali**
+- [✅] **Step 3: Esenzioni sulle azioni personali**
 
 Aggiungi `import { allowSelfService } from '@/lib/rbac/access-declarations'` e metti
 `allowSelfService()` come **prima** istruzione di: `saveProfile` (`lib/profile-actions.ts`),
@@ -946,7 +946,7 @@ Aggiungi `import { allowSelfService } from '@/lib/rbac/access-declarations'` e m
 (`lib/i18n/user-language-actions.ts`). Il resto del corpo non cambia: quelle funzioni verificano già da
 sé la sessione.
 
-- [ ] **Step 4: Rotte API**
+- [✅] **Step 4: Rotte API**
 
 Le quattro rotte delle griglie oggi leggono `session.user.isAdmin` dal token (HOLE-1). Diventano, per
 esempio `app/api/rbac/users-grid/route.ts`:
@@ -981,7 +981,7 @@ Togli l'import di `auth` se non serve più.
 | `app/api/i18n/dictionary/route.ts`, `i18n/languages/route.ts` | `allowAnonymous()` — servono anche alla pagina di accesso |
 | `app/api/auth/[...nextauth]/route.ts` | nessuna modifica: è nell'elenco delle esportazioni opache della guardia (Task 5) |
 
-- [ ] **Step 5: Aggiorna i mock dei test**
+- [✅] **Step 5: Aggiorna i mock dei test**
 
 Ogni `vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdmin: async () => ({ userId: 'test', roleIds: [1] }) }))`
 diventa:
@@ -1030,7 +1030,7 @@ it('returns 403 when the read permission is missing', async () => {
 Per `users-grid-route.test.ts` usa nel corpo i campi minimi validi che gli altri test di quel file già
 usano.
 
-- [ ] **Step 6: Nessun `requireAdmin` rimasto**
+- [✅] **Step 6: Nessun `requireAdmin` rimasto**
 
 Run: `grep -rn "requireAdmin\b" --include='*.ts' --include='*.tsx' app components context lib types`
 Expected: nessuna riga, a parte commenti che Task 9 aggiornerà
@@ -1053,7 +1053,7 @@ Niente commit: continua con Task 4.
 **Interfaces:**
 - Consumes: `requirePagePermission`, `requireAdministratorPage`, `allowAnyAuthenticated`.
 
-- [ ] **Step 1: Togli il layout `(admin)` e il suo test**
+- [✅] **Step 1: Togli il layout `(admin)` e il suo test**
 
 ```bash
 git rm "sources/microservices/web-construct/app/(protected)/(admin)/layout.tsx" \
@@ -1062,7 +1062,7 @@ git rm "sources/microservices/web-construct/app/(protected)/(admin)/layout.tsx" 
 
 La cartella `(admin)` resta: è un gruppo di rotte, e senza layout non cambia gli URL.
 
-- [ ] **Step 2: Ogni pagina dichiara il proprio accesso come prima istruzione**
+- [✅] **Step 2: Ogni pagina dichiara il proprio accesso come prima istruzione**
 
 | Pagina | Prima istruzione |
 |---|---|
@@ -1093,7 +1093,7 @@ export default async function EditFunctionalityPage({ params }: { params: Promis
   // … resto invariato
 ```
 
-- [ ] **Step 3: Il middleware smette di decidere per gli amministratori (HOLE-2)**
+- [✅] **Step 3: Il middleware smette di decidere per gli amministratori (HOLE-2)**
 
 In `lib/auth.config.ts` cancella le righe di `ADMIN_PATHS` e `needsAdmin`, e la riga del callback
 `session` che copia `token.isAdmin`:
@@ -1108,7 +1108,7 @@ In `lib/auth.config.ts` cancella le righe di `ADMIN_PATHS` e `needsAdmin`, e la 
       return true
 ```
 
-- [ ] **Step 4: Via `isAdmin` da token, sessione e client (HOLE-1)**
+- [✅] **Step 4: Via `isAdmin` da token, sessione e client (HOLE-1)**
 
 - `lib/auth.ts`: togli le due righe `token.isAdmin = authorization.isAdmin` e la riga `session.user.isAdmin = …`.
 - `types/next-auth.d.ts`: togli `isAdmin: boolean` da `Session.user` e da `JWT`.
@@ -1117,7 +1117,7 @@ In `lib/auth.config.ts` cancella le righe di `ADMIN_PATHS` e `needsAdmin`, e la 
 `evaluateAuthorization` e `resolveUserAuthorization` continuano a restituire `isAdmin`: lo usa
 `lib/rbac/actor.ts`.
 
-- [ ] **Step 5: Verifica i tipi e i test**
+- [✅] **Step 5: Verifica i tipi e i test**
 
 Run (da `sources/microservices/web-construct/`):
 ```bash
@@ -1132,7 +1132,7 @@ che non cambia: non dovrebbe servire toccarlo.
 Run: `grep -rn "isAdmin" app components context types lib/auth.ts lib/auth.config.ts`
 Expected: nessuna riga.
 
-- [ ] **Step 6: Gli E2E esistenti sulle rotte protette**
+- [✅] **Step 6: Gli E2E esistenti sulle rotte protette**
 
 `sources/tests/e2e/test_rbac.py` verifica che un utente non amministratore sia rimandato via da
 `/user-management`, `/functionalities`, `/roles-permissions` e `/admin/theme`. Resta vero (l'utente di
@@ -1144,7 +1144,7 @@ uv run pytest sources/tests/e2e/test_rbac.py
 ```
 Expected: PASS.
 
-- [ ] **Step 7: Commit di Task 2, 3 e 4**
+- [✅] **Step 7: Commit di Task 2, 3 e 4**
 
 ```bash
 git add -A sources/microservices/web-construct
@@ -1162,7 +1162,7 @@ git commit -m "feat(rbac): requirePermission replaces requireAdmin on actions, r
 - Consumes: i nomi delle funzioni di dichiarazione definite in Task 2.
 - Produces: `inspectExports(source, fileName): { undeclared: string[]; opaque: string[] }`, `containsDeclaration(node)` — esportate per i test, come fa `handler-naming.test.ts`.
 
-- [ ] **Step 1: Scrivi la guardia**
+- [✅] **Step 1: Scrivi la guardia**
 
 ```ts
 import { readdirSync, readFileSync } from 'node:fs'
@@ -1365,7 +1365,7 @@ describe('permission declared', () => {
 })
 ```
 
-- [ ] **Step 2: Lancia la guardia**
+- [✅] **Step 2: Lancia la guardia**
 
 Run: `npx vitest run guards/permission-declared.test.ts`
 Expected: PASS. Se `declares access first` elenca un file, è un punto che Task 3 o Task 4 hanno
@@ -1375,7 +1375,7 @@ quella costante è l'unica esportazione opaca, con il motivo; altrimenti estendi
 ignorare le esportazioni di configurazione note a Next (`dynamic`, `revalidate`, `metadata`,
 `runtime`) e aggiungi un test per questo.
 
-- [ ] **Step 3: Verifica che la guardia morda davvero**
+- [✅] **Step 3: Verifica che la guardia morda davvero**
 
 Togli temporaneamente `await requirePermission('manage-roles')` da `createRole` in
 `lib/rbac/roles-actions.ts`, lancia di nuovo la guardia e controlla che fallisca con
@@ -1384,7 +1384,7 @@ Togli temporaneamente `await requirePermission('manage-roles')` da `createRole` 
 Run: `npx vitest run guards/permission-declared.test.ts`
 Expected (con la riga tolta): FAIL con quell'elemento in `offenders`. Expected (con la riga rimessa): PASS.
 
-- [ ] **Step 4: Commit**
+- [✅] **Step 4: Commit**
 
 ```bash
 git add sources/microservices/web-construct/guards/permission-declared.test.ts
@@ -1413,7 +1413,7 @@ git commit -m "test(guards): every action, route and protected page declares its
   - `symmetricDifference(a: number[], b: number[]): number[]`
   - `permissionCodesByIds(ids: number[]): Promise<string[]>`, `functionalityIdsForRoles(roleIds: number[]): Promise<Set<number>>`, `grantsForRoles(roleIds: number[]): Promise<RoleGrants[]>`, `currentRoleIds(userId: string): Promise<number[]>`
 
-- [ ] **Step 1: Scrivi i test delle regole**
+- [✅] **Step 1: Scrivi i test delle regole**
 
 `lib/rbac/grant-guards.test.ts`:
 
@@ -1505,12 +1505,12 @@ describe('symmetricDifference', () => {
 })
 ```
 
-- [ ] **Step 2: Lancia e verifica che fallisca**
+- [✅] **Step 2: Lancia e verifica che fallisca**
 
 Run: `npx vitest run lib/rbac/grant-guards.test.ts`
 Expected: FAIL, `./grant-guards` non esiste.
 
-- [ ] **Step 3: Scrivi `lib/rbac/grant-guards.ts`**
+- [✅] **Step 3: Scrivi `lib/rbac/grant-guards.ts`**
 
 ```ts
 import type { Actor } from './actor'
@@ -1577,12 +1577,12 @@ export function symmetricDifference(a: number[], b: number[]): number[] {
 }
 ```
 
-- [ ] **Step 4: Lancia i test delle regole**
+- [✅] **Step 4: Lancia i test delle regole**
 
 Run: `npx vitest run lib/rbac/grant-guards.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Scrivi `lib/rbac/grant-service.ts`**
+- [✅] **Step 5: Scrivi `lib/rbac/grant-service.ts`**
 
 ```ts
 import { and, eq, inArray, isNull } from 'drizzle-orm'
@@ -1631,7 +1631,7 @@ export async function currentRoleIds(userId: string): Promise<number[]> {
 }
 ```
 
-- [ ] **Step 6: Applica le regole in `updateRolePermissions`**
+- [✅] **Step 6: Applica le regole in `updateRolePermissions`**
 
 In `lib/rbac/roles-actions.ts`, dopo il controllo sul ruolo di sistema e **prima** di
 `db.transaction`:
@@ -1660,7 +1660,7 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
 
 Aggiungi gli import da `./grant-guards` e `./grant-service`.
 
-- [ ] **Step 7: Applica le regole in `updateUserRoles` e `setUserStatus`**
+- [✅] **Step 7: Applica le regole in `updateUserRoles` e `setUserStatus`**
 
 In `lib/rbac/users-actions.ts`, `updateUserRoles`, dopo il calcolo di `finalRoleIds` e prima del
 `try`:
@@ -1682,7 +1682,7 @@ In `setUserStatus`, subito dopo `assertStatusChangeAllowed({ … })`:
 
 `userIsAdmin` esiste già nel file (lo usa `updateUserRoles`).
 
-- [ ] **Step 8: Test di integrazione su `updateRolePermissions` con un attore limitato**
+- [✅] **Step 8: Test di integrazione su `updateRolePermissions` con un attore limitato**
 
 In `lib/rbac/roles-actions.integration.test.ts` il mock di `auth-guard` (Task 3) restituisce un
 amministratore. Rendilo pilotabile:
@@ -1715,7 +1715,7 @@ it('refuses a limited actor granting a permission it does not hold (DEC-6)', asy
 `makeServiceRole` è l'helper che il file ha già; l'`afterEach` esistente cancella il ruolo. Aggiungi
 `eq` all'import da `drizzle-orm` se manca.
 
-- [ ] **Step 9: Lancia tutto**
+- [✅] **Step 9: Lancia tutto**
 
 ```bash
 npx vitest run lib/rbac/grant-guards.test.ts
@@ -1724,7 +1724,7 @@ npm run typecheck && npm run lint && npm test
 ```
 Expected: tutto verde.
 
-- [ ] **Step 10: Commit**
+- [✅] **Step 10: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac
@@ -1751,7 +1751,7 @@ git commit -m "feat(rbac): a limited role cannot grant or assign more than it ho
 Nascondere un pulsante non protegge niente: lo fa `requirePermission` sull'azione. Qui si evita solo di
 mostrare a un lettore pulsanti che gli darebbero un errore.
 
-- [ ] **Step 1: Test di `rowActions` con il nuovo argomento**
+- [✅] **Step 1: Test di `rowActions` con il nuovo argomento**
 
 In `lib/rbac/nav-row-actions.test.ts` aggiungi `true` come secondo argomento a ogni chiamata esistente
 e aggiungi:
@@ -1766,7 +1766,7 @@ it('offers nothing at all to a reader, whatever the node', () => {
 Run: `npx vitest run lib/rbac/nav-row-actions.test.ts`
 Expected: FAIL sul test nuovo.
 
-- [ ] **Step 2: `rowActions` riceve `canManage`**
+- [✅] **Step 2: `rowActions` riceve `canManage`**
 
 ```ts
 /**
@@ -1791,7 +1791,7 @@ export function rowActions(node: Pick<UserNavigationTreeDto, 'type' | 'isImmutab
 Run: `npx vitest run lib/rbac/nav-row-actions.test.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Funzionalità**
+- [✅] **Step 3: Funzionalità**
 
 `app/(protected)/(admin)/functionalities/page.tsx`:
 
@@ -1817,7 +1817,7 @@ export default async function FunctionalitiesPage() {
   `{canManage && <Button size="sm" data-testid="create-functionality" onClick={() => router.push('/functionalities/create')}>{t('functionalities.actions.create')}</Button>}`;
 - il trascinamento: `dnd={search.trim() || !canManage ? undefined : { canDrag: n => !n.isImmutable, onMove: handleMove }}`.
 
-- [ ] **Step 4: Ruoli, lista**
+- [✅] **Step 4: Ruoli, lista**
 
 Pagina: `<RolesTableClient … canManage={hasPermission(actor, 'manage-roles')} />`.
 
@@ -1837,7 +1837,7 @@ actionsColumnDef<RolePageItemDto>(r => [
 
 Aggiungi `props.canManage` alle dipendenze dello `useMemo` di `columnDefs`.
 
-- [ ] **Step 5: Ruoli, dettaglio**
+- [✅] **Step 5: Ruoli, dettaglio**
 
 Pagina:
 
@@ -1856,7 +1856,7 @@ Pagina:
 - `const editable = !isSystem && canGrant` e `editable={editable}` sui due `PermissionsTree`;
 - il pulsante Salva si mostra solo con `canGrant`: `{canGrant && <Button onClick={save} disabled={busy || isSystem} …>}`. Senza `canGrant` resta solo «Annulla», che torna alla lista.
 
-- [ ] **Step 6: Utenti**
+- [✅] **Step 6: Utenti**
 
 Pagina: `canAssignRoles={hasPermission(actor, 'assign-user-roles')}` e
 `canSetStatus={hasPermission(actor, 'set-user-status')}`.
@@ -1880,7 +1880,7 @@ const columnDefs = useMemo<ColDef<UserPageItemDto>[]>(() => [
 
 Usa il nome del tipo di riga che il file usa già al posto di `UserPageItemDto` se è diverso.
 
-- [ ] **Step 7: Lingue**
+- [✅] **Step 7: Lingue**
 
 Pagina: `canManage={hasPermission(actor, 'manage-languages')}`.
 
@@ -1888,7 +1888,7 @@ Pagina: `canManage={hasPermission(actor, 'manage-languages')}`.
 diventa `{props.canManage && <Button size="sm" data-testid="create-language" …>}`; la colonna delle
 azioni c'è solo con `canManage` (stessa forma dello Step 6).
 
-- [ ] **Step 8: Traduzioni**
+- [✅] **Step 8: Traduzioni**
 
 Pagina: `canEdit={hasPermission(actor, 'edit-translations')}` e
 `canManageKeys={hasPermission(actor, 'manage-translation-keys')}`.
@@ -1897,7 +1897,7 @@ Pagina: `canEdit={hasPermission(actor, 'edit-translations')}` e
 con `canManageKeys`; nel menu della riga «Modifica» solo con `canEdit`, «Elimina» solo con
 `canManageKeys`; colonna delle azioni assente se nessuna delle due.
 
-- [ ] **Step 9: Tipi, lint, test**
+- [✅] **Step 9: Tipi, lint, test**
 
 ```bash
 npm run typecheck && npm run lint && npm test
@@ -1905,7 +1905,7 @@ npm run typecheck && npm run lint && npm test
 Expected: tutto verde. I test esistenti dei componenti toccati che renderizzano senza le prop nuove
 non compilano più: passa le prop con valore `true`, che riproduce il comportamento di oggi.
 
-- [ ] **Step 10: Commit**
+- [✅] **Step 10: Commit**
 
 ```bash
 git add sources/microservices/web-construct
@@ -1919,7 +1919,7 @@ git commit -m "feat(rbac): edit controls follow the permissions; readers see rea
 **Files:**
 - Create: `sources/tests/e2e/test_permissions.py`
 
-- [ ] **Step 1: Avvia l'app sul database di test**
+- [✅] **Step 1: Avvia l'app sul database di test**
 
 Gli E2E girano contro il server che usa il database di test (vedi la memoria di progetto: E2E e
 anteprima di sviluppo usano database diversi, e cambiare configurazione invalida la sessione
@@ -1932,7 +1932,7 @@ node sources/devops/db/db.mjs test-apply
 Poi avvia il server di test come fanno gli altri E2E del progetto (configurazione in
 `.claude/launch.json`).
 
-- [ ] **Step 2: Scrivi il test**
+- [✅] **Step 2: Scrivi il test**
 
 `sources/tests/e2e/test_permissions.py`:
 
@@ -2045,7 +2045,7 @@ Il selettore `.ag-row` aspetta la prima riga della griglia: se gli altri E2E del
 helper (`grid_rows` in `helpers.py`), usa quello. Non aspettare `networkidle`: la memoria di progetto
 documenta che quell'attesa non è il segnale di completamento giusto in questa suite.
 
-- [ ] **Step 3: Lancia il gruppo nuovo, poi la suite intera**
+- [✅] **Step 3: Lancia il gruppo nuovo, poi la suite intera**
 
 ```bash
 uv run pytest sources/tests/e2e/test_permissions.py
@@ -2054,7 +2054,7 @@ uv run pytest
 Expected: tutto verde. Se `test_reader_*` falliscono con un rimando alla home, controlla prima che la
 migrazione 0041 sia applicata al database **di test** (`node sources/devops/db/db.mjs test-query "select code from permission where code is not null"`).
 
-- [ ] **Step 4: Verifica nel browser**
+- [✅] **Step 4: Verifica nel browser**
 
 Con l'anteprima di sviluppo e un utente non amministratore a cui hai dato, dalla pagina Ruoli, un ruolo
 con la voce di menu «Funzionalità» (albero *Funzionalità*) e `read-menu` (albero *Operazioni*):
@@ -2067,7 +2067,7 @@ con la voce di menu «Funzionalità» (albero *Funzionalità*) e `read-menu` (al
 Fai uno screenshot della pagina Funzionalità vista dal lettore e uno del ruolo Amministratore nella
 pagina Ruoli.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/tests/e2e/test_permissions.py
@@ -2084,13 +2084,13 @@ git commit -m "test(e2e): a read-only role sees pages without edit controls"
 - Modify: `components/i18n/translations/TranslationKeyForm.tsx`, `components/i18n/translations/TranslationKeyForm.test.tsx` (commenti)
 - Modify: questo piano (spunte del riepilogo)
 
-- [ ] **Step 1: Spunta HOLE-1 e HOLE-2 nella specifica**
+- [✅] **Step 1: Spunta HOLE-1 e HOLE-2 nella specifica**
 
 In `docs/superpowers/specs/2026-09-01-rbac-permission-model-design.md`, §6.4: `- [ ] ID=HOLE-1` →
 `- [✅] ID=HOLE-1` e lo stesso per HOLE-2, con in coda alla descrizione «Chiuso il <data> dal piano
 2026-10-12 (Task 3 e 4).». HOLE-3 e HOLE-4 restano aperti: fuori perimetro.
 
-- [ ] **Step 2: AGENTS.md del microservizio**
+- [✅] **Step 2: AGENTS.md del microservizio**
 
 La frase che cita `app/(protected)/(admin)/layout.tsx` come esempio di file `.tsx` senza JSX non è più
 vera: il file non esiste. Sostituisci l'esempio con un altro file riservato del framework senza JSX
@@ -2100,7 +2100,7 @@ togli la frase se non ce n'è.
 Aggiungi `permission-declared` e `permission-catalog` all'elenco delle guardie in «Come si fanno
 rispettare».
 
-- [ ] **Step 3: Commenti che citano `requireAdmin`**
+- [✅] **Step 3: Commenti che citano `requireAdmin`**
 
 `components/i18n/translations/TranslationKeyForm.tsx:190` e
 `components/i18n/translations/TranslationKeyForm.test.tsx:212`: `requireAdmin()` → `requirePermission()`.
@@ -2109,12 +2109,12 @@ Run: `grep -rn "requireAdmin\b" sources docs/superpowers/specs/2026-09-01-rbac-p
 Expected: solo righe della specifica che descrivono lo stato di prima (sono storia: non si
 riscrivono).
 
-- [ ] **Step 4: Spunte del riepilogo di questo piano**
+- [✅] **Step 4: Spunte del riepilogo di questo piano**
 
 Spunta (`- [✅]`) ogni `TASK-n` del riepilogo in cima man mano che il task è finito e verificato, non
 tutti insieme alla fine.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add docs sources/microservices/web-construct/AGENTS.md sources/microservices/web-construct/components/i18n/translations
