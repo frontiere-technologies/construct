@@ -3,6 +3,7 @@ import { eq, like } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { menuEntry, permission, role, roleFunctionality, rolePermission } from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
+import type { Actor } from './actor'
 
 const guard = vi.hoisted(() => ({
   actor: { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() },
@@ -13,6 +14,7 @@ vi.mock('@/lib/rbac/auth-guard', () => ({
 }))
 
 const { updateRolePermissions } = await import('./roles-actions')
+const { grantableItemIds } = await import('./grant-service')
 
 const PREFIX = 'zzz_roles_actions_tx_'
 const ROLE_TYPE_SERVICE = 2
@@ -234,6 +236,32 @@ describeIntegration('updateRolePermissions against the database', () => {
     }
     const rows = await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))
     expect(rows.map(r => r.idPermission)).toEqual([perm.idPermission])
+  })
+
+  // I3 della revisione finale: la pagina offre solo ciò che l'azione accetterebbe.
+  it('offers a limited actor only the permissions it holds and the menu entries it sees', async () => {
+    const codes = await db.select({ id: permission.idPermission, code: permission.code }).from(permission)
+    const idOf = (code: string) => codes.find(c => c.code === code)!.id
+    const uncoded = await makePermission('GRANT')
+    const hidden = await makeMenuEntry('functionality')
+    const seen = await makeMenuEntry('functionality')
+    const actorRole = await makeServiceRole()
+    await db.insert(roleFunctionality).values({ idRole: actorRole, idMenuEntry: seen })
+    const actor: Actor = { userId: 'test', roleIds: [actorRole], isAdmin: false, permissions: new Set(['read-menu', 'grant-role-permissions']) }
+
+    const grantable = await grantableItemIds(actor, {
+      operationIds: [idOf('read-menu'), idOf('manage-menu'), uncoded],
+      functionalityIds: [hidden, seen],
+    })
+    expect(grantable).toEqual({ operationIds: [idOf('read-menu')], functionalityIds: [seen] })
+  })
+
+  it('offers the Administrator every candidate, code-less GRANT rows included', async () => {
+    const uncoded = await makePermission('GRANT')
+    const hidden = await makeMenuEntry('functionality')
+    const admin: Actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+    const grantable = await grantableItemIds(admin, { operationIds: [uncoded], functionalityIds: [hidden] })
+    expect(grantable).toEqual({ operationIds: [uncoded], functionalityIds: [hidden] })
   })
 
   it('refuses a string idItem smuggled past the types (input validation)', async () => {

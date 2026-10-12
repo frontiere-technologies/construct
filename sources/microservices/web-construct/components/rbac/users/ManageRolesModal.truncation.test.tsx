@@ -40,12 +40,19 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
-function render() {
+function render(
+  allRoles: { id: number; name: string }[] = [],
+  assignableRoleIds: number[] = [],
+  target: UserDto = user,
+) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
   act(() => root?.render(
-    <ManageRolesModal user={user} allRoles={[]} onClose={() => {}} onSaved={() => {}} />,
+    <ManageRolesModal
+      user={target} allRoles={allRoles} assignableRoleIds={assignableRoleIds}
+      onClose={() => {}} onSaved={() => {}}
+    />,
   ))
   return container
 }
@@ -77,5 +84,26 @@ describe('manage roles modal truncation', () => {
 
     expect(close, 'il bottone di chiusura non e\' stato reso').not.toBe(null)
     expect(close!.classList.contains('shrink-0'), 'al bottone di chiusura manca shrink-0').toBe(true)
+  })
+})
+
+// I3 della revisione finale: il server rifiuta un ruolo le cui concessioni l'attore non possiede
+// tutte (DEC-29). Il dialogo non lo offre: lo mostra disabilitato, con il motivo.
+describe('manage roles modal, roles the actor cannot assign', () => {
+  const roles = [{ id: 0, name: 'Registered' }, { id: 1, name: 'Administrator' }, { id: 7, name: 'Reader' }]
+  const checkbox = (el: HTMLElement, id: number) =>
+    el.querySelector<HTMLInputElement>(`[data-testid="role-checkbox-${id}"]`)!
+
+  it('disables a role outside the assignable set and explains why', () => {
+    const el = render(roles, [0, 7])
+    expect(checkbox(el, 1).disabled).toBe(true)
+    expect(checkbox(el, 1).closest('label')?.getAttribute('title')).toBe('users.roles.not_assignable_hint')
+    expect(checkbox(el, 7).disabled).toBe(false)
+  })
+
+  it('does not offer to remove an assigned role the actor cannot assign', () => {
+    const el = render(roles, [0, 7], { ...user, roles: [{ id: 1, name: 'Administrator' }, { id: 7, name: 'Reader' }] })
+    expect(el.querySelector('[aria-label="users.roles.remove_label"]')).not.toBe(null)
+    expect(el.querySelectorAll('[aria-label="users.roles.remove_label"]')).toHaveLength(1)
   })
 })

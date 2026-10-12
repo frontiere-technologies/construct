@@ -38,11 +38,11 @@ def _assert_sent_home(page, base_url) -> None:
     assert urlparse(page.url).path == "/"
 
 
-def _grant(code: str) -> None:
+def _grant(code: str, role: str = ROLE_NAME) -> None:
     _sql(
         "insert into role_permission (id_role, id_permission) "
         f"select r.id_role, p.id_permission from role r, permission p "
-        f"where r.description = '{ROLE_NAME}' and p.code = '{code}' on conflict do nothing"
+        f"where r.description = '{role}' and p.code = '{code}' on conflict do nothing"
     )
 
 
@@ -135,3 +135,75 @@ def test_reader_api_answers_by_permission(non_admin_page, base_url, read_only_ro
         data={"page": 0, "size": 50, "sort": "id", "direction": "ASC"},
     )
     assert roles.status == 200, roles.text()
+
+
+MANAGER_ROLE = "zzz_e2e_delegato"
+TARGET_ROLE = "zzz_e2e_bersaglio"
+MANAGER_CODES = ("read-users", "assign-user-roles", "read-roles", "grant-role-permissions", "read-menu")
+
+
+@pytest.fixture
+def delegated_manager(test_email_user):
+    """Un gestore delegato: assegna ruoli e concede permessi, ma solo quelli che ha (DEC-6, DEC-29).
+
+    Accanto, un ruolo di servizio vuoto su cui provare la pagina di dettaglio.
+    """
+    roles = f"('{MANAGER_ROLE}', '{TARGET_ROLE}')"
+    _sql(f"delete from role where description in {roles}")
+    _sql(
+        "insert into role (description, id_role_type) values "
+        f"('{MANAGER_ROLE}', {ROLE_TYPE_SERVICE}), ('{TARGET_ROLE}', {ROLE_TYPE_SERVICE})"
+    )
+    try:
+        _sql(
+            "insert into user_role (user_id, id_role) "
+            f"select u.id, r.id_role from users u, role r "
+            f"where u.email = '{test_email_user}' and r.description = '{MANAGER_ROLE}'"
+        )
+        for code in MANAGER_CODES:
+            _grant(code, MANAGER_ROLE)
+        yield
+    finally:
+        _sql(f"delete from role where description in {roles}")
+
+
+def _role_id(page, base_url, name: str) -> int:
+    """L'id del ruolo, letto dalla rotta della griglia con la sessione della pagina (read-roles)."""
+    response = page.request.post(
+        f"{base_url}/api/rbac/roles-grid",
+        data={"page": 0, "size": 50, "search": name},
+    )
+    assert response.status == 200, response.text()
+    matches = [r["id"] for r in response.json()["elements"] if r["description"] == name]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
+def test_delegated_manager_cannot_pick_roles_it_cannot_assign(non_admin_page, base_url, delegated_manager):
+    page = non_admin_page
+    nav(page, f"{base_url}/user-management")
+    target_id = _role_id(page, base_url, TARGET_ROLE)
+    page.locator('[data-testid^="row-menu"]').first.click()
+    page.get_by_text("Gestisci ruoli", exact=True).first.click()
+    expect(page.get_by_test_id("save-roles")).to_be_visible()
+
+    administrator = page.get_by_test_id("role-checkbox-1")
+    expect(administrator).to_be_disabled()
+    hint = page.locator("label").filter(has=administrator).get_attribute("title")
+    assert hint and hint != "users.roles.not_assignable_hint", hint
+    # Un ruolo senza concessioni si assegna: non c'e' niente che il gestore non abbia.
+    expect(page.get_by_test_id(f"role-checkbox-{target_id}")).to_be_enabled()
+
+
+def test_delegated_manager_cannot_switch_on_what_it_does_not_hold(non_admin_page, base_url, delegated_manager):
+    page = non_admin_page
+    nav(page, f"{base_url}/roles-permissions")
+    target_id = _role_id(page, base_url, TARGET_ROLE)
+    nav(page, f"{base_url}/roles-permissions/{target_id}")
+
+    # Le etichette degli alberi sono in inglese (nota del Task 8): "Edit the menu" e' manage-menu.
+    edit_menu = page.locator('[data-testid="perm-toggle"][aria-label="Edit the menu"]')
+    expect(edit_menu).to_be_disabled()
+    hint = edit_menu.get_attribute("title")
+    assert hint and hint != "roles.detail.not_grantable_hint", hint
+    expect(page.locator('[data-testid="perm-toggle"][aria-label="View the menu"]')).to_be_enabled()

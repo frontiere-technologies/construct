@@ -40,6 +40,8 @@ interface Props {
   updatedFrom: string | null
   updatedTo: string | null
   canAssignRoles: boolean
+  /** I ruoli che l'attore può assegnare e togliere: la pagina li calcola dall'Actor (DEC-29, DEC-32). */
+  assignableRoleIds: number[]
   canSetStatus: boolean
 }
 
@@ -171,6 +173,7 @@ export default function UsersTableClient(props: Props) {
         <ManageRolesModal
           user={managing}
           allRoles={props.allRoles}
+          assignableRoleIds={props.assignableRoleIds}
           onClose={() => setManaging(null)}
           onSaved={() => { setManaging(null); router.refresh(); gridApi?.refreshInfiniteCache() }}
         />

@@ -20,9 +20,23 @@ export interface RoleGrants {
   uncataloguedIds: number[]
 }
 
+/**
+ * L'attore può concedere questo codice? `null` è una riga GRANT senza codice: fuori dal catalogo,
+ * nessun non amministratore la possiede. Le assert sotto e le pagine che decidono che cosa offrire
+ * (DEC-32) leggono la stessa regola da qui.
+ */
+export function canGrantCode(actor: Actor, code: string | null): boolean {
+  if (actor.isAdmin) return true
+  return code !== null && isPermissionCode(code) && actor.permissions.has(code)
+}
+
+/** L'attore può concedere questa voce di menu? Solo se la vede, cioè se è di uno dei suoi ruoli. */
+export function canGrantFunctionality(actor: Actor, actorFunctionalityIds: ReadonlySet<number>, id: number): boolean {
+  return actor.isAdmin || actorFunctionalityIds.has(id)
+}
+
 export function assertCanGrantPermissions(actor: Actor, codes: string[]): void {
-  if (actor.isAdmin) return
-  const missing = codes.filter(code => !isPermissionCode(code) || !actor.permissions.has(code))
+  const missing = codes.filter(code => !canGrantCode(actor, code))
   if (missing.length) throw new Error(`Cannot grant permission(s) you do not hold: ${missing.join(', ')}`)
 }
 
@@ -31,9 +45,32 @@ export function assertCanGrantFunctionalities(
   actorFunctionalityIds: ReadonlySet<number>,
   ids: number[],
 ): void {
-  if (actor.isAdmin) return
-  const missing = ids.filter(id => !actorFunctionalityIds.has(id))
+  const missing = ids.filter(id => !canGrantFunctionality(actor, actorFunctionalityIds, id))
   if (missing.length) throw new Error(`Cannot grant menu entry(ies) you cannot see: ${missing.join(', ')}`)
+}
+
+/** Il motivo per cui l'attore non può assegnare né togliere questi ruoli, o `null` se può. */
+function roleChangeRefusal(
+  actor: Actor,
+  actorFunctionalityIds: ReadonlySet<number>,
+  touched: RoleGrants[],
+): string | null {
+  if (actor.isAdmin) return null
+  if (touched.some(r => r.idRole === ROLE_ADMINISTRATOR)) {
+    return 'Only an administrator can assign or remove the Administrator role'
+  }
+  for (const grants of touched) {
+    // Come `permissionCodesByIds` per chi concede: una concessione fuori catalogo non si possiede,
+    // quindi il ruolo che la porta non si assegna né si toglie.
+    if (grants.uncataloguedIds.length) {
+      return `Cannot assign role ${grants.idRole}: it holds permission(s) outside the catalog: ${grants.uncataloguedIds.join(', ')}`
+    }
+    const codes = grants.codes.filter(code => !canGrantCode(actor, code))
+    if (codes.length) return `Cannot grant permission(s) you do not hold: ${codes.join(', ')}`
+    const ids = grants.functionalityIds.filter(id => !canGrantFunctionality(actor, actorFunctionalityIds, id))
+    if (ids.length) return `Cannot grant menu entry(ies) you cannot see: ${ids.join(', ')}`
+  }
+  return null
 }
 
 export function assertCanChangeRoles(
@@ -41,19 +78,14 @@ export function assertCanChangeRoles(
   actorFunctionalityIds: ReadonlySet<number>,
   touched: RoleGrants[],
 ): void {
-  if (actor.isAdmin) return
-  if (touched.some(r => r.idRole === ROLE_ADMINISTRATOR)) {
-    throw new Error('Only an administrator can assign or remove the Administrator role')
-  }
-  for (const grants of touched) {
-    // Come `permissionCodesByIds` per chi concede: una concessione fuori catalogo non si possiede,
-    // quindi il ruolo che la porta non si assegna né si toglie.
-    if (grants.uncataloguedIds.length) {
-      throw new Error(`Cannot assign role ${grants.idRole}: it holds permission(s) outside the catalog: ${grants.uncataloguedIds.join(', ')}`)
-    }
-    assertCanGrantPermissions(actor, grants.codes)
-    assertCanGrantFunctionalities(actor, actorFunctionalityIds, grants.functionalityIds)
-  }
+  const refusal = roleChangeRefusal(actor, actorFunctionalityIds, touched)
+  if (refusal) throw new Error(refusal)
+}
+
+/** Lo stesso giudizio di `assertCanChangeRoles` su un ruolo solo, per la pagina che deve sapere
+ *  in anticipo quali ruoli offrire. */
+export function canChangeRole(actor: Actor, actorFunctionalityIds: ReadonlySet<number>, grants: RoleGrants): boolean {
+  return roleChangeRefusal(actor, actorFunctionalityIds, [grants]) === null
 }
 
 export function assertCanChangeStatus(actor: Actor, targetIsAdmin: boolean): void {

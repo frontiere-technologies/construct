@@ -10,21 +10,34 @@ import PermissionsTree from '@/components/rbac/PermissionsTree'
 import { buildAuthMap, computeDeltas } from '@/lib/rbac/permission-tree'
 import { updateRolePermissions } from '@/lib/rbac/roles-actions'
 import { useI18n } from '@/context/I18nContext'
-import type { RoleAuthorizationTrees, RoleInformationDto } from '@/lib/rbac/types'
+import type { GrantableItemIds, RoleAuthorizationTrees, RoleInformationDto } from '@/lib/rbac/types'
 import RenameRoleModal from './RenameRoleModal'
 
 interface Props {
   role: RoleInformationDto
   trees: RoleAuthorizationTrees
+  /** Ciò che l'attore può accendere nei due alberi, calcolato dalla pagina (DEC-6, DEC-29, DEC-32). */
+  grantable: GrantableItemIds
   canGrant: boolean
   canManageRoles: boolean
 }
 
-export default function RoleDetailClient({ role, trees, canGrant, canManageRoles }: Props) {
+export default function RoleDetailClient({ role, trees, grantable, canGrant, canManageRoles }: Props) {
   const { t } = useI18n()
   const router = useRouter()
   const loadedFunctionalities = useMemo(() => buildAuthMap(trees.functionalities), [trees.functionalities])
   const loadedOperations = useMemo(() => buildAuthMap(trees.operations), [trees.operations])
+
+  // Si può riaccendere anche ciò che era già concesso al caricamento: non produce un delta, e il
+  // server rifiuta solo una concessione nuova.
+  const canGrantFunctionality = useMemo(() => {
+    const ids = new Set(grantable.functionalityIds)
+    return (id: number) => ids.has(id) || loadedFunctionalities.get(id) === true
+  }, [grantable.functionalityIds, loadedFunctionalities])
+  const canGrantOperation = useMemo(() => {
+    const ids = new Set(grantable.operationIds)
+    return (id: number) => ids.has(id) || loadedOperations.get(id) === true
+  }, [grantable.operationIds, loadedOperations])
 
   const [functionalities, setFunctionalities] = useState(loadedFunctionalities)
   const [operations, setOperations] = useState(loadedOperations)
@@ -84,12 +97,18 @@ export default function RoleDetailClient({ role, trees, canGrant, canManageRoles
     >
       <section className="space-y-2">
         <h2 className="text-sm font-medium text-muted-foreground">{t('roles.detail.functionalities')}</h2>
-        <PermissionsTree trees={trees.functionalities} map={functionalities} onChange={setFunctionalities} editable={editable} />
+        <PermissionsTree
+          trees={trees.functionalities} map={functionalities} onChange={setFunctionalities} editable={editable}
+          canGrantNode={canGrantFunctionality}
+        />
       </section>
 
       <section className="space-y-2 pt-4">
         <h2 className="text-sm font-medium text-muted-foreground">{t('roles.detail.operations')}</h2>
-        <PermissionsTree trees={trees.operations} map={operations} onChange={setOperations} editable={editable} />
+        <PermissionsTree
+          trees={trees.operations} map={operations} onChange={setOperations} editable={editable}
+          canGrantNode={canGrantOperation}
+        />
       </section>
 
       <div className="pt-4 border-t border-border flex items-center justify-between gap-3">

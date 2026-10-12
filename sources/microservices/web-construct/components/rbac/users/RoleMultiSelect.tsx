@@ -14,9 +14,13 @@ interface Props {
   onToggle: (id: number) => void
   lockedId?: number
   lockedLabel?: string
+  /** Ruoli che chi usa il selettore non può assegnare né togliere: restano visibili, disabilitati,
+   *  con `disabledHint` come motivo. Assente vuol dire nessuno. */
+  disabledIds?: ReadonlySet<number>
+  disabledHint?: string
 }
 
-export default function RoleMultiSelect({ options, selected, onToggle, lockedId, lockedLabel }: Props) {
+export default function RoleMultiSelect({ options, selected, onToggle, lockedId, lockedLabel, disabledIds, disabledHint }: Props) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
 
@@ -36,7 +40,7 @@ export default function RoleMultiSelect({ options, selected, onToggle, lockedId,
           {selectedRoles.map(r => (
             <span key={r.id} className="flex shrink-0 whitespace-nowrap items-center gap-1 px-2 py-0.5 rounded bg-accent text-sm">
               {r.name}
-              {r.id !== lockedId && (
+              {r.id !== lockedId && !disabledIds?.has(r.id) && (
                 <Button
                   variant="ghost" size="icon"
                   aria-label={t('users.roles.remove_label', { name: r.name })}
@@ -63,16 +67,18 @@ export default function RoleMultiSelect({ options, selected, onToggle, lockedId,
         {filtered.map(r => {
           const isSelected = selected.has(r.id)
           const locked = r.id === lockedId
+          const unavailable = !locked && (disabledIds?.has(r.id) ?? false)
           return (
             <label
               key={r.id}
-              className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-accent ${locked ? 'opacity-60' : 'cursor-pointer'}`}
+              title={unavailable ? disabledHint : undefined}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-accent ${locked || unavailable ? 'opacity-60' : 'cursor-pointer'}`}
             >
               <input
                 type="checkbox"
                 data-testid={`role-checkbox-${r.id}`}
                 checked={isSelected}
-                disabled={locked}
+                disabled={locked || unavailable}
                 onChange={() => onToggle(r.id)}
               />
               <span className={isSelected ? 'font-semibold' : ''}>

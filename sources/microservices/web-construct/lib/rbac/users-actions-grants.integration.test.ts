@@ -3,6 +3,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
+import type { Actor } from './actor'
 
 const guard = vi.hoisted(() => ({
   actor: { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() },
@@ -13,6 +14,7 @@ vi.mock('@/lib/rbac/auth-guard', () => ({
 }))
 
 const { updateUserRoles, setUserStatus } = await import('./users-actions')
+const { assignableRoleIds } = await import('./grant-service')
 
 const ACTIVE = 2
 const ROLE_TYPE_SERVICE = 2
@@ -137,6 +139,21 @@ describeIntegration('user role and status actions with a limited actor', () => {
     const target = await makeUser([0])
     await expect(updateUserRoles(target, [0, odd])).rejects.toThrow(/outside the catalog/)
     expect(await rolesOf(target)).toEqual([0])
+  })
+
+  // I3 della revisione finale: la pagina offre solo i ruoli che l'azione accetterebbe.
+  it('offers a limited actor only the roles whose grants it holds, never the Administrator', async () => {
+    const reader = await makeRole([await permissionId('read-menu')])
+    const manager = await makeRole([await permissionId('manage-menu')])
+    const odd = await makeRole([await makeUncodedGrant()])
+    const actor: Actor = { userId: guard.actor.userId, roleIds: [0], isAdmin: false, permissions: new Set(['assign-user-roles', 'read-menu']) }
+    expect(await assignableRoleIds(actor, [1, reader, manager, odd])).toEqual([reader])
+  })
+
+  it('offers the Administrator every role', async () => {
+    const manager = await makeRole([await permissionId('manage-menu')])
+    const admin: Actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+    expect(await assignableRoleIds(admin, [1, manager])).toEqual([1, manager])
   })
 
   it('lets a limited actor deactivate a normal user', async () => {

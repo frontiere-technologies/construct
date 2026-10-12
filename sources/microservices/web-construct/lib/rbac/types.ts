@@ -211,3 +211,10 @@ export interface UsersQuery {
   sort?: 'firstName' | 'lastName' | 'email' | 'dateIns' | 'dateMod' | 'status'
   direction?: 'ASC' | 'DESC'
 }
+
+/** Le voci dei due alberi della pagina Ruoli che l'attore può concedere (DEC-6, DEC-29). La pagina
+ *  le calcola con `grantableItemIds` e le passa al client (DEC-32). */
+export interface GrantableItemIds {
+  operationIds: number[]
+  functionalityIds: number[]
+}
