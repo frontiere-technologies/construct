@@ -46,7 +46,8 @@ export function ConfirmModal({ title, message, confirmLabel, destructive = false
       panelClassName="w-full max-w-md rounded-xl bg-popover p-6 shadow-xl"
     >
         <h2 id={titleId} className="text-lg font-bold mb-2">{title}</h2>
-        <p id={descriptionId} className={`text-sm text-muted-foreground ${children ? 'mb-3' : 'mb-6'}`}>{message}</p>
+        {/* break-words: il messaggio riporta spesso un nome scelto da chi usa l'app, e un nome senza spazi usciva dal bordo */}
+        <p id={descriptionId} className={`break-words text-sm text-muted-foreground ${children ? 'mb-3' : 'mb-6'}`}>{message}</p>
         {children && <div className="mb-6">{children}</div>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" data-dialog-initial-focus data-dialog-close onClick={onCancel}>{t('common.actions.cancel')}</Button>
