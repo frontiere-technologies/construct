@@ -8,8 +8,10 @@ concessione e' il dato in prova, non il modo di farla.
 """
 import subprocess
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
+from playwright.sync_api import expect
 
 from helpers import grid_rows, nav
 
@@ -19,10 +21,21 @@ ROLE_TYPE_SERVICE = 2
 
 
 def _sql(query: str) -> None:
-    subprocess.run(
-        ["node", "sources/devops/db/db.mjs", "test-query", query],
-        cwd=REPO_ROOT, check=True, capture_output=True,
-    )
+    try:
+        subprocess.run(
+            ["node", "sources/devops/db/db.mjs", "test-query", query],
+            cwd=REPO_ROOT, check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"test-query failed: {query}\nstdout: {e.stdout}\nstderr: {e.stderr}"
+        ) from e
+
+
+def _assert_sent_home(page, base_url) -> None:
+    """Il rifiuto e' un rimando alla home: non /login, non un'altra pagina."""
+    page.wait_for_url(f"{base_url}/")
+    assert urlparse(page.url).path == "/"
 
 
 def _grant(code: str) -> None:
@@ -62,13 +75,15 @@ def test_reader_sees_functionalities_without_edit_controls(non_admin_page, base_
     nav(non_admin_page, f"{base_url}/functionalities")
     assert "/functionalities" in non_admin_page.url
     non_admin_page.wait_for_selector('[data-testid="open-filters"]')
+    # Un nodo dell'albero deve essere gia' disegnato, o i conteggi a zero passerebbero a vuoto.
+    expect(non_admin_page.get_by_text("Admin", exact=True).first).to_be_visible()
     for testid in ("create-functionality", "nav-add", "nav-edit", "nav-delete"):
         assert non_admin_page.locator(f'[data-testid="{testid}"]').count() == 0, testid
 
 
 def test_reader_cannot_open_the_create_page(non_admin_page, base_url, read_only_role):
     nav(non_admin_page, f"{base_url}/functionalities/create")
-    assert "/functionalities/create" not in non_admin_page.url
+    _assert_sent_home(non_admin_page, base_url)
 
 
 def test_reader_sees_roles_without_create(non_admin_page, base_url, read_only_role):
@@ -87,7 +102,7 @@ def test_reader_sees_languages_without_create(non_admin_page, base_url, read_onl
 
 def test_reader_without_read_users_is_kept_out(non_admin_page, base_url, read_only_role):
     nav(non_admin_page, f"{base_url}/user-management")
-    assert "/user-management" not in non_admin_page.url
+    _assert_sent_home(non_admin_page, base_url)
 
 
 def test_revocation_takes_effect_without_new_login(non_admin_page, base_url, read_only_role):
@@ -95,7 +110,7 @@ def test_revocation_takes_effect_without_new_login(non_admin_page, base_url, rea
     assert "/functionalities" in non_admin_page.url
     _revoke("read-menu")
     nav(non_admin_page, f"{base_url}/functionalities")
-    assert "/functionalities" not in non_admin_page.url
+    _assert_sent_home(non_admin_page, base_url)
 
 
 def test_administrator_still_sees_edit_controls(logged_in_page, base_url):
