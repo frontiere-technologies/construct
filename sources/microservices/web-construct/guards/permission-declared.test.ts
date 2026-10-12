@@ -206,27 +206,49 @@ export function inspectExports(source: string, fileName: string): ExportsReport 
   return { undeclared, opaque, declared }
 }
 
+/** Cartelle che non contengono sorgenti dell'app: dipendenze, build, file statici, configurazioni nascoste. */
+function isSkippedDirectory(name: string): boolean {
+  return name === 'node_modules' || name === 'public' || name.startsWith('.')
+}
+
 function sourceFiles(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap(entry => {
     const path = join(root, entry.name)
-    if (entry.isDirectory()) return sourceFiles(path)
+    if (entry.isDirectory()) return isSkippedDirectory(entry.name) ? [] : sourceFiles(path)
     if (!entry.isFile() || /\.test\.tsx?$/.test(path)) return []
     return path.endsWith('.ts') || path.endsWith('.tsx') ? [path] : []
   })
 }
 
-function isServerActionsFile(path: string): boolean {
-  return /^\s*['"]use server['"]/.test(readFileSync(path, 'utf8'))
+/**
+ * `'use server'` vale solo nel prologo delle direttive: le istruzioni-stringa in testa al file,
+ * prima di qualunque altra istruzione. I commenti davanti non contano, come per Next; una stringa
+ * dopo un `import` non è più una direttiva. Si legge dall'albero sintattico, non dalla prima riga.
+ */
+export function isServerActionsSource(source: string, fileName: string): boolean {
+  const scriptKind = fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const parsed = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, false, scriptKind)
+  for (const statement of parsed.statements) {
+    if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) return false
+    if (statement.expression.text === 'use server') return true
+  }
+  return false
+}
+
+/**
+ * Ogni file sorgente dell'app, relativo alla sua radice: tutte le cartelle (`app`, `lib`,
+ * `components`, `context`, …) e i file in radice, non un elenco che invecchia quando ne nasce una.
+ */
+function appSourceFiles(): string[] {
+  return sourceFiles('.').map(path => relative(process.cwd(), path))
 }
 
 function scannedFiles(): string[] {
-  return ['app', 'lib']
-    .flatMap(sourceFiles)
-    .map(path => relative(process.cwd(), path))
+  return appSourceFiles()
     .filter(path =>
       /^app\/api\/.*\/route\.ts$/.test(path)
       || /^app\/\(protected\)\/.*\/?page\.tsx$/.test(path)
-      || isServerActionsFile(path))
+      || isServerActionsSource(readFileSync(path, 'utf8'), path))
 }
 
 const GUARD_IMPORT = "import { requirePermission, requirePagePermission, requireAdministrator } from '@/lib/rbac/auth-guard'"
@@ -417,6 +439,27 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/rbac/users-actions.ts#updateUserRoles': 'assign-user-roles',
   'lib/theme-actions.ts#saveAppTheme': 'requireAdministrator',
 }
+
+describe('isServerActionsSource / appSourceFiles', () => {
+  it('finds the directive in the prologue, after leading comments too', () => {
+    expect(isServerActionsSource("'use server'\nexport async function a() {}", 'a.ts')).toBe(true)
+    expect(isServerActionsSource("// header\n/* block */\n'use server'\nexport async function a() {}", 'a.ts')).toBe(true)
+    expect(isServerActionsSource("'use strict'\n\"use server\"\nexport async function a() {}", 'a.ts')).toBe(true)
+  })
+
+  it('ignores the words outside the prologue', () => {
+    expect(isServerActionsSource("import x from 'y'\n'use server'\n", 'a.ts')).toBe(false)
+    expect(isServerActionsSource("const s = 'use server'\n", 'a.ts')).toBe(false)
+    expect(isServerActionsSource("// 'use server'\nexport const a = 1\n", 'a.ts')).toBe(false)
+  })
+
+  it('reads every source root of the app, not only app/ and lib/', () => {
+    const roots = new Set(appSourceFiles().map(path => path.split('/')[0]))
+    expect([...roots]).toEqual(expect.arrayContaining(['app', 'lib', 'components', 'context', 'types', 'proxy.ts']))
+    expect(roots.has('node_modules')).toBe(false)
+    expect(roots.has('.next')).toBe(false)
+  })
+})
 
 describe('permission declared', () => {
   it('scans the files it is meant to scan', () => {
