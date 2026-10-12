@@ -69,6 +69,7 @@ export function SetPasswordForm({ token }: { token: string }) {
           <Input
             id="new-password"
             type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
@@ -96,6 +97,7 @@ export function SetPasswordForm({ token }: { token: string }) {
         <Input
           id="confirm-password"
           type={showPassword ? 'text' : 'password'}
+          autoComplete="new-password"
           value={confirm}
           onChange={e => setConfirm(e.target.value)}
           required

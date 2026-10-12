@@ -2,7 +2,7 @@
 
 import React, { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { inputBaseClasses } from '@/components/ui/input'
+import { inputBaseClasses, PASSWORD_MANAGER_IGNORE } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 export interface EditableComboboxProps {
@@ -142,6 +142,7 @@ export function EditableCombobox({
         aria-autocomplete="list"
         aria-activedescendant={shown && highlighted !== null ? optionId(highlighted) : undefined}
         autoComplete="off"
+        {...PASSWORD_MANAGER_IGNORE}
         value={value}
         placeholder={placeholder}
         onChange={e => { openList(); onChange(e.target.value) }}

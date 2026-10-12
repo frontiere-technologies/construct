@@ -69,6 +69,7 @@ export function ChangePasswordForm() {
           <label className={labelCls}>{t('auth.change_password.current_password')}</label>
           <Input
             type="password"
+            autoComplete="current-password"
             value={currentPassword}
             onChange={e => setCurrentPassword(e.target.value)}
             required
@@ -78,6 +79,7 @@ export function ChangePasswordForm() {
           <label className={labelCls}>{t('auth.change_password.new_password')}</label>
           <Input
             type="password"
+            autoComplete="new-password"
             value={newPassword}
             onChange={e => setNewPassword(e.target.value)}
             required
@@ -89,6 +91,7 @@ export function ChangePasswordForm() {
           <label className={labelCls}>{t('auth.change_password.confirm_password')}</label>
           <Input
             type="password"
+            autoComplete="new-password"
             value={confirmPassword}
             onChange={e => setConfirmPassword(e.target.value)}
             required

@@ -6,6 +6,7 @@ import { IconRenderer } from '@/components/shared/IconRenderer'
 import { sanitizeSvg } from '@/lib/rbac/svg-sanitize'
 import { useI18n } from '@/context/I18nContext'
 import { Button } from '@/components/ui/button'
+import { PASSWORD_MANAGER_IGNORE } from '@/components/ui/input'
 
 // Curated subset of Lucide icons suited for navigation/admin items.
 // Names are PascalCase — fed directly to IconRenderer which does the lazy import.
@@ -173,6 +174,8 @@ export default function IconPicker({ value, onChange, compact = false }: Props) 
                   <input
                     autoFocus
                     type="search"
+                    autoComplete="off"
+                    {...PASSWORD_MANAGER_IGNORE}
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     placeholder={t('icon_picker.search_placeholder')}

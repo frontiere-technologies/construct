@@ -35,8 +35,8 @@ function render(element: React.ReactElement): HTMLInputElement {
 /**
  * Il nome di un ruolo non e' un dato personale, ma il segnaposto «Nome ruolo» e il focus
  * automatico all'apertura facevano comparire subito il menu di riempimento di Bitwarden, che
- * lo scambiava per il «nome» di un'identita'. `data-bwignore` lo spegne per Bitwarden,
- * `autocomplete="off"` per i suggerimenti del browser.
+ * lo scambiava per il «nome» di un'identita'. Ora ci pensa la primitiva `Input` (riempimento
+ * spento se il campo non dichiara che cosa contiene): questo test resta come prova sul caso reale.
  */
 describe('role name fields and password managers', () => {
   it.each([

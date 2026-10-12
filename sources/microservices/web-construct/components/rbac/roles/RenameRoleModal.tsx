@@ -31,9 +31,6 @@ export default function RenameRoleModal({ roleId, currentName, onClose }: { role
     >
         <h2 id={titleId} className="text-lg font-bold mb-4">{t('roles.rename.title')}</h2>
         <Input
-          // Il nome di un ruolo non va riempito da un gestore di password: Bitwarden lo scambiava per
-          // il «nome» di un'identità e apriva il suo menu appena il campo prendeva il focus.
-          autoComplete="off" data-bwignore
           data-dialog-initial-focus value={name} onChange={e => setName(e.target.value)} placeholder={t('roles.form.name')}
           className="mb-6"
         />
