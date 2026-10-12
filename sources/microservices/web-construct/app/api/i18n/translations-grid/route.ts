@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/rbac/auth-guard'
+import { deniedActor } from '@/lib/rbac/route-denial'
 import { listTranslations } from '@/lib/i18n/translation-service'
 import { listActiveLanguages } from '@/lib/i18n/language-service'
 import { translationsGridQuerySchema } from '@/lib/i18n/translations-grid-query-schema'
 
 export async function POST(req: NextRequest) {
-  const actor = await requirePermission('read-translations').catch(() => null)
+  const actor = await requirePermission('read-translations').catch(deniedActor)
   if (!actor) {
     return NextResponse.json({ error: 'Non autorizzato.' }, { status: 403 })
   }
