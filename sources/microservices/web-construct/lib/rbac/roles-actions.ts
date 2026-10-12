@@ -4,6 +4,7 @@ import { eq, inArray, sql } from 'drizzle-orm'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { permission, menuEntry, role, roleType } from '@/lib/db/schema'
+import { rolePermissionDeltasSchema, roleIdSchema } from './action-input-schemas'
 import {
   assertCanGrantFunctionalities, assertCanGrantPermissions,
 } from './grant-guards'
@@ -61,6 +62,10 @@ export async function renameRole(roleId: number, roleName: string): Promise<void
 
 export async function updateRolePermissions(roleId: number, deltas: RolePermissionDeltas): Promise<void> {
   const actor = await requirePermission('grant-role-permissions')
+  // Gli argomenti sono JSON arbitrario: un idItem stringa sfuggirebbe ai confronti di identità.
+  if (!roleIdSchema.safeParse(roleId).success || !rolePermissionDeltasSchema.safeParse(deltas).success) {
+    throw new Error('Invalid input')
+  }
   if ((await getRoleType(roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
 
   // Non si concede ciò che non si possiede (DEC-6, DEC-29): vale per chi concede, non per chi

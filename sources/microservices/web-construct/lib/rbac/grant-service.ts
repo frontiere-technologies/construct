@@ -3,11 +3,18 @@ import { db } from '@/lib/db'
 import { permission, roleFunctionality, rolePermission, userRole } from '@/lib/db/schema'
 import type { RoleGrants } from './grant-guards'
 
-/** I code delle righe indicate. Una categoria non ha code e non compare: la rifiuta
- *  `updateRolePermissions` per conto suo, con il proprio messaggio. */
+/** I code delle righe GRANT indicate. Una categoria non ha code e non compare: la rifiuta
+ *  `updateRolePermissions` per conto suo, con il proprio messaggio. Una riga GRANT senza code
+ *  non è nel catalogo e nessuno la possiede: si rifiuta qui, altrimenti sparirebbe dal controllo
+ *  e un non amministratore potrebbe concederla senza verifica. */
 export async function permissionCodesByIds(ids: number[]): Promise<string[]> {
   if (!ids.length) return []
-  const rows = await db.select({ code: permission.code }).from(permission).where(inArray(permission.idPermission, ids))
+  const rows = await db
+    .select({ idPermission: permission.idPermission, kind: permission.kind, code: permission.code })
+    .from(permission)
+    .where(inArray(permission.idPermission, ids))
+  const uncoded = rows.filter(row => row.kind === 'GRANT' && !row.code).map(row => row.idPermission)
+  if (uncoded.length) throw new Error(`Cannot grant permission(s) outside the catalog: ${uncoded.join(', ')}`)
   return rows.flatMap(row => (row.code ? [row.code] : []))
 }
 

@@ -4,6 +4,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { userRole } from '@/lib/db/schema'
+import { roleIdsSchema, userIdSchema, userStatusSchema } from './action-input-schemas'
 import { assertCanChangeRoles, assertCanChangeStatus, symmetricDifference } from './grant-guards'
 import { currentRoleIds, functionalityIdsForRoles, grantsForRoles } from './grant-service'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
@@ -33,6 +34,11 @@ function isLastAdministratorConflict(error: unknown): boolean {
 
 export async function updateUserRoles(userId: string, roleIds: number[]): Promise<void> {
   const actor = await requirePermission('assign-user-roles')
+  // Gli argomenti sono JSON arbitrario: un id ruolo stringa sfuggirebbe ai confronti di identità
+  // dei controlli di scalata e verrebbe poi scritto dal cast ::bigint[].
+  if (!userIdSchema.safeParse(userId).success || !roleIdsSchema.safeParse(roleIds).success) {
+    throw new Error('Invalid input')
+  }
   const currentUserId = actor.userId
   const targetCurrentlyAdmin = await userIsAdmin(userId)
   assertRoleChangeAllowed({
@@ -62,6 +68,9 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
 
 export async function setUserStatus(userId: string, status: UserStatusId): Promise<void> {
   const actor = await requirePermission('set-user-status')
+  if (!userIdSchema.safeParse(userId).success || !userStatusSchema.safeParse(status).success) {
+    throw new Error('Invalid input')
+  }
   const currentUserId = actor.userId
   assertStatusChangeAllowed({
     targetUserId: userId,
@@ -71,7 +80,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
     targetIsAdmin: false,
     otherActiveAdminCount: 1,
   })
-  assertCanChangeStatus(actor, await userIsAdmin(userId))
+  if (!actor.isAdmin) assertCanChangeStatus(actor, await userIsAdmin(userId))
 
   try {
     await db.execute(sql`select public.set_user_status_guarded(${userId}, ${status})`)

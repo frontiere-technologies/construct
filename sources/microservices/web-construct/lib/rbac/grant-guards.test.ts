@@ -66,7 +66,7 @@ describe('assertCanChangeRoles (DEC-29)', () => {
 
 describe('assertCanChangeStatus (DEC-29)', () => {
   it('refuses a non-administrator changing the status of an administrator', () => {
-    expect(() => assertCanChangeStatus(limited(['set-user-status']), true)).toThrow()
+    expect(() => assertCanChangeStatus(limited(['set-user-status']), true)).toThrow(/administrator/)
   })
 
   it('accepts a non-administrator changing the status of a normal user', () => {

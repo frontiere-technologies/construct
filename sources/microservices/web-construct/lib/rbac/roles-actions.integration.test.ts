@@ -45,6 +45,9 @@ async function makeMenuEntry(kind: 'container' | 'functionality'): Promise<numbe
   return created.id
 }
 
+const limitedActor = { userId: 'test', roleIds: [0], isAdmin: false, permissions: new Set<string>(['grant-role-permissions']) }
+const adminActor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+
 const nessunDelta = { functionalities: [], operations: [] }
 
 describeIntegration('updateRolePermissions against the database', () => {
@@ -175,14 +178,60 @@ describeIntegration('updateRolePermissions against the database', () => {
   it('refuses a limited actor granting a permission it does not hold (DEC-6)', async () => {
     const roleId = await makeServiceRole()
     const [perm] = await db.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'manage-menu'))
-    guard.actor = { userId: 'test', roleIds: [0], isAdmin: false, permissions: new Set(['grant-role-permissions']) }
+    expect(perm).toBeDefined()
+    guard.actor = limitedActor
     try {
       await expect(updateRolePermissions(roleId, {
         operations: [{ idItem: perm.idPermission, authorization: true }],
         functionalities: [],
       })).rejects.toThrow(/manage-menu/)
     } finally {
-      guard.actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+      guard.actor = adminActor
     }
+  })
+
+  it('refuses a limited actor granting a menu entry it cannot see (DEC-29)', async () => {
+    const roleId = await makeServiceRole()
+    const funcId = await makeMenuEntry('functionality')
+    guard.actor = limitedActor
+    try {
+      await expect(updateRolePermissions(roleId, {
+        ...nessunDelta,
+        functionalities: [{ idItem: funcId, authorization: true }],
+      })).rejects.toThrow(/menu entry/)
+    } finally {
+      guard.actor = adminActor
+    }
+    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId))).toHaveLength(0)
+  })
+
+  it('refuses a limited actor granting a GRANT row that has no catalog code', async () => {
+    const roleId = await makeServiceRole()
+    const grantId = await makePermission('GRANT')
+    guard.actor = limitedActor
+    try {
+      await expect(updateRolePermissions(roleId, {
+        ...nessunDelta,
+        operations: [{ idItem: grantId, authorization: true }],
+      })).rejects.toThrow(/outside the catalog/)
+    } finally {
+      guard.actor = adminActor
+    }
+    expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
+  })
+
+  it('refuses a string idItem smuggled past the types (input validation)', async () => {
+    const roleId = await makeServiceRole()
+    const grantId = await makePermission('GRANT')
+    guard.actor = limitedActor
+    try {
+      await expect(updateRolePermissions(roleId, {
+        ...nessunDelta,
+        operations: [{ idItem: String(grantId) as unknown as number, authorization: true }],
+      })).rejects.toThrow(/Invalid input/)
+    } finally {
+      guard.actor = adminActor
+    }
+    expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
   })
 })
