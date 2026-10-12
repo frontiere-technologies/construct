@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { eq, like, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, like, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { appLanguage, menuEntry, permission, role, roleFunctionality, roleListView, rolePermission, translationKey, translationValue, users } from '@/lib/db/schema'
 import { unique } from '@/lib/i18n/test-support/db-fixtures'
+import { PERMISSION_CODES } from './permission-catalog'
 
 /** Il rename è riuscito solo se i nomi vecchi sono spariti: una vista o una
  *  funzione lasciata indietro punterebbe ancora là e fallirebbe a runtime, non qui. */
@@ -274,9 +275,10 @@ describe('travaso in menu_entry', () => {
     // in fisso, senza guardia — se quella riga mancasse, `not in (insieme vuoto)` sarebbe vero
     // per ogni riga e la migrazione svuoterebbe la tabella, cascando sulle concessioni.
     // È irraggiungibile oggi (0001_baseline.sql semina -1 prima), ma solo la metà positiva se
-    // ne accorgerebbe: operations e le sue otto foglie, nove righe in tutto.
+    // ne accorgerebbe: operations, le cinque categorie e i quindici permessi del catalogo che la
+    // 0041 ha messo al posto degli otto segnaposto della baseline, ventuno righe in tutto.
     const [{ totali }] = await db.execute(sql`select count(*)::int as totali from public.permission`)
-    expect(totali).toBe(9)
+    expect(totali).toBe(21)
   })
 
   it('non ha più una colonna id_permission su menu_entry (MIG-4)', async () => {
@@ -564,5 +566,45 @@ describe('role_functionality (0024)', () => {
 
     await db.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, '{}'::bigint[], ${`{${entry.id}}`}::bigint[])`)
     expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole))).toHaveLength(0)
+  })
+})
+
+describe('catalogo dei permessi (0041)', () => {
+  it('contiene esattamente i codici del catalogo, di origine SOURCE e immutabili', async () => {
+    const rows = await db
+      .select({ code: permission.code, origin: permission.origin, kind: permission.kind, isImmutable: permission.isImmutable })
+      .from(permission)
+      .where(isNotNull(permission.code))
+    expect(rows.map(r => r.code).sort()).toEqual([...PERMISSION_CODES].sort())
+    expect(rows.every(r => r.origin === 'SOURCE' && r.kind === 'GRANT' && r.isImmutable === 1)).toBe(true)
+  })
+
+  it('non contiene più gli 8 segnaposto della baseline', async () => {
+    const rows = await db
+      .select({ name: permission.name })
+      .from(permission)
+      .where(inArray(permission.name, [
+        'USER_CREATE', 'USER_READ', 'USER_UPDATE', 'USER_DELETE',
+        'PERMISSION_CREATE', 'PERMISSION_READ', 'PERMISSION_UPDATE', 'PERMISSION_DELETE',
+      ]))
+    expect(rows).toEqual([])
+  })
+
+  it('appende cinque categorie SOURCE sotto operations, la prima direttamente', async () => {
+    const categories = await db
+      .select({ name: permission.name, idParent: permission.idParent })
+      .from(permission)
+      .where(and(eq(permission.kind, 'CATEGORY'), eq(permission.origin, 'SOURCE')))
+    expect(categories).toHaveLength(5)
+    expect(categories.filter(c => c.idParent === -1).map(c => c.name)).toEqual(['Amministrazione'])
+  })
+
+  it("concede all'Amministratore ogni codice del catalogo (DEC-25)", async () => {
+    const rows = await db
+      .select({ code: permission.code })
+      .from(rolePermission)
+      .innerJoin(permission, eq(permission.idPermission, rolePermission.idPermission))
+      .where(and(eq(rolePermission.idRole, 1), isNotNull(permission.code)))
+    expect(rows.map(r => r.code).sort()).toEqual([...PERMISSION_CODES].sort())
   })
 })
