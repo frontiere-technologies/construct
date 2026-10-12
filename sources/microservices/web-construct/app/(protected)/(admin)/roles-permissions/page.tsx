@@ -3,9 +3,10 @@ import { parseRolesGridUrlParams } from '@/lib/rbac/roles-grid-query'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
 import { requirePagePermission } from '@/lib/rbac/auth-guard'
+import { hasPermission } from '@/lib/rbac/actor'
 
 export default async function RolesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  await requirePagePermission('read-roles')
+  const actor = await requirePagePermission('read-roles')
   const sp = await searchParams
   const params = parseRolesGridUrlParams(sp)
   const { t } = await getI18n()
@@ -27,6 +28,7 @@ export default async function RolesPage({ searchParams }: { searchParams: Promis
         endDateIns={params.endDateIns}
         startDateMod={params.startDateMod ?? null}
         endDateMod={params.endDateMod ?? null}
+        canManage={hasPermission(actor, 'manage-roles')}
       />
     </PageContainer>
   )

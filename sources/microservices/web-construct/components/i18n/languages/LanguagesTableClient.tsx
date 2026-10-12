@@ -25,6 +25,7 @@ import LanguageFormModal from './LanguageFormModal'
 interface Props extends LanguagesUrlParams {
   /** Every language code in app_language, not just the grid's loaded rows. */
   existingCodes: string[]
+  canManage: boolean
 }
 
 const LANGUAGE_TEXT_FILTER = TEXT_FILTER as Pick<ColDef<LanguagePageItemDto>, 'filter' | 'filterParams'>
@@ -59,7 +60,7 @@ export default function LanguagesTableClient(props: Props) {
   }, [refresh])
 
   const columnDefs = useMemo<ColDef<LanguagePageItemDto>[]>(() => [
-    actionsColumnDef<LanguagePageItemDto>(row => [
+    ...(props.canManage ? [actionsColumnDef<LanguagePageItemDto>(row => [
       { label: t('common.actions.edit'), onClick: () => setEditing(row) },
       {
         label: row.isActive ? t('language.actions.deactivate') : t('language.actions.activate'),
@@ -72,7 +73,7 @@ export default function LanguagesTableClient(props: Props) {
         onClick: () => setPromoting(row),
       },
       { label: t('common.actions.delete'), disabled: row.isDefault, onClick: () => setDeleting(row) },
-    ]),
+    ])] : []),
     { field: 'code', headerName: t('language.form.code'), sortable: true, width: 100, ...LANGUAGE_TEXT_FILTER },
     { field: 'locale', headerName: t('language.form.locale'), sortable: true, width: 120, ...LANGUAGE_TEXT_FILTER },
     {
@@ -96,7 +97,7 @@ export default function LanguagesTableClient(props: Props) {
       colId: 'createdAt', headerName: t('language.created_at'), sortable: true, ...LANGUAGE_DATE_FILTER,
       valueGetter: p => p.data ? fmt.date(p.data.createdAt) : '',
     },
-  ], [t, fmt, run])
+  ], [t, fmt, run, props.canManage])
 
   const columnLabels = useMemo(() => [
     { colId: 'code', label: t('language.form.code') },
@@ -123,9 +124,11 @@ export default function LanguagesTableClient(props: Props) {
           () => setParam(languagesFilterModelToSearchParams({})),
         )}
       >
-        <Button size="sm" onClick={() => setCreating(true)}>
-          {t('language.actions.create')}
-        </Button>
+        {props.canManage && (
+          <Button size="sm" data-testid="create-language" onClick={() => setCreating(true)}>
+            {t('language.actions.create')}
+          </Button>
+        )}
       </GridToolbar>
 
       {error && <p role="alert" className="mb-3 text-sm text-destructive-muted-foreground">{error}</p>}

@@ -6,7 +6,7 @@ import {
   usersUrlParamsToFilterModel, usersFilterModelToSearchParams,
 } from './users-grid-query'
 
-vi.mock('@/lib/rbac/auth-guard', () => ({ requirePagePermission: vi.fn().mockResolvedValue({}) }))
+vi.mock('@/lib/rbac/auth-guard', () => ({ requirePagePermission: vi.fn().mockResolvedValue({ permissions: new Set() }) }))
 vi.mock('@/lib/rbac/roles-service', () => ({ getAllRoles: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/lib/i18n/server', () => ({ getI18n: vi.fn().mockResolvedValue({ t: (key: string) => key }) }))
 vi.mock('@/components/rbac/users/UsersTableClient', () => ({ default: () => null }))

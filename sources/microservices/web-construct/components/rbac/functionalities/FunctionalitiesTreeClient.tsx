@@ -14,9 +14,9 @@ import { rowActions } from '@/lib/rbac/nav-row-actions'
 import { useI18n } from '@/context/I18nContext'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 
-interface Props { tree: UserNavigationTreeDto[] }
+interface Props { tree: UserNavigationTreeDto[]; canManage: boolean }
 
-export default function FunctionalitiesTreeClient({ tree }: Props) {
+export default function FunctionalitiesTreeClient({ tree, canManage }: Props) {
   const { t } = useI18n()
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -47,7 +47,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
   const clearFilters = () => { setSearchDraft(''); setSearch('') }
 
   const trailing = (node: UserNavigationTreeDto) => {
-    const actions = rowActions(node)
+    const actions = rowActions(node, canManage)
     if (!actions.add && !actions.edit && !actions.remove) return null
     return (
       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -102,7 +102,9 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
             </button>
           )}
         </div>
-        <Button size="sm" onClick={() => router.push('/functionalities/create')}>{t('functionalities.actions.create')}</Button>
+        {canManage && (
+          <Button size="sm" data-testid="create-functionality" onClick={() => router.push('/functionalities/create')}>{t('functionalities.actions.create')}</Button>
+        )}
       </div>
       <FilterDrawer
         open={showFilters}
@@ -128,7 +130,7 @@ export default function FunctionalitiesTreeClient({ tree }: Props) {
       <NavigationTree
         nodes={filterTree(tree)}
         renderTrailing={trailing}
-        dnd={search.trim() ? undefined : { canDrag: n => !n.isImmutable, onMove: handleMove }}
+        dnd={search.trim() || !canManage ? undefined : { canDrag: n => !n.isImmutable, onMove: handleMove }}
       />
       {deleting && (
         <ConfirmModal

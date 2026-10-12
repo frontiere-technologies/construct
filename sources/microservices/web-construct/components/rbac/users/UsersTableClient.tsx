@@ -39,6 +39,8 @@ interface Props {
   createdTo: string | null
   updatedFrom: string | null
   updatedTo: string | null
+  canAssignRoles: boolean
+  canSetStatus: boolean
 }
 
 export default function UsersTableClient(props: Props) {
@@ -83,10 +85,13 @@ export default function UsersTableClient(props: Props) {
   const dateFilter = DATE_FILTER as Pick<ColDef<UserDto>, 'filter' | 'filterParams'>
 
   const columnDefs = useMemo<ColDef<UserDto>[]>(() => [
-    actionsColumnDef<UserDto>(u => [
-      { label: t('users.actions.manage_roles'), onClick: () => setManaging(u) },
-      { label: u.status.idUserStatus === USER_STATUS_ACTIVE ? t('users.actions.deactivate') : t('users.actions.activate'), onClick: () => setConfirmingStatus(u) },
-    ]),
+    ...(props.canAssignRoles || props.canSetStatus ? [actionsColumnDef<UserDto>(u => [
+      ...(props.canAssignRoles ? [{ label: t('users.actions.manage_roles'), onClick: () => setManaging(u) }] : []),
+      ...(props.canSetStatus ? [{
+        label: u.status.idUserStatus === USER_STATUS_ACTIVE ? t('users.actions.deactivate') : t('users.actions.activate'),
+        onClick: () => setConfirmingStatus(u),
+      }] : []),
+    ])] : []),
     {
       colId: 'firstName', headerName: t('users.list.name'), sortable: true,
       valueGetter: p => p.data ? fullName(p.data) : '',
@@ -113,7 +118,7 @@ export default function UsersTableClient(props: Props) {
       ...dateFilter,
       valueGetter: p => p.data?.updatedAt ? fmt.date(p.data.updatedAt) : '—',
     },
-  ], [allRolesKey, t, fmt]) // eslint-disable-line react-hooks/exhaustive-deps -- allRolesKey stands in for props.allRoles (see comment above)
+  ], [allRolesKey, t, fmt, props.canAssignRoles, props.canSetStatus]) // eslint-disable-line react-hooks/exhaustive-deps -- allRolesKey stands in for props.allRoles (see comment above)
 
   const columnLabels = useMemo(() => [
     { colId: 'firstName', label: t('users.list.name') },

@@ -63,7 +63,7 @@ describe('TranslationsTableClient column sizing', () => {
 
   it('uses create-only initial widths when URL-driven props rebuild column definitions', () => {
     const renderWithNamespaces = (namespaces: string[]) => renderToStaticMarkup(
-      <TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={[]} />,
+      <TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={[]} canEdit canManageKeys />,
     )
 
     renderWithNamespaces(['common'])
@@ -90,7 +90,7 @@ describe('TranslationsTableClient row actions', () => {
   })
 
   it('sends Modifica to the edit page, carrying the grid query', () => {
-    renderToStaticMarkup(<TranslationsTableClient urlParams={{}} namespaces={['common']} modules={[]} />)
+    renderToStaticMarkup(<TranslationsTableClient urlParams={{}} namespaces={['common']} modules={[]} canEdit canManageKeys />)
 
     const actions = captured.columnDefs[0].find(column => column.colId === 'actions')
     const getItems = (actions?.cellRendererParams as { getItems: (row: TranslationRowDto) => { label: string; onClick: () => void }[] }).getItems
@@ -106,7 +106,7 @@ describe('TranslationsTableClient row actions', () => {
   })
 
   it('leaves Elimina as an in-place action, not a navigation', () => {
-    renderToStaticMarkup(<TranslationsTableClient urlParams={{}} namespaces={['common']} modules={[]} />)
+    renderToStaticMarkup(<TranslationsTableClient urlParams={{}} namespaces={['common']} modules={[]} canEdit canManageKeys />)
 
     const actions = captured.columnDefs[0].find(column => column.colId === 'actions')
     const getItems = (actions?.cellRendererParams as { getItems: (row: TranslationRowDto) => { label: string; onClick: () => void }[] }).getItems
@@ -130,10 +130,10 @@ describe('TranslationsTableClient row actions', () => {
     document.body.append(container)
     const root = createRoot(container)
 
-    act(() => root.render(<TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={modules} />))
+    act(() => root.render(<TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={modules} canEdit canManageKeys />))
 
     searchParamsHolder.value = 'sort=namespace&direction=DESC'
-    act(() => root.render(<TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={modules} />))
+    act(() => root.render(<TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={modules} canEdit canManageKeys />))
 
     act(() => root.unmount())
     container.remove()

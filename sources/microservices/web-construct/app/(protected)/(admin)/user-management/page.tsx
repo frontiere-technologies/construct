@@ -4,9 +4,10 @@ import { PageContainer } from '@/components/shared/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
 import { parseUsersGridUrlParams } from '@/lib/rbac/users-grid-query'
 import { requirePagePermission } from '@/lib/rbac/auth-guard'
+import { hasPermission } from '@/lib/rbac/actor'
 
 export default async function UserManagementPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  await requirePagePermission('read-users')
+  const actor = await requirePagePermission('read-users')
   const sp = await searchParams
   const allRolesRaw = await getAllRoles()
   const allRoles = allRolesRaw.map(r => ({ id: r.id, name: r.description }))
@@ -31,6 +32,8 @@ export default async function UserManagementPage({ searchParams }: { searchParam
         createdTo={params.createdTo}
         updatedFrom={params.updatedFrom ?? null}
         updatedTo={params.updatedTo ?? null}
+        canAssignRoles={hasPermission(actor, 'assign-user-roles')}
+        canSetStatus={hasPermission(actor, 'set-user-status')}
       />
     </PageContainer>
   )

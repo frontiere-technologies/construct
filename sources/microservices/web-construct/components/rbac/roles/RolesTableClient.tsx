@@ -42,6 +42,7 @@ interface Props {
   endDateIns: string | null
   startDateMod: string | null
   endDateMod: string | null
+  canManage: boolean
 }
 
 export default function RolesTableClient(props: Props) {
@@ -67,8 +68,10 @@ export default function RolesTableClient(props: Props) {
   const columnDefs = useMemo<ColDef<RolePageItemDto>[]>(() => [
     actionsColumnDef<RolePageItemDto>(r => [
       { label: t('common.actions.open'), onClick: () => router.push(`/roles-permissions/${r.id}`) },
-      { label: t('common.actions.rename'), disabled: r.roleType !== 'SERVICE', onClick: () => setRenaming(r) },
-      { label: t('common.actions.delete'), disabled: r.roleType === 'SYSTEM', onClick: () => setDeleting(r) },
+      ...(props.canManage ? [
+        { label: t('common.actions.rename'), disabled: r.roleType !== 'SERVICE', onClick: () => setRenaming(r) },
+        { label: t('common.actions.delete'), disabled: r.roleType === 'SYSTEM', onClick: () => setDeleting(r) },
+      ] : []),
     ]),
     { field: 'id', headerName: t('roles.list.id'), sortable: true, ...ROLE_NUMBER_FILTER },
     {
@@ -92,7 +95,7 @@ export default function RolesTableClient(props: Props) {
       valueGetter: p => p.data ? fmt.date(p.data.dateIns) : '',
     },
     { field: 'dateMod', headerName: t('roles.list.updated_at'), sortable: true, ...ROLE_DATE_FILTER, valueGetter: p => p.data ? fmt.date(p.data.dateMod) : '' },
-  ], [router, t, fmt])
+  ], [router, t, fmt, props.canManage])
 
   const columnLabels = useMemo(() => [
     { colId: 'id', label: t('roles.list.id') },
@@ -123,7 +126,9 @@ export default function RolesTableClient(props: Props) {
   return (
     <>
       <GridToolbar gridApi={gridApi} columns={columnLabels} onClearFilters={handleClearFilters}>
-        <Button size="sm" onClick={() => setShowCreate(true)}>{t('roles.actions.create')}</Button>
+        {props.canManage && (
+          <Button size="sm" data-testid="create-role" onClick={() => setShowCreate(true)}>{t('roles.actions.create')}</Button>
+        )}
       </GridToolbar>
       <DataGrid<RolePageItemDto>
         columnDefs={columnDefs}

@@ -16,9 +16,11 @@ import RenameRoleModal from './RenameRoleModal'
 interface Props {
   role: RoleInformationDto
   trees: RoleAuthorizationTrees
+  canGrant: boolean
+  canManageRoles: boolean
 }
 
-export default function RoleDetailClient({ role, trees }: Props) {
+export default function RoleDetailClient({ role, trees, canGrant, canManageRoles }: Props) {
   const { t } = useI18n()
   const router = useRouter()
   const loadedFunctionalities = useMemo(() => buildAuthMap(trees.functionalities), [trees.functionalities])
@@ -31,7 +33,8 @@ export default function RoleDetailClient({ role, trees }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const isSystem = role.roleType === 'SYSTEM'
-  const canRename = role.roleType === 'SERVICE'
+  const canRename = role.roleType === 'SERVICE' && canManageRoles
+  const editable = !isSystem && canGrant
 
   const cancel = () => router.push('/roles-permissions')
   const save = async () => {
@@ -81,22 +84,24 @@ export default function RoleDetailClient({ role, trees }: Props) {
     >
       <section className="space-y-2">
         <h2 className="text-sm font-medium text-muted-foreground">{t('roles.detail.functionalities')}</h2>
-        <PermissionsTree trees={trees.functionalities} map={functionalities} onChange={setFunctionalities} editable={!isSystem} />
+        <PermissionsTree trees={trees.functionalities} map={functionalities} onChange={setFunctionalities} editable={editable} />
       </section>
 
       <section className="space-y-2 pt-4">
         <h2 className="text-sm font-medium text-muted-foreground">{t('roles.detail.operations')}</h2>
-        <PermissionsTree trees={trees.operations} map={operations} onChange={setOperations} editable={!isSystem} />
+        <PermissionsTree trees={trees.operations} map={operations} onChange={setOperations} editable={editable} />
       </section>
 
       <div className="pt-4 border-t border-border flex items-center justify-between gap-3">
         <div>{error && <p role="alert" className="text-sm text-destructive-muted-foreground">{error}</p>}</div>
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={cancel}>{t('common.actions.cancel')}</Button>
-          <Button
-            onClick={save} disabled={busy || isSystem}
-            title={isSystem ? t('roles.detail.system_readonly_hint') : undefined}
-          >{t('common.actions.save')}</Button>
+          {canGrant && (
+            <Button
+              onClick={save} disabled={busy || isSystem}
+              title={isSystem ? t('roles.detail.system_readonly_hint') : undefined}
+            >{t('common.actions.save')}</Button>
+          )}
         </div>
       </div>
 
