@@ -187,7 +187,7 @@ export function TranslationKeyForm(props: TranslationKeyFormProps) {
       // A brand-new key is at `version` 1 (`not null default 1` in schema.sql).
       await saveValues(keyId, 1)
     } catch (err) {
-      // Every server action here starts with `requireAdmin()`
+      // Every server action here starts with `requirePermission()`
       // (lib/rbac/auth-guard.ts), which throws rather than returning an
       // error — an expired session or a downgraded admin rejects the promise,
       // same as the invariant above. Same raw-server-string treatment as

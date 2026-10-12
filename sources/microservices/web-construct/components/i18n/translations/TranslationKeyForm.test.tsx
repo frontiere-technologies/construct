@@ -209,7 +209,7 @@ describe('TranslationKeyForm in edit mode', () => {
   })
 
   it('surfaces a rejected save instead of quietly re-enabling Salva with nothing to show for it', async () => {
-    // `requireAdmin()` (lib/rbac/auth-guard.ts) throws rather than returning
+    // `requirePermission()` (lib/rbac/auth-guard.ts) throws rather than returning
     // an error — this simulates an expired session or a downgraded admin,
     // which a bare try/finally with no catch used to swallow silently.
     vi.mocked(saveTranslations).mockRejectedValue(new Error('Sessione scaduta.'))

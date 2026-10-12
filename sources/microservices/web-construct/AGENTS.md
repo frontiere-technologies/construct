@@ -65,9 +65,7 @@ Due regole, in quest'ordine:
 
 Nomi riservati dal framework invariati, sia nel nome sia nell'estensione: `page.tsx`,
 `layout.tsx`, `route.ts`, `error.tsx`, `loading.tsx`, `not-found.tsx`, `template.tsx`,
-`default.tsx`, `middleware.ts`. Questa è l'unica eccezione reale alla regola `.tsx`-solo-con-JSX
-di sopra: `app/(protected)/(admin)/layout.tsx` non contiene JSX, ma rinominarlo `layout.ts`
-allontanerebbe il file dalla convenzione Next che ogni lettore si aspetta, per un guadagno nullo.
+`default.tsx`, `middleware.ts`.
 
 **Il `camelCase` nei nomi di file non esiste.** Non appartiene a nessuna delle due regole:
 un file che non esporta un componente va in `kebab-case`.
@@ -257,7 +255,8 @@ Ogni convenzione qui sopra che si può rompere in silenzio deve avere una delle 
 - una regola ESLint (`import-x/order`, `import-x/no-default-export` su `components/**`);
 - una guardia vitest in `guards/`, alla radice del microservizio — è dove stanno oggi
   `file-naming`, `acronym-casing`, `handler-naming`, `button-interaction-styles`,
-  `disabled-button-hover-styles`, `dialog-consumers`, `icon-only-button-accessible-name`.
+  `disabled-button-hover-styles`, `dialog-consumers`, `icon-only-button-accessible-name`,
+  `permission-declared`, `permission-catalog`.
   Girano dentro `npm test`, quindi in CI ci arrivano da sole;
 - un cricchetto `node --test` in `sources/devops/`, agganciato a mano a
   `.github/workflows/quality.yml`.
