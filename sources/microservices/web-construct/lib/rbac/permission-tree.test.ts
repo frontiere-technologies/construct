@@ -18,6 +18,17 @@ describe('buildAuthTree', () => {
     expect(tree[0].children[0].authorization).toBe(true)
   })
 
+  // Il tipo decide l'icona in NavigationTree: senza, una foglia cadeva sul tondino di riserva,
+  // che sembrava un'opzione da selezionare accanto all'interruttore.
+  it('marca le foglie come permessi, e le categorie no', () => {
+    const tree = buildAuthTree([
+      perm({ id_permission: 1, kind: 'CATEGORY', code: null }),
+      perm({ id_permission: 2, id_parent: 1 }),
+    ], new Set())
+    expect(tree[0].children[0].functionalityType).toBe('PERMISSION')
+    expect(tree[0].functionalityType ?? null).toBeNull()
+  })
+
   it('non concede mai una categoria: la concessione sta sulle foglie', () => {
     const tree = buildAuthTree([
       perm({ id_permission: 1, kind: 'CATEGORY', code: null }),

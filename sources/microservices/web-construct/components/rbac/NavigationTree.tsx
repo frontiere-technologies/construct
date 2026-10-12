@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useRef } from 'react'
-import { ChevronDown, ChevronRight, GripVertical, FolderTree, Code, Globe, Link as LinkIcon, Circle, type LucideIcon } from 'lucide-react'
+import { ChevronDown, ChevronRight, GripVertical, FolderTree, Code, Globe, Link as LinkIcon, Circle, KeyRound, type LucideIcon } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors, pointerWithin,
   useDraggable, useDroppable, type DragStartEvent, type DragMoveEvent, type DragEndEvent,
@@ -47,6 +47,7 @@ export function typeIcon(node: Pick<UserNavigationTreeDto, 'type' | 'functionali
     case 'EMBEDDED_PAGE': return Code
     case 'EXTERNAL_LINK': return Globe
     case 'INTERNAL_FUNCTIONALITY': return LinkIcon
+    case 'PERMISSION': return KeyRound
     default: return Circle
   }
 }

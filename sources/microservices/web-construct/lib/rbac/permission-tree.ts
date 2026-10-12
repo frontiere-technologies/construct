@@ -42,6 +42,9 @@ export function buildAuthTree(
         id: p.id_permission,
         name: labelFor(p, locale),
         type: p.kind === 'CATEGORY' ? 'CATEGORY' as const : 'FUNCTIONALITY' as const,
+        // Il tipo decide l'icona (typeIcon in NavigationTree): una chiave, non il tondino di
+        // riserva che accanto all'interruttore sembrava un'opzione da selezionare.
+        functionalityType: p.kind === 'CATEGORY' ? null : 'PERMISSION' as const,
         parentId: p.id_parent,
         // Spec 3.3: la concessione sta sulle foglie. Una categoria non ha mai una riga propria
         // in role_permission, quindi la sua authorization è sempre false — anche se il database
