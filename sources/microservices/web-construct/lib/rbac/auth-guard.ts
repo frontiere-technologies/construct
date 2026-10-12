@@ -1,11 +1,52 @@
+import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
-import { resolveUserAuthorization } from './auth-roles'
+import { resolveActor, type Actor } from './actor'
+import type { PermissionCode } from './permission-catalog'
 
-export async function requireAdmin(): Promise<{ userId: string; roleIds: number[] }> {
+/**
+ * Il punto di controllo (specifica 2026-09-01, §6.2). Ogni azione server, rotta API e pagina
+ * protetta chiama una di queste funzioni come prima istruzione, oppure un'esenzione di
+ * `access-declarations.ts`: lo impone `guards/permission-declared.test.ts`.
+ *
+ * Due varianti per due chiamanti: un'azione o una rotta deve rifiutare (lancia, e la rotta lo
+ * trasforma in 403); una pagina deve portare altrove (`redirect`, che in Next lancia a sua volta).
+ * Il messaggio `'Unauthorized'` è quello che `theme-actions.ts` confronta: non cambiarlo.
+ */
+
+async function currentActor(): Promise<Actor | null> {
   const session = await auth()
-  const user = session?.user as { id?: string; roleIds?: number[]; isAdmin?: boolean } | undefined
-  if (!user?.id) throw new Error('Unauthorized')
-  const authorization = await resolveUserAuthorization(user.id)
-  if (!authorization.accountActive || !authorization.isAdmin) throw new Error('Unauthorized')
-  return { userId: user.id, roleIds: authorization.roleIds }
+  const userId = session?.user?.id
+  if (!userId) return null
+  return resolveActor(userId)
+}
+
+export async function requirePermission(code: PermissionCode): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || !actor.permissions.has(code)) throw new Error('Unauthorized')
+  return actor
+}
+
+export async function requirePagePermission(code: PermissionCode): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || !actor.permissions.has(code)) redirect('/')
+  return actor
+}
+
+/** Solo per ciò che non ha un codice nel catalogo: oggi il tema dell'app (DEC-23). */
+export async function requireAdministrator(): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || !actor.isAdmin) throw new Error('Unauthorized')
+  return actor
+}
+
+export async function requireAdministratorPage(): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || !actor.isAdmin) redirect('/')
+  return actor
+}
+
+/** Temporaneo: i chiamanti esistenti passano ancora da qui. Il Task 4 del piano 2026-10-12 lo rimuove. */
+export async function requireAdmin(): Promise<{ userId: string; roleIds: number[] }> {
+  const actor = await requireAdministrator()
+  return { userId: actor.userId, roleIds: actor.roleIds }
 }
