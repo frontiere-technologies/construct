@@ -6,10 +6,12 @@ import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
 import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
 import { prepareInvitation, recordInvitationDelivery } from '@/lib/auth-invitations'
+import { allowAnonymous } from '@/lib/rbac/access-declarations'
 
 const log = createLogger('auth:register')
 
 export async function POST(req: NextRequest) {
+  allowAnonymous()
   const body = await req.json().catch(() => null)
   const { email } = body ?? {}
 

@@ -7,6 +7,7 @@ import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { shouldUseSecureCookies } from '@/lib/i18n/cookie-security'
+import { allowSelfService } from '@/lib/rbac/access-declarations'
 import {
   APPEARANCE_COOKIE, APPEARANCE_COOKIE_MAX_AGE, appearancePatchSchema, serializeAppearance, toAppearance,
   type Appearance, type AppearancePatch,
@@ -22,6 +23,7 @@ const log = createLogger('appearance')
 export async function saveAppearance(
   patch: AppearancePatch,
 ): Promise<{ error: string | null; appearance?: Appearance }> {
+  allowSelfService()
   const session = await auth()
   const userId = session?.user?.id
   if (!userId) return { error: 'Not authenticated' }

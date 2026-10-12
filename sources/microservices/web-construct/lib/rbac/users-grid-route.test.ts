@@ -6,11 +6,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { POST } from '@/app/api/rbac/users-grid/route'
 
 const mocks = vi.hoisted(() => ({
-  auth: vi.fn(),
+  requirePermission: vi.fn(),
   listUsers: vi.fn(),
+  logError: vi.fn(),
 }))
 
-vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
+vi.mock('@/lib/rbac/auth-guard', () => ({ requirePermission: mocks.requirePermission }))
+vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: mocks.logError }) }))
 vi.mock('@/lib/rbac/users-service', () => ({ listUsers: mocks.listUsers }))
 
 function request(body: unknown): NextRequest {
@@ -23,11 +25,29 @@ function request(body: unknown): NextRequest {
 
 describe('POST /api/rbac/users-grid', () => {
   beforeEach(() => {
-    mocks.auth.mockResolvedValue({ user: { id: 'admin', isAdmin: true } })
+    mocks.logError.mockClear()
+    mocks.requirePermission.mockResolvedValue({ userId: 'admin', roleIds: [0, 1], isAdmin: true, permissions: new Set() })
     mocks.listUsers.mockImplementation(async (query: { updatedTo?: string }) => {
       if (query.updatedTo === 'not-a-date') throw new RangeError('Invalid time value')
       return { users: [], total: 0 }
     })
+  })
+
+  it('answers 403 to a failing check as well, and logs it instead of hiding it', async () => {
+    const err = new Error('connect ECONNREFUSED')
+    mocks.requirePermission.mockRejectedValue(err)
+    const response = await POST(request({ page: 0, size: 50, sort: 'dateIns', direction: 'DESC' }))
+    expect(response.status).toBe(403)
+    expect(mocks.logError).toHaveBeenCalledWith({ err }, expect.any(String))
+    expect(mocks.listUsers).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 when the read permission is missing', async () => {
+    mocks.requirePermission.mockRejectedValue(new Error('Unauthorized'))
+    const response = await POST(request({ page: 0, size: 50, sort: 'dateIns', direction: 'DESC' }))
+    expect(response.status).toBe(403)
+    expect(mocks.listUsers).not.toHaveBeenCalled()
+    expect(mocks.logError).not.toHaveBeenCalled()
   })
 
   it('returns 400 for malformed date filters before they reach the service', async () => {

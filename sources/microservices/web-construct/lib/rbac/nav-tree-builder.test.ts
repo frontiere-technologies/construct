@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildNavTree, canDeleteSubtree, isDescendant, selectableParents } from './nav-tree-builder'
+import { buildNavTree, canDeleteSubtree, hasChildren, isDescendant, selectableParents } from './nav-tree-builder'
 import type { MenuEntryRow } from './types'
 
 const row = (id: number, parent: number | null, isCategory: boolean, name: string, extra: Partial<MenuEntryRow> = {}): MenuEntryRow => ({
@@ -48,6 +48,17 @@ describe('canDeleteSubtree', () => {
     expect(canDeleteSubtree(mod, 2)).toBe(false)
   })
   it('allows a fully-deletable subtree', () => { expect(canDeleteSubtree(items, 4)).toBe(true) })
+})
+
+// Una cartella che contiene qualcosa non si elimina: si svuota prima, spostando o eliminando le
+// voci. Cancellarla a cascata portava via in silenzio anche le concessioni ai ruoli delle voci
+// interne, senza un modo per tornare indietro.
+describe('hasChildren', () => {
+  it('is true for a category that holds an item', () => { expect(hasChildren(items, 4)).toBe(true) })
+  it('is false for a leaf', () => { expect(hasChildren(items, 5)).toBe(false) })
+  it('is false for an empty category', () => {
+    expect(hasChildren([...items, row(6, null, true, 'C')], 6)).toBe(false)
+  })
 })
 
 describe('isDescendant', () => {

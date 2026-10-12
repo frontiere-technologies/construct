@@ -37,12 +37,12 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
-function draw(map: Map<number, boolean>, editable = true) {
+function draw(map: Map<number, boolean>, editable = true, canGrantNode?: (id: number) => boolean) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
   act(() => root?.render(
-    <PermissionsTree trees={trees} map={map} onChange={() => {}} editable={editable} />,
+    <PermissionsTree trees={trees} map={map} onChange={() => {}} editable={editable} canGrantNode={canGrantNode} />,
   ))
 }
 
@@ -114,5 +114,28 @@ describe('PermissionsTree, interruttore delle cartelle', () => {
     draw(new Map(), false)
     expect(toggle('nodo-6').disabled).toBe(true)
     expect(toggle('nodo-5').disabled).toBe(true)
+  })
+})
+
+// I3 della revisione finale: chi non è amministratore concede solo ciò che possiede (DEC-6).
+describe('PermissionsTree, ciò che non si può concedere', () => {
+  const soloSei = (id: number) => id === 6
+
+  it('disabilita la foglia spenta che non si può concedere, e dice perché', () => {
+    draw(new Map(), true, soloSei)
+    expect(toggle('nodo-7').disabled).toBe(true)
+    expect(toggle('nodo-7').getAttribute('title')).toBe('roles.detail.not_grantable_hint')
+    expect(toggle('nodo-6').disabled).toBe(false)
+  })
+
+  it('lascia spegnere una foglia accesa anche se non la si potrebbe concedere', () => {
+    draw(new Map([[7, true]]), true, soloSei)
+    expect(toggle('nodo-7').disabled).toBe(false)
+  })
+
+  it('disabilita la cartella che non ha niente da accendere né da spegnere', () => {
+    draw(new Map(), true, () => false)
+    expect(toggle('nodo-5').disabled).toBe(true)
+    expect(toggle('nodo-5').getAttribute('title')).toBe('roles.detail.not_grantable_hint')
   })
 })

@@ -68,6 +68,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
               </label>
               <Input
                 type="email"
+                autoComplete="email"
                 value={email}
                 disabled
               />
@@ -80,6 +81,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
               </label>
               <Input
                 type="text"
+                autoComplete="given-name"
                 value={profile.first_name ?? ''}
                 onChange={handleChange('first_name')}
               />
@@ -92,6 +94,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
               </label>
               <Input
                 type="text"
+                autoComplete="family-name"
                 value={profile.last_name ?? ''}
                 onChange={handleChange('last_name')}
               />
@@ -104,6 +107,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
               </label>
               <Input
                 type="text"
+                autoComplete="username"
                 value={profile.username ?? ''}
                 onChange={handleChange('username')}
               />
@@ -117,6 +121,7 @@ export default function ProfileForm({ email, avatarUrl, initialProfile, provider
               </label>
               <Input
                 type="tel"
+                autoComplete="tel"
                 value={profile.phone ?? ''}
                 onChange={handleChange('phone')}
                 placeholder="+391234567890"

@@ -1,9 +1,12 @@
 'use server'
 
 import { and, eq, sql } from 'drizzle-orm'
-import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { userRole } from '@/lib/db/schema'
+import { roleIdsSchema, userIdSchema, userStatusSchema } from './action-input-schemas'
+import { assertCanChangeRoles, assertCanChangeStatus, symmetricDifference } from './grant-guards'
+import { currentRoleIds, functionalityIdsForRoles, grantsForRoles } from './grant-service'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
 import { ROLE_ADMINISTRATOR, ROLE_REGISTERED, type UserStatusId } from './types'
 
@@ -30,7 +33,13 @@ function isLastAdministratorConflict(error: unknown): boolean {
 }
 
 export async function updateUserRoles(userId: string, roleIds: number[]): Promise<void> {
-  const { userId: currentUserId } = await requireAdmin()
+  const actor = await requirePermission('assign-user-roles')
+  // Gli argomenti sono JSON arbitrario: un id ruolo stringa sfuggirebbe ai confronti di identità
+  // dei controlli di scalata e verrebbe poi scritto dal cast ::bigint[].
+  if (!userIdSchema.safeParse(userId).success || !roleIdsSchema.safeParse(roleIds).success) {
+    throw new Error('Invalid input')
+  }
+  const currentUserId = actor.userId
   const targetCurrentlyAdmin = await userIsAdmin(userId)
   assertRoleChangeAllowed({
     targetUserId: userId,
@@ -43,6 +52,11 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
   })
 
   const finalRoleIds = Array.from(new Set<number>([ROLE_REGISTERED, ...roleIds]))
+  if (!actor.isAdmin) {
+    const touched = symmetricDifference(await currentRoleIds(userId), finalRoleIds)
+    const [visible, grants] = await Promise.all([functionalityIdsForRoles(actor.roleIds), grantsForRoles(touched)])
+    assertCanChangeRoles(actor, visible, grants)
+  }
   try {
     const roleIdsArray = `{${finalRoleIds.join(',')}}`
     await db.execute(sql`select public.replace_user_roles_guarded(${userId}, ${roleIdsArray}::bigint[])`)
@@ -53,7 +67,11 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
 }
 
 export async function setUserStatus(userId: string, status: UserStatusId): Promise<void> {
-  const { userId: currentUserId } = await requireAdmin()
+  const actor = await requirePermission('set-user-status')
+  if (!userIdSchema.safeParse(userId).success || !userStatusSchema.safeParse(status).success) {
+    throw new Error('Invalid input')
+  }
+  const currentUserId = actor.userId
   assertStatusChangeAllowed({
     targetUserId: userId,
     currentUserId,
@@ -62,6 +80,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
     targetIsAdmin: false,
     otherActiveAdminCount: 1,
   })
+  if (!actor.isAdmin) assertCanChangeStatus(actor, await userIsAdmin(userId))
 
   try {
     await db.execute(sql`select public.set_user_status_guarded(${userId}, ${status})`)

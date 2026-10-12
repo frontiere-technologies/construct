@@ -6,12 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { POST } from '@/app/api/i18n/translations-grid/route'
 
 const mocks = vi.hoisted(() => ({
-  auth: vi.fn(),
+  requirePermission: vi.fn(),
   listTranslations: vi.fn(),
   listActiveLanguages: vi.fn(),
 }))
 
-vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
+vi.mock('@/lib/rbac/auth-guard', () => ({ requirePermission: mocks.requirePermission }))
 vi.mock('@/lib/i18n/translation-service', () => ({ listTranslations: mocks.listTranslations }))
 vi.mock('@/lib/i18n/language-service', () => ({ listActiveLanguages: mocks.listActiveLanguages }))
 
@@ -26,9 +26,16 @@ function request(body: unknown): NextRequest {
 describe('POST /api/i18n/translations-grid', () => {
   beforeEach(() => {
     mocks.listTranslations.mockClear()
-    mocks.auth.mockResolvedValue({ user: { id: 'admin', isAdmin: true } })
+    mocks.requirePermission.mockResolvedValue({ userId: 'admin', roleIds: [0, 1], isAdmin: true, permissions: new Set() })
     mocks.listTranslations.mockResolvedValue({ elements: [], total: 0 })
     mocks.listActiveLanguages.mockResolvedValue([{ code: 'en', isActive: true }])
+  })
+
+  it('returns 403 when the read permission is missing', async () => {
+    mocks.requirePermission.mockRejectedValue(new Error('Unauthorized'))
+    const response = await POST(request({ page: 0, size: 50 }))
+    expect(response.status).toBe(403)
+    expect(mocks.listTranslations).not.toHaveBeenCalled()
   })
 
   it.each([

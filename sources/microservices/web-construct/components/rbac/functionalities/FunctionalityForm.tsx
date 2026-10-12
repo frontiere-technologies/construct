@@ -116,7 +116,8 @@ export default function FunctionalityForm(
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('functionalities.form.general_info')}</h2>
           <div className="flex items-start gap-3">
             <IconPicker compact value={f.iconPath} onChange={v => set('iconPath', v)} />
-            <div className="flex-1 space-y-3">
+            {/* min-w-0: senza, la colonna si allargava quanto il contenuto più lungo e usciva dal riquadro. */}
+            <div className="min-w-0 flex-1 space-y-3">
               <Input value={primaryName} onChange={e => set('translations', { ...f.translations, [defaultLocale]: { ...f.translations[defaultLocale], name: e.target.value } })}
                 placeholder={t('functionalities.form.name_placeholder')} maxLength={100}
                 className="bg-transparent" />

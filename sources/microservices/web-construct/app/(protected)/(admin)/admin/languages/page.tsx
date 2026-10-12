@@ -1,16 +1,13 @@
-import { redirect } from 'next/navigation'
-import { auth } from '@/lib/auth'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
 import { listLanguages } from '@/lib/i18n/language-service'
 import LanguagesTableClient from '@/components/i18n/languages/LanguagesTableClient'
 import { parseLanguagesGridUrlParams } from '@/lib/i18n/languages-grid-query'
+import { requirePagePermission } from '@/lib/rbac/auth-guard'
+import { hasPermission } from '@/lib/rbac/actor'
 
 export default async function LanguagesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  // Middleware already gates /admin/*, but a page must not rely on it alone:
-  // a direct RSC request that skipped the matcher would otherwise render.
-  const session = await auth()
-  if (!session?.user?.isAdmin) redirect('/')
+  const actor = await requirePagePermission('read-languages')
 
   const sp = await searchParams
   // Every language, active or not: the grid holds only the loaded page of rows,
@@ -22,7 +19,11 @@ export default async function LanguagesPage({ searchParams }: { searchParams: Pr
 
   return (
     <PageContainer title={t('language.title')} subtitle={t('language.subtitle')}>
-      <LanguagesTableClient {...gridParams} existingCodes={languages.map(l => l.code)} />
+      <LanguagesTableClient
+        {...gridParams}
+        existingCodes={languages.map(l => l.code)}
+        canManage={hasPermission(actor, 'manage-languages')}
+      />
     </PageContainer>
   )
 }

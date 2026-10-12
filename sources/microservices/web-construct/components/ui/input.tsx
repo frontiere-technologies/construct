@@ -14,10 +14,37 @@ export const inputBaseClasses =
   'focus:outline-none focus:ring-2 focus:ring-primary/50 ' +
   'disabled:bg-accent disabled:text-foreground-faint disabled:cursor-not-allowed'
 
+/**
+ * Gli attributi con cui i gestori di password più diffusi accettano di lasciare stare un campo:
+ * Bitwarden, 1Password, LastPass. `autocomplete="off"` da solo non basta, perché quasi tutti lo
+ * ignorano di proposito. Esportato per i campi di testo scritti come `<input>` nativo (le
+ * combobox), che non passano da `Input`.
+ */
+export const PASSWORD_MANAGER_IGNORE = {
+  'data-bwignore': true,
+  'data-1p-ignore': true,
+  'data-lpignore': 'true',
+} as const
+
 // `ComponentPropsWithRef`, as in button.tsx: on React 19 `ref` is a plain prop,
 // and the spread below hands it to the native input.
 export type InputProps = React.ComponentPropsWithRef<'input'>
 
-export function Input({ className, ...props }: InputProps) {
-  return <input className={cn(inputBaseClasses, className)} {...props} />
+/**
+ * Il riempimento automatico è spento per default: in questa app quasi ogni campo è un dato di
+ * amministrazione, e Bitwarden scambiava «Nome ruolo» per il nome di un'identità. Un campo che
+ * lo vuole acceso dichiara che cosa contiene (`autoComplete="current-password"`, `"email"`,
+ * `"given-name"`…), come chiede WCAG 1.3.5 per i dati personali dell'utente; allora i gestori
+ * di password sono liberi di aiutare.
+ */
+export function Input({ className, autoComplete, ...props }: InputProps) {
+  const declared = autoComplete !== undefined && autoComplete !== 'off'
+  return (
+    <input
+      className={cn(inputBaseClasses, className)}
+      autoComplete={declared ? autoComplete : 'off'}
+      {...(declared ? {} : PASSWORD_MANAGER_IGNORE)}
+      {...props}
+    />
+  )
 }

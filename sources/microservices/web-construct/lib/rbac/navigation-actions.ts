@@ -2,12 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
-import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { menuEntry } from '@/lib/db/schema'
 import { toMenuEntryRow } from './nav-row-mapper'
 import { sanitizeSvg } from './svg-sanitize'
-import { canDeleteSubtree, isDescendant } from './nav-tree-builder'
+import { canDeleteSubtree, hasChildren, isDescendant } from './nav-tree-builder'
 import type { CreateNavItemInput, UpdateNavItemInput, MoveInput, MenuEntryRow } from './types'
 import { ITEM_TYPE_CATEGORY } from './types'
 
@@ -89,7 +89,7 @@ async function reparent(
 }
 
 export async function createNavigationItem(input: CreateNavItemInput): Promise<{ id: number }> {
-  await requireAdmin()
+  await requirePermission('manage-menu')
   if (!input.name.trim()) throw new Error('Name is required')
   // Una categoria di menu non è un permesso: raggruppa voci, non protegge niente.
   const isCategory = input.idItemType === ITEM_TYPE_CATEGORY
@@ -153,7 +153,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
 // percorso di creazione, invece, idItemType è l'unica fonte e createNavigationItem lo
 // valida contro idFunctionalityType.
 export async function updateNavigationItem(id: number, input: UpdateNavItemInput): Promise<void> {
-  await requireAdmin()
+  await requirePermission('manage-menu')
   if (!input.name.trim()) throw new Error('Name is required')
   try {
     await db.transaction(async tx => {
@@ -210,7 +210,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
 }
 
 export async function moveNavigationItem(id: number, move: MoveInput): Promise<void> {
-  await requireAdmin()
+  await requirePermission('manage-menu')
   await db.transaction(async tx => {
     await lockNavigationWrites(tx)
     await assertMutable(id, tx)
@@ -221,19 +221,21 @@ export async function moveNavigationItem(id: number, move: MoveInput): Promise<v
 }
 
 export async function deleteNavigationItem(id: number): Promise<void> {
-  await requireAdmin()
+  await requirePermission('manage-menu')
   try {
     await db.transaction(async tx => {
       await lockNavigationWrites(tx)
       const items = await loadMenuItems(tx)
       if (!items.some(i => i.id_menu_entry === id)) return
       if (!canDeleteSubtree(items, id)) throw new Error('This item (or a descendant) is immutable and cannot be deleted')
+      // Una cartella si elimina solo vuota (hasChildren). Il controllo sta qui, dentro il lucchetto
+      // delle scritture sul menu, e non solo nell'interfaccia: un figlio aggiunto fra la lettura
+      // della pagina e il clic non deve sparire senza che nessuno l'abbia visto.
+      if (hasChildren(items, id)) throw new Error('This category is not empty: move or delete its items first')
 
-      // menu_entry.id_parent è on delete cascade: cancellare `id` travolge il sottoalbero.
-      // Le concessioni se ne vanno con lui, per la cascata su role_functionality.id_menu_entry
-      // (migrazione 0024) — non c'è più niente da raccogliere prima di cancellare, e non c'è
-      // più un permesso gemello che possa restare orfano. Era BUG-4: la riga di permission di
-      // una categoria non era puntata da nessuna voce, quindi nessun percorso la citava mai.
+      // menu_entry.id_parent resta on delete cascade, ma con la cartella vuota non travolge più
+      // niente. Le concessioni della voce se ne vanno con lei, per la cascata su
+      // role_functionality.id_menu_entry (migrazione 0024): non c'è niente da raccogliere prima.
       await tx.delete(menuEntry).where(eq(menuEntry.idMenuEntry, id))
     })
   } catch (err) {

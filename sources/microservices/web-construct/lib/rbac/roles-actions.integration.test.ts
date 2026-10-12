@@ -3,10 +3,18 @@ import { eq, like } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { menuEntry, permission, role, roleFunctionality, rolePermission } from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
+import type { Actor } from './actor'
 
-vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdmin: async () => ({ userId: 'test', roleIds: [1] }) }))
+const guard = vi.hoisted(() => ({
+  actor: { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() },
+}))
+vi.mock('@/lib/rbac/auth-guard', () => ({
+  requirePermission: async () => guard.actor,
+  requireAdministrator: async () => guard.actor,
+}))
 
 const { updateRolePermissions } = await import('./roles-actions')
+const { grantableItemIds } = await import('./grant-service')
 
 const PREFIX = 'zzz_roles_actions_tx_'
 const ROLE_TYPE_SERVICE = 2
@@ -38,6 +46,9 @@ async function makeMenuEntry(kind: 'container' | 'functionality'): Promise<numbe
     .returning({ id: menuEntry.idMenuEntry })
   return created.id
 }
+
+const limitedActor = { userId: 'test', roleIds: [0], isAdmin: false, permissions: new Set<string>(['grant-role-permissions']) }
+const adminActor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
 
 const nessunDelta = { functionalities: [], operations: [] }
 
@@ -163,6 +174,108 @@ describeIntegration('updateRolePermissions against the database', () => {
       operations: [{ idItem: grantId, authorization: true }],
     })).rejects.toThrow()
 
+    expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
+  })
+
+  it('refuses a limited actor granting a permission it does not hold (DEC-6)', async () => {
+    const roleId = await makeServiceRole()
+    const [perm] = await db.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'manage-menu'))
+    expect(perm).toBeDefined()
+    guard.actor = limitedActor
+    try {
+      await expect(updateRolePermissions(roleId, {
+        operations: [{ idItem: perm.idPermission, authorization: true }],
+        functionalities: [],
+      })).rejects.toThrow(/manage-menu/)
+    } finally {
+      guard.actor = adminActor
+    }
+  })
+
+  it('refuses a limited actor granting a menu entry it cannot see (DEC-29)', async () => {
+    const roleId = await makeServiceRole()
+    const funcId = await makeMenuEntry('functionality')
+    guard.actor = limitedActor
+    try {
+      await expect(updateRolePermissions(roleId, {
+        ...nessunDelta,
+        functionalities: [{ idItem: funcId, authorization: true }],
+      })).rejects.toThrow(/menu entry/)
+    } finally {
+      guard.actor = adminActor
+    }
+    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId))).toHaveLength(0)
+  })
+
+  it('refuses a limited actor granting a GRANT row that has no catalog code', async () => {
+    const roleId = await makeServiceRole()
+    const grantId = await makePermission('GRANT')
+    guard.actor = limitedActor
+    try {
+      await expect(updateRolePermissions(roleId, {
+        ...nessunDelta,
+        operations: [{ idItem: grantId, authorization: true }],
+      })).rejects.toThrow(/outside the catalog/)
+    } finally {
+      guard.actor = adminActor
+    }
+    expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
+  })
+
+  // Il rovescio dei rifiuti sopra (I2 della revisione finale): DEC-6 limita, non blocca. Chi ha
+  // read-menu e grant-role-permissions concede read-menu a un ruolo di servizio, e la riga c'è.
+  it('lets a limited actor grant a permission it holds (DEC-6)', async () => {
+    const roleId = await makeServiceRole()
+    const [perm] = await db.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'read-menu'))
+    expect(perm).toBeDefined()
+    guard.actor = { ...limitedActor, permissions: new Set<string>(['read-menu', 'grant-role-permissions']) }
+    try {
+      await updateRolePermissions(roleId, { ...nessunDelta, operations: [{ idItem: perm.idPermission, authorization: true }] })
+    } finally {
+      guard.actor = adminActor
+    }
+    const rows = await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))
+    expect(rows.map(r => r.idPermission)).toEqual([perm.idPermission])
+  })
+
+  // I3 della revisione finale: la pagina offre solo ciò che l'azione accetterebbe.
+  it('offers a limited actor only the permissions it holds and the menu entries it sees', async () => {
+    const codes = await db.select({ id: permission.idPermission, code: permission.code }).from(permission)
+    const idOf = (code: string) => codes.find(c => c.code === code)!.id
+    const uncoded = await makePermission('GRANT')
+    const hidden = await makeMenuEntry('functionality')
+    const seen = await makeMenuEntry('functionality')
+    const actorRole = await makeServiceRole()
+    await db.insert(roleFunctionality).values({ idRole: actorRole, idMenuEntry: seen })
+    const actor: Actor = { userId: 'test', roleIds: [actorRole], isAdmin: false, permissions: new Set(['read-menu', 'grant-role-permissions']) }
+
+    const grantable = await grantableItemIds(actor, {
+      operationIds: [idOf('read-menu'), idOf('manage-menu'), uncoded],
+      functionalityIds: [hidden, seen],
+    })
+    expect(grantable).toEqual({ operationIds: [idOf('read-menu')], functionalityIds: [seen] })
+  })
+
+  it('offers the Administrator every candidate, code-less GRANT rows included', async () => {
+    const uncoded = await makePermission('GRANT')
+    const hidden = await makeMenuEntry('functionality')
+    const admin: Actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+    const grantable = await grantableItemIds(admin, { operationIds: [uncoded], functionalityIds: [hidden] })
+    expect(grantable).toEqual({ operationIds: [uncoded], functionalityIds: [hidden] })
+  })
+
+  it('refuses a string idItem smuggled past the types (input validation)', async () => {
+    const roleId = await makeServiceRole()
+    const grantId = await makePermission('GRANT')
+    guard.actor = limitedActor
+    try {
+      await expect(updateRolePermissions(roleId, {
+        ...nessunDelta,
+        operations: [{ idItem: String(grantId) as unknown as number, authorization: true }],
+      })).rejects.toThrow(/Invalid input/)
+    } finally {
+      guard.actor = adminActor
+    }
     expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
   })
 })

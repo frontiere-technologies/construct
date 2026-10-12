@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { FolderTree, Code, Globe, Link as LinkIcon, Circle } from 'lucide-react'
+import { FolderTree, Code, Globe, Link as LinkIcon, Circle, KeyRound } from 'lucide-react'
 import { typeIcon } from './NavigationTree'
 
 // NavigationTree now reads useI18n for its drag-handle/toggle aria-labels
@@ -21,9 +21,13 @@ describe('typeIcon', () => {
   it('returns LinkIcon for internal-link functionalities', () => {
     expect(typeIcon({ type: 'FUNCTIONALITY', functionalityType: 'INTERNAL_FUNCTIONALITY' })).toBe(LinkIcon)
   })
+  // A permission leaf sits next to a toggle on the role page: a circle there read as a radio
+  // button to select, so permissions get a key instead.
+  it('returns KeyRound for permissions', () => {
+    expect(typeIcon({ type: 'FUNCTIONALITY', functionalityType: 'PERMISSION' })).toBe(KeyRound)
+  })
   it('falls back to Circle for types not creatable from the form', () => {
     expect(typeIcon({ type: 'FUNCTIONALITY', functionalityType: 'REMOTE_DESKTOP' })).toBe(Circle)
-    expect(typeIcon({ type: 'FUNCTIONALITY', functionalityType: 'PERMISSION' })).toBe(Circle)
     expect(typeIcon({ type: 'FUNCTIONALITY', functionalityType: null })).toBe(Circle)
   })
 })

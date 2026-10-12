@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { PASSWORD_MANAGER_IGNORE } from '@/components/ui/input'
 import { useI18n } from '@/context/I18nContext'
 import type { NavigationLocale } from '@/lib/rbac/navigation-locales'
 import TagInput from './TagInput'
@@ -36,6 +37,8 @@ export default function TranslationsAccordion(
           {open[locale.code] && (
             <div className="px-3 pb-3 space-y-2">
               <input
+                autoComplete="off"
+                {...PASSWORD_MANAGER_IGNORE}
                 value={translations[locale.code]?.name ?? ''}
                 onChange={e => setField(locale.code, 'name', e.target.value)}
                 placeholder={t('functionalities.form.name_placeholder_optional')}

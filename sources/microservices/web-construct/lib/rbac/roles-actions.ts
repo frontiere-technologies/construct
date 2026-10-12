@@ -1,9 +1,14 @@
 'use server'
 
 import { eq, inArray, sql } from 'drizzle-orm'
-import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { permission, menuEntry, role, roleType } from '@/lib/db/schema'
+import { rolePermissionDeltasSchema, roleIdSchema } from './action-input-schemas'
+import {
+  assertCanGrantFunctionalities, assertCanGrantPermissions,
+} from './grant-guards'
+import { functionalityIdsForRoles, permissionCodesByIds } from './grant-service'
 import type { RolePermissionDeltas, RoleType as RoleTypeStr } from './types'
 
 /** `{id_role, ids}` → il letterale di array che Postgres si aspetta. `drizzle-orm`'s `sql`
@@ -32,7 +37,7 @@ async function getRoleType(roleId: number): Promise<RoleTypeStr> {
 }
 
 export async function createRole(roleName: string): Promise<{ id: number }> {
-  await requireAdmin()
+  await requirePermission('manage-roles')
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
   try {
@@ -44,7 +49,7 @@ export async function createRole(roleName: string): Promise<{ id: number }> {
 }
 
 export async function renameRole(roleId: number, roleName: string): Promise<void> {
-  await requireAdmin()
+  await requirePermission('manage-roles')
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
   if ((await getRoleType(roleId)) !== 'SERVICE') throw new Error('This role cannot be renamed')
@@ -56,8 +61,26 @@ export async function renameRole(roleId: number, roleName: string): Promise<void
 }
 
 export async function updateRolePermissions(roleId: number, deltas: RolePermissionDeltas): Promise<void> {
-  await requireAdmin()
+  const actor = await requirePermission('grant-role-permissions')
+  // Gli argomenti sono JSON arbitrario: un idItem stringa sfuggirebbe ai confronti di identità.
+  if (!roleIdSchema.safeParse(roleId).success || !rolePermissionDeltasSchema.safeParse(deltas).success) {
+    throw new Error('Invalid input')
+  }
   if ((await getRoleType(roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
+
+  // Non si concede ciò che non si possiede (DEC-6, DEC-29): vale per chi concede, non per chi
+  // revoca, e l'Amministratore ne è esente. Va prima della transazione perché è un rifiuto
+  // dell'intera chiamata, come il controllo sulle cartelle che segue.
+  if (!actor.isAdmin) {
+    const grantedOperations = deltas.operations.filter(d => d.authorization).map(d => d.idItem)
+    const grantedFunctionalities = deltas.functionalities.filter(d => d.authorization).map(d => d.idItem)
+    const [codes, visible] = await Promise.all([
+      permissionCodesByIds(grantedOperations),
+      functionalityIdsForRoles(actor.roleIds),
+    ])
+    assertCanGrantPermissions(actor, codes)
+    assertCanGrantFunctionalities(actor, visible, grantedFunctionalities)
+  }
 
   // Una cartella non riceve mai una riga di concessione (DEC-20). L'invariante viveva solo
   // nelle funzioni pure lato client, ed è la classe di errore che ha prodotto HOLE-5: una
@@ -116,7 +139,7 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
 }
 
 export async function deleteRole(roleId: number): Promise<void> {
-  await requireAdmin()
+  await requirePermission('manage-roles')
   if ((await getRoleType(roleId)) === 'SYSTEM') throw new Error('System roles cannot be deleted')
   try {
     await db.delete(role).where(eq(role.idRole, roleId))

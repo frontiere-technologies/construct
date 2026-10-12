@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { folderState, toggleNode, type FolderState } from '@/lib/rbac/permission-tree'
+import { canToggle, folderState, toggleNode, type CanGrant, type FolderState } from '@/lib/rbac/permission-tree'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 import { useI18n } from '@/context/I18nContext'
 import NavigationTree from './NavigationTree'
@@ -11,6 +11,9 @@ interface PermissionsTreeProps {
   map: Map<number, boolean>
   onChange: (next: Map<number, boolean>) => void
   editable: boolean
+  /** Le foglie che l'attore può accendere; assente vuol dire tutte (DEC-6: spegnere resta sempre
+   *  ammesso). La pagina lo ricava dall'Actor con le regole di `grant-guards.ts` (DEC-32). */
+  canGrantNode?: CanGrant
 }
 
 /** L'aspetto è lo stesso per foglie e cartelle, e deve restare identico al selettore del tema
@@ -51,7 +54,7 @@ const Track: React.FC<{
   </button>
 )
 
-export default function PermissionsTree({ trees, map, onChange, editable }: PermissionsTreeProps) {
+export default function PermissionsTree({ trees, map, onChange, editable, canGrantNode }: PermissionsTreeProps) {
   const { t } = useI18n()
   return (
     <NavigationTree
@@ -68,6 +71,11 @@ export default function PermissionsTree({ trees, map, onChange, editable }: Perm
           </span>
         ) : null}
       renderTrailing={node => {
+        // Un interruttore che non cambierebbe niente perché l'attore non può concedere ciò che
+        // accenderebbe: disabilitato, con il motivo, come il contenitore vuoto.
+        const locked = !canToggle(node, map, canGrantNode)
+        const lockedHint = locked ? t('roles.detail.not_grantable_hint') : undefined
+        const handleToggle = () => onChange(toggleNode(trees, map, node.id, canGrantNode))
         if (node.type === 'CATEGORY') {
           const state = folderState(node, map)
           // Un contenitore senza foglie sotto di sé non ha niente da concedere. Disabilitato
@@ -79,10 +87,10 @@ export default function PermissionsTree({ trees, map, onChange, editable }: Perm
               state={state}
               role="checkbox"
               ariaChecked={state === 'on' ? 'true' : state === 'partial' ? 'mixed' : 'false'}
-              disabled={!editable || empty}
-              title={empty ? t('roles.detail.empty_container_hint') : undefined}
+              disabled={!editable || empty || locked}
+              title={empty ? t('roles.detail.empty_container_hint') : editable ? lockedHint : undefined}
               label={node.name}
-              onToggle={() => onChange(toggleNode(trees, map, node.id))}
+              onToggle={handleToggle}
             />
           )
         }
@@ -92,9 +100,10 @@ export default function PermissionsTree({ trees, map, onChange, editable }: Perm
             state={on ? 'on' : 'off'}
             role="switch"
             ariaChecked={on ? 'true' : 'false'}
-            disabled={!editable}
+            disabled={!editable || locked}
+            title={editable ? lockedHint : undefined}
             label={node.name}
-            onToggle={() => onChange(toggleNode(trees, map, node.id))}
+            onToggle={handleToggle}
           />
         )
       }}

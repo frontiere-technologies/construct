@@ -2,7 +2,7 @@
 
 import React, { useEffect, useId, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { inputBaseClasses } from '@/components/ui/input'
+import { inputBaseClasses, PASSWORD_MANAGER_IGNORE } from '@/components/ui/input'
 import { useI18n } from '@/context/I18nContext'
 import {
   filterLanguagePresets, languagePresetOptions, type LanguagePresetOption,
@@ -149,6 +149,7 @@ export function LanguagePresetPicker({ id, existingCodes, chosen, onChoose }: La
         aria-autocomplete="list"
         aria-activedescendant={highlightedId}
         autoComplete="off"
+        {...PASSWORD_MANAGER_IGNORE}
         value={text}
         placeholder={t('language.form.preset_placeholder')}
         onChange={e => handleType(e.target.value)}

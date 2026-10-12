@@ -7,7 +7,6 @@ interface AuthUser {
   name?: string | null
   email?: string | null
   image?: string | null
-  isAdmin: boolean
 }
 
 interface AuthContextType {
@@ -25,7 +24,6 @@ export function useAuth(): AuthContextType {
         name: session.user.name,
         email: session.user.email,
         image: session.user.image,
-        isAdmin: session.user.isAdmin,
       }
     : null
 

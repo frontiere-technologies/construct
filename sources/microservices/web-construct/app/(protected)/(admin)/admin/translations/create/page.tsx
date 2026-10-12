@@ -1,9 +1,11 @@
 import { listModules, listNamespaces } from '@/lib/i18n/translation-service'
 import { TranslationKeyForm } from '@/components/i18n/translations/TranslationKeyForm'
+import { requirePagePermission } from '@/lib/rbac/auth-guard'
 
 export default async function CreateTranslationKeyPage(
   { searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> },
 ) {
+  await requirePagePermission('manage-translation-keys')
   const [sp, namespaces, modules] = await Promise.all([searchParams, listNamespaces(), listModules()])
   // Next hands an array for a repeated query parameter (`?from=a&from=b`), and
   // `translationsListHref` only accepts a string — only a string reaches it,

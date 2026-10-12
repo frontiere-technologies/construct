@@ -42,6 +42,9 @@ export function buildAuthTree(
         id: p.id_permission,
         name: labelFor(p, locale),
         type: p.kind === 'CATEGORY' ? 'CATEGORY' as const : 'FUNCTIONALITY' as const,
+        // Il tipo decide l'icona (typeIcon in NavigationTree): una chiave, non il tondino di
+        // riserva che accanto all'interruttore sembrava un'opzione da selezionare.
+        functionalityType: p.kind === 'CATEGORY' ? null : 'PERMISSION' as const,
         parentId: p.id_parent,
         // Spec 3.3: la concessione sta sulle foglie. Una categoria non ha mai una riga propria
         // in role_permission, quindi la sua authorization è sempre false — anche se il database
@@ -113,6 +116,13 @@ export function folderState(node: UserNavigationTreeDto, map: Map<number, boolea
   return 'partial'
 }
 
+/** Quale foglia l'attore può accendere. Senza limite (l'Amministratore, o un albero che non
+ *  conosce l'attore) ogni foglia lo è. DEC-6 limita il concedere, non il revocare: spegnere è
+ *  sempre ammesso, e per questo il limite si consulta solo sulle foglie spente. */
+export type CanGrant = (id: number) => boolean
+
+const grantAll: CanGrant = () => true
+
 /**
  * Il clic decide il verso da sé, e questo è il punto (BUG-3). Prima lo calcolava il chiamante
  * come `!(map.get(node.id) ?? false)`: su una foglia è corretto, su una cartella — che
@@ -120,16 +130,20 @@ export function folderState(node: UserNavigationTreeDto, map: Map<number, boolea
  * sempre `true`, quindi una cartella accendeva e non spegneva mai. Portando la decisione qui
  * dentro non resta un chiamante che possa sbagliarla.
  *
- * Su una cartella la regola è: accendi tutte le foglie se non sono già tutte accese
+ * Su una cartella la regola è: accendi le foglie se ce n'è almeno una spenta che si può accendere
  * (`off` e `partial` vanno entrambi verso l'accensione — «parziale» non è metà di un ciclo a
- * tre passi, è una condizione da completare), spegnile tutte se lo sono. La cartella stessa
- * non viene mai scritta nella mappa: `next.has(idCartella)` resta falso in entrambi i versi,
- * ed è ciò che impedisce a `computeDeltas` di generare un delta che il server rifiuterebbe.
+ * tre passi, è una condizione da completare), altrimenti spegnile tutte. Accendendo si toccano
+ * solo le foglie che `canGrant` ammette (I3 della revisione finale del piano 2026-10-12): le
+ * altre restano come sono, e una cartella le cui foglie concedibili sono già tutte accese si
+ * spegne invece di restare ferma. La cartella stessa non viene mai scritta nella mappa:
+ * `next.has(idCartella)` resta falso in entrambi i versi, ed è ciò che impedisce a
+ * `computeDeltas` di generare un delta che il server rifiuterebbe.
  */
 export function toggleNode(
   trees: UserNavigationTreeDto[],
   map: Map<number, boolean>,
   itemId: number,
+  canGrant: CanGrant = grantAll,
 ): Map<number, boolean> {
   const byId = indexTree(trees)
   const node = byId.get(itemId)
@@ -137,13 +151,27 @@ export function toggleNode(
   if (!node) return next
 
   if (node.type === 'FUNCTIONALITY') {
-    next.set(itemId, !(map.get(itemId) ?? false))
+    const on = map.get(itemId) ?? false
+    if (on || canGrant(itemId)) next.set(itemId, !on)
     return next
   }
 
-  const enabled = folderState(node, map) !== 'on'
-  for (const id of leafIds(node)) next.set(id, enabled)
+  const leaves = leafIds(node)
+  const toSwitchOn = leaves.filter(id => !(map.get(id) ?? false) && canGrant(id))
+  if (toSwitchOn.length) {
+    for (const id of toSwitchOn) next.set(id, true)
+  } else {
+    for (const id of leaves) next.set(id, false)
+  }
   return next
+}
+
+/** Il clic su `node` cambierebbe qualcosa? Una foglia accesa si spegne sempre, una spenta si
+ *  accende solo se concedibile; una cartella si muove se ha una foglia da accendere o da spegnere.
+ *  Un interruttore che non cambierebbe niente va disabilitato, non lasciato inerte. */
+export function canToggle(node: UserNavigationTreeDto, map: Map<number, boolean>, canGrant: CanGrant = grantAll): boolean {
+  const ids = node.type === 'FUNCTIONALITY' ? [node.id] : leafIds(node)
+  return ids.some(id => (map.get(id) ?? false) || canGrant(id))
 }
 
 /**

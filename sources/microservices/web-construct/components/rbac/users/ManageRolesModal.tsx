@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useId, useState } from 'react'
+import React, { useId, useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import { updateUserRoles } from '@/lib/rbac/users-actions'
 import { ROLE_REGISTERED, type UserDto } from '@/lib/rbac/types'
@@ -9,18 +9,29 @@ import { AccessibleDialog } from '@/components/shared/AccessibleDialog'
 import { Button } from '@/components/ui/button'
 import RoleMultiSelect from './RoleMultiSelect'
 
-export default function ManageRolesModal(
-  { user, allRoles, onClose, onSaved }:
-  { user: UserDto; allRoles: { id: number; name: string }[]; onClose: () => void; onSaved: () => void },
-) {
+interface Props {
+  user: UserDto
+  allRoles: { id: number; name: string }[]
+  /** I ruoli che l'attore può assegnare e togliere (DEC-29), calcolati dalla pagina con le regole
+   *  di `grant-guards.ts` (DEC-32). Gli altri restano visibili e disabilitati. */
+  assignableRoleIds: number[]
+  onClose: () => void
+  onSaved: () => void
+}
+
+export default function ManageRolesModal({ user, allRoles, assignableRoleIds, onClose, onSaved }: Props) {
   const { t } = useI18n()
+  const unassignable = useMemo(() => {
+    const assignable = new Set(assignableRoleIds)
+    return new Set(allRoles.filter(r => !assignable.has(r.id)).map(r => r.id))
+  }, [allRoles, assignableRoleIds])
   const [selected, setSelected] = useState<Set<number>>(new Set(user.roles.map(r => r.id)))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const titleId = useId()
 
   const toggle = (id: number) => {
-    if (id === ROLE_REGISTERED) return // always kept, not toggleable
+    if (id === ROLE_REGISTERED || unassignable.has(id)) return // always kept / not the actor's to change
     setSelected(prev => {
       const n = new Set(prev)
       if (n.has(id)) n.delete(id); else n.add(id)
@@ -60,6 +71,8 @@ export default function ManageRolesModal(
           onToggle={toggle}
           lockedId={ROLE_REGISTERED}
           lockedLabel={t('users.roles.always_assigned')}
+          disabledIds={unassignable}
+          disabledHint={t('users.roles.not_assignable_hint')}
         />
         {error && <p className="text-sm text-destructive-muted-foreground mt-3">{error}</p>}
         <div className="flex justify-end gap-2 mt-5">

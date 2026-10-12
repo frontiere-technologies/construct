@@ -3,11 +3,18 @@ import UsersTableClient from '@/components/rbac/users/UsersTableClient'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { getI18n } from '@/lib/i18n/server'
 import { parseUsersGridUrlParams } from '@/lib/rbac/users-grid-query'
+import { requirePagePermission } from '@/lib/rbac/auth-guard'
+import { hasPermission } from '@/lib/rbac/actor'
+import { assignableRoleIds } from '@/lib/rbac/grant-service'
 
 export default async function UserManagementPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const actor = await requirePagePermission('read-users')
   const sp = await searchParams
   const allRolesRaw = await getAllRoles()
   const allRoles = allRolesRaw.map(r => ({ id: r.id, name: r.description }))
+  const canAssignRoles = hasPermission(actor, 'assign-user-roles')
+  // Il dialogo dei ruoli offre solo ciò che updateUserRoles accetterebbe (DEC-29, DEC-32).
+  const assignable = canAssignRoles ? await assignableRoleIds(actor, allRoles.map(r => r.id)) : []
   const { t } = await getI18n()
   const params = parseUsersGridUrlParams(sp)
 
@@ -29,6 +36,9 @@ export default async function UserManagementPage({ searchParams }: { searchParam
         createdTo={params.createdTo}
         updatedFrom={params.updatedFrom ?? null}
         updatedTo={params.updatedTo ?? null}
+        canAssignRoles={canAssignRoles}
+        assignableRoleIds={assignable}
+        canSetStatus={hasPermission(actor, 'set-user-status')}
       />
     </PageContainer>
   )

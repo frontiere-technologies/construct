@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { appTheme } from '@/lib/db/schema'
-import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { requireAdministrator } from '@/lib/rbac/auth-guard'
 import { createLogger } from '@/lib/logger'
 import { themeContrastWarnings, type AppTheme, type ContrastWarning, type SurfaceOverrides } from '@/lib/theme-vars'
 
@@ -55,8 +55,9 @@ export type SaveThemeResult = ThemeSaved | ThemeRefused | ThemeNeedsAcknowledgem
 
 /**
  * Il tema dell'app, uno per tutti (DEC-1, DEC-9): colore principale e superfici.
- * `requireAdmin` e non `session.user.isAdmin`: verifica i ruoli sul database,
- * quindi un admin declassato con un JWT ancora valido viene rifiutato.
+ * `requireAdministrator` e non `session.user.isAdmin`: verifica i ruoli sul database,
+ * quindi un admin declassato con un JWT ancora valido viene rifiutato. Il tema non ha un
+ * codice nel catalogo (DEC-23 del piano 2026-10-12): resta all'Amministratore.
  *
  * Il contrasto si decide qui, una volta sola per tutti: se qualcosa si legge
  * male non si scrive niente e si restituisce l'elenco dei problemi. La pagina lo
@@ -67,18 +68,18 @@ export async function saveAppTheme(
   theme: AppTheme,
   options?: { acknowledgeWarnings?: boolean },
 ): Promise<SaveThemeResult> {
-  // Un'azione server riceve quello che il client manda, non quello che dice il tipo:
-  // vale come conferma solo un `true` vero, e un null non deve far lanciare.
-  const acknowledged = options?.acknowledgeWarnings === true
-
   try {
-    await requireAdmin()
+    await requireAdministrator()
   } catch (err) {
     // Un rifiuto vero e' normale; qualunque altro errore (database fuori uso) va
     // lasciato in traccia, anche se all'utente si risponde nello stesso modo.
     if (!(err instanceof Error && err.message === 'Unauthorized')) log.error({ err }, 'admin check failed')
     return { saved: false, error: 'unauthorized' }
   }
+
+  // Un'azione server riceve quello che il client manda, non quello che dice il tipo:
+  // vale come conferma solo un `true` vero, e un null non deve far lanciare.
+  const acknowledged = options?.acknowledgeWarnings === true
 
   const parsed = themeSchema.safeParse(theme)
   if (!parsed.success) return { saved: false, error: 'invalid' }

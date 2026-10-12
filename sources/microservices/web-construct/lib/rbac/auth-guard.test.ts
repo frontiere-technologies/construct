@@ -1,36 +1,95 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Actor } from './actor'
+import type { PermissionCode } from './permission-catalog'
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
-  resolveUserAuthorization: vi.fn(),
+  resolveActor: vi.fn(),
+  redirect: vi.fn((url: string) => { throw new Error(`NEXT_REDIRECT ${url}`) }),
 }))
 
 vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
-vi.mock('./auth-roles', () => ({ resolveUserAuthorization: mocks.resolveUserAuthorization }))
+vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))
+// Mock completo, non parziale: il modulo vero importa `@/lib/db`, e un test unitario non deve
+// aprire una connessione. `auth-guard` da `./actor` usa solo `resolveActor` e il tipo `Actor`.
+vi.mock('./actor', () => ({ resolveActor: mocks.resolveActor }))
 
-const { requireAdmin } = await import('./auth-guard')
+const { requireAdministrator, requireAdministratorPage, requirePagePermission, requirePermission } = await import('./auth-guard')
 
-describe('requireAdmin live authorization', () => {
+function actor(codes: PermissionCode[], isAdmin = false): Actor {
+  return { userId: 'u1', roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, permissions: new Set(codes) }
+}
+
+describe('requirePermission', () => {
   beforeEach(() => {
-    mocks.auth.mockReset()
-    mocks.resolveUserAuthorization.mockReset()
+    mocks.auth.mockReset().mockResolvedValue({ user: { id: 'u1' } })
+    mocks.resolveActor.mockReset()
+    mocks.redirect.mockClear()
   })
 
-  it('rejects a session whose stale JWT still claims administrator after demotion', async () => {
-    mocks.auth.mockResolvedValue({ user: { id: 'user-1', roleIds: [0, 1], isAdmin: true } })
-    mocks.resolveUserAuthorization.mockResolvedValue({ accountActive: true, roleIds: [0], isAdmin: false })
-    await expect(requireAdmin()).rejects.toThrow('Unauthorized')
+  it('returns the actor when the permission is held', async () => {
+    const reader = actor(['read-menu'])
+    mocks.resolveActor.mockResolvedValue(reader)
+    await expect(requirePermission('read-menu')).resolves.toBe(reader)
   })
 
-  it('rejects a deactivated administrator', async () => {
-    mocks.auth.mockResolvedValue({ user: { id: 'user-1', roleIds: [0, 1], isAdmin: true } })
-    mocks.resolveUserAuthorization.mockResolvedValue({ accountActive: false, roleIds: [], isAdmin: false })
-    await expect(requireAdmin()).rejects.toThrow('Unauthorized')
+  it('rejects when the permission is missing', async () => {
+    mocks.resolveActor.mockResolvedValue(actor(['read-menu']))
+    await expect(requirePermission('manage-menu')).rejects.toThrow('Unauthorized')
   })
 
-  it('returns only the current database roles for an active administrator', async () => {
-    mocks.auth.mockResolvedValue({ user: { id: 'user-1', roleIds: [0], isAdmin: false } })
-    mocks.resolveUserAuthorization.mockResolvedValue({ accountActive: true, roleIds: [0, 1], isAdmin: true })
-    await expect(requireAdmin()).resolves.toEqual({ userId: 'user-1', roleIds: [0, 1] })
+  it('rejects without a session, without asking the database', async () => {
+    mocks.auth.mockResolvedValue(null)
+    await expect(requirePermission('read-menu')).rejects.toThrow('Unauthorized')
+    expect(mocks.resolveActor).not.toHaveBeenCalled()
+  })
+
+  it('rejects a deactivated account', async () => {
+    mocks.resolveActor.mockResolvedValue(null)
+    await expect(requirePermission('read-menu')).rejects.toThrow('Unauthorized')
+  })
+})
+
+describe('requirePagePermission', () => {
+  beforeEach(() => {
+    mocks.auth.mockReset().mockResolvedValue({ user: { id: 'u1' } })
+    mocks.resolveActor.mockReset()
+    mocks.redirect.mockClear()
+  })
+
+  it('sends a user without the permission back to the home page', async () => {
+    mocks.resolveActor.mockResolvedValue(actor([]))
+    await expect(requirePagePermission('read-menu')).rejects.toThrow('NEXT_REDIRECT /')
+    expect(mocks.redirect).toHaveBeenCalledWith('/')
+  })
+
+  it('returns the actor when the permission is held', async () => {
+    const reader = actor(['read-menu'])
+    mocks.resolveActor.mockResolvedValue(reader)
+    await expect(requirePagePermission('read-menu')).resolves.toBe(reader)
+  })
+})
+
+describe('requireAdministrator', () => {
+  beforeEach(() => {
+    mocks.auth.mockReset().mockResolvedValue({ user: { id: 'u1' } })
+    mocks.resolveActor.mockReset()
+    mocks.redirect.mockClear()
+  })
+
+  it('rejects a user who holds every catalog code but is not the Administrator', async () => {
+    mocks.resolveActor.mockResolvedValue(actor(['read-menu', 'manage-menu']))
+    await expect(requireAdministrator()).rejects.toThrow('Unauthorized')
+  })
+
+  it('accepts the Administrator', async () => {
+    const admin = actor([], true)
+    mocks.resolveActor.mockResolvedValue(admin)
+    await expect(requireAdministrator()).resolves.toBe(admin)
+  })
+
+  it('redirects from a page instead of throwing', async () => {
+    mocks.resolveActor.mockResolvedValue(actor([]))
+    await expect(requireAdministratorPage()).rejects.toThrow('NEXT_REDIRECT /')
   })
 })

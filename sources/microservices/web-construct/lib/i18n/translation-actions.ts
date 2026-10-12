@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, eq, sql } from 'drizzle-orm'
-import { requireAdmin } from '@/lib/rbac/auth-guard'
+import { requirePermission } from '@/lib/rbac/auth-guard'
 import { db } from '@/lib/db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { auditI18n } from './audit'
@@ -72,7 +72,7 @@ function validateKeyInput(input: TranslationKeyInput): string | null {
 }
 
 export async function createTranslationKey(input: TranslationKeyInput): Promise<KeyActionResult> {
-  await requireAdmin()
+  await requirePermission('manage-translation-keys')
   const invalid = validateKeyInput(input)
   if (invalid) return { error: invalid }
 
@@ -101,7 +101,7 @@ export async function createTranslationKey(input: TranslationKeyInput): Promise<
 }
 
 export async function deleteTranslationKey(id: number): Promise<{ error: string | null }> {
-  await requireAdmin()
+  await requirePermission('manage-translation-keys')
   try {
     const [row] = await db.select({ key: translationKey.key }).from(translationKey)
       .where(eq(translationKey.idTranslationKey, id)).limit(1)
@@ -127,7 +127,7 @@ export async function deleteTranslationKey(id: number): Promise<{ error: string 
  * single language leaves every other language untouched too.
  */
 export async function saveTranslations(input: SaveTranslationsInput): Promise<SaveTranslationsResult> {
-  await requireAdmin()
+  await requirePermission('edit-translations')
 
   if (input.values.length > MAX_BULK_VALUES) {
     return { ok: false, error: `Troppe traduzioni in un solo salvataggio (max ${MAX_BULK_VALUES}).` }

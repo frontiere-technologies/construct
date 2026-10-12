@@ -29,6 +29,8 @@ interface Props {
   urlParams: TranslationsUrlParams
   namespaces: string[]
   modules: string[]
+  canEdit: boolean
+  canManageKeys: boolean
 }
 
 const textFilter = {
@@ -53,10 +55,10 @@ export function TranslationsTableClient(props: Props) {
   const refresh = () => { router.refresh(); gridApiRef.current?.refreshInfiniteCache() }
 
   const columnDefs = useMemo<ColDef<TranslationRowDto>[]>(() => [
-    actionsColumnDef<TranslationRowDto>(row => [
-      { label: t('common.actions.edit'), onClick: () => router.push(translationEditHref(row.id, sp.toString())) },
-      { label: t('common.actions.delete'), onClick: () => setDeleting(row) },
-    ]),
+    ...(props.canEdit || props.canManageKeys ? [actionsColumnDef<TranslationRowDto>(row => [
+      ...(props.canEdit ? [{ label: t('common.actions.edit'), onClick: () => router.push(translationEditHref(row.id, sp.toString())) }] : []),
+      ...(props.canManageKeys ? [{ label: t('common.actions.delete'), onClick: () => setDeleting(row) }] : []),
+    ])] : []),
     {
       field: 'key', headerName: t('translation.key'), sortable: true,
       ...textFilter,
@@ -103,7 +105,7 @@ export function TranslationsTableClient(props: Props) {
       colId: 'updatedAt', headerName: t('translation.updated_at'), sortable: true, ...TRANSLATION_DATE_FILTER, width: 160,
       valueGetter: p => p.data ? fmt.dateTime(p.data.updatedAt) : '',
     },
-  ], [t, fmt, languages, props.namespaces, props.modules, router, sp])
+  ], [t, fmt, languages, props.namespaces, props.modules, props.canEdit, props.canManageKeys, router, sp])
 
   const columnLabels = useMemo(() => [
     { colId: 'key', label: t('translation.key') },
@@ -135,9 +137,11 @@ export function TranslationsTableClient(props: Props) {
           () => setParam(translationsFilterModelToSearchParams({}, languages.map(language => language.code))),
         )}
       >
-        <Button size="sm" onClick={() => router.push(translationCreateHref(sp.toString()))}>
-          {t('translation.actions.create')}
-        </Button>
+        {props.canManageKeys && (
+          <Button size="sm" data-testid="create-translation-key" onClick={() => router.push(translationCreateHref(sp.toString()))}>
+            {t('translation.actions.create')}
+          </Button>
+        )}
       </GridToolbar>
 
       {error && <p role="alert" className="mb-3 text-sm text-destructive-muted-foreground">{error}</p>}

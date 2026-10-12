@@ -6,11 +6,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { POST } from '@/app/api/rbac/roles-grid/route'
 
 const mocks = vi.hoisted(() => ({
-  auth: vi.fn(),
+  requirePermission: vi.fn(),
   listRoles: vi.fn(),
+  logError: vi.fn(),
 }))
 
-vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
+vi.mock('@/lib/rbac/auth-guard', () => ({ requirePermission: mocks.requirePermission }))
+vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: mocks.logError }) }))
 vi.mock('@/lib/rbac/roles-service', () => ({ listRoles: mocks.listRoles }))
 
 function request(body: unknown): NextRequest {
@@ -23,8 +25,26 @@ function request(body: unknown): NextRequest {
 
 describe('POST /api/rbac/roles-grid', () => {
   beforeEach(() => {
-    mocks.auth.mockResolvedValue({ user: { id: 'admin', isAdmin: true } })
+    mocks.logError.mockClear()
+    mocks.requirePermission.mockResolvedValue({ userId: 'admin', roleIds: [0, 1], isAdmin: true, permissions: new Set() })
     mocks.listRoles.mockResolvedValue({ elements: [], total: 0, pagination: { currentElements: 0, currentPage: 0, totalPages: 1 } })
+  })
+
+  it('answers 403 to a failing check as well, and logs it instead of hiding it', async () => {
+    const err = new Error('connect ECONNREFUSED')
+    mocks.requirePermission.mockRejectedValue(err)
+    const response = await POST(request({ page: 0, size: 50, sort: 'id', direction: 'ASC' }))
+    expect(response.status).toBe(403)
+    expect(mocks.logError).toHaveBeenCalledWith({ err }, expect.any(String))
+    expect(mocks.listRoles).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 when the read permission is missing', async () => {
+    mocks.requirePermission.mockRejectedValue(new Error('Unauthorized'))
+    const response = await POST(request({ page: 0, size: 50, sort: 'id', direction: 'ASC' }))
+    expect(response.status).toBe(403)
+    expect(mocks.listRoles).not.toHaveBeenCalled()
+    expect(mocks.logError).not.toHaveBeenCalled()
   })
 
   it('returns 400 for a malformed date before it reaches the service', async () => {

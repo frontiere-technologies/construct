@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildAuthTree, buildAuthMap, computeDeltas, folderState, toggleNode, stampAuthorization } from './permission-tree'
+import { buildAuthTree, buildAuthMap, canToggle, computeDeltas, folderState, toggleNode, stampAuthorization } from './permission-tree'
 import type { PermissionRow, UserNavigationTreeDto } from './types'
 
 const perm = (over: Partial<PermissionRow> & { id_permission: number }): PermissionRow => ({
@@ -16,6 +16,17 @@ describe('buildAuthTree', () => {
     expect(tree).toHaveLength(1)
     expect(tree[0].children.map(c => c.id)).toEqual([2])
     expect(tree[0].children[0].authorization).toBe(true)
+  })
+
+  // Il tipo decide l'icona in NavigationTree: senza, una foglia cadeva sul tondino di riserva,
+  // che sembrava un'opzione da selezionare accanto all'interruttore.
+  it('marca le foglie come permessi, e le categorie no', () => {
+    const tree = buildAuthTree([
+      perm({ id_permission: 1, kind: 'CATEGORY', code: null }),
+      perm({ id_permission: 2, id_parent: 1 }),
+    ], new Set())
+    expect(tree[0].children[0].functionalityType).toBe('PERMISSION')
+    expect(tree[0].functionalityType ?? null).toBeNull()
   })
 
   it('non concede mai una categoria: la concessione sta sulle foglie', () => {
@@ -212,6 +223,60 @@ describe('toggleNode', () => {
     const next = toggleNode(menu, originale, 9999)
     expect([...next.entries()]).toEqual([[6, true]])
     expect(next).not.toBe(originale)
+  })
+})
+
+// I3 della revisione finale: DEC-6 limita il concedere, non il revocare. L'albero non deve
+// lasciar accendere ciò che il server rifiuterebbe; spegnere resta sempre possibile.
+describe('toggleNode con un limite a ciò che si può concedere', () => {
+  const soloSei = (id: number) => id === 6
+
+  it('non accende una foglia che non si può concedere', () => {
+    const next = toggleNode(menu, spento, 7, soloSei)
+    expect(next.get(7)).toBeUndefined()
+  })
+
+  it('spegne una foglia accesa anche se non si potrebbe concederla', () => {
+    const next = toggleNode(menu, new Map([[7, true]]), 7, soloSei)
+    expect(next.get(7)).toBe(false)
+  })
+
+  it('una cartella accende solo le foglie concedibili', () => {
+    const next = toggleNode(menu, spento, 5, soloSei)
+    expect(next.get(6)).toBe(true)
+    expect(next.has(7)).toBe(false)
+  })
+
+  it('una cartella le cui foglie concedibili sono già accese spegne tutto, invece di restare ferma', () => {
+    const next = toggleNode(menu, new Map([[6, true]]), 5, soloSei)
+    expect(next.get(6)).toBe(false)
+    expect(next.get(7) ?? false).toBe(false)
+  })
+
+  it('senza limite si comporta come prima', () => {
+    expect(toggleNode(menu, spento, 5)).toEqual(new Map([[6, true], [7, true]]))
+  })
+})
+
+describe('canToggle', () => {
+  const niente = () => false
+  const foglia = (id: number) => nodo(id, 'FUNCTIONALITY')
+
+  it('una foglia spenta si muove solo se concedibile; una accesa si spegne sempre', () => {
+    expect(canToggle(foglia(7), spento, niente)).toBe(false)
+    expect(canToggle(foglia(7), new Map([[7, true]]), niente)).toBe(true)
+    expect(canToggle(foglia(7), spento, () => true)).toBe(true)
+  })
+
+  it('una cartella si muove se ha una foglia accesa da spegnere o una concedibile da accendere', () => {
+    const admin = menu[1]
+    expect(canToggle(admin, spento, niente)).toBe(false)
+    expect(canToggle(admin, new Map([[7, true]]), niente)).toBe(true)
+    expect(canToggle(admin, spento, id => id === 6)).toBe(true)
+  })
+
+  it('un contenitore vuoto non si muove', () => {
+    expect(canToggle(menu[0].children[0].children[1], spento, () => true)).toBe(false)
   })
 })
 

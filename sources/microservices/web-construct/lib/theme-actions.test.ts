@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppTheme } from '@/lib/theme-vars'
 
 const mocks = vi.hoisted(() => ({
-  requireAdmin: vi.fn(),
+  requireAdministrator: vi.fn(),
   set: vi.fn(),
   logError: vi.fn(),
 }))
 
-vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdmin: mocks.requireAdmin }))
+vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdministrator: mocks.requireAdministrator }))
 vi.mock('@/lib/db', () => ({
   db: { update: () => ({ set: (values: unknown) => ({ returning: () => mocks.set(values) }) }) },
 }))
@@ -31,20 +31,20 @@ const allNull = {
 
 describe('saveAppTheme', () => {
   beforeEach(() => {
-    mocks.requireAdmin.mockReset().mockResolvedValue({ userId: 'admin-1', roleIds: [1] })
+    mocks.requireAdministrator.mockReset().mockResolvedValue({ userId: 'admin-1', roleIds: [0, 1], isAdmin: true, permissions: new Set() })
     mocks.set.mockReset().mockResolvedValue([{ id: 1 }])
     mocks.logError.mockReset()
   })
 
-  it('refuses anyone requireAdmin refuses', async () => {
-    mocks.requireAdmin.mockRejectedValue(new Error('Unauthorized'))
+  it('refuses anyone requireAdministrator refuses', async () => {
+    mocks.requireAdministrator.mockRejectedValue(new Error('Unauthorized'))
     expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'unauthorized' })
     expect(mocks.set).not.toHaveBeenCalled()
     expect(mocks.logError).not.toHaveBeenCalled()
   })
 
   it('logs a failure that is not a refusal, still answering unauthorized', async () => {
-    mocks.requireAdmin.mockRejectedValue(new Error('connection refused'))
+    mocks.requireAdministrator.mockRejectedValue(new Error('connection refused'))
     expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'unauthorized' })
     expect(mocks.logError).toHaveBeenCalledOnce()
     expect(mocks.set).not.toHaveBeenCalled()

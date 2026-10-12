@@ -3,6 +3,7 @@ import { getDictionary, refreshLanguageVersions } from '@/lib/i18n/dictionary-se
 import { getDefaultLanguage, listActiveLanguages } from '@/lib/i18n/language-service'
 import { isValidNamespace } from '@/lib/i18n/key-format'
 import { getActiveLanguage } from '@/lib/i18n/server'
+import { allowAnonymous } from '@/lib/rbac/access-declarations'
 
 /**
  * One aggregated response per language (optionally per namespace) — §9.2's
@@ -11,6 +12,7 @@ import { getActiveLanguage } from '@/lib/i18n/server'
  * clients that load labels outside the React tree.
  */
 export async function GET(req: NextRequest) {
+  allowAnonymous()
   const requested = req.nextUrl.searchParams.get('code')
   const namespace = req.nextUrl.searchParams.get('namespace')
 

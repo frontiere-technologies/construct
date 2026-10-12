@@ -5,16 +5,22 @@ import { translationKey, translationValue } from '@/lib/db/schema'
 import { MAX_VALUE_LENGTH, type SaveTranslationsInput } from './types'
 import { cleanupTestData, describeIntegration, testKey, unique } from './test-support/db-fixtures'
 
-// Same rationale as language-actions.integration.test.ts: requireAdmin() and
+// Same rationale as language-actions.integration.test.ts: requirePermission() and
 // revalidatePath() are session-/request-bound and don't exist in a Vitest
 // process. The authorization path itself is covered by the E2E suite.
-vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdmin: async () => ({ userId: 'test', roleIds: [1] }) }))
+vi.mock('@/lib/rbac/auth-guard', () => {
+  const admin = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+  return {
+    requirePermission: async () => admin,
+    requireAdministrator: async () => admin,
+  }
+})
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
-vi.mock('@/lib/auth', () => ({ auth: async () => ({ user: { id: 'test', isAdmin: true } }) }))
+vi.mock('@/lib/auth', () => ({ auth: async () => ({ user: { id: 'test' } }) }))
 
 const { createTranslationKey, deleteTranslationKey, saveTranslations } = await import('./translation-actions')
 // listTranslations lives in translation-service.ts, not translation-actions.ts —
-// it needs no requireAdmin() guard since it is a read used by the (already
+// it needs no requirePermission() guard since it is a read used by the (already
 // admin-gated) grid route, not a mutation.
 const { listTranslations } = await import('./translation-service')
 

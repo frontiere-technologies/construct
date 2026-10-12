@@ -89,6 +89,15 @@ export function canDeleteSubtree(items: MenuEntryRow[], id: number): boolean {
   return true
 }
 
+/**
+ * Una cartella che contiene qualcosa non si elimina: si svuota prima. Cancellarla a cascata portava
+ * via in silenzio le voci interne e le loro concessioni ai ruoli, senza un modo per tornare
+ * indietro; spostare le voci col trascinamento costa poco.
+ */
+export function hasChildren(items: MenuEntryRow[], id: number): boolean {
+  return items.some(it => it.id_parent === id)
+}
+
 export function isDescendant(items: MenuEntryRow[], candidateId: number, ancestorId: number): boolean {
   return descendantIds(items, ancestorId).has(candidateId)
 }
