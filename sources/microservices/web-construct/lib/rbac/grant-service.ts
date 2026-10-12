@@ -27,10 +27,15 @@ export async function functionalityIdsForRoles(roleIds: number[]): Promise<Set<n
   return new Set(rows.map(row => row.idMenuEntry))
 }
 
+/** Le concessioni di ciascun ruolo. Una riga GRANT senza code finisce in `uncataloguedIds`, non
+ *  sparisce: per `assertCanChangeRoles` è una concessione che nessuno possiede, come per
+ *  `permissionCodesByIds` quando la si vuole concedere. */
 export async function grantsForRoles(roleIds: number[]): Promise<RoleGrants[]> {
   if (!roleIds.length) return []
   const [codes, functionalities] = await Promise.all([
-    db.select({ idRole: rolePermission.idRole, code: permission.code })
+    db.select({
+      idRole: rolePermission.idRole, idPermission: permission.idPermission, kind: permission.kind, code: permission.code,
+    })
       .from(rolePermission)
       .innerJoin(permission, eq(permission.idPermission, rolePermission.idPermission))
       .where(and(inArray(rolePermission.idRole, roleIds), isNull(permission.deprecatedAt))),
@@ -42,6 +47,9 @@ export async function grantsForRoles(roleIds: number[]): Promise<RoleGrants[]> {
     idRole,
     codes: codes.flatMap(row => (row.idRole === idRole && row.code ? [row.code] : [])),
     functionalityIds: functionalities.filter(row => row.idRole === idRole).map(row => row.idMenuEntry),
+    uncataloguedIds: codes
+      .filter(row => row.idRole === idRole && row.kind === 'GRANT' && !row.code)
+      .map(row => row.idPermission),
   }))
 }
 

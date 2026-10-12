@@ -220,6 +220,22 @@ describeIntegration('updateRolePermissions against the database', () => {
     expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
   })
 
+  // Il rovescio dei rifiuti sopra (I2 della revisione finale): DEC-6 limita, non blocca. Chi ha
+  // read-menu e grant-role-permissions concede read-menu a un ruolo di servizio, e la riga c'è.
+  it('lets a limited actor grant a permission it holds (DEC-6)', async () => {
+    const roleId = await makeServiceRole()
+    const [perm] = await db.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'read-menu'))
+    expect(perm).toBeDefined()
+    guard.actor = { ...limitedActor, permissions: new Set<string>(['read-menu', 'grant-role-permissions']) }
+    try {
+      await updateRolePermissions(roleId, { ...nessunDelta, operations: [{ idItem: perm.idPermission, authorization: true }] })
+    } finally {
+      guard.actor = adminActor
+    }
+    const rows = await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))
+    expect(rows.map(r => r.idPermission)).toEqual([perm.idPermission])
+  })
+
   it('refuses a string idItem smuggled past the types (input validation)', async () => {
     const roleId = await makeServiceRole()
     const grantId = await makePermission('GRANT')

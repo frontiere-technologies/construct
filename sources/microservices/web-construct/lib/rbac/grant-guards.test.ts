@@ -40,27 +40,32 @@ describe('assertCanChangeRoles (DEC-29)', () => {
   const reader = limited(['assign-user-roles', 'read-menu'])
 
   it('refuses to add or remove the Administrator role for a non-administrator', () => {
-    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: 1, codes: [], functionalityIds: [] }]))
+    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: 1, codes: [], functionalityIds: [], uncataloguedIds: [] }]))
       .toThrow(/Administrator/)
   })
 
   it('refuses a role that grants a permission the actor does not hold', () => {
-    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: 7, codes: ['manage-menu'], functionalityIds: [] }]))
+    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: 7, codes: ['manage-menu'], functionalityIds: [], uncataloguedIds: [] }]))
       .toThrow(/manage-menu/)
   })
 
   it('refuses a role that grants a menu entry the actor cannot see', () => {
-    expect(() => assertCanChangeRoles(reader, new Set([3]), [{ idRole: 7, codes: [], functionalityIds: [4] }]))
+    expect(() => assertCanChangeRoles(reader, new Set([3]), [{ idRole: 7, codes: [], functionalityIds: [4], uncataloguedIds: [] }]))
       .toThrow(/4/)
   })
 
+  it('refuses a role holding a GRANT row outside the catalog: nobody holds it (M3)', () => {
+    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: 7, codes: ['read-menu'], functionalityIds: [], uncataloguedIds: [42] }]))
+      .toThrow(/outside the catalog: 42/)
+  })
+
   it('accepts a role whose grants the actor holds entirely', () => {
-    expect(() => assertCanChangeRoles(reader, new Set([3]), [{ idRole: 7, codes: ['read-menu'], functionalityIds: [3] }]))
+    expect(() => assertCanChangeRoles(reader, new Set([3]), [{ idRole: 7, codes: ['read-menu'], functionalityIds: [3], uncataloguedIds: [] }]))
       .not.toThrow()
   })
 
   it('lets the Administrator change any role, the Administrator role included', () => {
-    expect(() => assertCanChangeRoles(admin, new Set(), [{ idRole: 1, codes: [], functionalityIds: [] }])).not.toThrow()
+    expect(() => assertCanChangeRoles(admin, new Set(), [{ idRole: 1, codes: [], functionalityIds: [], uncataloguedIds: [] }])).not.toThrow()
   })
 })
 

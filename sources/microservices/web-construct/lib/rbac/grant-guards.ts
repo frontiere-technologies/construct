@@ -16,6 +16,8 @@ export interface RoleGrants {
   idRole: number
   codes: string[]
   functionalityIds: number[]
+  /** Righe GRANT senza codice: fuori dal catalogo, nessun non amministratore le possiede. */
+  uncataloguedIds: number[]
 }
 
 export function assertCanGrantPermissions(actor: Actor, codes: string[]): void {
@@ -44,6 +46,11 @@ export function assertCanChangeRoles(
     throw new Error('Only an administrator can assign or remove the Administrator role')
   }
   for (const grants of touched) {
+    // Come `permissionCodesByIds` per chi concede: una concessione fuori catalogo non si possiede,
+    // quindi il ruolo che la porta non si assegna né si toglie.
+    if (grants.uncataloguedIds.length) {
+      throw new Error(`Cannot assign role ${grants.idRole}: it holds permission(s) outside the catalog: ${grants.uncataloguedIds.join(', ')}`)
+    }
     assertCanGrantPermissions(actor, grants.codes)
     assertCanGrantFunctionalities(actor, actorFunctionalityIds, grants.functionalityIds)
   }
