@@ -47,8 +47,17 @@ const DECLARATION_MODULES: Record<string, Record<string, 'awaited' | 'sync'>> = 
   },
 }
 
-/** I nomi **locali** delle dichiarazioni importate dal file, con il modo in cui devono essere chiamate. */
-type ImportedDeclarations = ReadonlyMap<string, 'awaited' | 'sync'>
+/** Una dichiarazione importata: il nome con cui il modulo di guardia la esporta e come va chiamata. */
+interface DeclarationBinding {
+  name: string
+  mode: 'awaited' | 'sync'
+}
+
+/** I nomi **locali** delle dichiarazioni importate dal file. */
+type ImportedDeclarations = ReadonlyMap<string, DeclarationBinding>
+
+/** Le dichiarazioni che chiedono un codice del catalogo: per loro conta anche quale. */
+const CODE_DECLARATIONS = new Set(['requirePermission', 'requirePagePermission'])
 
 /** File che esportano qualcosa che la guardia non sa ispezionare, ciascuno con il motivo. */
 const OPAQUE_EXPORTS: Record<string, string> = {
@@ -81,16 +90,28 @@ function isAwaited(call: ts.CallExpression): boolean {
   }
 }
 
-export function containsDeclaration(node: ts.Node, declarations: ImportedDeclarations): boolean {
-  let found = false
+/**
+ * Che cosa dichiara la chiamata trovata: il codice per `requirePermission` / `requirePagePermission`
+ * (solo se è un letterale: un codice calcolato non si confronta con la tabella), altrimenti il nome
+ * della dichiarazione.
+ */
+function declarationMarker(call: ts.CallExpression, binding: DeclarationBinding): string {
+  if (!CODE_DECLARATIONS.has(binding.name)) return binding.name
+  const [code] = call.arguments
+  return code && ts.isStringLiteralLike(code) ? code.text : '<not a literal>'
+}
+
+/** La prima dichiarazione valida dentro `node`, come marcatore; `null` se non ce n'è. */
+export function findDeclaration(node: ts.Node, declarations: ImportedDeclarations): string | null {
+  let found: string | null = null
   const visit = (current: ts.Node): void => {
-    if (found) return
+    if (found !== null) return
     // Anche il nodo di partenza: una `function check() {...}` come prima istruzione non gira mai da sola.
     if (isNestedFunction(current)) return
     if (ts.isCallExpression(current) && ts.isIdentifier(current.expression)) {
-      const mode = declarations.get(current.expression.text)
-      if (mode === 'sync' || (mode === 'awaited' && isAwaited(current))) {
-        found = true
+      const binding = declarations.get(current.expression.text)
+      if (binding && (binding.mode === 'sync' || isAwaited(current))) {
+        found = declarationMarker(current, binding)
         return
       }
     }
@@ -101,15 +122,16 @@ export function containsDeclaration(node: ts.Node, declarations: ImportedDeclara
 }
 
 function importedDeclarations(parsed: ts.SourceFile): ImportedDeclarations {
-  const declarations = new Map<string, 'awaited' | 'sync'>()
+  const declarations = new Map<string, DeclarationBinding>()
   for (const statement of parsed.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
     const known = DECLARATION_MODULES[statement.moduleSpecifier.text]
     const bindings = statement.importClause?.namedBindings
     if (!known || statement.importClause?.isTypeOnly || !bindings || !ts.isNamedImports(bindings)) continue
     for (const element of bindings.elements) {
-      const mode = known[(element.propertyName ?? element.name).text]
-      if (mode && !element.isTypeOnly) declarations.set(element.name.text, mode)
+      const name = (element.propertyName ?? element.name).text
+      const mode = Object.hasOwn(known, name) ? known[name] : undefined
+      if (mode && !element.isTypeOnly) declarations.set(element.name.text, { name, mode })
     }
   }
   return declarations
@@ -120,18 +142,38 @@ function isExported(node: ts.Node): boolean {
     && (ts.getModifiers(node) ?? []).some(m => m.kind === ts.SyntaxKind.ExportKeyword)
 }
 
-function declaresFirst(body: ts.ConciseBody, declarations: ImportedDeclarations): boolean {
-  if (!ts.isBlock(body)) return containsDeclaration(body, declarations)
-  const first = body.statements[0]
-  return first !== undefined && containsDeclaration(first, declarations)
+function isDefaultExport(node: ts.Node): boolean {
+  return ts.canHaveModifiers(node)
+    && (ts.getModifiers(node) ?? []).some(m => m.kind === ts.SyntaxKind.DefaultKeyword)
 }
 
-export function inspectExports(source: string, fileName: string): { undeclared: string[]; opaque: string[] } {
+/** La dichiarazione della prima istruzione del corpo, o `null`. */
+function firstDeclaration(body: ts.ConciseBody, declarations: ImportedDeclarations): string | null {
+  if (!ts.isBlock(body)) return findDeclaration(body, declarations)
+  const first = body.statements[0]
+  return first === undefined ? null : findDeclaration(first, declarations)
+}
+
+interface ExportsReport {
+  /** Le funzioni esportate senza una dichiarazione come prima istruzione. */
+  undeclared: string[]
+  /** Ciò che è esportato in una forma che la guardia non sa ispezionare. */
+  opaque: string[]
+  /** Nome esportato (`default` per l'esportazione predefinita) → codice o nome della dichiarazione. */
+  declared: Record<string, string>
+}
+
+export function inspectExports(source: string, fileName: string): ExportsReport {
   const scriptKind = fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
   const parsed = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, scriptKind)
   const undeclared: string[] = []
   const opaque: string[] = []
+  const declared: Record<string, string> = {}
   const declarations = importedDeclarations(parsed)
+  const record = (name: string, marker: string | null): void => {
+    if (marker === null) undeclared.push(name)
+    else declared[name] = marker
+  }
 
   for (const statement of parsed.statements) {
     if (ts.isExportDeclaration(statement) && !statement.isTypeOnly) {
@@ -146,21 +188,22 @@ export function inspectExports(source: string, fileName: string): { undeclared: 
 
     if (ts.isFunctionDeclaration(statement)) {
       if (!statement.body) continue // firma di un overload: il corpo è sulla dichiarazione dopo
-      if (!declaresFirst(statement.body, declarations)) undeclared.push(statement.name?.text ?? 'default')
+      const name = isDefaultExport(statement) ? 'default' : statement.name?.text ?? 'default'
+      record(name, firstDeclaration(statement.body, declarations))
       continue
     }
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         const init = declaration.initializer
         if (init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init))) {
-          if (!declaresFirst(init.body, declarations)) undeclared.push(declaration.name.getText(parsed))
+          record(declaration.name.getText(parsed), firstDeclaration(init.body, declarations))
         } else {
           opaque.push(declaration.name.getText(parsed))
         }
       }
     }
   }
-  return { undeclared, opaque }
+  return { undeclared, opaque, declared }
 }
 
 function sourceFiles(root: string): string[] {
@@ -194,7 +237,7 @@ function probe(...lines: string[]): string {
   return [GUARD_IMPORT, ALLOW_IMPORT, ...lines].join('\n')
 }
 
-describe('containsDeclaration / inspectExports', () => {
+describe('findDeclaration / inspectExports', () => {
   it('accepts a declaration as the first statement', () => {
     const { undeclared } = inspectExports(
       probe("export async function save() { await requirePermission('manage-menu'); await write() }"),
@@ -283,6 +326,24 @@ describe('containsDeclaration / inspectExports', () => {
     expect(inspectExports(source, 'probe.tsx').undeclared).toEqual(['GET'])
   })
 
+  it('records which code or which declaration each export asks for', () => {
+    const source = probe(
+      "export async function a() { const actor = await requirePermission('manage-menu'); return actor }",
+      "export default async function Page() { await requirePagePermission('read-menu'); return null }",
+      'export async function c() { try { await requireAdministrator() } catch { return null } }',
+      'export async function d() { allowSelfService(); return 1 }',
+      'export async function e(code: never) { await requirePermission(code) }',
+      'export async function f() { return 1 }',
+    )
+    expect(inspectExports(source, 'probe.tsx').declared).toEqual({
+      a: 'manage-menu',
+      default: 'read-menu',
+      c: 'requireAdministrator',
+      d: 'allowSelfService',
+      e: '<not a literal>',
+    })
+  })
+
   it('reports what it cannot inspect instead of letting it through', () => {
     const source = [
       'export const { GET, POST } = handlers',
@@ -292,6 +353,70 @@ describe('containsDeclaration / inspectExports', () => {
     expect(inspectExports(source, 'probe.ts').opaque).toHaveLength(2)
   })
 })
+
+/**
+ * Quale porta chiede quale codice (piano 2026-10-12, tabelle di Task 3 e Task 4). Senza questa
+ * tabella la guardia sa che ogni porta dichiara *qualcosa*, non *cosa*: `requirePermission('read-menu')`
+ * al posto di `requirePermission('manage-menu')` passerebbe. Il valore è il codice passato a
+ * `requirePermission` / `requirePagePermission`, oppure il nome della dichiarazione per le altre.
+ * Una porta nuova senza riga, una porta tolta o un codice cambiato fanno fallire il test.
+ */
+const EXPECTED_DECLARATIONS: Record<string, string> = {
+  'app/(protected)/(admin)/admin/languages/page.tsx#default': 'read-languages',
+  'app/(protected)/(admin)/admin/theme/page.tsx#default': 'requireAdministratorPage',
+  'app/(protected)/(admin)/admin/translations/[keyId]/edit/page.tsx#default': 'edit-translations',
+  'app/(protected)/(admin)/admin/translations/create/page.tsx#default': 'manage-translation-keys',
+  'app/(protected)/(admin)/admin/translations/page.tsx#default': 'read-translations',
+  'app/(protected)/(admin)/functionalities/[funcId]/edit/page.tsx#default': 'manage-menu',
+  'app/(protected)/(admin)/functionalities/create/page.tsx#default': 'manage-menu',
+  'app/(protected)/(admin)/functionalities/page.tsx#default': 'read-menu',
+  'app/(protected)/(admin)/roles-permissions/[roleId]/page.tsx#default': 'read-roles',
+  'app/(protected)/(admin)/roles-permissions/page.tsx#default': 'read-roles',
+  'app/(protected)/(admin)/user-management/page.tsx#default': 'read-users',
+  'app/(protected)/[...slug]/page.tsx#default': 'allowAnyAuthenticated',
+  'app/(protected)/embedded/[itemId]/page.tsx#default': 'allowAnyAuthenticated',
+  'app/(protected)/page.tsx#default': 'allowAnyAuthenticated',
+  'app/(protected)/profile/page.tsx#default': 'allowAnyAuthenticated',
+  'app/(protected)/settings/page.tsx#default': 'allowAnyAuthenticated',
+  'app/api/admin/send-invite/route.ts#POST': 'invite-users',
+  'app/api/auth/change-password/route.ts#POST': 'allowSelfService',
+  'app/api/auth/forgot-password/route.ts#POST': 'allowAnonymous',
+  'app/api/auth/register/route.ts#POST': 'allowAnonymous',
+  'app/api/auth/set-password/route.ts#POST': 'allowAnonymous',
+  'app/api/health/live/route.ts#GET': 'allowAnonymous',
+  'app/api/health/ready/route.ts#GET': 'allowAnonymous',
+  'app/api/i18n/dictionary/route.ts#GET': 'allowAnonymous',
+  'app/api/i18n/languages-grid/route.ts#POST': 'read-languages',
+  'app/api/i18n/languages/route.ts#GET': 'allowAnonymous',
+  'app/api/i18n/preferences/language/route.ts#GET': 'allowSelfService',
+  'app/api/i18n/preferences/language/route.ts#PUT': 'allowSelfService',
+  'app/api/i18n/translations-grid/route.ts#POST': 'read-translations',
+  'app/api/rbac/roles-grid/route.ts#POST': 'read-roles',
+  'app/api/rbac/users-grid/route.ts#POST': 'read-users',
+  'lib/appearance-actions.ts#saveAppearance': 'allowSelfService',
+  'lib/i18n/language-actions.ts#createLanguage': 'manage-languages',
+  'lib/i18n/language-actions.ts#deleteLanguage': 'manage-languages',
+  'lib/i18n/language-actions.ts#setDefaultLanguage': 'manage-languages',
+  'lib/i18n/language-actions.ts#setLanguageActive': 'manage-languages',
+  'lib/i18n/language-actions.ts#updateLanguage': 'manage-languages',
+  'lib/i18n/translation-actions.ts#createTranslationKey': 'manage-translation-keys',
+  'lib/i18n/translation-actions.ts#deleteTranslationKey': 'manage-translation-keys',
+  'lib/i18n/translation-actions.ts#saveTranslations': 'edit-translations',
+  'lib/i18n/user-language-actions.ts#getPreferredLanguage': 'allowSelfService',
+  'lib/i18n/user-language-actions.ts#setPreferredLanguage': 'allowSelfService',
+  'lib/profile-actions.ts#saveProfile': 'allowSelfService',
+  'lib/rbac/navigation-actions.ts#createNavigationItem': 'manage-menu',
+  'lib/rbac/navigation-actions.ts#deleteNavigationItem': 'manage-menu',
+  'lib/rbac/navigation-actions.ts#moveNavigationItem': 'manage-menu',
+  'lib/rbac/navigation-actions.ts#updateNavigationItem': 'manage-menu',
+  'lib/rbac/roles-actions.ts#createRole': 'manage-roles',
+  'lib/rbac/roles-actions.ts#deleteRole': 'manage-roles',
+  'lib/rbac/roles-actions.ts#renameRole': 'manage-roles',
+  'lib/rbac/roles-actions.ts#updateRolePermissions': 'grant-role-permissions',
+  'lib/rbac/users-actions.ts#setUserStatus': 'set-user-status',
+  'lib/rbac/users-actions.ts#updateUserRoles': 'assign-user-roles',
+  'lib/theme-actions.ts#saveAppTheme': 'requireAdministrator',
+}
 
 describe('permission declared', () => {
   it('scans the files it is meant to scan', () => {
@@ -306,6 +431,13 @@ describe('permission declared', () => {
     const offenders = scannedFiles().flatMap(file =>
       inspectExports(readFileSync(file, 'utf8'), file).undeclared.map(name => `${file}: ${name}`))
     expect(offenders).toEqual([])
+  })
+
+  it('asks every door for the code the plan assigns to it', () => {
+    const actual = Object.fromEntries(scannedFiles().flatMap(file =>
+      Object.entries(inspectExports(readFileSync(file, 'utf8'), file).declared)
+        .map(([name, marker]) => [`${file}#${name}`, marker])))
+    expect(actual).toEqual(EXPECTED_DECLARATIONS)
   })
 
   it('exports something opaque only from the listed files', () => {

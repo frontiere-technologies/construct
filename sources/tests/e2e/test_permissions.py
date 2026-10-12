@@ -117,3 +117,21 @@ def test_administrator_still_sees_edit_controls(logged_in_page, base_url):
     nav(logged_in_page, f"{base_url}/functionalities")
     logged_in_page.wait_for_selector('[data-testid="create-functionality"]')
     assert logged_in_page.locator('[data-testid="nav-add"]').count() > 0
+
+
+def test_reader_api_answers_by_permission(non_admin_page, base_url, read_only_role):
+    """La rotta della griglia chiede il proprio codice: read-roles apre roles-grid, non users-grid.
+
+    La richiesta parte dal contesto della pagina, quindi con il cookie di sessione del lettore.
+    """
+    nav(non_admin_page, f"{base_url}/functionalities")
+    users = non_admin_page.request.post(
+        f"{base_url}/api/rbac/users-grid",
+        data={"page": 0, "size": 50, "sort": "dateIns", "direction": "DESC"},
+    )
+    assert users.status == 403, users.text()
+    roles = non_admin_page.request.post(
+        f"{base_url}/api/rbac/roles-grid",
+        data={"page": 0, "size": 50, "sort": "id", "direction": "ASC"},
+    )
+    assert roles.status == 200, roles.text()
