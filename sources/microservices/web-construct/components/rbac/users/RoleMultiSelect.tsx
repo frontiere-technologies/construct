@@ -77,11 +77,14 @@ export default function RoleMultiSelect({ options, selected, onToggle, lockedId,
               <input
                 type="checkbox"
                 data-testid={`role-checkbox-${r.id}`}
+                className="shrink-0"
                 checked={isSelected}
                 disabled={locked || unavailable}
                 onChange={() => onToggle(r.id)}
               />
-              <span className={isSelected ? 'font-semibold' : ''}>
+              {/* Un nome lungo e senza spazi va a capo qui: altrimenti la lista scorre in
+                  orizzontale e l'hover, largo quanto la parte visibile, si interrompe a meta'. */}
+              <span className={`min-w-0 break-words ${isSelected ? 'font-semibold' : ''}`}>
                 {r.name}{locked && lockedLabel ? ` (${lockedLabel})` : ''}
               </span>
             </label>

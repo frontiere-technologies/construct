@@ -78,6 +78,21 @@ describe('manage roles modal truncation', () => {
     expect(title!.classList.contains('break-words'), 'al titolo manca break-words').toBe(true)
   })
 
+  // Un nome di ruolo lungo e senza spazi usciva dalla riga della lista: la lista scorreva in
+  // orizzontale, lo sfondo dell'hover finiva a meta' (copre la riga, larga quanto la parte
+  // visibile) e la casella di spunta usciva a sinistra. Il nome va a capo dentro la riga.
+  it('wraps a long role name inside its row instead of scrolling the list sideways', () => {
+    const longName = `Ruolo${'q'.repeat(90)}`
+    const el = render([{ id: 7, name: longName }], [7])
+    const box = el.querySelector<HTMLInputElement>('[data-testid="role-checkbox-7"]')
+    const name = box?.closest('label')?.querySelector<HTMLElement>('span')
+
+    expect(name?.textContent).toBe(longName)
+    expect(name!.classList.contains('min-w-0'), 'al nome del ruolo manca min-w-0').toBe(true)
+    expect(name!.classList.contains('break-words'), 'al nome del ruolo manca break-words').toBe(true)
+    expect(box!.classList.contains('shrink-0'), 'alla casella di spunta manca shrink-0').toBe(true)
+  })
+
   it('keeps the close button at its own width', () => {
     const el = render()
     const close = el.querySelector<HTMLElement>('[aria-label="common.actions.close"]')
