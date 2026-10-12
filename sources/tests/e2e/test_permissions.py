@@ -1,0 +1,104 @@
+"""Un ruolo in sola lettura: vede le pagine, non i pulsanti di modifica.
+
+E' il caso che ha motivato il catalogo dei permessi (piano 2026-10-12): far vedere la pagina
+Funzionalita' a un utente senza permettergli di creare, modificare o eliminare voci.
+
+Il ruolo si crea e si cancella con SQL diretto sul database di test, non dall'interfaccia: la
+concessione e' il dato in prova, non il modo di farla.
+"""
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from helpers import grid_rows, nav
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+ROLE_NAME = "zzz_e2e_sola_lettura"
+ROLE_TYPE_SERVICE = 2
+
+
+def _sql(query: str) -> None:
+    subprocess.run(
+        ["node", "sources/devops/db/db.mjs", "test-query", query],
+        cwd=REPO_ROOT, check=True, capture_output=True,
+    )
+
+
+def _grant(code: str) -> None:
+    _sql(
+        "insert into role_permission (id_role, id_permission) "
+        f"select r.id_role, p.id_permission from role r, permission p "
+        f"where r.description = '{ROLE_NAME}' and p.code = '{code}' on conflict do nothing"
+    )
+
+
+def _revoke(code: str) -> None:
+    _sql(
+        "delete from role_permission "
+        f"where id_role = (select id_role from role where description = '{ROLE_NAME}') "
+        f"and id_permission = (select id_permission from permission where code = '{code}')"
+    )
+
+
+@pytest.fixture
+def read_only_role(test_email_user):
+    _sql(f"delete from role where description = '{ROLE_NAME}'")
+    _sql(f"insert into role (description, id_role_type) values ('{ROLE_NAME}', {ROLE_TYPE_SERVICE})")
+    try:
+        _sql(
+            "insert into user_role (user_id, id_role) "
+            f"select u.id, r.id_role from users u, role r "
+            f"where u.email = '{test_email_user}' and r.description = '{ROLE_NAME}'"
+        )
+        for code in ("read-menu", "read-roles", "read-languages"):
+            _grant(code)
+        yield
+    finally:
+        _sql(f"delete from role where description = '{ROLE_NAME}'")
+
+
+def test_reader_sees_functionalities_without_edit_controls(non_admin_page, base_url, read_only_role):
+    nav(non_admin_page, f"{base_url}/functionalities")
+    assert "/functionalities" in non_admin_page.url
+    non_admin_page.wait_for_selector('[data-testid="open-filters"]')
+    for testid in ("create-functionality", "nav-add", "nav-edit", "nav-delete"):
+        assert non_admin_page.locator(f'[data-testid="{testid}"]').count() == 0, testid
+
+
+def test_reader_cannot_open_the_create_page(non_admin_page, base_url, read_only_role):
+    nav(non_admin_page, f"{base_url}/functionalities/create")
+    assert "/functionalities/create" not in non_admin_page.url
+
+
+def test_reader_sees_roles_without_create(non_admin_page, base_url, read_only_role):
+    nav(non_admin_page, f"{base_url}/roles-permissions")
+    assert "/roles-permissions" in non_admin_page.url
+    grid_rows(non_admin_page).first.wait_for()
+    assert non_admin_page.locator('[data-testid="create-role"]').count() == 0
+
+
+def test_reader_sees_languages_without_create(non_admin_page, base_url, read_only_role):
+    nav(non_admin_page, f"{base_url}/admin/languages")
+    assert "/admin/languages" in non_admin_page.url
+    grid_rows(non_admin_page).first.wait_for()
+    assert non_admin_page.locator('[data-testid="create-language"]').count() == 0
+
+
+def test_reader_without_read_users_is_kept_out(non_admin_page, base_url, read_only_role):
+    nav(non_admin_page, f"{base_url}/user-management")
+    assert "/user-management" not in non_admin_page.url
+
+
+def test_revocation_takes_effect_without_new_login(non_admin_page, base_url, read_only_role):
+    nav(non_admin_page, f"{base_url}/functionalities")
+    assert "/functionalities" in non_admin_page.url
+    _revoke("read-menu")
+    nav(non_admin_page, f"{base_url}/functionalities")
+    assert "/functionalities" not in non_admin_page.url
+
+
+def test_administrator_still_sees_edit_controls(logged_in_page, base_url):
+    nav(logged_in_page, f"{base_url}/functionalities")
+    logged_in_page.wait_for_selector('[data-testid="create-functionality"]')
+    assert logged_in_page.locator('[data-testid="nav-add"]').count() > 0
