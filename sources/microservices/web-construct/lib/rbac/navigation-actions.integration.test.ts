@@ -282,31 +282,45 @@ describeIntegration('navigation mutations against the database', () => {
     }
   })
 
-  // Revisione Task 4, giro 1 (RILIEVO 2): il test rimosso allo Step 8
-  // («elimina i permessi orfani di un intero sottoalbero») aveva un cammino a due livelli
-  // apposta — «cosi' un cammino fermato al primo figlio farebbe fallire questo test». Un
-  // rimpiazzo a profondità 0 (una foglia isolata) non prova che la cascata attraversi il
-  // sottoalbero: `menu_entry.id_parent on delete cascade` sul PRIMO livello sarebbe bastato
-  // a farlo passare comunque. Qui si cancella il contenitore in cima a
-  // contenitore > sotto-contenitore > funzionalità, e si verificano sia i tre `menu_entry`
-  // (il cascade attraversa due livelli, non uno) sia la riga `role_functionality` sulla
-  // funzionalità più profonda (la cascata di `role_functionality.id_menu_entry`, migrazione
-  // 0024, arriva fino in fondo).
-  it('cancellare un contenitore porta via l\'intero sottoalbero e le concessioni dei discendenti, per cascata', async () => {
+  // Una cartella che contiene qualcosa non si elimina (richiesta del 2026-10-12): prima si
+  // svuota. Il rifiuto e' del server, non solo dell'interfaccia, e non cancella niente: ne' la
+  // cartella ne' i figli ne' le concessioni dei figli. Il cammino ha due livelli apposta, come il
+  // test della cascata che sostituisce: un controllo fermo al primo figlio passerebbe lo stesso.
+  it('rifiuta di cancellare una cartella non vuota, e non tocca niente', async () => {
     const { id: catId } = await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`))
     const { id: subId } = await createNavigationItem({ ...categoryInput(`${PREFIX}${sequence++}`), idItemParent: catId })
     const { id: funcId } = await createNavigationItem({ ...functionalityInput(`${PREFIX}${sequence++}`), idItemParent: subId })
-    const [ruolo] = await db.insert(role).values({ description: `${PREFIX}cascata`, idRoleType: 2 }).returning({ idRole: role.idRole })
+    const [ruolo] = await db.insert(role).values({ description: `${PREFIX}non_vuota`, idRoleType: 2 }).returning({ idRole: role.idRole })
     try {
       await db.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: funcId })
 
+      await expect(deleteNavigationItem(catId)).rejects.toThrow(/not empty/)
+      await expect(deleteNavigationItem(subId)).rejects.toThrow(/not empty/)
+
+      for (const id of [catId, subId, funcId]) {
+        expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))).toHaveLength(1)
+      }
+      expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idMenuEntry, funcId))).toHaveLength(1)
+    } finally {
+      await db.delete(role).where(eq(role.idRole, ruolo.idRole))
+    }
+  })
+
+  // Cancellare una voce porta via le sue concessioni ai ruoli per cascata
+  // (role_functionality.id_menu_entry, migrazione 0024): nessun percorso applicativo deve
+  // ricordarsene. Si svuota la cartella dal fondo, come farebbe chi usa l'interfaccia.
+  it('svuotata dal fondo, la cartella si cancella e le concessioni delle voci se ne vanno con loro', async () => {
+    const { id: catId } = await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`))
+    const { id: funcId } = await createNavigationItem({ ...functionalityInput(`${PREFIX}${sequence++}`), idItemParent: catId })
+    const [ruolo] = await db.insert(role).values({ description: `${PREFIX}svuotata`, idRoleType: 2 }).returning({ idRole: role.idRole })
+    try {
+      await db.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: funcId })
+
+      await deleteNavigationItem(funcId)
+      expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idMenuEntry, funcId))).toHaveLength(0)
       await deleteNavigationItem(catId)
 
       expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, catId))).toHaveLength(0)
-      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, subId))).toHaveLength(0)
-      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, funcId))).toHaveLength(0)
-      const rimaste = await db.select().from(roleFunctionality).where(eq(roleFunctionality.idMenuEntry, funcId))
-      expect(rimaste).toHaveLength(0)
     } finally {
       await db.delete(role).where(eq(role.idRole, ruolo.idRole))
     }

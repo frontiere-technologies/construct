@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { rowActions } from './nav-row-actions'
+import { childCountById, rowActions } from './nav-row-actions'
+import type { UserNavigationTreeDto } from './types'
 
 describe('rowActions', () => {
   it('lets any category take a new child, immutable ones included', () => {
@@ -27,5 +28,21 @@ describe('rowActions', () => {
   it('offers nothing at all to a reader, whatever the node', () => {
     expect(rowActions({ type: 'CATEGORY', isImmutable: false }, false)).toEqual({ add: false, edit: false, remove: false })
     expect(rowActions({ type: 'FUNCTIONALITY', isImmutable: false }, false)).toEqual({ add: false, edit: false, remove: false })
+  })
+})
+
+// Il cestino di una cartella non vuota resta visibile ma disattivato. Il conteggio va fatto
+// sull'albero intero: con un filtro di ricerca attivo l'albero mostrato perde dei figli, e una
+// cartella piena sembrerebbe vuota proprio mentre la si guarda.
+describe('childCountById', () => {
+  const node = (id: number, children: UserNavigationTreeDto[] = []): UserNavigationTreeDto =>
+    ({ id, name: `n${id}`, type: children.length ? 'CATEGORY' : 'FUNCTIONALITY', parentId: null, authorization: false, children })
+
+  it('counts the direct children of every node, nested ones included', () => {
+    const counts = childCountById([node(1, [node(2, [node(3), node(4)]), node(5)]), node(6)])
+    expect(counts.get(1)).toBe(2)
+    expect(counts.get(2)).toBe(2)
+    expect(counts.get(3)).toBe(0)
+    expect(counts.get(6)).toBe(0)
   })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, SlidersHorizontal, Search, X } from 'lucide-react'
 import NavigationTree from '@/components/rbac/NavigationTree'
@@ -10,7 +10,7 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { moveNavigationItem, deleteNavigationItem } from '@/lib/rbac/navigation-actions'
-import { rowActions } from '@/lib/rbac/nav-row-actions'
+import { childCountById, rowActions } from '@/lib/rbac/nav-row-actions'
 import { useI18n } from '@/context/I18nContext'
 import type { UserNavigationTreeDto } from '@/lib/rbac/types'
 
@@ -46,8 +46,14 @@ export default function FunctionalitiesTreeClient({ tree, canManage }: Props) {
 
   const clearFilters = () => { setSearchDraft(''); setSearch('') }
 
+  // Contato sull'albero intero, non su quello filtrato dalla ricerca (vedi childCountById).
+  const childCounts = useMemo(() => childCountById(tree), [tree])
+
   const trailing = (node: UserNavigationTreeDto) => {
     const actions = rowActions(node, canManage)
+    // Una cartella si elimina solo vuota: il cestino resta visibile, disattivato, con il motivo.
+    // Il server rifiuta comunque (deleteNavigationItem): questo evita solo un clic a vuoto.
+    const notEmpty = (childCounts.get(node.id) ?? 0) > 0
     if (!actions.add && !actions.edit && !actions.remove) return null
     return (
       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -66,12 +72,17 @@ export default function FunctionalitiesTreeClient({ tree, canManage }: Props) {
           ><Pencil size={15} /></Button>
         )}
         {actions.remove && (
-          <Button
-            variant="ghost" size="icon"
-            className="enabled:hover:text-destructive"
-            data-testid="nav-delete" title={t('common.actions.delete')} aria-label={t('common.actions.delete')}
-            onClick={() => setDeleting(node)}
-          ><Trash2 size={15} /></Button>
+          // Il motivo sta sul contenitore e non sul bottone: un bottone disabilitato non riceve
+          // il passaggio del mouse in ogni browser, e il suo title non comparirebbe.
+          <span title={notEmpty ? t('functionalities.tree.delete_not_empty_hint') : undefined}>
+            <Button
+              variant="ghost" size="icon"
+              className="enabled:hover:text-destructive"
+              data-testid="nav-delete" title={notEmpty ? undefined : t('common.actions.delete')} aria-label={t('common.actions.delete')}
+              disabled={notEmpty}
+              onClick={() => setDeleting(node)}
+            ><Trash2 size={15} /></Button>
+          </span>
         )}
       </div>
     )
@@ -135,7 +146,7 @@ export default function FunctionalitiesTreeClient({ tree, canManage }: Props) {
       {deleting && (
         <ConfirmModal
           title={t('common.actions.delete')}
-          message={t('functionalities.tree.confirm_delete', { name: deleting.name })}
+          message={t('functionalities.tree.confirm_delete_item', { name: deleting.name })}
           destructive
           confirmLabel={t('common.actions.delete')}
           onCancel={() => setDeleting(null)}

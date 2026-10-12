@@ -515,6 +515,46 @@ def test_edit_can_change_genitore(logged_in_page, base_url):
         _delete_functionality(page, base_url, cat)
 
 
+def test_non_empty_category_cannot_be_deleted(logged_in_page, base_url):
+    """A folder is deleted only once empty: its trash is disabled while it holds an item, and the
+    item's own confirmation no longer speaks of children it cannot have."""
+    page = logged_in_page
+    ts = int(time.time())
+    cat, func = f"E2E Full {ts}", f"E2E Inside {ts}"
+    _create_category(page, base_url, cat)
+    _create_functionality(page, base_url, func, f"/e2e-inside-{ts}")
+    try:
+        nav(page, f"{base_url}/functionalities")
+        page.get_by_text(func, exact=True).first.scroll_into_view_if_needed()
+        row = page.locator("div").filter(has_text=func).filter(has=page.locator('[data-testid="nav-edit"]')).last
+        row.locator('[data-testid="nav-edit"]').click()
+        page.wait_for_url("**/edit", timeout=10_000)
+        _pick_genitore(page, cat)
+        page.get_by_role("button", name="Salva").click()
+        page.wait_for_url("**/functionalities", timeout=10_000)
+        expect(page.get_by_text(func, exact=True)).to_be_visible()
+
+        cat_row = page.locator("div").filter(has_text=cat).filter(
+            has=page.locator('[data-testid="nav-add"]')
+        ).last
+        cat_delete = cat_row.locator('[data-testid="nav-delete"]').first
+        expect(cat_delete).to_be_disabled()
+        expect(cat_delete.locator("xpath=..")).to_have_attribute(
+            "title", "La cartella non è vuota: sposta o elimina prima le voci che contiene"
+        )
+
+        func_row = page.locator("div").filter(has_text=func).filter(has=page.locator('[data-testid="nav-delete"]')).last
+        func_row.locator('[data-testid="nav-delete"]').click()
+        dialog = page.get_by_role("dialog")
+        expect(dialog).to_contain_text(f'Eliminare "{func}"?')
+        expect(dialog).not_to_contain_text("figli")
+        dialog.get_by_role("button", name="Annulla").click()
+        expect(dialog).to_have_count(0)
+    finally:
+        _delete_functionality(page, base_url, func)
+        _delete_functionality(page, base_url, cat)
+
+
 def test_edit_genitore_excludes_own_subtree(logged_in_page, base_url):
     """A category must not be able to become a child of itself or of its own descendants."""
     page = logged_in_page
