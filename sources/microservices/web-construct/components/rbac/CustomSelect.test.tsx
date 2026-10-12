@@ -193,3 +193,31 @@ describe('CustomSelect', () => {
     expect(container?.querySelector('[role="listbox"]')).toBeNull()
   })
 })
+
+// Un nome lungo e senza spazi (il «Genitore» nella modifica di una funzionalità) allargava il
+// pulsante fino al nome intero, e con lui la colonna del modulo, che usciva dal suo riquadro.
+// jsdom non fa layout: si controllano le classi che lo impediscono.
+describe('CustomSelect with a long label', () => {
+  const longLabel = `Test2222.${'1'.repeat(60)}${'2'.repeat(12)}`
+  const longOptions = [{ value: 'long', label: longLabel }, { value: 'short', label: 'Short' }]
+
+  it('shortens the chosen label in the trigger and shows it whole on hover', () => {
+    const { trigger } = renderSelect({ value: 'long', selectOptions: longOptions })
+    const label = trigger.querySelector('span')!
+
+    expect(label.textContent).toBe(longLabel)
+    expect(label.classList.contains('min-w-0'), "all'etichetta manca min-w-0").toBe(true)
+    expect(label.classList.contains('truncate'), "all'etichetta manca truncate").toBe(true)
+    expect(label.getAttribute('title')).toBe(longLabel)
+  })
+
+  it('wraps a long option in the open list instead of scrolling it sideways', () => {
+    const { trigger } = renderSelect({ value: 'short', selectOptions: longOptions })
+    act(() => trigger.click())
+    const option = container?.querySelector('[role="option"] span') as HTMLElement
+
+    expect(option.textContent).toBe(longLabel)
+    expect(option.classList.contains('min-w-0'), "all'opzione manca min-w-0").toBe(true)
+    expect(option.classList.contains('break-words'), "all'opzione manca break-words").toBe(true)
+  })
+})

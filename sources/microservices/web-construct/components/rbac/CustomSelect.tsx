@@ -149,7 +149,12 @@ export default function CustomSelect({
             ? 'opacity-50 cursor-not-allowed'
             : 'enabled:hover:border-border cursor-pointer'}`}
       >
-        <span className={showPlaceholder ? 'text-muted-foreground' : 'text-foreground'}>
+        {/* min-w-0 + truncate: un nome lungo e senza spazi allargava il pulsante, e con lui il
+            modulo che lo contiene. Si accorcia con i puntini; il nome intero resta nel title. */}
+        <span
+          className={`min-w-0 truncate ${showPlaceholder ? 'text-muted-foreground' : 'text-foreground'}`}
+          title={selectedLabel ?? undefined}
+        >
           {selectedLabel ?? placeholder ?? '—'}
         </span>
         <ChevronDown
@@ -189,7 +194,8 @@ export default function CustomSelect({
                       ? 'font-medium text-foreground'
                       : 'text-foreground-secondary'}`}
                 >
-                  <span className="flex-1">{opt.label}</span>
+                  {/* Nella lista aperta il nome si legge tutto: va a capo invece di far scorrere la lista di lato. */}
+                  <span className="min-w-0 flex-1 break-words">{opt.label}</span>
                   {selected && <Check size={13} className="text-primary shrink-0" />}
                 </div>
               )
