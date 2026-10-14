@@ -267,6 +267,17 @@ describeIntegration('database runtime boundary', () => {
     ])
   })
 
+  it('runs every function in public with the caller rights', async () => {
+    const definers = await db.execute<{ name: string }>(sql`
+      select p.proname as name
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.prosecdef
+        and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+      order by p.proname
+    `)
+    expect(definers.map(row => row.name)).toEqual([])
+  })
+
   it('keeps migration history inaccessible to the runtime role', async () => {
     const privileges = await db.execute<{ allowed: boolean }>(sql`
       select has_table_privilege('construct_runtime', 'public.construct_schema_migration', 'select') as allowed

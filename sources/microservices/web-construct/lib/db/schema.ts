@@ -124,14 +124,6 @@ export const role = pgTable('role', {
   dateMod: timestamp('date_mod', { withTimezone: true, mode: 'string' }),
 })
 
-export const roleHistory = pgTable('role_history', {
-  idRole: bigint('id_role', { mode: 'number' }).notNull(),
-  hDateIns: timestamp('h_date_ins', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
-  description: text('description').notNull(),
-  dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }),
-  dateMod: timestamp('date_mod', { withTimezone: true, mode: 'string' }),
-}, (t) => [primaryKey({ columns: [t.idRole, t.hDateIns] })])
-
 export const userRole = pgTable('user_role', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   idRole: bigint('id_role', { mode: 'number' }).notNull().references(() => role.idRole, { onDelete: 'cascade' }),
@@ -195,14 +187,6 @@ export const roleFunctionality = pgTable('role_functionality', {
   idRole: bigint('id_role', { mode: 'number' }).notNull().references(() => role.idRole, { onDelete: 'cascade' }),
   idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).notNull().references(() => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
 }, (t) => [primaryKey({ columns: [t.idRole, t.idMenuEntry] })])
-
-export const userInfo = pgTable('user_info', {
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  attributeType: varchar('attribute_type', { length: 30 }).notNull(),
-  attributeValue: text('attribute_value').notNull(),
-  dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }).defaultNow(),
-  dateMod: timestamp('date_mod', { withTimezone: true, mode: 'string' }),
-}, (t) => [primaryKey({ columns: [t.userId, t.attributeType] })])
 
 // Read-only — created by schema.sql, never migrated by drizzle-kit (DEC-4).
 export const roleListView = pgView('role_list_view', {
