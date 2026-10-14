@@ -1,7 +1,8 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, expect, it, vi } from 'vitest'
 import { count, eq, like } from 'drizzle-orm'
 import postgres from 'postgres'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
+import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { permission, menuEntry, role, roleFunctionality } from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
@@ -59,13 +60,15 @@ function omitFunctionalityType(input: CreateNavItemInput): CreateNavItemInput {
   return copy as unknown as CreateNavItemInput
 }
 
+afterAll(closeOwner)
+
 describeIntegration('navigation mutations against the database', () => {
   afterEach(async () => {
     // menu_entry e permission non hanno più relazione dopo la 0027 (Task 6): questa riga di
     // pulizia è difensiva, nel caso un test qui sotto inserisca ancora un permesso con questo
     // prefisso — nessuno lo fa più oggi.
     await withTenant(defaultTestTenant(), tx => tx.delete(menuEntry).where(like(menuEntry.name, `${PREFIX}%`)))
-    await withGlobal(tx => tx.delete(permission).where(like(permission.name, `${PREFIX}%`)))
+    await withOwner(tx => tx.delete(permission).where(like(permission.name, `${PREFIX}%`)))
   })
 
   it('non crea alcun permesso gemello per una funzionalità nuova (via la sincronizzazione)', async () => {
@@ -102,7 +105,7 @@ describeIntegration('navigation mutations against the database', () => {
     //
     // code non nullo e unico: permission_code_matches_kind lo pretende per un GRANT di
     // origine SOURCE — col prefisso di prova del file, cosi' la pulizia lo raggiunge.
-    const [perm] = await withGlobal(tx => tx.insert(permission).values({
+    const [perm] = await withOwner(tx => tx.insert(permission).values({
       kind: 'GRANT',
       origin: 'SOURCE',
       code,
@@ -134,7 +137,7 @@ describeIntegration('navigation mutations against the database', () => {
       expect(await withGlobal(tx => tx.select().from(permission).where(eq(permission.idPermission, perm.id)))).toHaveLength(1)
     } finally {
       await withTenant(defaultTestTenant(), tx => tx.delete(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id)))
-      await withGlobal(tx => tx.delete(permission).where(eq(permission.idPermission, perm.id)))
+      await withOwner(tx => tx.delete(permission).where(eq(permission.idPermission, perm.id)))
     }
   })
 

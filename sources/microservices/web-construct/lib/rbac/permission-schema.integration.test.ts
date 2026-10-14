@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { and, eq, inArray, isNotNull, like, sql } from 'drizzle-orm'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
+import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { appLanguage, menuEntry, permission, role, roleFunctionality, roleListView, rolePermission, translationKey, translationValue, users } from '@/lib/db/schema'
 import { unique } from '@/lib/i18n/test-support/db-fixtures'
@@ -39,6 +40,8 @@ async function expectRejectedByConstraint(run: () => Promise<unknown>, constrain
   const cause = (caught as { cause?: { constraint_name?: string } }).cause
   expect(cause?.constraint_name).toBe(constraint)
 }
+
+afterAll(closeOwner)
 
 describe('rename delle tabelle RBAC', () => {
   it('espone permission e role_permission, e non più i nomi vecchi', async () => {
@@ -84,7 +87,7 @@ describe('rename delle tabelle RBAC', () => {
     const [createdRole] = await withTenant(defaultTestTenant(), tx => tx.insert(role)
       .values({ description: 'zzz_rbac_rename_test_role' })
       .returning({ idRole: role.idRole }))
-    const [createdPermission] = await withGlobal(tx => tx.insert(permission)
+    const [createdPermission] = await withOwner(tx => tx.insert(permission)
       .values({ name: 'zzz_rbac_rename_test_permission', kind: 'CATEGORY' })
       .returning({ idPermission: permission.idPermission }))
     try {
@@ -98,7 +101,7 @@ describe('rename delle tabelle RBAC', () => {
       expect(row?.hasPermissions).toBe(true)
     } finally {
       await withTenant(defaultTestTenant(), tx => tx.delete(rolePermission).where(eq(rolePermission.idRole, createdRole.idRole)))
-      await withGlobal(tx => tx.delete(permission).where(eq(permission.idPermission, createdPermission.idPermission)))
+      await withOwner(tx => tx.delete(permission).where(eq(permission.idPermission, createdPermission.idPermission)))
       await withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, createdRole.idRole)))
     }
   })
@@ -134,14 +137,14 @@ describe('identità del permesso', () => {
   it('rifiuta un kind non ammesso', async () => {
     try {
       await expectRejectedByConstraint(
-        () => withGlobal(tx => tx.execute(sql`
+        () => withOwner(tx => tx.execute(sql`
           insert into public.permission (kind, origin, description, id_parent, order_position)
           values ('BOGUS', 'CONSOLE', 'kind non valido', -1, 0)
         `)),
         'permission_kind_valid',
       )
     } finally {
-      await withGlobal(tx => tx.execute(sql`delete from public.permission where description = 'kind non valido'`))
+      await withOwner(tx => tx.execute(sql`delete from public.permission where description = 'kind non valido'`))
     }
   })
 
@@ -149,20 +152,20 @@ describe('identità del permesso', () => {
   it('rifiuta un origin non ammesso', async () => {
     try {
       await expectRejectedByConstraint(
-        () => withGlobal(tx => tx.execute(sql`
+        () => withOwner(tx => tx.execute(sql`
           insert into public.permission (kind, origin, description, id_parent, order_position)
           values ('GRANT', 'BOGUS', 'origin non valido', -1, 0)
         `)),
         'permission_origin_valid',
       )
     } finally {
-      await withGlobal(tx => tx.execute(sql`delete from public.permission where description = 'origin non valido'`))
+      await withOwner(tx => tx.execute(sql`delete from public.permission where description = 'origin non valido'`))
     }
   })
 
   it('rifiuta un GRANT di origine SOURCE senza code', async () => {
     await expectRejectedByConstraint(
-      () => withGlobal(tx => tx.execute(sql`
+      () => withOwner(tx => tx.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', null, 'SOURCE', 'senza codice', -1, 0)
       `)),
@@ -174,7 +177,7 @@ describe('identità del permesso', () => {
    * altrettanto una violazione del vincolo nuovo, non solo la sua assenza su una SOURCE. */
   it('rifiuta un GRANT di origine CONSOLE con un code', async () => {
     await expectRejectedByConstraint(
-      () => withGlobal(tx => tx.execute(sql`
+      () => withOwner(tx => tx.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', 'non-dovrebbe-esistere', 'CONSOLE', 'con codice', -1, 0)
       `)),
@@ -194,14 +197,14 @@ describe('identità del permesso', () => {
   it('rifiuta una CATEGORY di origine SOURCE con un code', async () => {
     try {
       await expectRejectedByConstraint(
-        () => withGlobal(tx => tx.execute(sql`
+        () => withOwner(tx => tx.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
           values ('CATEGORY', 'test-categoria-source-con-code', 'SOURCE', 'categoria con codice', -1, 0)
         `)),
         'permission_code_matches_kind',
       )
     } finally {
-      await withGlobal(tx => tx.execute(sql`delete from public.permission where code = 'test-categoria-source-con-code'`))
+      await withOwner(tx => tx.execute(sql`delete from public.permission where code = 'test-categoria-source-con-code'`))
     }
   })
 
@@ -224,19 +227,19 @@ describe('identità del permesso', () => {
     // questo test vuole esercitare.
     const code = `test-dup-${unique()}`
     try {
-      await withGlobal(tx => tx.execute(sql`
+      await withOwner(tx => tx.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', ${code}, 'SOURCE', 'primo', -1, 0)
       `))
       await expectRejectedByConstraint(
-        () => withGlobal(tx => tx.execute(sql`
+        () => withOwner(tx => tx.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
           values ('GRANT', ${code}, 'SOURCE', 'secondo', -1, 0)
         `)),
         'permission_code_unique',
       )
     } finally {
-      await withGlobal(tx => tx.execute(sql`delete from public.permission where code = ${code}`))
+      await withOwner(tx => tx.execute(sql`delete from public.permission where code = ${code}`))
     }
   })
 })
@@ -347,17 +350,17 @@ describe('pulizia colonne e tabelle assorbite (Task 7)', () => {
  * verificare che il trigger sia sparito, non che l'operazione che falliva ora funzioni. */
 describe('trigger permission_updated_at (Task 9)', () => {
   it('accetta un UPDATE su una riga di permission', async () => {
-    const [created] = await withGlobal(tx => tx.insert(permission)
+    const [created] = await withOwner(tx => tx.insert(permission)
       .values({ name: 'zzz_rbac_trigger_orphan_test', kind: 'CATEGORY' })
       .returning({ idPermission: permission.idPermission }))
     try {
       await expect(
-        withGlobal(tx => tx.update(permission)
+        withOwner(tx => tx.update(permission)
           .set({ description: 'aggiornata dal test' })
           .where(eq(permission.idPermission, created.idPermission))),
       ).resolves.not.toThrow()
     } finally {
-      await withGlobal(tx => tx.delete(permission).where(eq(permission.idPermission, created.idPermission)))
+      await withOwner(tx => tx.delete(permission).where(eq(permission.idPermission, created.idPermission)))
     }
   })
 })
@@ -496,17 +499,25 @@ describe('role_functionality (0024)', () => {
     expect(rows[0].concesse).toBe(4)
   })
 
-  it('ha la policy RLS che il confine di runtime richiede', async () => {
+  // Dalla 0047 la policy permissiva `construct_runtime_server_access` di 0002 non c'e' piu': il
+  // confine e' la coppia di tenant (una restrittiva sul tenant, una permissiva), con la RLS forzata.
+  it('ha la RLS forzata e le due policy di tenant che il confine di runtime richiede', async () => {
     const rows = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
-      select c.relrowsecurity as rls, count(p.polname)::int as policy
+      select c.relrowsecurity as rls, c.relforcerowsecurity as forced,
+        count(p.polname) filter (where p.polname = 'tenant_boundary' and not p.polpermissive)::int as boundary,
+        count(p.polname) filter (where p.polname = 'tenant_access' and p.polpermissive)::int as access,
+        count(p.polname)::int as total
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
-      left join pg_policy p on p.polrelid = c.oid and p.polname = 'construct_runtime_server_access'
+      left join pg_policy p on p.polrelid = c.oid
       where n.nspname = 'public' and c.relname = 'role_functionality'
-      group by c.relrowsecurity
+      group by c.relrowsecurity, c.relforcerowsecurity
     `))
     expect(rows[0].rls).toBe(true)
-    expect(rows[0].policy).toBe(1)
+    expect(rows[0].forced).toBe(true)
+    expect(rows[0].boundary).toBe(1)
+    expect(rows[0].access).toBe(1)
+    expect(rows[0].total).toBe(2)
   })
 
   // 'non lascia in role_permission nessuna concessione su una voce di menu (travaso

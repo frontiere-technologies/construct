@@ -1,6 +1,7 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, expect, it, vi } from 'vitest'
 import { eq, like } from 'drizzle-orm'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
+import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { menuEntry, permission, role, roleFunctionality, rolePermission } from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
@@ -33,7 +34,7 @@ async function makeServiceRole(): Promise<number> {
 }
 
 async function makePermission(kind: 'CATEGORY' | 'GRANT'): Promise<number> {
-  const [created] = await withGlobal(tx => tx
+  const [created] = await withOwner(tx => tx
     .insert(permission)
     .values({ name: name(), kind, origin: 'CONSOLE' })
     .returning({ idPermission: permission.idPermission }))
@@ -58,12 +59,14 @@ const adminActor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions
 
 const nessunDelta = { functionalities: [], operations: [] }
 
+afterAll(closeOwner)
+
 describeIntegration('updateRolePermissions against the database', () => {
   afterEach(async () => {
     // role_permission e role_functionality cascatano via id_role -> role; permission e
     // menu_entry invece restano finché non le si cancella esplicitamente qui.
     await withTenant(defaultTestTenant(), tx => tx.delete(role).where(like(role.description, `${PREFIX}%`)))
-    await withGlobal(tx => tx.delete(permission).where(like(permission.name, `${PREFIX}%`)))
+    await withOwner(tx => tx.delete(permission).where(like(permission.name, `${PREFIX}%`)))
     await withTenant(defaultTestTenant(), tx => tx.delete(menuEntry).where(like(menuEntry.name, `${PREFIX}%`)))
   })
 

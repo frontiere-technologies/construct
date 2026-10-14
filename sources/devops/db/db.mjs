@@ -264,9 +264,18 @@ async function provisionRuntimeRole() {
  * months without anyone noticing — in development nothing fails, because the
  * application is its own superuser.
  *
- * Read-only, so it is safe to point at production. The four probes are the same
- * four the spec makes; the two are deliberate duplicates in two runtimes and will
- * drift if edited apart. Change one, change the other.
+ * Read-only, so it is safe to point at production. The probes are the ones the spec
+ * makes, in three groups: who the connection is (privileged attributes, memberships,
+ * direct grants, migration history), who owns the application objects (relations and
+ * functions in public and app_private, and the app_private schema; no security definer
+ * function), and how the tenant boundary is closed (every table classified, row level
+ * security forced, a restrictive policy on every tenant table). The two are deliberate
+ * duplicates in two runtimes and will drift if edited apart. Change one, change the
+ * other: the contract test is lib/schema-contract.integration.test.ts.
+ *
+ * Every probe reports: on a database that has not yet received the migrations that
+ * create what a probe looks at (construct_owner, app_private), the probe prints FAIL
+ * instead of aborting the whole command with a raw error.
  */
 async function boundaryCheck() {
   const sql = postgres(applicationDatabaseUrl(), { prepare: false, connect_timeout: 30, idle_timeout: 5 })
@@ -331,28 +340,82 @@ async function boundaryCheck() {
       'construct_owner exists without BYPASSRLS, login and superuser',
       Boolean(ownerRole) && !ownerRole.rolbypassrls && !ownerRole.rolcanlogin && !ownerRole.rolsuper,
     )
+    // Il proprietario si cerca per nome attraverso pg_roles e non con un cast a regrole: il cast
+    // fa abortire l'intero comando dove construct_owner non esiste ancora, e la sonda deve
+    // invece dire FAIL.
     const strays = await sql`
-      select c.relname as name
-      from pg_class c join pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'S')
+      select n.nspname || '.' || c.relname as name
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      join pg_roles r on r.oid = c.relowner
+      where n.nspname in ('public', 'app_private') and c.relkind in ('r', 'p', 'v', 'S')
         and c.relname <> 'construct_schema_migration'
-        and c.relowner <> 'construct_owner'::regrole
+        and r.rolname <> 'construct_owner'
         and not exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype = 'e')
+      order by 1
     `
     report('construct_owner owns every application relation', !strays.length, strays.map(row => row.name).join(', '))
     const strayFunctions = await sql`
-      select p.proname as name
-      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public'
-        and p.proowner <> 'construct_owner'::regrole
+      select n.nspname || '.' || p.proname as name
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      join pg_roles r on r.oid = p.proowner
+      where n.nspname in ('public', 'app_private')
+        and r.rolname <> 'construct_owner'
         and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
-      order by p.proname
+      order by 1
     `
     report(
       'construct_owner owns every application function',
       !strayFunctions.length,
       strayFunctions.map(row => row.name).join(', '),
     )
+    const strayNamespaces = await sql`
+      select n.nspname as name
+      from pg_namespace n join pg_roles r on r.oid = n.nspowner
+      where n.nspname = 'app_private' and r.rolname <> 'construct_owner'
+    `
+    report('construct_owner owns the app_private schema', !strayNamespaces.length, strayNamespaces.map(row => row.name).join(', '))
+    const definers = await sql`
+      select n.nspname || '.' || p.proname as name
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname in ('public', 'app_private') and p.prosecdef
+        and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+      order by 1
+    `
+    report('no function runs with its owner rights', !definers.length, definers.map(row => row.name).join(', '))
+
+    const [{ hasRegistry }] = await sql`select to_regclass('app_private.table_class') is not null as "hasRegistry"`
+    if (!hasRegistry) {
+      report('the table classification registry exists', false, 'app_private.table_class is absent')
+    } else {
+      const unclassified = await sql`
+        select c.relname as name
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind in ('r', 'p') and c.relname <> 'construct_schema_migration'
+          and not exists (select 1 from app_private.table_class tc where tc.table_name = c.relname)
+        order by 1
+      `
+      report('every application table is classified', !unclassified.length, unclassified.map(row => row.name).join(', '))
+      const loose = await sql`
+        select tc.table_name as name
+        from app_private.table_class tc
+        join pg_class c on c.relname = tc.table_name and c.relnamespace = 'public'::regnamespace
+        where not (c.relrowsecurity and c.relforcerowsecurity)
+        order by 1
+      `
+      report('row level security is forced on every classified table', !loose.length, loose.map(row => row.name).join(', '))
+      const unguarded = await sql`
+        select tc.table_name as name
+        from app_private.table_class tc
+        where tc.class = 'tenant' and not exists (
+          select 1 from pg_policies p
+          where p.schemaname = 'public' and p.tablename = tc.table_name
+            and p.policyname = 'tenant_boundary' and p.permissive = 'RESTRICTIVE')
+        order by 1
+      `
+      report('every tenant table has its restrictive tenant policy', !unguarded.length, unguarded.map(row => row.name).join(', '))
+    }
   } finally {
     await sql.end({ timeout: 5 })
   }

@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { eq, inArray } from 'drizzle-orm'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
+import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
@@ -48,7 +49,7 @@ async function permissionId(code: string): Promise<number> {
 
 /** Una riga GRANT senza codice: fuori dal catalogo, nessuno la possiede. */
 async function makeUncodedGrant(): Promise<number> {
-  const [row] = await withGlobal(tx => tx.insert(permission)
+  const [row] = await withOwner(tx => tx.insert(permission)
     .values({ name: `zzz_grants_${unique()}`, kind: 'GRANT', origin: 'CONSOLE' })
     .returning({ id: permission.idPermission }))
   createdPermissions.push(row.id)
@@ -73,6 +74,8 @@ const rolesOf = async (userId: string) =>
 const statusOf = async (userId: string) =>
   (await withGlobal(tx => tx.select({ s: users.idUserStatus }).from(users).where(eq(users.id, userId))))[0].s
 
+afterAll(closeOwner)
+
 describeIntegration('user role and status actions with a limited actor', () => {
   beforeEach(() => {
     guard.actor = {
@@ -90,7 +93,7 @@ describeIntegration('user role and status actions with a limited actor', () => {
     const roleIds = createdRoles.splice(0)
     if (roleIds.length) await withTenant(defaultTestTenant(), tx => tx.delete(role).where(inArray(role.idRole, roleIds)))
     const permissionIds = createdPermissions.splice(0)
-    if (permissionIds.length) await withGlobal(tx => tx.delete(permission).where(inArray(permission.idPermission, permissionIds)))
+    if (permissionIds.length) await withOwner(tx => tx.delete(permission).where(inArray(permission.idPermission, permissionIds)))
   })
 
   it('refuses assigning the Administrator role (number)', async () => {

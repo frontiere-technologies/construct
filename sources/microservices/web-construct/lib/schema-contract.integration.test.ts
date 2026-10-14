@@ -267,11 +267,11 @@ describeIntegration('database runtime boundary', () => {
     ])
   })
 
-  it('runs every function in public with the caller rights', async () => {
+  it('runs every function in public and app_private with the caller rights', async () => {
     const definers = await withGlobal(tx => tx.execute<{ name: string }>(sql`
       select p.proname as name
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.prosecdef
+      where n.nspname in ('public', 'app_private') and p.prosecdef
         and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
       order by p.proname
     `))
@@ -289,7 +289,7 @@ describeIntegration('database runtime boundary', () => {
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
       join pg_roles r on r.oid = c.relowner
-      where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'S')
+      where n.nspname in ('public', 'app_private') and c.relkind in ('r', 'p', 'v', 'S')
         and c.relname <> 'construct_schema_migration'
         and r.rolname <> 'construct_owner'
         and not exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype = 'e')
@@ -298,11 +298,100 @@ describeIntegration('database runtime boundary', () => {
       from pg_proc p
       join pg_namespace n on n.oid = p.pronamespace
       join pg_roles r on r.oid = p.proowner
-      where n.nspname = 'public' and r.rolname <> 'construct_owner'
+      where n.nspname in ('public', 'app_private') and r.rolname <> 'construct_owner'
         and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+      union all
+      select n.nspname, r.rolname
+      from pg_namespace n
+      join pg_roles r on r.oid = n.nspowner
+      where n.nspname = 'app_private' and r.rolname <> 'construct_owner'
       order by 1
     `))
     expect(strays).toEqual([])
+  })
+
+  it('classifies every application table', async () => {
+    const unclassified = await withGlobal(tx => tx.execute<{ name: string }>(sql`
+      select c.relname as name
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind in ('r', 'p')
+        and c.relname <> 'construct_schema_migration'
+        and not exists (select 1 from app_private.table_class tc where tc.table_name = c.relname)
+      order by 1
+    `))
+    expect(unclassified.map(row => row.name)).toEqual([])
+  })
+
+  it('forces row level security on every classified table', async () => {
+    const loose = await withGlobal(tx => tx.execute<{ name: string }>(sql`
+      select tc.table_name as name
+      from app_private.table_class tc
+      join pg_class c on c.relname = tc.table_name and c.relnamespace = 'public'::regnamespace
+      where not (c.relrowsecurity and c.relforcerowsecurity)
+      order by 1
+    `))
+    expect(loose.map(row => row.name)).toEqual([])
+  })
+
+  it('guards every tenant table with the tenant policies, a leading index and composite keys', async () => {
+    const violations = await withGlobal(tx => tx.execute<{ name: string; problem: string }>(sql`
+      with tenant_tables as (
+        select c.oid, c.relname
+        from app_private.table_class tc
+        join pg_class c on c.relname = tc.table_name and c.relnamespace = 'public'::regnamespace
+        where tc.class = 'tenant'
+      )
+      select t.relname as name, 'id_tenant' as problem from tenant_tables t
+      where not exists (select 1 from pg_attribute a where a.attrelid = t.oid and a.attname = 'id_tenant'
+                        and a.attnotnull and a.atttypid = 'int8'::regtype)
+      union all
+      select t.relname, 'tenant_boundary' from tenant_tables t
+      where not exists (
+        select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t.relname and p.policyname = 'tenant_boundary'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'ALL'
+          and p.roles @> array['construct_runtime', 'construct_owner']::name[]
+          and p.qual like '%current_tenant_id%' and p.with_check like '%current_tenant_id%')
+      union all
+      select t.relname, 'tenant_access' from tenant_tables t
+      where not exists (
+        select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t.relname and p.policyname = 'tenant_access'
+          and p.permissive = 'PERMISSIVE' and p.cmd = 'ALL')
+      union all
+      select t.relname, 'leading index' from tenant_tables t
+      where not exists (
+        select 1 from pg_index i join pg_attribute a on a.attrelid = i.indrelid and a.attnum = i.indkey[0]
+        where i.indrelid = t.oid and a.attname = 'id_tenant')
+      union all
+      select t.relname, 'foreign key ' || k.conname from tenant_tables t
+      join pg_constraint k on k.conrelid = t.oid and k.contype = 'f'
+      join tenant_tables target on target.oid = k.confrelid
+      where not exists (
+        select 1 from unnest(k.conkey) key_column(attnum)
+        join pg_attribute a on a.attrelid = t.oid and a.attnum = key_column.attnum
+        where a.attname = 'id_tenant')
+      order by 1, 2
+    `))
+    expect(violations).toEqual([])
+  })
+
+  it('gives global tables the policies and grants of their class', async () => {
+    const violations = await withGlobal(tx => tx.execute<{ name: string; problem: string }>(sql`
+      select tc.table_name as name, 'policy' as problem
+      from app_private.table_class tc
+      where tc.class <> 'tenant' and not exists (
+        select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = tc.table_name
+          and p.policyname = case tc.class when 'global_write' then 'global_access' else 'global_read' end)
+      union all
+      select tc.table_name, 'write grant on a read-only table'
+      from app_private.table_class tc
+      where tc.class = 'global_read'
+        and has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'insert,update,delete')
+      order by 1, 2
+    `))
+    expect(violations).toEqual([])
   })
 
   it('keeps migration history inaccessible to the runtime role', async () => {
