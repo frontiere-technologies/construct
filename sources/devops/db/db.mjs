@@ -16,7 +16,9 @@ import { fileURLToPath } from 'node:url'
 import {
   applyPendingMigrations,
   discoverMigrations,
+  parseApplyArguments,
   renderSchemaSnapshot,
+  selectMigrationsUpTo,
 } from './migration-lib.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -152,7 +154,10 @@ function migrationAdapter(sql) {
   }
 }
 
-async function runMigrations(connectionUrl) {
+async function runMigrations(connectionUrl, { to } = {}) {
+  // Prima di aprire la connessione: una versione inesistente non deve toccare il database.
+  const migrations = discoverMigrations(migrationsDir)
+  selectMigrationsUpTo(migrations, to)
   const sql = postgres(connectionUrl, {
     prepare: false,
     connect_timeout: 30,
@@ -163,9 +168,9 @@ async function runMigrations(connectionUrl) {
   try {
     connection = await sql.reserve()
     await connection`select pg_advisory_lock(49374200)`
-    const migrations = discoverMigrations(migrationsDir)
-    const applied = await applyPendingMigrations(migrationAdapter(connection), migrations)
+    const applied = await applyPendingMigrations(migrationAdapter(connection), migrations, { to })
     if (applied.length) console.log(`applied migration(s): ${applied.join(', ')}`)
+    else if (to) console.log(`nothing to apply up to ${to}`)
     else console.log('database schema is up to date')
   } finally {
     if (connection) {
@@ -592,7 +597,7 @@ async function runCommandBody(sql, command, argument) {
   }
 }
 
-const [command, argument] = process.argv.slice(2)
+const [command, argument, ...extraArguments] = process.argv.slice(2)
 const supported = new Set([
   'apply',
   'boundary-check',
@@ -607,17 +612,19 @@ const supported = new Set([
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | test-apply | test-query "<sql>" | test-reset-e2e | test-delete-user')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user')
   process.exit(2)
 }
+
+const applyArguments = [argument, ...extraArguments].filter(value => value !== undefined)
 
 try {
   if (command === 'schema-write') writeSchemaSnapshot()
   else if (command === 'schema-check') checkSchemaSnapshot()
-  else if (command === 'apply') await runMigrations(migrationDatabaseUrl())
+  else if (command === 'apply') await runMigrations(migrationDatabaseUrl(), parseApplyArguments(applyArguments))
   else if (command === 'boundary-check') await boundaryCheck()
   else if (command === 'provision-runtime-role') await provisionRuntimeRole()
-  else if (command === 'test-apply') await runMigrations(testMigrationDatabaseUrl())
+  else if (command === 'test-apply') await runMigrations(testMigrationDatabaseUrl(), parseApplyArguments(applyArguments))
   else await runDatabaseCommand(command, argument)
 } catch (err) {
   console.error(`ERROR: ${err.message}`)

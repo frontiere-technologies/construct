@@ -138,6 +138,40 @@ login e senza BYPASSRLS), e `db.mjs apply` esegue ogni migrazione successiva con
 `0045` stessa. Se in un ambiente le migrazioni le esegue un utente diverso da quello che ha
 applicato la `0045`, va concesso a mano: `grant construct_owner to <utente>;`.
 
+### Rilascio in produzione: tre tappe (isolamento per tenant, migrazioni 0044-0047)
+
+Il job delle migrazioni gira **prima** che i pod nuovi sostituiscano i vecchi: per qualche istante
+il codice vecchio lavora sul database già migrato. Per questo le migrazioni dell'isolamento per
+tenant non si applicano tutte insieme: `db.mjs apply --to <versione>` (e `test-apply --to
+<versione>`) applica le migrazioni in sospeso fino a quella versione compresa e si ferma. Senza
+`--to` il comportamento è quello di sempre, cioè applica tutto. Una versione che non esiste fa
+fallire il comando prima di toccare il database; se è già applicata, il comando scrive
+`nothing to apply up to <versione>` ed esce con successo.
+
+| Tappa | Codice che va in produzione | Job delle migrazioni | Perché ci si ferma lì |
+|---|---|---|---|
+| R1 | Tutto il codice fino a MTF-4: ogni accesso ai dati passa da `withTenant` o `withGlobal` | `db.mjs apply --to 0045` | Il codice nuovo funziona anche sul database vecchio, e le migrazioni 0044 e 0045 non rompono i pod vecchi. Va prima di tutto il resto: dalla 0046 `id_tenant` ha come valore predefinito una funzione che richiede il contesto del tenant, e solo il codice di R1 lo imposta sempre. |
+| R2 | Il tenant preso dal contesto della richiesta e i ruoli di sistema cercati per chiave (MTF-6) | `db.mjs apply --to 0046` | La 0046 aggiunge la tabella dei tenant, cambia chiavi e colonne (per esempio toglie `app_theme.id`) e dà a `id_tenant` il valore predefinito che richiede il contesto. Il codice che non imposta il contesto, o che usa le colonne tolte, sbaglia. |
+| R3 | Nessun codice nuovo | `db.mjs apply` (applica la 0047) | La 0047 accende la sicurezza per riga (RLS): da lì **ogni** lettura e scrittura delle tabelle di tenant richiede il contesto, anche l'accesso. Si lancia solo quando tutti i pod di R2 sono in esecuzione e non ne è rimasto nessuno più vecchio. |
+
+Cosa tenere presente:
+
+- R1 e R2 sono due immagini diverse, costruite da due punti diversi della storia del ramo: R1 dal
+  commit che chiude MTF-4 (`e0868d5`, «the database is reachable only through withTenant and
+  withGlobal»), R2 da quello che chiude MTF-6 (`0b19314`, «system roles are found by key in the
+  request tenant»). Il codice finale del ramo, che contiene anche la 0046 e la 0047, non funziona
+  su un database fermo alla 0045. Chi unisce il ramo in `development` in un colpo solo deve
+  comunque rilasciare in tre tappe, costruendo le immagini da quei due punti (o da commit
+  equivalenti dopo l'unione).
+- La tappa successiva non parte finché la precedente non è completa su tutti i pod.
+- Ritorno indietro: il progetto non ha migrazioni all'indietro. Per le tappe di solo codice si torna
+  all'immagine precedente. Se dopo R3 emerge un errore, una migrazione di correzione rimette sulle
+  tabelle di tenant una policy permissiva `using (true)` al posto delle due di tenant; colonne e
+  chiavi restano e il codice di R2 continua a funzionare (specifica, §5.3).
+- Un database di sviluppo condiviso che ha raggiunto la 0047 funziona solo con codice che include
+  questo lavoro: `development` e gli altri rami ricevono errori finché non lo incorporano. Prima di
+  lanciare `apply` su quel database, accordarsi con chi lo usa.
+
 Then put the new limited login in `DATABASE_URL` and start the app:
 
 ```bash
