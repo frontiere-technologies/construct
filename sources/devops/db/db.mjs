@@ -269,9 +269,12 @@ async function provisionRuntimeRole() {
  * direct grants, migration history), who owns the application objects (relations and
  * functions in public and app_private, and the app_private schema; no security definer
  * function), and how the tenant boundary is closed (every table classified, row level
- * security forced, a restrictive policy on every tenant table). The two are deliberate
- * duplicates in two runtimes and will drift if edited apart. Change one, change the
- * other: the contract test is lib/schema-contract.integration.test.ts.
+ * security forced; on every tenant table id_tenant, its foreign key and default, both
+ * tenant policies, the leading index and the composite keys; on every global table the
+ * policy and grants of its class). The tenant and global probes are the same queries as
+ * the contract test, copied: the two are deliberate duplicates in two runtimes and will
+ * drift if edited apart. Change one, change the other: the contract test is
+ * lib/schema-contract.integration.test.ts.
  *
  * Every probe reports: on a database that has not yet received the migrations that
  * create what a probe looks at (construct_owner, app_private), the probe prints FAIL
@@ -405,16 +408,94 @@ async function boundaryCheck() {
         order by 1
       `
       report('row level security is forced on every classified table', !loose.length, loose.map(row => row.name).join(', '))
-      const unguarded = await sql`
-        select tc.table_name as name
+      // Specchio di 'guards every tenant table with the tenant policies, a leading index and
+      // composite keys' del test di contratto: stessa interrogazione, una riga per violazione.
+      const tenantViolations = await sql`
+        with tenant_tables as (
+          select c.oid, c.relname
+          from app_private.table_class tc
+          join pg_class c on c.relname = tc.table_name and c.relnamespace = 'public'::regnamespace
+          where tc.class = 'tenant'
+        )
+        select t.relname as name, 'id_tenant' as problem from tenant_tables t
+        where not exists (select 1 from pg_attribute a where a.attrelid = t.oid and a.attname = 'id_tenant'
+                          and a.attnotnull and a.atttypid = 'int8'::regtype)
+        union all
+        select t.relname, 'tenant foreign key' from tenant_tables t
+        where not exists (
+          select 1 from pg_constraint k
+          where k.conrelid = t.oid and k.contype = 'f' and k.confrelid = 'public.tenant'::regclass
+            and k.conkey = array[(select a.attnum from pg_attribute a where a.attrelid = t.oid and a.attname = 'id_tenant')])
+        union all
+        select t.relname, 'tenant default' from tenant_tables t
+        where not exists (
+          select 1 from pg_attrdef d join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+          where d.adrelid = t.oid and a.attname = 'id_tenant'
+            and pg_get_expr(d.adbin, d.adrelid) like '%current_tenant_id%')
+        union all
+        select t.relname, 'tenant_boundary' from tenant_tables t
+        where not exists (
+          select 1 from pg_policies p
+          where p.schemaname = 'public' and p.tablename = t.relname and p.policyname = 'tenant_boundary'
+            and p.permissive = 'RESTRICTIVE' and p.cmd = 'ALL'
+            and p.roles @> array['construct_runtime', 'construct_owner']::name[]
+            and p.qual like '%current_tenant_id%' and p.with_check like '%current_tenant_id%')
+        union all
+        select t.relname, 'tenant_access' from tenant_tables t
+        where not exists (
+          select 1 from pg_policies p
+          where p.schemaname = 'public' and p.tablename = t.relname and p.policyname = 'tenant_access'
+            and p.permissive = 'PERMISSIVE' and p.cmd = 'ALL')
+        union all
+        select t.relname, 'leading index' from tenant_tables t
+        where not exists (
+          select 1 from pg_index i join pg_attribute a on a.attrelid = i.indrelid and a.attnum = i.indkey[0]
+          where i.indrelid = t.oid and a.attname = 'id_tenant')
+        union all
+        select t.relname, 'foreign key ' || k.conname from tenant_tables t
+        join pg_constraint k on k.conrelid = t.oid and k.contype = 'f'
+        join tenant_tables target on target.oid = k.confrelid
+        where not exists (
+          select 1 from unnest(k.conkey) key_column(attnum)
+          join pg_attribute a on a.attrelid = t.oid and a.attnum = key_column.attnum
+          where a.attname = 'id_tenant')
+        order by 1, 2
+      `
+      const tenantProbes = [
+        ['every tenant table has id_tenant bigint not null', problem => problem === 'id_tenant'],
+        ['every tenant table has a foreign key from id_tenant to tenant', problem => problem === 'tenant foreign key'],
+        ['every tenant table defaults id_tenant to the tenant of the transaction', problem => problem === 'tenant default'],
+        ['every tenant table has its restrictive tenant_boundary policy on the tenant of the transaction', problem => problem === 'tenant_boundary'],
+        ['every tenant table has its permissive tenant_access policy', problem => problem === 'tenant_access'],
+        ['every tenant table has an index led by id_tenant', problem => problem === 'leading index'],
+        ['foreign keys between tenant tables carry id_tenant', problem => problem.startsWith('foreign key ')],
+      ]
+      for (const [label, matches] of tenantProbes) {
+        const rows = tenantViolations.filter(row => matches(row.problem))
+        report(label, !rows.length, rows.map(row => row.problem.startsWith('foreign key ') ? `${row.name} (${row.problem})` : row.name).join(', '))
+      }
+      // Specchio di 'gives global tables the policies and grants of their class'.
+      const globalViolations = await sql`
+        select tc.table_name as name, 'policy' as problem
         from app_private.table_class tc
-        where tc.class = 'tenant' and not exists (
+        where tc.class <> 'tenant' and not exists (
           select 1 from pg_policies p
           where p.schemaname = 'public' and p.tablename = tc.table_name
-            and p.policyname = 'tenant_boundary' and p.permissive = 'RESTRICTIVE')
-        order by 1
+            and p.policyname = case tc.class when 'global_write' then 'global_access' else 'global_read' end)
+        union all
+        select tc.table_name, 'write grant on a read-only table'
+        from app_private.table_class tc
+        where tc.class = 'global_read'
+          and has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'insert,update,delete')
+        order by 1, 2
       `
-      report('every tenant table has its restrictive tenant policy', !unguarded.length, unguarded.map(row => row.name).join(', '))
+      for (const [label, problem] of [
+        ['every global table has the policy of its class', 'policy'],
+        ['no read-only global table is writable by construct_runtime', 'write grant on a read-only table'],
+      ]) {
+        const rows = globalViolations.filter(row => row.problem === problem)
+        report(label, !rows.length, rows.map(row => row.name).join(', '))
+      }
     }
   } finally {
     await sql.end({ timeout: 5 })

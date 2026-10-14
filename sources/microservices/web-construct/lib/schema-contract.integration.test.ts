@@ -345,6 +345,18 @@ describeIntegration('database runtime boundary', () => {
       where not exists (select 1 from pg_attribute a where a.attrelid = t.oid and a.attname = 'id_tenant'
                         and a.attnotnull and a.atttypid = 'int8'::regtype)
       union all
+      select t.relname, 'tenant foreign key' from tenant_tables t
+      where not exists (
+        select 1 from pg_constraint k
+        where k.conrelid = t.oid and k.contype = 'f' and k.confrelid = 'public.tenant'::regclass
+          and k.conkey = array[(select a.attnum from pg_attribute a where a.attrelid = t.oid and a.attname = 'id_tenant')])
+      union all
+      select t.relname, 'tenant default' from tenant_tables t
+      where not exists (
+        select 1 from pg_attrdef d join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+        where d.adrelid = t.oid and a.attname = 'id_tenant'
+          and pg_get_expr(d.adbin, d.adrelid) like '%current_tenant_id%')
+      union all
       select t.relname, 'tenant_boundary' from tenant_tables t
       where not exists (
         select 1 from pg_policies p
