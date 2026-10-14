@@ -1263,7 +1263,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces: un errore di lint e un test rosso per chiunque raggiunga il database fuori da
   `lib/db/`, o costruisca un `TenantId` fuori da `lib/tenancy/`.
 
-- [ ] **Step 1: Scrivere la guardia** `guards/tenant-boundary.test.ts`:
+- [✅] **Step 1: Scrivere la guardia** `guards/tenant-boundary.test.ts`:
 
 ```ts
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -1341,7 +1341,7 @@ describe('tenant boundary', () => {
 })
 ```
 
-- [ ] **Step 2: Lanciarla prima di rimuovere `lib/db.ts`.**
+- [✅] **Step 2: Lanciarla prima di rimuovere `lib/db.ts`.**
 
 Run: `npx vitest run guards/tenant-boundary.test.ts`
 Expected:
@@ -1349,7 +1349,7 @@ Expected:
 - **FAIL** con l'elenco dei file che importano ancora `@/lib/db`: vanno convertiti secondo R1–R5
   prima di continuare.
 
-- [ ] **Step 3: Rimuovere `lib/db.ts`** e aggiornare gli ultimi import nei test di integrazione:
+- [✅] **Step 3: Rimuovere `lib/db.ts`** e aggiornare gli ultimi import nei test di integrazione:
   - `schema-contract.integration.test.ts` interroga i cataloghi con `withGlobal(tx => tx.execute(…))`;
   - i test che costruiscono connessioni proprie importano `postgres` direttamente (permesso nei
     `*.integration.test.ts`).
@@ -1357,7 +1357,7 @@ Expected:
 Run: `cd sources/microservices/web-construct && git rm lib/db.ts && npx tsc --noEmit`
 Expected: nessun errore.
 
-- [ ] **Step 4: Regola ESLint.**
+- [✅] **Step 4: Regola ESLint.**
   - In `eslint.config.mjs`, nel blocco che oggi dichiara `'no-restricted-imports'`, aggiungere a
     `patterns` un secondo elemento e un elenco `paths`.
   - Poi aggiungere in fondo all'array `config` un blocco che toglie la restrizione dove è
@@ -1394,23 +1394,23 @@ Expected: nessun errore.
   },
 ```
 
-- [ ] **Step 5: Verificare che la regola morda.** Aggiungere temporaneamente
+- [✅] **Step 5: Verificare che la regola morda.** Aggiungere temporaneamente
   `import postgres from 'postgres'` in `lib/health.ts`.
 
 Run: `npx eslint lib/health.ts`
 Expected: errore `'postgres' import is restricted …`. Poi togliere la riga.
 
-- [ ] **Step 6: Verificare tutto.**
+- [✅] **Step 6: Verificare tutto.**
 
 Run: `cd sources/microservices/web-construct && npm run lint && npm run test && npm run test:integration && npm run build`
 Expected: PASS.
 
-- [ ] **Step 7: E2E completo** (con l'integrazione ferma, vedi Global Constraints).
+- [✅] **Step 7: E2E completo** (con l'integrazione ferma, vedi Global Constraints).
 
 Run: `uv run pytest`
 Expected: PASS come prima del Task 4.
 
-- [ ] **Step 8: Commit e checkbox.** Segnare MTF-4 e MTF-OK-5 come `- [✅]`.
+- [✅] **Step 8: Commit e checkbox.** Segnare MTF-4 e MTF-OK-5 come `- [✅]`.
 
 ```bash
 git add -A sources/microservices/web-construct docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md
