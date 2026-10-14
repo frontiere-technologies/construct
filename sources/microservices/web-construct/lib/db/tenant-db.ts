@@ -16,10 +16,16 @@ export type TransactionOptions = PgTransactionConfig
 
 const log = createLogger('tenant-db')
 
+type PgErrorLike = { code?: string; message?: string; cause?: unknown }
+
+// Il 42501 del confine è quello di app_private.current_tenant_id(), con il messaggio `tenant
+// context missing`. Un altro 42501 (per esempio un permission denied su una tabella globale in
+// sola lettura) è un problema di permessi, non una violazione del confine: etichettarlo così
+// manderebbe fuori strada chi analizza l'incidente. Drizzle avvolge l'errore di postgres.js, che
+// resta in `cause`: si guardano entrambi.
 function isTenantBoundaryError(error: unknown): boolean {
-  const code = (error as { code?: string; cause?: { code?: string } })?.code
-    ?? (error as { cause?: { code?: string } })?.cause?.code
-  return code === '42501'
+  const candidates = [error as PgErrorLike | null | undefined, (error as PgErrorLike | null | undefined)?.cause as PgErrorLike | undefined]
+  return candidates.some(candidate => candidate?.code === '42501' && /tenant context missing/.test(candidate.message ?? ''))
 }
 
 /**
