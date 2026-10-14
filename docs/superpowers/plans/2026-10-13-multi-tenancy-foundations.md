@@ -2616,12 +2616,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md` (checkbox
   rimaste e misure)
 
-- [ ] **Step 1: Tutte le porte di qualità.**
+- [✅] **Step 1: Tutte le porte di qualità.**
 
 Run: `cd sources/microservices/web-construct && npm run lint && npm run test && npm run test:integration && npm run build && npm run test:migrations && npm run test:env-contract && node ../../devops/db/db.mjs schema-check`
 Expected: PASS.
 
-- [ ] **Step 2: E2E completo** (a integrazione ferma).
+- [✅] **Step 2: E2E completo** (a integrazione ferma).
 
 Run: `uv run pytest`
 Expected: PASS.
@@ -2642,7 +2642,7 @@ Expected: PASS.
 Run: `node sources/devops/db/db.mjs boundary-check`
 Expected: tutte `ok`.
 
-- [ ] **Step 5: Checkbox finali.** Segnare MTF-RISK-5 (eccezione documentata in §2.2 della
+- [✅] **Step 5: Checkbox finali.** Segnare MTF-RISK-5 (eccezione documentata in §2.2 della
   specifica) e verificare che MTF-1…8, MTF-OK-1…5 e MTF-RISK-1…5 siano tutte `- [✅]`, o motivate
   se no.
 
