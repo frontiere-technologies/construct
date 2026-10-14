@@ -39,12 +39,16 @@ describe('withTenant', () => {
     expect(configs).toEqual([{ isolationLevel: 'repeatable read', accessMode: 'read only' }])
   })
 
-  it('refuses a tenant id that was not built by toTenantId', async () => {
-    const { database, executed } = fakeDatabase()
-    const { withTenant } = createTenantAccess(database)
-    await expect(withTenant(0 as never, async () => null)).rejects.toThrow('invalid tenant id')
-    expect(executed).toHaveLength(0)
-  })
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'refuses %s, a tenant id that was not built by toTenantId, before talking to the database',
+    async value => {
+      const { database, executed, configs } = fakeDatabase()
+      const { withTenant } = createTenantAccess(database)
+      await expect(withTenant(value as never, async () => null)).rejects.toThrow('invalid tenant id')
+      expect(executed).toHaveLength(0)
+      expect(configs).toHaveLength(0)
+    },
+  )
 })
 
 describe('withGlobal', () => {
