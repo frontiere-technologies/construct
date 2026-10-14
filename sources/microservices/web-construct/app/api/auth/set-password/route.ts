@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { sql } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { createLogger } from '@/lib/logger'
 import { passwordSchema } from '@/lib/validations'
 import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
@@ -34,9 +34,9 @@ export async function POST(req: NextRequest) {
 
   const hash = await bcrypt.hash(password, 12)
   try {
-    const rows = await db.execute<{ result: string }>(
+    const rows = await withGlobal(tx => tx.execute<{ result: string }>(
       sql`select public.consume_password_set_token(${token}, ${hash}) as result`,
-    )
+    ))
     const result = rows[0]?.result
     if (result === 'invalid') return NextResponse.json({ error: 'Link non valido.' }, { status: 410 })
     if (result === 'superseded' || result === 'undelivered') {

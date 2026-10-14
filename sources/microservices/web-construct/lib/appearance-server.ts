@@ -2,7 +2,7 @@ import { cache } from 'react'
 import { cookies } from 'next/headers'
 import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { APPEARANCE_COOKIE, anonymousAppearance, parseAppearanceCookie, toAppearance, type Appearance } from './appearance'
@@ -21,11 +21,11 @@ export const getAppearance = cache(async (): Promise<Appearance> => {
   const userId = session?.user?.id
   if (userId) {
     try {
-      const [row] = await db
+      const [row] = await withGlobal(tx => tx
         .select({ themeMode: users.themeMode, textScale: users.textScale })
         .from(users)
         .where(eq(users.id, userId))
-        .limit(1)
+        .limit(1))
       if (row) return toAppearance(row)
     } catch (err) {
       log.error({ err }, 'failed to read the appearance preference')

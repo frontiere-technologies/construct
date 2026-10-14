@@ -5,7 +5,7 @@ import Keycloak from 'next-auth/providers/keycloak'
 import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { eq } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { users, allowedDomains } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { authConfig, mergeAuthCallbacks } from '@/lib/auth.config'
@@ -29,7 +29,7 @@ async function getAllowedDomains(): Promise<string[]> {
   const now = Date.now()
   if (domainCache && domainCache.expiresAt > now) return domainCache.domains
   try {
-    const rows = await db.select({ domain: allowedDomains.domain }).from(allowedDomains).where(eq(allowedDomains.active, true))
+    const rows = await withGlobal(tx => tx.select({ domain: allowedDomains.domain }).from(allowedDomains).where(eq(allowedDomains.active, true)))
     const domains = rows.map(r => r.domain)
     domainCache = { domains, expiresAt: now + 60_000 }
     return domains
@@ -101,7 +101,7 @@ function buildProviders() {
           throw err
         }
 
-        const [user] = await db
+        const [user] = await withGlobal(tx => tx
           .select({
             id: users.id,
             email: users.email,
@@ -111,7 +111,7 @@ function buildProviders() {
           })
           .from(users)
           .where(eq(users.email, normalizedEmail))
-          .limit(1)
+          .limit(1))
 
         const valid = await verifyCredentialCandidate(user, credentials.password, bcrypt.compare)
         if (!valid) {
@@ -120,7 +120,7 @@ function buildProviders() {
           return null
         }
 
-        await db.update(users).set({ authProvider: 'credentials' }).where(eq(users.id, user.id))
+        await withGlobal(tx => tx.update(users).set({ authProvider: 'credentials' }).where(eq(users.id, user.id)))
 
         return { id: user.id, email: user.email, name: user.name ?? user.email }
       },
@@ -139,12 +139,14 @@ function buildProviders() {
         async authorize(credentials) {
           if (!credentials?.email || typeof credentials.email !== 'string') return null
           const normalizedEmail = credentials.email.toLowerCase().trim()
-          await db.insert(users).values({ email: normalizedEmail, authProvider: 'test' }).onConflictDoNothing({ target: users.email })
-          const [data] = await db
-            .select({ id: users.id, email: users.email, name: users.name, idUserStatus: users.idUserStatus })
-            .from(users)
-            .where(eq(users.email, normalizedEmail))
-            .limit(1)
+          const [data] = await withGlobal(async tx => {
+            await tx.insert(users).values({ email: normalizedEmail, authProvider: 'test' }).onConflictDoNothing({ target: users.email })
+            return tx
+              .select({ id: users.id, email: users.email, name: users.name, idUserStatus: users.idUserStatus })
+              .from(users)
+              .where(eq(users.email, normalizedEmail))
+              .limit(1)
+          })
           if (!data || !isActiveAccount(data.idUserStatus)) return null
           return { id: data.id, email: data.email, name: data.name ?? data.email }
         },
@@ -168,11 +170,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const domain = email.split('@')[1] ?? ''
         const allowed = await getAllowedDomains()
         if (!allowed.includes(domain)) return false
-        const [existing] = await db
+        const [existing] = await withGlobal(tx => tx
           .select({ idUserStatus: users.idUserStatus })
           .from(users)
           .where(eq(users.email, email))
-          .limit(1)
+          .limit(1))
         if (existing && !isActiveAccount(existing.idUserStatus)) return false
       }
       return true
@@ -186,7 +188,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           userId = user.id as string
         } else {
           try {
-            const [data] = await db
+            const [data] = await withGlobal(tx => tx
               .insert(users)
               .values({
                 email: user.email!,
@@ -202,7 +204,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                   ...(user.image ? { avatar: user.image } : {}),
                 },
               })
-              .returning({ id: users.id })
+              .returning({ id: users.id }))
             userId = data?.id ?? ''
           } catch (err) {
             log.error({ err }, 'failed to provision user in Supabase')

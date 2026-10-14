@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { users } from '@/lib/db/schema'
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'userId mancante.' }, { status: 400 })
   }
 
-  const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1)
+  const [user] = await withGlobal(tx => tx.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1))
   if (!user?.email) {
     return NextResponse.json({ error: 'Utente non trovato.' }, { status: 404 })
   }

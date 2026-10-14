@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { users, passwordSetTokens } from '@/lib/db/schema'
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
@@ -28,11 +28,11 @@ export async function POST(req: NextRequest) {
     throw err
   }
 
-  const [user] = await db
+  const [user] = await withGlobal(tx => tx
     .select({ id: users.id, email: users.email, passwordHash: users.passwordHash })
     .from(users)
     .where(eq(users.email, normalizedEmail))
-    .limit(1)
+    .limit(1))
 
   // Always return 200 — do not leak whether the email exists
   // Only issue reset tokens for credentials users (those with a passwordHash)
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() // 2 hours
 
   try {
-    await db.insert(passwordSetTokens).values({ userId: user.id, token, expiresAt })
+    await withGlobal(tx => tx.insert(passwordSetTokens).values({ userId: user.id, token, expiresAt }))
   } catch (err) {
     log.error({ err }, 'failed to create reset token')
     return NextResponse.json({ ok: true })

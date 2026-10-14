@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { passwordSetTokens } from '@/lib/db/schema'
 import { getI18n } from '@/lib/i18n/server'
 import { SetPasswordForm } from './SetPasswordForm'
@@ -15,11 +15,11 @@ export default async function SetPasswordPage({ searchParams }: Props) {
   const invalid = !token || typeof token !== 'string'
 
   if (!invalid) {
-    const [tokenRow] = await db
+    const [tokenRow] = await withGlobal(tx => tx
       .select({ id: passwordSetTokens.id, expiresAt: passwordSetTokens.expiresAt, usedAt: passwordSetTokens.usedAt })
       .from(passwordSetTokens)
       .where(eq(passwordSetTokens.token, token))
-      .limit(1)
+      .limit(1))
 
     const isValid =
       tokenRow &&

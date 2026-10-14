@@ -1,5 +1,5 @@
 import { and, eq, isNull, lte, ne } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { passwordSetTokens, users } from '@/lib/db/schema'
 
 export interface PreparedInvitation {
@@ -14,7 +14,7 @@ export async function prepareInvitation(email: string, requestedBy?: string): Pr
   const normalizedEmail = email.trim().toLowerCase()
   if (!normalizedEmail) return null
 
-  return db.transaction(async transaction => {
+  return withGlobal(async transaction => {
     await transaction.insert(users).values({
       email: normalizedEmail,
       authProvider: 'credentials',
@@ -43,7 +43,7 @@ export async function recordInvitationDelivery(
   tokenId: string,
   result: { ok: true } | { ok: false; code: string },
 ): Promise<void> {
-  await db.transaction(async transaction => {
+  await withGlobal(async transaction => {
     const [token] = await transaction.select({
       id: passwordSetTokens.id,
       userId: passwordSetTokens.userId,

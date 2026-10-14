@@ -1,7 +1,8 @@
 import { cache } from 'react'
-import { db } from '@/lib/db'
+import { withTenant } from '@/lib/db/tenant-db'
 import { appTheme } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { DEFAULT_APP_THEME, type AppTheme, type SurfaceOverrides } from './theme-vars'
 
 const log = createLogger('theme')
@@ -19,9 +20,9 @@ function overrides(values: Record<keyof SurfaceOverrides, string | null>): Surfa
  * ancora la 0033: la query nomina le colonne nuove e fallisce tutta, quindi
  * anche il colore principale torna al predefinito finche' la migrazione non c'e'.
  */
-export const getAppTheme = cache(async (): Promise<AppTheme> => {
+export const getAppTheme = cache(async (tenantId: TenantId): Promise<AppTheme> => {
   try {
-    const [row] = await db.select({
+    const [row] = await withTenant(tenantId, tx => tx.select({
       primaryColor: appTheme.primaryColor,
       primaryDark: appTheme.primaryDark,
       backgroundLight: appTheme.backgroundLight,
@@ -32,7 +33,7 @@ export const getAppTheme = cache(async (): Promise<AppTheme> => {
       cardDark: appTheme.cardDark,
       accentDark: appTheme.accentDark,
       sidebarDark: appTheme.sidebarDark,
-    }).from(appTheme).limit(1)
+    }).from(appTheme).limit(1))
     if (!row) return DEFAULT_APP_THEME
     return {
       primaryColor: row.primaryColor,

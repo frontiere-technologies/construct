@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { getI18nBundle } from '@/lib/i18n/server'
 import { getAppearance } from '@/lib/appearance-server'
 import { getAppTheme } from '@/lib/theme-server'
+import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
 import { themeCss } from '@/lib/theme-vars'
 import { THEME_MODE_SCRIPT } from '@/lib/appearance'
 import { Providers } from './Providers'
@@ -15,8 +16,10 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Resolved in the root layout so /login, /register and the rest of the public
   // surface are translated and themed too, not just the protected area.
+  // Il tema è un dato di tenant e qui non c'è un attore: il tenant lo dà la richiesta.
+  const tenantId = await resolveRequestTenant()
   const [i18n, appearance, theme] = await Promise.all([
-    getI18nBundle(), getAppearance(), getAppTheme(),
+    getI18nBundle(), getAppearance(), getAppTheme(tenantId),
   ])
 
   return (

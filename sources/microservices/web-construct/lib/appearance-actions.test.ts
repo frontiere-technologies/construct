@@ -9,15 +9,15 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: mocks.cookieSet }) }))
-vi.mock('@/lib/db', () => ({
-  db: {
+vi.mock('@/lib/db/tenant-db', () => ({
+  withGlobal: (fn: (tx: unknown) => unknown) => fn({
     update: () => ({
       set: (values: unknown) => {
         mocks.set(values)
         return { where: () => ({ returning: mocks.returning }) }
       },
     }),
-  },
+  }),
 }))
 
 const { saveAppearance } = await import('./appearance-actions')

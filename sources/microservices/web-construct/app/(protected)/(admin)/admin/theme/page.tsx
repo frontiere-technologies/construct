@@ -3,7 +3,7 @@ import { AdminTheme } from '@/components/AdminTheme'
 import { requireAdministratorPage } from '@/lib/rbac/auth-guard'
 
 export default async function ThemePage() {
-  await requireAdministratorPage()
+  const actor = await requireAdministratorPage()
 
-  return <AdminTheme savedTheme={await getAppTheme()} />
+  return <AdminTheme savedTheme={await getAppTheme(actor.tenantId)} />
 }

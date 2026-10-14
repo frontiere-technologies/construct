@@ -5,7 +5,9 @@ const mocks = vi.hoisted(() => ({
   error: vi.fn(),
 }))
 
-vi.mock('@/lib/db', () => ({ db: { execute: mocks.execute } }))
+vi.mock('@/lib/db/tenant-db', () => ({
+  withGlobal: (fn: (tx: unknown) => unknown) => fn({ execute: mocks.execute }),
+}))
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: mocks.error }) }))
 
 const { GET: live } = await import('@/app/api/health/live/route')

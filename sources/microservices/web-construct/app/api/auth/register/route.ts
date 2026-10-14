@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { allowedDomains } from '@/lib/db/schema'
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
@@ -33,11 +33,11 @@ export async function POST(req: NextRequest) {
   log.info({ domain }, 'register attempt')
 
   // Domain allow-list check
-  const [domainRow] = await db
+  const [domainRow] = await withGlobal(tx => tx
     .select({ id: allowedDomains.id })
     .from(allowedDomains)
     .where(and(eq(allowedDomains.domain, domain), eq(allowedDomains.active, true)))
-    .limit(1)
+    .limit(1))
   if (!domainRow) {
     log.info({ domain }, 'domain not allowed, skipping')
     return NextResponse.json({ ok: true })
