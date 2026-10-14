@@ -278,6 +278,33 @@ describeIntegration('database runtime boundary', () => {
     expect(definers.map(row => row.name)).toEqual([])
   })
 
+  it('lets construct_owner, and only it, own the application objects', async () => {
+    const [owner] = await db.execute<{ rolcanlogin: boolean; rolbypassrls: boolean; rolsuper: boolean }>(sql`
+      select rolcanlogin, rolbypassrls, rolsuper from pg_roles where rolname = 'construct_owner'
+    `)
+    expect(owner).toEqual({ rolcanlogin: false, rolbypassrls: false, rolsuper: false })
+
+    const strays = await db.execute<{ name: string; owner: string }>(sql`
+      select c.relname as name, r.rolname as owner
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      join pg_roles r on r.oid = c.relowner
+      where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'S')
+        and c.relname <> 'construct_schema_migration'
+        and r.rolname <> 'construct_owner'
+        and not exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype = 'e')
+      union all
+      select p.proname, r.rolname
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      join pg_roles r on r.oid = p.proowner
+      where n.nspname = 'public' and r.rolname <> 'construct_owner'
+        and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+      order by 1
+    `)
+    expect(strays).toEqual([])
+  })
+
   it('keeps migration history inaccessible to the runtime role', async () => {
     const privileges = await db.execute<{ allowed: boolean }>(sql`
       select has_table_privilege('construct_runtime', 'public.construct_schema_migration', 'select') as allowed

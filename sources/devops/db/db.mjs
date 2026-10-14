@@ -123,7 +123,16 @@ function migrationAdapter(sql) {
     async runInTransaction(migration) {
       await sql`begin`
       try {
+        // Dalla 0045 in poi ogni migrazione lavora come construct_owner, che possiede gli oggetti e
+        // non ha BYPASSRLS: la RLS forzata vale anche qui (specifica 2026-10-13, §2.1). La 0045
+        // stessa gira ancora come utente delle migrazioni, perché il ruolo non esiste ancora.
+        const [{ ownerExists }] = await sql`
+          select exists (select 1 from pg_roles where rolname = 'construct_owner') as "ownerExists"
+        `
+        if (ownerExists) await sql`set local role construct_owner`
         await sql.unsafe(migration.sql).simple()
+        // La cronologia resta dell'utente delle migrazioni, non del proprietario.
+        await sql`reset role`
         await sql`
           update public.construct_schema_migration
           set completed_at = clock_timestamp()
@@ -314,6 +323,23 @@ async function boundaryCheck() {
       select has_table_privilege(current_user, 'public.construct_schema_migration', 'select') as allowed
     `
     report('cannot read migration history', history.allowed === false)
+
+    const [ownerRole] = await sql`
+      select rolbypassrls, rolcanlogin from pg_roles where rolname = 'construct_owner'
+    `
+    report(
+      'construct_owner exists without BYPASSRLS and without login',
+      Boolean(ownerRole) && !ownerRole.rolbypassrls && !ownerRole.rolcanlogin,
+    )
+    const strays = await sql`
+      select c.relname as name
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'S')
+        and c.relname <> 'construct_schema_migration'
+        and c.relowner <> 'construct_owner'::regrole
+        and not exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype = 'e')
+    `
+    report('construct_owner owns every application relation', !strays.length, strays.map(row => row.name).join(', '))
   } finally {
     await sql.end({ timeout: 5 })
   }

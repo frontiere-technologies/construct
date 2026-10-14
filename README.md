@@ -132,6 +132,12 @@ node sources/devops/db/db.mjs apply
 node sources/devops/db/db.mjs provision-runtime-role
 ```
 
+Dalla migrazione `0045` gli oggetti del database appartengono al ruolo `construct_owner` (senza
+login e senza BYPASSRLS), e `db.mjs apply` esegue ogni migrazione successiva con
+`set local role construct_owner`. L'utente di `MIGRATION_DATABASE_URL` ne diventa membro con la
+`0045` stessa. Se in un ambiente le migrazioni le esegue un utente diverso da quello che ha
+applicato la `0045`, va concesso a mano: `grant construct_owner to <utente>;`.
+
 Then put the new limited login in `DATABASE_URL` and start the app:
 
 ```bash
