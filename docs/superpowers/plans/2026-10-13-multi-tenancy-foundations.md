@@ -1954,7 +1954,7 @@ export function evaluateAuthorization(status: number | null | undefined, roleIds
 // lib/rbac/types.ts: ROLE_REGISTERED e ROLE_ADMINISTRATOR rimossi
 ```
 
-- [ ] **Step 1: Test unitario che fallisce.** Nel file che testa `evaluateAuthorization`,
+- [✅] **Step 1: Test unitario che fallisce.** Nel file che testa `evaluateAuthorization`,
   sostituire i casi che danno per scontato l'id 1 con:
 
 ```ts
@@ -1964,7 +1964,7 @@ export function evaluateAuthorization(status: number | null | undefined, roleIds
   })
 ```
 
-- [ ] **Step 2: Test d'integrazione che fallisce** `lib/tenancy/system-roles.integration.test.ts`:
+- [✅] **Step 2: Test d'integrazione che fallisce** `lib/tenancy/system-roles.integration.test.ts`:
 
 ```ts
 import { expect, it } from 'vitest'
@@ -1988,7 +1988,7 @@ describeIntegration('tenant context', () => {
 Run: `npx tsc --noEmit`
 Expected: FAIL (`./system-roles` non esiste; `evaluateAuthorization` vuole 2 argomenti).
 
-- [ ] **Step 3: Scrivere `lib/tenancy/system-roles.ts`.**
+- [✅] **Step 3: Scrivere `lib/tenancy/system-roles.ts`.**
 
 ```ts
 import { cache } from 'react'
@@ -2015,7 +2015,7 @@ export const getSystemRoleIds = cache(async (tx: TenantTx): Promise<SystemRoleId
 })
 ```
 
-- [ ] **Step 4: `resolveRequestTenant` legge la tabella.** Sostituire
+- [✅] **Step 4: `resolveRequestTenant` legge la tabella.** Sostituire
   `lib/tenancy/request-tenant.ts`:
 
 ```ts
@@ -2042,7 +2042,7 @@ export const resolveRequestTenant = cache(async (): Promise<TenantId> => {
 })
 ```
 
-- [ ] **Step 5: Sostituire gli id fissi.**
+- [✅] **Step 5: Sostituire gli id fissi.**
   - **`lib/auth-policy.ts`:** `evaluateAuthorization(status, roleIds, adminRoleId)` con
     `isAdmin: effectiveRoleIds.includes(adminRoleId)`.
   - **`lib/rbac/auth-roles.ts`:**
@@ -2066,7 +2066,7 @@ export const resolveRequestTenant = cache(async (): Promise<TenantId> => {
 Run: `cd sources/microservices/web-construct && grep -rn "ROLE_ADMINISTRATOR\|ROLE_REGISTERED\|includes(1)" lib app components`
 Expected: nessuna riga.
 
-- [ ] **Step 6: Verificare.**
+- [✅] **Step 6: Verificare.**
 
 Run: `npx tsc --noEmit && npm run lint && npm run test && npm run test:integration`
 Expected: PASS, compresi i due nuovi test.
@@ -2076,12 +2076,12 @@ Expected: PASS, compresi i due nuovi test.
     controllare che il ruolo base sia bloccato come prima.
   - Come utente non amministratore controllare che le voci di amministrazione non compaiano.
 
-- [ ] **Step 8: E2E.**
+- [✅] **Step 8: E2E.**
 
 Run: `uv run pytest`
 Expected: PASS.
 
-- [ ] **Step 9: Commit e checkbox.** Segnare MTF-6 come `- [✅]`.
+- [✅] **Step 9: Commit e checkbox.** Segnare MTF-6 come `- [✅]`.
 
 ```bash
 git add sources/microservices/web-construct docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md
