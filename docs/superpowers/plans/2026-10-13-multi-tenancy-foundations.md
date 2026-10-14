@@ -2524,7 +2524,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: Task 4 (`createDatabase`, `createTenantAccess`), Task 10 (stesso schema di fixture).
 - Produces: prova di MTF-OK-4.
 
-- [ ] **Step 1: Scrivere il test.**
+- [✅] **Step 1: Scrivere il test.**
   - Gira su ogni URL configurato:
     - `TEST_DATABASE_URL`, modalità sessione, sempre presente;
     - `TEST_DATABASE_POOLED_URL`, modalità transazione, se c'è.
@@ -2594,12 +2594,12 @@ for (const target of targets) {
 }
 ```
 
-- [ ] **Step 2: Lanciare il test.**
+- [✅] **Step 2: Lanciare il test.**
 
 Run: `cd sources/microservices/web-construct && npm run test:integration -- lib/db/tenant-concurrency.integration.test.ts`
 Expected: PASS. In locale si vedono due blocchi (`session` e `transaction pooler`), in CI uno.
 
-- [ ] **Step 3: Commit e checkbox.** Segnare MTF-OK-4, MTF-8, MTF-RISK-4 come `- [✅]`.
+- [✅] **Step 3: Commit e checkbox.** Segnare MTF-OK-4, MTF-8, MTF-RISK-4 come `- [✅]`.
 
 ```bash
 git add sources/microservices/web-construct/lib/db/tenant-concurrency.integration.test.ts docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md
