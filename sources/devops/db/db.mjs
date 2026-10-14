@@ -123,6 +123,11 @@ function migrationAdapter(sql) {
     async runInTransaction(migration) {
       await sql`begin`
       try {
+        // Tutte le migrazioni di un apply condividono la stessa connessione: una migrazione che
+        // imposta il tenant a livello di sessione (set_config(..., false)) non deve lasciarlo alle
+        // migrazioni successive, che scriverebbero nel suo tenant invece di fallire con 42501
+        // (Review Focus 2).
+        await sql`select set_config('app.tenant_id', '', false)`
         // Dalla 0045 in poi ogni migrazione lavora come construct_owner, che possiede gli oggetti e
         // non ha BYPASSRLS: la RLS forzata vale anche qui (specifica 2026-10-13, §2.1). La 0045
         // stessa gira ancora come utente delle migrazioni, perché il ruolo non esiste ancora.
