@@ -306,7 +306,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
     `construct_owner`;
   - dalla migrazione 0046 in poi, ogni migrazione gira come `construct_owner`.
 
-- [ ] **Step 1: Scrivere il test che fallisce.** In `schema-contract.integration.test.ts`,
+- [✅] **Step 1: Scrivere il test che fallisce.** In `schema-contract.integration.test.ts`,
   aggiungere:
 
 ```ts
@@ -338,12 +338,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   })
 ```
 
-- [ ] **Step 2: Verificare che fallisca.**
+- [✅] **Step 2: Verificare che fallisca.**
 
 Run: `npm run test:integration -- lib/schema-contract.integration.test.ts`
 Expected: FAIL, `owner` è `undefined` perché il ruolo non esiste.
 
-- [ ] **Step 3: Scrivere la migrazione** `0045_construct_owner.sql`:
+- [✅] **Step 3: Scrivere la migrazione** `0045_construct_owner.sql`:
 
 ```sql
 -- Multi-tenancy, pezzo 1 (specifica 2026-10-13, §2.1, MTF-DEC-4): un proprietario senza
@@ -422,7 +422,7 @@ alter default privileges for role construct_owner
   revoke execute on functions from public;
 ```
 
-- [ ] **Step 4: Far girare le migrazioni come `construct_owner`.** In `sources/devops/db/db.mjs`,
+- [✅] **Step 4: Far girare le migrazioni come `construct_owner`.** In `sources/devops/db/db.mjs`,
   sostituire `runInTransaction` dentro `migrationAdapter`:
 
 ```js
@@ -452,7 +452,7 @@ alter default privileges for role construct_owner
     },
 ```
 
-- [ ] **Step 5: Aggiungere la sonda a `boundary-check`.** In `db.mjs`, dentro `boundaryCheck()`,
+- [✅] **Step 5: Aggiungere la sonda a `boundary-check`.** In `db.mjs`, dentro `boundaryCheck()`,
   prima di `} finally {`. Lo stesso controllo è nel contratto: vale la regola "se ne cambi una,
   cambia anche l'altra".
 
@@ -475,7 +475,7 @@ alter default privileges for role construct_owner
     report('construct_owner owns every application relation', !strays.length, strays.map(row => row.name).join(', '))
 ```
 
-- [ ] **Step 6: Applicare, rigenerare, verificare.**
+- [✅] **Step 6: Applicare, rigenerare, verificare.**
 
 ```bash
 set -a && . ./sources/devops/db/operator.env && set +a && TEST_DATABASE_DISPOSABLE=1 node sources/devops/db/db.mjs test-apply
@@ -486,7 +486,7 @@ cd sources/microservices/web-construct && npm run test:integration
 Expected: `applied migration(s): 0045`, schema aggiornato, integrazione PASS (compreso il nuovo
 test).
 
-- [ ] **Step 7: Verificare che una migrazione successiva giri come `construct_owner`.** Creare
+- [✅] **Step 7: Verificare che una migrazione successiva giri come `construct_owner`.** Creare
   temporaneamente `0045a_probe.sql` con `create table public.zz_owner_probe (id int);`, applicarla,
   controllare il proprietario, poi rimuovere tabella e file. La riga di cronologia `0045a` resta
   sul database usa e getta: va cancellata a mano.
@@ -500,7 +500,7 @@ rm sources/devops/db/migrations/0045a_probe.sql
 
 Expected: `construct_owner`.
 
-- [ ] **Step 8: Documentare.** In `README.md`, subito dopo il blocco che mostra
+- [✅] **Step 8: Documentare.** In `README.md`, subito dopo il blocco che mostra
   `node sources/devops/db/db.mjs apply` e `provision-runtime-role`, aggiungere:
 
 ```markdown
@@ -511,7 +511,7 @@ login e senza BYPASSRLS), e `db.mjs apply` esegue ogni migrazione successiva con
 applicato la `0045`, va concesso a mano: `grant construct_owner to <utente>;`.
 ```
 
-- [ ] **Step 9: Commit e checkbox.** Segnare MTF-3 come `- [✅]`.
+- [✅] **Step 9: Commit e checkbox.** Segnare MTF-3 come `- [✅]`.
 
 ```bash
 git add sources/devops/db/migrations/0045_construct_owner.sql sources/devops/db/schema.sql \
