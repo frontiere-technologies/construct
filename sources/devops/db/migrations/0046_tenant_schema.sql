@@ -145,6 +145,20 @@ create unique index role_tenant_system_key_idx on public.role (id_tenant, system
 update public.role set system_key = 'REGISTERED' where id_role = 0;
 update public.role set system_key = 'TENANT_ADMIN' where id_role = 1;
 
+-- I due update sopra non dicono nulla se la riga manca: su un database dove i ruoli 0 e 1 non sono
+-- quelli attesi la migrazione riuscirebbe in silenzio e, dopo la 0047, nessuno potrebbe più
+-- accedere (getSystemRoleIds non trova i ruoli di sistema). Meglio fallire qui, finché la
+-- migrazione è ancora modificabile: servono esattamente un REGISTERED e un TENANT_ADMIN nel tenant 1.
+do $$
+begin
+  if (select count(*) from public.role where id_tenant = 1 and system_key = 'REGISTERED' and id_role = 0) <> 1
+     or (select count(*) from public.role where id_tenant = 1 and system_key = 'TENANT_ADMIN' and id_role = 1) <> 1
+     or (select count(*) from public.role where system_key is not null) <> 2 then
+    raise exception 'ruoli di sistema 0 (REGISTERED) e 1 (TENANT_ADMIN) non trovati nel tenant 1: la migrazione 0046 non può marcarli';
+  end if;
+end
+$$;
+
 -- 6. menu_entry -------------------------------------------------------------------------------
 alter table public.menu_entry add constraint menu_entry_tenant_entry_key unique (id_tenant, id_menu_entry);
 alter table public.menu_entry drop constraint menu_entry_id_parent_fkey;
