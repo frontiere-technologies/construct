@@ -2111,7 +2111,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces: ogni tabella di `public` (tranne la cronologia delle migrazioni) è nel registro, con
   RLS forzata e le policy della sua classe.
 
-- [ ] **Step 1: Scrivere i test di contratto che falliscono.** In
+- [✅] **Step 1: Scrivere i test di contratto che falliscono.** In
   `schema-contract.integration.test.ts`:
 
 ```ts
@@ -2207,7 +2207,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Run: `npm run test:integration -- lib/schema-contract.integration.test.ts`
 Expected: FAIL, tutte le tabelle non classificate.
 
-- [ ] **Step 2: Scrivere la migrazione** `0047_tenant_rls.sql`:
+- [✅] **Step 2: Scrivere la migrazione** `0047_tenant_rls.sql`:
 
 ```sql
 -- Multi-tenancy, pezzo 1 (specifica 2026-10-13, §2.4–2.5, MTF-7): il confine si accende.
@@ -2235,7 +2235,7 @@ select app_private.declare_global_table('public.translation_key', true, 'provvis
 select app_private.declare_global_table('public.translation_value', true, 'provvisoria: sovrascritture per tenant nel pezzo 2');
 ```
 
-- [ ] **Step 3: I fixture che scrivono `permission` passano a `withOwner`.**
+- [✅] **Step 3: I fixture che scrivono `permission` passano a `withOwner`.**
   - Nei cinque file elencati, ogni `insert`, `update` o `delete` su `permission` fatto oggi con
     `db` o con `withGlobal` passa per `withOwner(tx => …)`. Per esempio, in
     `actor.integration.test.ts`:
@@ -2249,7 +2249,7 @@ select app_private.declare_global_table('public.translation_value', true, 'provv
 
 Run: `cd sources/microservices/web-construct && grep -n "(permission)" lib/rbac/*.integration.test.ts`
 
-- [ ] **Step 4: Estendere `boundary-check`.** In `db.mjs`, dentro `boundaryCheck()`, dopo le sonde
+- [✅] **Step 4: Estendere `boundary-check`.** In `db.mjs`, dentro `boundaryCheck()`, dopo le sonde
   del Task 3:
 
 ```js
@@ -2278,7 +2278,7 @@ Run: `cd sources/microservices/web-construct && grep -n "(permission)" lib/rbac/
     report('every tenant table has its restrictive tenant policy', !unguarded.length, unguarded.map(row => row.name).join(', '))
 ```
 
-- [ ] **Step 5: Applicare, rigenerare, verificare.**
+- [✅] **Step 5: Applicare, rigenerare, verificare.**
 
 ```bash
 set -a && . ./sources/devops/db/operator.env && set +a && TEST_DATABASE_DISPOSABLE=1 node sources/devops/db/db.mjs test-apply
@@ -2288,12 +2288,12 @@ cd sources/microservices/web-construct && npm run test && npm run test:integrati
 
 Expected: `applied migration(s): 0047`, tutto PASS.
 
-- [ ] **Step 6: `boundary-check` sul database di test.**
+- [✅] **Step 6: `boundary-check` sul database di test.**
 
 Run: `DATABASE_URL="$TEST_DATABASE_URL" node sources/devops/db/db.mjs boundary-check`
 Expected: tutte le righe `ok`, poi `the connection sits inside the runtime boundary`.
 
-- [ ] **Step 7: E2E e verifica nel browser** (Review Focus 4).
+- [✅] **Step 7: E2E e verifica nel browser** (Review Focus 4).
 
 Run: `uv run pytest`
 Expected: PASS.
@@ -2303,7 +2303,7 @@ Expected: PASS.
   - accesso, menu, Utenti, Ruoli, Funzionalità, Tema, Lingue;
   - nessun `tenant boundary violation` nel log del server (`preview_logs`, ricerca `tenant`).
 
-- [ ] **Step 8: Commit e checkbox.** Segnare MTF-7, MTF-OK-1 e MTF-OK-2 come `- [✅]`.
+- [✅] **Step 8: Commit e checkbox.** Segnare MTF-7, MTF-OK-1 e MTF-OK-2 come `- [✅]`.
 
 ```bash
 git add sources/devops/db sources/microservices/web-construct docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md
