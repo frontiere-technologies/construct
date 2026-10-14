@@ -31,6 +31,27 @@ function pgError(error: unknown): { code?: string; message?: string } {
   return outer.cause ?? outer
 }
 
+/** Il 42501 che dà il contesto mancante, non un privilegio revocato: lo dice il messaggio. */
+function isMissingTenantContext(error: unknown): boolean {
+  const pg = pgError(error)
+  return pg.code === '42501' && /tenant context missing/.test(pg.message ?? '')
+}
+
+const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+/** 'done' se la promessa finisce entro `ms`, altrimenti 'waiting' (la promessa resta in corso). */
+function settledWithin(promise: Promise<unknown>, ms: number): Promise<'done' | 'waiting'> {
+  return Promise.race([promise.then(() => 'done' as const, () => 'done' as const), delay(ms).then(() => 'waiting' as const)])
+}
+
+/** Quanti lock advisory dell'invariante (chiave 49374202) sono presi sul tenant dato. */
+async function adminLocksHeld(tenantId: TenantId): Promise<number> {
+  const rows = await withGlobal(tx => tx.execute(sql`
+    select count(*)::int as n from pg_locks
+    where locktype = 'advisory' and classid = 49374202 and objid::bigint = ${tenantId} and objsubid = 2 and granted`))
+  return Number((rows as unknown as Array<{ n: number }>)[0].n)
+}
+
 describeIntegration('tenant isolation in the database', () => {
   beforeAll(async () => {
     const slug = `zzz-iso-${unique()}`.slice(0, 40)
@@ -64,23 +85,25 @@ describeIntegration('tenant isolation in the database', () => {
   // Pulisce anche quando un caso o la preparazione sono falliti a metà: le cancellazioni a cascata
   // portano via tag, funzionalità e permessi di B insieme a ruoli e voci.
   afterAll(async () => {
-    try {
-      if (B !== undefined) {
-        // Ogni delete nomina il tenant B: se la policy di una tabella mancasse (come nella prova di
-        // «il test morde»), un delete senza where porterebbe via anche le righe di A.
-        await withOwner(async tx => {
-          await tx.delete(appTheme).where(eq(appTheme.idTenant, B))
-          await tx.delete(menuEntry).where(eq(menuEntry.idTenant, B))
-          await tx.delete(userRole).where(eq(userRole.idTenant, B))
-          await tx.delete(role).where(eq(role.idTenant, B))
-        }, B)
-        await withOwner(tx => tx.delete(tenant).where(eq(tenant.id, B)))
-      }
-      const userIds = [bAdminUserId, aUserId].filter(Boolean)
-      if (userIds.length > 0) await withGlobal(tx => tx.delete(users).where(inArray(users.id, userIds)))
-    } finally {
-      await closeOwner()
+    // Ogni passo è indipendente: se uno fallisce, i successivi girano comunque e le righe
+    // «zzz» non restano. L'errore del primo passo fallito viene rilanciato alla fine.
+    const errors: unknown[] = []
+    const step = async (fn: () => Promise<unknown>) => { try { await fn() } catch (error) { errors.push(error) } }
+    if (B !== undefined) {
+      // Ogni delete nomina il tenant B: se la policy di una tabella mancasse, un delete senza
+      // where porterebbe via anche le righe di A.
+      await step(() => withOwner(async tx => {
+        await tx.delete(appTheme).where(eq(appTheme.idTenant, B))
+        await tx.delete(menuEntry).where(eq(menuEntry.idTenant, B))
+        await tx.delete(userRole).where(eq(userRole.idTenant, B))
+        await tx.delete(role).where(eq(role.idTenant, B))
+      }, B))
+      await step(() => withOwner(tx => tx.delete(tenant).where(eq(tenant.id, B))))
     }
+    const userIds = [bAdminUserId, aUserId].filter(Boolean)
+    if (userIds.length > 0) await step(() => withGlobal(tx => tx.delete(users).where(inArray(users.id, userIds))))
+    await step(() => closeOwner())
+    if (errors.length > 0) throw errors[0]
   })
 
   it('shows tenant A only its own rows', async () => {
@@ -102,9 +125,11 @@ describeIntegration('tenant isolation in the database', () => {
     const deleted = await withTenant(A, tx => tx.delete(menuEntry).where(eq(menuEntry.idMenuEntry, bEntryId)).returning())
     expect(updated).toHaveLength(0)
     expect(deleted).toHaveLength(0)
-    // La riga di B è intatta (lo si vede dal suo tenant).
+    // Le righe di B sono intatte (lo si vede dal suo tenant).
     const [intact] = await withTenant(B, tx => tx.select({ description: role.description }).from(role).where(eq(role.idRole, bRoleId)))
     expect(intact.description).toBe('B service')
+    const entries = await withTenant(B, tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry).where(eq(menuEntry.idMenuEntry, bEntryId)))
+    expect(entries).toHaveLength(1)
   })
 
   it('cannot insert a row into tenant B', async () => {
@@ -120,7 +145,7 @@ describeIntegration('tenant isolation in the database', () => {
   it('refuses every tenant table without a tenant', async () => {
     for (const table of [role, userRole, rolePermission, menuEntry, menuEntryTag, roleFunctionality, appTheme]) {
       await expect(withGlobal(tx => tx.select().from(table).limit(1)))
-        .rejects.toSatisfy(error => pgError(error).code === '42501')
+        .rejects.toSatisfy(isMissingTenantContext)
     }
   })
 
@@ -148,53 +173,113 @@ describeIntegration('tenant isolation in the database', () => {
     const client = postgres(process.env.TEST_DATABASE_URL!, { prepare: false, max: 1 })
     try {
       await client.begin(async tx => { await tx`select set_config('app.tenant_id', ${String(A)}, true)` })
-      await expect(client`select count(*) from public.role`).rejects.toSatisfy(
-        (error: { code?: string }) => error.code === '42501')
+      await expect(client`select count(*) from public.role`).rejects.toSatisfy(isMissingTenantContext)
     } finally {
       await client.end({ timeout: 5 })
     }
   })
 
   it('keeps the last active administrator per tenant', async () => {
-    // A ha i propri amministratori: non salvano B.
+    // Precondizione: A ha amministratori attivi propri. Senza, il caso passerebbe anche con un
+    // conteggio globale.
+    const [{ n }] = await withTenant(A, tx => tx.select({ n: sql<number>`count(*)::int` })
+      .from(users)
+      .innerJoin(userRole, eq(userRole.userId, users.id))
+      .innerJoin(role, eq(role.idRole, userRole.idRole))
+      .where(sql`${role.systemKey} = 'TENANT_ADMIN' and ${users.idUserStatus} = 2`))
+    expect(n).toBeGreaterThan(0)
+    // B ha un solo amministratore, e quelli di A non lo salvano.
     await expect(withTenant(B, tx => tx.execute(sql`select public.replace_user_roles_guarded(${bAdminUserId}, '{}'::bigint[])`)))
       .rejects.toSatisfy(error => /last_active_administrator/.test(pgError(error).message ?? ''))
   })
 
-  it('does not make tenants wait on each other for the administrator lock', async () => {
+  it('does not let the administrators of A and B save a third tenant', async () => {
+    // Il caso simmetrico, senza toccare gli amministratori veri del tenant predefinito: un tenant C
+    // usa e getta con un solo amministratore, mentre A e B ne hanno.
+    const slug = `zzz-iso-c-${unique()}`.slice(0, 40)
+    const [created] = await withOwner(tx => tx.insert(tenant).values({ slug, name: 'Isolation C' }).returning({ id: tenant.id }))
+    const C = tenantIdForTest(created.id)
+    let cAdminId: string | undefined
+    try {
+      const [cAdmin] = await withGlobal(tx => tx.insert(users).values({ email: `zzz_iso_c_${unique()}@example.test`, idUserStatus: 2 }).returning({ id: users.id }))
+      cAdminId = cAdmin.id
+      await withOwner(async tx => {
+        const [registered] = await tx.insert(role).values({ description: 'C registered', idRoleType: ROLE_TYPE_SYSTEM, systemKey: 'REGISTERED' }).returning({ idRole: role.idRole })
+        const [admin] = await tx.insert(role).values({ description: 'C admin', idRoleType: ROLE_TYPE_SYSTEM, systemKey: 'TENANT_ADMIN' }).returning({ idRole: role.idRole })
+        await tx.insert(userRole).values([
+          { userId: cAdmin.id, idRole: registered.idRole },
+          { userId: cAdmin.id, idRole: admin.idRole },
+        ])
+      }, C)
+      await expect(withTenant(C, tx => tx.execute(sql`select public.replace_user_roles_guarded(${cAdmin.id}, '{}'::bigint[])`)))
+        .rejects.toSatisfy(error => /last_active_administrator/.test(pgError(error).message ?? ''))
+    } finally {
+      if (cAdminId !== undefined) await withGlobal(tx => tx.delete(users).where(eq(users.id, cAdminId!))).catch(() => undefined)
+      await withOwner(async tx => {
+        await tx.delete(userRole).where(eq(userRole.idTenant, C))
+        await tx.delete(role).where(eq(role.idTenant, C))
+      }, C).catch(() => undefined)
+      await withOwner(tx => tx.delete(tenant).where(eq(tenant.id, C)))
+    }
+  }, 30_000)
+
+  it('takes the administrator lock per tenant: A waits on A, B does not', async () => {
+    // Il lock lo prende una chiamata vera: set_user_status_guarded su un utente che lascia vero
+    // l'invariante (aUserId resta attivo, e A ha già un amministratore attivo).
     const holder = postgres(process.env.TEST_DATABASE_URL!, { prepare: false, max: 1 })
     let release!: () => void
     const held = new Promise<void>(resolve => { release = resolve })
     const holding = holder.begin(async tx => {
       await tx`select set_config('app.tenant_id', ${String(A)}, true)`
-      await tx`select pg_advisory_xact_lock(49374202, ${A}::integer)`
+      await tx`select public.set_user_status_guarded(${aUserId}, 2)`
       await held
     })
+    holding.catch(() => undefined)
+    let pendingA: Promise<unknown> | undefined
     try {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      const started = Date.now()
-      await withTenant(B, tx => tx.execute(sql`select public.set_user_status_guarded(${bAdminUserId}, 2)`))
-      expect(Date.now() - started).toBeLessThan(2000)
+      // Si aspetta che il lock sia davvero preso: nessuno sleep a occhio.
+      const deadline = Date.now() + 10_000
+      while (await adminLocksHeld(A) === 0) {
+        if (Date.now() > deadline) throw new Error('the holder never took the administrator lock of A')
+        await delay(50)
+      }
+      // Controllo positivo: una seconda operazione di A aspetta il lock di A.
+      pendingA = withTenant(A, tx => tx.execute(sql`select public.set_user_status_guarded(${aUserId}, 2)`))
+      pendingA.catch(() => undefined)
+      expect(await settledWithin(pendingA, 1500)).toBe('waiting')
+      // Una di B, nello stesso momento, non aspetta.
+      const forB = withTenant(B, tx => tx.execute(sql`select public.set_user_status_guarded(${bAdminUserId}, 2)`))
+      expect(await settledWithin(forB, 8000)).toBe('done')
+      await forB
     } finally {
+      // Sempre: il titolare rilascia, e l'operazione di A in attesa finisce prima di chiudere.
       release()
-      await holding
+      await holding.catch(() => undefined)
+      if (pendingA) await pendingA.catch(() => undefined)
       await holder.end({ timeout: 5 })
     }
-  })
+    // Una volta rilasciato, l'operazione di A in attesa è finita davvero, non è stata annullata.
+    await expect(pendingA).resolves.toBeDefined()
+  }, 30_000)
 
   it('holds construct_owner to the boundary too', async () => {
     await expect(withOwner(tx => tx.select().from(role).limit(1)))
-      .rejects.toSatisfy(error => pgError(error).code === '42501')
+      .rejects.toSatisfy(isMissingTenantContext)
   })
 
   it('removes the memberships of a deleted user in every tenant', async () => {
     const [temp] = await withGlobal(tx => tx.insert(users).values({ email: `zzz_iso_tmp_${unique()}@example.test`, idUserStatus: 2 }).returning({ id: users.id }))
     try {
+      const [aRegistered] = await withTenant(A, tx => tx.select({ idRole: role.idRole }).from(role).where(eq(role.systemKey, 'REGISTERED')))
+      await withTenant(A, tx => tx.insert(userRole).values({ userId: temp.id, idRole: aRegistered.idRole }))
       await withOwner(tx => tx.insert(userRole).values({ userId: temp.id, idRole: bRoleId }), B)
+      // Le due appartenenze esistono, una per tenant, prima della cancellazione.
+      expect(await withTenant(A, tx => tx.select().from(userRole).where(eq(userRole.userId, temp.id)))).toHaveLength(1)
+      expect(await withTenant(B, tx => tx.select().from(userRole).where(eq(userRole.userId, temp.id)))).toHaveLength(1)
     } finally {
       await withGlobal(tx => tx.delete(users).where(eq(users.id, temp.id)))
     }
-    const left = await withOwner(tx => tx.select().from(userRole).where(eq(userRole.userId, temp.id)), B)
-    expect(left).toHaveLength(0)
+    expect(await withTenant(A, tx => tx.select().from(userRole).where(eq(userRole.userId, temp.id)))).toHaveLength(0)
+    expect(await withTenant(B, tx => tx.select().from(userRole).where(eq(userRole.userId, temp.id)))).toHaveLength(0)
   })
 })
