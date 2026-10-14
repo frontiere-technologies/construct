@@ -4,18 +4,19 @@ import { and, eq, sql } from 'drizzle-orm'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole } from '@/lib/db/schema'
+import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { roleIdsSchema, userIdSchema, userStatusSchema } from './action-input-schemas'
 import { assertCanChangeRoles, assertCanChangeStatus, symmetricDifference } from './grant-guards'
 import { currentRoleIds, functionalityIdsForRoles, grantsForRoles } from './grant-service'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
-import { ROLE_ADMINISTRATOR, ROLE_REGISTERED, type UserStatusId } from './types'
+import type { UserStatusId } from './types'
 
-async function userIsAdmin(tx: TenantTx, userId: string): Promise<boolean> {
+async function userIsAdmin(tx: TenantTx, userId: string, tenantAdminId: number): Promise<boolean> {
   try {
     const rows = await tx
       .select({ userId: userRole.userId })
       .from(userRole)
-      .where(and(eq(userRole.userId, userId), eq(userRole.idRole, ROLE_ADMINISTRATOR)))
+      .where(and(eq(userRole.userId, userId), eq(userRole.idRole, tenantAdminId)))
       .limit(1)
     return rows.length > 0
   } catch (err) {
@@ -41,23 +42,24 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
   }
   const currentUserId = actor.userId
   await withTenant(actor.tenantId, async tx => {
-    const targetCurrentlyAdmin = await userIsAdmin(tx, userId)
+    const system = await getSystemRoleIds(tx)
+    const targetCurrentlyAdmin = await userIsAdmin(tx, userId, system.tenantAdmin)
     assertRoleChangeAllowed({
       targetUserId: userId,
       currentUserId,
       targetCurrentlyAdmin,
-      newRolesIncludeAdmin: roleIds.includes(ROLE_ADMINISTRATOR),
+      newRolesIncludeAdmin: roleIds.includes(system.tenantAdmin),
       // The database function performs the authoritative serialized count. This
       // value is only for the independent self-demotion UX guard.
       otherActiveAdminCount: 1,
     })
 
-    const finalRoleIds = Array.from(new Set<number>([ROLE_REGISTERED, ...roleIds]))
+    const finalRoleIds = Array.from(new Set<number>([system.registered, ...roleIds]))
     if (!actor.isAdmin) {
       const touched = symmetricDifference(await currentRoleIds(tx, userId), finalRoleIds)
       const visible = await functionalityIdsForRoles(tx, actor.roleIds)
       const grants = await grantsForRoles(tx, touched)
-      assertCanChangeRoles(actor, visible, grants)
+      assertCanChangeRoles(actor, visible, grants, system.tenantAdmin)
     }
     try {
       const roleIdsArray = `{${finalRoleIds.join(',')}}`
@@ -85,7 +87,10 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
   })
 
   await withTenant(actor.tenantId, async tx => {
-    if (!actor.isAdmin) assertCanChangeStatus(actor, await userIsAdmin(tx, userId))
+    if (!actor.isAdmin) {
+      const system = await getSystemRoleIds(tx)
+      assertCanChangeStatus(actor, await userIsAdmin(tx, userId, system.tenantAdmin))
+    }
 
     try {
       await tx.execute(sql`select public.set_user_status_guarded(${userId}, ${status})`)

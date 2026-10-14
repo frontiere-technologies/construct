@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { TenantTx } from '@/lib/db/tenant-db'
 import { permission, roleFunctionality, rolePermission, userRole } from '@/lib/db/schema'
+import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import type { Actor } from './actor'
 import { canChangeRole, canGrantCode, canGrantFunctionality, type RoleGrants } from './grant-guards'
 import type { GrantableItemIds } from './types'
@@ -67,7 +68,8 @@ export async function currentRoleIds(tx: TenantTx, userId: string): Promise<numb
 export async function assignableRoleIds(tx: TenantTx, actor: Actor, roleIds: number[]): Promise<number[]> {
   const visible = await functionalityIdsForRoles(tx, actor.roleIds)
   const grants = await grantsForRoles(tx, roleIds)
-  return grants.filter(g => canChangeRole(actor, visible, g)).map(g => g.idRole)
+  const { tenantAdmin } = await getSystemRoleIds(tx)
+  return grants.filter(g => canChangeRole(actor, visible, g, tenantAdmin)).map(g => g.idRole)
 }
 
 /**

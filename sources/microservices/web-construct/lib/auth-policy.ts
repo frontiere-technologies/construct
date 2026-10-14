@@ -10,13 +10,17 @@ export function isActiveAccount(status: number | null | undefined): boolean {
   return status === ACTIVE_USER_STATUS
 }
 
-export function evaluateAuthorization(status: number | null | undefined, roleIds: number[]) {
+export function evaluateAuthorization(
+  status: number | null | undefined,
+  roleIds: number[],
+  adminRoleId: number,
+) {
   const accountActive = isActiveAccount(status)
   const effectiveRoleIds = accountActive ? roleIds : []
   return {
     accountActive,
     roleIds: effectiveRoleIds,
-    isAdmin: effectiveRoleIds.includes(1),
+    isAdmin: effectiveRoleIds.includes(adminRoleId),
   }
 }
 

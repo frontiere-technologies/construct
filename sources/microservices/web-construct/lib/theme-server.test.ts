@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ rows: vi.fn(), withTenant: vi.fn(), logError: vi.fn() }))
+const mocks = vi.hoisted(() => ({ rows: vi.fn(), withTenant: vi.fn(), logError: vi.fn(), resolveRequestTenant: vi.fn() }))
 
 vi.mock('react', async importOriginal => ({
   ...(await importOriginal<typeof import('react')>()),
@@ -13,9 +13,10 @@ vi.mock('@/lib/db/tenant-db', () => ({
     return fn({ select: () => ({ from: () => ({ limit: () => mocks.rows() }) }) })
   },
 }))
+vi.mock('@/lib/tenancy/request-tenant', () => ({ resolveRequestTenant: mocks.resolveRequestTenant }))
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: mocks.logError }) }))
 
-const { getAppTheme } = await import('./theme-server')
+const { getAppTheme, getRequestAppTheme } = await import('./theme-server')
 const { DEFAULT_APP_THEME } = await import('./theme-vars')
 const { defaultTestTenant } = await import('@/lib/tenancy/testing')
 
@@ -31,6 +32,7 @@ describe('getAppTheme', () => {
     mocks.rows.mockReset()
     mocks.withTenant.mockReset()
     mocks.logError.mockReset()
+    mocks.resolveRequestTenant.mockReset()
   })
 
   it('reads the primary colour and only the surfaces that were changed', async () => {
@@ -62,5 +64,30 @@ describe('getAppTheme', () => {
     mocks.rows.mockRejectedValue(new Error('column "card_light" does not exist'))
     expect(await getAppTheme(defaultTestTenant())).toEqual(DEFAULT_APP_THEME)
     expect(mocks.logError).toHaveBeenCalledOnce()
+  })
+})
+
+// La pagina di accesso è anonima e deve disegnarsi anche quando il database non risponde: il
+// tenant ora si legge dal database, quindi anche la sua risoluzione deve ripiegare sui predefiniti.
+describe('getRequestAppTheme', () => {
+  beforeEach(() => {
+    mocks.rows.mockReset()
+    mocks.withTenant.mockReset()
+    mocks.logError.mockReset()
+    mocks.resolveRequestTenant.mockReset()
+  })
+
+  it('reads the theme of the tenant of the request', async () => {
+    mocks.resolveRequestTenant.mockResolvedValue(defaultTestTenant())
+    mocks.rows.mockResolvedValue([row])
+    expect((await getRequestAppTheme()).primaryColor).toBe('#059669')
+    expect(mocks.withTenant).toHaveBeenCalledWith(defaultTestTenant())
+  })
+
+  it('falls back to the defaults and logs when the tenant cannot be resolved', async () => {
+    mocks.resolveRequestTenant.mockRejectedValue(new Error('connection refused'))
+    expect(await getRequestAppTheme()).toEqual(DEFAULT_APP_THEME)
+    expect(mocks.logError).toHaveBeenCalledOnce()
+    expect(mocks.withTenant).not.toHaveBeenCalled()
   })
 })

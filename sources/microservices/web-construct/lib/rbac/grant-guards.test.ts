@@ -10,6 +10,8 @@ import {
 function limited(codes: PermissionCode[]): Actor {
   return { userId: 'u1', tenantId: defaultTestTenant(), roleIds: [0, 7], isAdmin: false, permissions: new Set(codes) }
 }
+// Un id che non è 1: l'amministratore si riconosce dall'id del tenant, non da un id fisso.
+const TENANT_ADMIN_ID = 57
 const admin: Actor = { userId: 'a1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() }
 
 describe('assertCanGrantPermissions (DEC-6)', () => {
@@ -41,32 +43,32 @@ describe('assertCanChangeRoles (DEC-29)', () => {
   const reader = limited(['assign-user-roles', 'read-menu'])
 
   it('refuses to add or remove the Administrator role for a non-administrator', () => {
-    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: 1, codes: [], functionalityIds: [], uncataloguedIds: [] }]))
+    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: TENANT_ADMIN_ID, codes: [], functionalityIds: [], uncataloguedIds: [] }], TENANT_ADMIN_ID))
       .toThrow(/Administrator/)
   })
 
   it('refuses a role that grants a permission the actor does not hold', () => {
-    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: 7, codes: ['manage-menu'], functionalityIds: [], uncataloguedIds: [] }]))
+    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: 7, codes: ['manage-menu'], functionalityIds: [], uncataloguedIds: [] }], TENANT_ADMIN_ID))
       .toThrow(/manage-menu/)
   })
 
   it('refuses a role that grants a menu entry the actor cannot see', () => {
-    expect(() => assertCanChangeRoles(reader, new Set([3]), [{ idRole: 7, codes: [], functionalityIds: [4], uncataloguedIds: [] }]))
+    expect(() => assertCanChangeRoles(reader, new Set([3]), [{ idRole: 7, codes: [], functionalityIds: [4], uncataloguedIds: [] }], TENANT_ADMIN_ID))
       .toThrow(/4/)
   })
 
   it('refuses a role holding a GRANT row outside the catalog: nobody holds it (M3)', () => {
-    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: 7, codes: ['read-menu'], functionalityIds: [], uncataloguedIds: [42] }]))
+    expect(() => assertCanChangeRoles(reader, new Set(), [{ idRole: 7, codes: ['read-menu'], functionalityIds: [], uncataloguedIds: [42] }], TENANT_ADMIN_ID))
       .toThrow(/outside the catalog: 42/)
   })
 
   it('accepts a role whose grants the actor holds entirely', () => {
-    expect(() => assertCanChangeRoles(reader, new Set([3]), [{ idRole: 7, codes: ['read-menu'], functionalityIds: [3], uncataloguedIds: [] }]))
+    expect(() => assertCanChangeRoles(reader, new Set([3]), [{ idRole: 7, codes: ['read-menu'], functionalityIds: [3], uncataloguedIds: [] }], TENANT_ADMIN_ID))
       .not.toThrow()
   })
 
   it('lets the Administrator change any role, the Administrator role included', () => {
-    expect(() => assertCanChangeRoles(admin, new Set(), [{ idRole: 1, codes: [], functionalityIds: [], uncataloguedIds: [] }])).not.toThrow()
+    expect(() => assertCanChangeRoles(admin, new Set(), [{ idRole: TENANT_ADMIN_ID, codes: [], functionalityIds: [], uncataloguedIds: [] }], TENANT_ADMIN_ID)).not.toThrow()
   })
 })
 
@@ -121,14 +123,18 @@ describe('canChangeRole (DEC-29)', () => {
     ({ idRole: 7, codes: [], functionalityIds: [], uncataloguedIds: [], ...over })
 
   it('answers as assertCanChangeRoles does, one role at a time', () => {
-    expect(canChangeRole(reader, new Set([3]), grants({ codes: ['read-menu'], functionalityIds: [3] }))).toBe(true)
-    expect(canChangeRole(reader, new Set(), grants({ codes: ['manage-menu'] }))).toBe(false)
-    expect(canChangeRole(reader, new Set([3]), grants({ functionalityIds: [4] }))).toBe(false)
-    expect(canChangeRole(reader, new Set(), grants({ uncataloguedIds: [42] }))).toBe(false)
+    expect(canChangeRole(reader, new Set([3]), grants({ codes: ['read-menu'], functionalityIds: [3] }), TENANT_ADMIN_ID)).toBe(true)
+    expect(canChangeRole(reader, new Set(), grants({ codes: ['manage-menu'] }), TENANT_ADMIN_ID)).toBe(false)
+    expect(canChangeRole(reader, new Set([3]), grants({ functionalityIds: [4] }), TENANT_ADMIN_ID)).toBe(false)
+    expect(canChangeRole(reader, new Set(), grants({ uncataloguedIds: [42] }), TENANT_ADMIN_ID)).toBe(false)
   })
 
   it('never offers the Administrator role to a non-administrator', () => {
-    expect(canChangeRole(reader, new Set(), grants({ idRole: 1 }))).toBe(false)
-    expect(canChangeRole(admin, new Set(), grants({ idRole: 1 }))).toBe(true)
+    expect(canChangeRole(reader, new Set(), grants({ idRole: TENANT_ADMIN_ID }), TENANT_ADMIN_ID)).toBe(false)
+    expect(canChangeRole(admin, new Set(), grants({ idRole: TENANT_ADMIN_ID }), TENANT_ADMIN_ID)).toBe(true)
+  })
+
+  it('treats a role with id 1 as an ordinary role when it is not the tenant administrator', () => {
+    expect(canChangeRole(reader, new Set(), grants({ idRole: 1 }), TENANT_ADMIN_ID)).toBe(true)
   })
 })

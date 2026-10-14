@@ -3,6 +3,7 @@ import { like } from 'drizzle-orm'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { role, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
+import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { USER_STATUS_ACTIVE } from './types'
 import { getNavigationItem, getNavigationSubtree, getParentList } from './functionalities-service'
@@ -74,7 +75,8 @@ describeIntegration('RBAC loaders through withTenant', () => {
     expect(await getNavigationItemById(tenant, first.id)).toMatchObject({ id_menu_entry: first.id })
     expect(await getNavigationItemById(tenant, 999999999)).toBeNull()
     expect((await getParentList(tenant)).length).toBeGreaterThan(0)
-    // L'Amministratore (ruolo 1) vede il menu: il caricamento della barra laterale non è vuoto.
-    expect((await getSidebarMenu(tenant, [0, 1])).length).toBeGreaterThan(0)
+    // L'Amministratore del tenant vede il menu: il caricamento della barra laterale non è vuoto.
+    const system = await withTenant(tenant, getSystemRoleIds)
+    expect((await getSidebarMenu(tenant, [system.registered, system.tenantAdmin])).length).toBeGreaterThan(0)
   })
 })
