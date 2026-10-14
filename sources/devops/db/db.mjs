@@ -325,11 +325,11 @@ async function boundaryCheck() {
     report('cannot read migration history', history.allowed === false)
 
     const [ownerRole] = await sql`
-      select rolbypassrls, rolcanlogin from pg_roles where rolname = 'construct_owner'
+      select rolbypassrls, rolcanlogin, rolsuper from pg_roles where rolname = 'construct_owner'
     `
     report(
-      'construct_owner exists without BYPASSRLS and without login',
-      Boolean(ownerRole) && !ownerRole.rolbypassrls && !ownerRole.rolcanlogin,
+      'construct_owner exists without BYPASSRLS, login and superuser',
+      Boolean(ownerRole) && !ownerRole.rolbypassrls && !ownerRole.rolcanlogin && !ownerRole.rolsuper,
     )
     const strays = await sql`
       select c.relname as name
@@ -340,6 +340,19 @@ async function boundaryCheck() {
         and not exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype = 'e')
     `
     report('construct_owner owns every application relation', !strays.length, strays.map(row => row.name).join(', '))
+    const strayFunctions = await sql`
+      select p.proname as name
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proowner <> 'construct_owner'::regrole
+        and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+      order by p.proname
+    `
+    report(
+      'construct_owner owns every application function',
+      !strayFunctions.length,
+      strayFunctions.map(row => row.name).join(', '),
+    )
   } finally {
     await sql.end({ timeout: 5 })
   }
