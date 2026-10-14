@@ -1447,7 +1447,7 @@ specifica).
   - `role.system_key`;
   - Drizzle: `tenant`, colonne `idTenant`, `role.systemKey`; `appTheme.id` sparisce.
 
-- [ ] **Step 1: Scrivere il test che fallisce** `lib/tenancy/tenant-schema.integration.test.ts`:
+- [✅] **Step 1: Scrivere il test che fallisce** `lib/tenancy/tenant-schema.integration.test.ts`:
 
 ```ts
 import { expect, it } from 'vitest'
@@ -1489,7 +1489,7 @@ describeIntegration('tenant schema', () => {
 Run: `npm run test:integration -- lib/tenancy/tenant-schema.integration.test.ts`
 Expected: FAIL (`tenant` non esportato da `schema.ts`, o relazione inesistente).
 
-- [ ] **Step 2: Scrivere la migrazione** `0046_tenant_schema.sql`:
+- [✅] **Step 2: Scrivere la migrazione** `0046_tenant_schema.sql`:
 
 ```sql
 -- Multi-tenancy, pezzo 1 (specifica 2026-10-13, §2.2–2.6, MTF-5). Gira come construct_owner.
@@ -1759,7 +1759,7 @@ end;
 $$;
 ```
 
-- [ ] **Step 3: Allineare Drizzle** (`lib/db/schema.ts`).
+- [✅] **Step 3: Allineare Drizzle** (`lib/db/schema.ts`).
   - Aggiungere `foreignKey` all'import da `drizzle-orm/pg-core`.
   - Definire `tenant` prima di `role`.
   - Modificare le tabelle come segue.
@@ -1876,11 +1876,11 @@ export const roleFunctionality = pgTable('role_functionality', {
   Il contratto confronta colonne, indici e chiavi come insiemi, quindi l'ordine delle colonne
   nel modello Drizzle non deve per forza seguire quello del catalogo.
 
-- [ ] **Step 4: `theme-actions.ts`.** `.returning({ id: appTheme.id })` diventa
+- [✅] **Step 4: `theme-actions.ts`.** `.returning({ id: appTheme.id })` diventa
   `.returning({ idTenant: appTheme.idTenant })`, e il controllo successivo sul numero di righe
   resta invariato.
 
-- [ ] **Step 5: Tenant predefinito nei comandi di `db.mjs`.**
+- [✅] **Step 5: Tenant predefinito nei comandi di `db.mjs`.**
   - In `runDatabaseCommand`, subito dopo la creazione di `sql` e prima di `try {`, aggiungere il
     blocco qui sotto.
   - Il blocco copre `query`, `test-query`, `test-reset-e2e` e `test-delete-user`: il seme della
@@ -1898,7 +1898,7 @@ export const roleFunctionality = pgTable('role_functionality', {
   }
 ```
 
-- [ ] **Step 6: Applicare, rigenerare, verificare.**
+- [✅] **Step 6: Applicare, rigenerare, verificare.**
 
 ```bash
 set -a && . ./sources/devops/db/operator.env && set +a && TEST_DATABASE_DISPOSABLE=1 node sources/devops/db/db.mjs test-apply
@@ -1912,13 +1912,13 @@ Expected:
   indici;
 - i test dell'invariante di `users-actions.integration.test.ts` passano senza modifiche.
 
-- [ ] **Step 7: E2E.**
+- [✅] **Step 7: E2E.**
 
 Run: `uv run pytest`
 Expected: PASS. `test_permissions.py` scrive `role` e `user_role` attraverso `db.mjs test-query`,
 che ora imposta il tenant.
 
-- [ ] **Step 8: Commit e checkbox.** Segnare MTF-5 come `- [✅]`.
+- [✅] **Step 8: Commit e checkbox.** Segnare MTF-5 come `- [✅]`.
 
 ```bash
 git add sources/devops/db sources/microservices/web-construct docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md
