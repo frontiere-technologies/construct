@@ -1051,7 +1051,7 @@ Nuove firme degli altri moduli:
 | `navigation-actions.ts` | `lockNavigationWrites(tx)` e la chiamata a `replace_menu_entry_tags` usano `db` o il `tx` di oggi | ogni azione: guardia, poi una `withTenant(actor.tenantId, …)` che contiene lock, letture (oggi `:35` legge tutta `menu_entry`), scritture e la chiamata alla funzione dei tag |
 | `roles-actions.ts`, `users-actions.ts` | `db.*` e `db.transaction` | R3 |
 
-- [ ] **Step 1: Aggiornare prima i test di `actor`,** perché fissano la nuova firma. In
+- [✅] **Step 1: Aggiornare prima i test di `actor`,** perché fissano la nuova firma. In
   `lib/rbac/actor.integration.test.ts`:
   - `readerOf` scrive dentro `withTenant(defaultTestTenant(), async tx => { … })`, con `tx` al
     posto di `db`;
@@ -1066,12 +1066,12 @@ Nuove firme degli altri moduli:
   Nei test unitari che chiamano `buildActor` (`grep -rln "buildActor(" lib`), aggiungere il
   secondo argomento `defaultTestTenant()`.
 
-- [ ] **Step 2: Verificare che falliscano.**
+- [✅] **Step 2: Verificare che falliscano.**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit`
 Expected: errori di tipo su `resolveActor` e `buildActor` (numero di argomenti).
 
-- [ ] **Step 3: Convertire `actor.ts`, `auth-roles.ts`, `auth-guard.ts`.**
+- [✅] **Step 3: Convertire `actor.ts`, `auth-roles.ts`, `auth-guard.ts`.**
   - **`actor.ts`:**
     - `Actor` riceve `tenantId`;
     - `buildActor(userId, tenantId, authorization, grantedCodes)` lo copia nel risultato;
@@ -1093,7 +1093,7 @@ async function currentActor(): Promise<Actor | null> {
 }
 ```
 
-- [ ] **Step 4: Convertire gli altri moduli della tabella** secondo R1–R4, un file alla volta,
+- [✅] **Step 4: Convertire gli altri moduli della tabella** secondo R1–R4, un file alla volta,
   lanciando `npx tsc --noEmit` dopo ciascuno e aggiornando i chiamanti che segnala (pagine sotto
   `app/(protected)/`, route `users-grid` e `roles-grid`).
   - **Il layout `app/(protected)/layout.tsx`** non ha un attore: chiama
@@ -1102,10 +1102,10 @@ async function currentActor(): Promise<Actor | null> {
   - **Le letture fatte prima della `withTenant`** di un'azione per controlli UX (per esempio
     `users-actions.ts:18`) entrano nella stessa `withTenant`.
 
-- [ ] **Step 5: Convertire i test di integrazione dell'area** secondo R5. Il nome degli aiuti di
+- [✅] **Step 5: Convertire i test di integrazione dell'area** secondo R5. Il nome degli aiuti di
   `lib/i18n/test-support/db-fixtures.ts` resta invariato; quel file si converte nel Task 5c.
 
-- [ ] **Step 6: Verificare.**
+- [✅] **Step 6: Verificare.**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint && npm run test && npm run test:integration`
 Expected: tutto PASS. Nessun test esistente cambia il proprio atteso.
@@ -1119,7 +1119,7 @@ Expected: tutto PASS. Nessun test esistente cambia il proprio atteso.
 
   Atteso: nessun errore in console né nel log del server.
 
-- [ ] **Step 8: Commit.**
+- [✅] **Step 8: Commit.**
 
 ```bash
 git add sources/microservices/web-construct/lib/rbac sources/microservices/web-construct/app
