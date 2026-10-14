@@ -384,10 +384,19 @@ async function runDatabaseCommand(command, argument) {
   const testCommands = new Set(['test-query', 'test-reset-e2e', 'test-delete-user'])
   const sql = postgres(testCommands.has(command) ? testDatabaseUrl() : applicationDatabaseUrl(), {
     prepare: false,
+    max: 1, // una sola connessione: il tenant impostato sotto vale per ogni istruzione del comando
     connect_timeout: 30,
     idle_timeout: 5,
     onnotice: notice => console.log(`NOTICE: ${notice.message}`),
   })
+  // Dalla 0046 le tabelle di tenant ricevono id_tenant dal contesto, e dalla 0047 lo pretendono.
+  // Questi comandi lavorano sempre sul tenant predefinito: è l'unico in questo pezzo (specifica
+  // 2026-10-13, MTF-DEC-2). La connessione è dedicata al comando, quindi un set_config di sessione
+  // non arriva a nessun altro.
+  const [{ hasTenantTable }] = await sql`select to_regclass('public.tenant') is not null as "hasTenantTable"`
+  if (hasTenantTable) {
+    await sql`select set_config('app.tenant_id', (select id::text from public.tenant where slug = 'default'), false)`
+  }
   try {
     if (command === 'test-reset-e2e') {
       const emails = [process.env.TEST_EMAIL, process.env.TEST_EMAIL_USER].filter(Boolean)

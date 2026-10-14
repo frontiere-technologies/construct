@@ -105,7 +105,7 @@ export async function saveAppTheme(
       accentDark: dark.accent ?? null,
       sidebarDark: dark.sidebar ?? null,
       dateMod: sql`now()`,
-    }).returning({ id: appTheme.id }))
+    }).returning({ idTenant: appTheme.idTenant }))
     if (rows.length === 0) {
       log.error('app_theme has no row to update')
       return { saved: false, error: 'failed' }

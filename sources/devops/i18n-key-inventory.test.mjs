@@ -188,6 +188,10 @@ const NOT_A_KEY = [
   { file: 'lib/i18n/translation-actions.ts', pattern: /^translation_(key|value)\./, why: 'audit event names' },
   // The log message of the same audit events, built as a template: `i18n.${event}`.
   { file: 'lib/i18n/audit.ts', pattern: /^i18n\./, why: 'audit log message template' },
+  // Tenant context: a Postgres setting name and a sequence name, not copy.
+  { file: 'lib/db/tenant-db.ts', pattern: /^app\.tenant_id$/, why: 'name of the Postgres setting that carries the tenant' },
+  { file: 'lib/db/testing.ts', pattern: /^app\.tenant_id$/, why: 'name of the Postgres setting that carries the tenant' },
+  { file: 'lib/db/schema.ts', pattern: /^public\.s_id_tenant$/, why: 'schema-qualified sequence name in a column default' },
   // A CSS length that happens to be lowercase digits around a dot.
   { file: 'components/grid/data-grid-config.ts', pattern: /^0\.875rem$/, why: 'ag-grid font size in rem' },
 ]
