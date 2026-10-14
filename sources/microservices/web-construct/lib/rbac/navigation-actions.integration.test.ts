@@ -1,7 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { count, eq, like } from 'drizzle-orm'
 import postgres from 'postgres'
-import { db } from '@/lib/db'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { permission, menuEntry, role, roleFunctionality } from '@/lib/db/schema'
@@ -66,7 +65,7 @@ describeIntegration('navigation mutations against the database', () => {
     // pulizia è difensiva, nel caso un test qui sotto inserisca ancora un permesso con questo
     // prefisso — nessuno lo fa più oggi.
     await withTenant(defaultTestTenant(), tx => tx.delete(menuEntry).where(like(menuEntry.name, `${PREFIX}%`)))
-    await db.delete(permission).where(like(permission.name, `${PREFIX}%`))
+    await withGlobal(tx => tx.delete(permission).where(like(permission.name, `${PREFIX}%`)))
   })
 
   it('non crea alcun permesso gemello per una funzionalità nuova (via la sincronizzazione)', async () => {
@@ -103,7 +102,7 @@ describeIntegration('navigation mutations against the database', () => {
     //
     // code non nullo e unico: permission_code_matches_kind lo pretende per un GRANT di
     // origine SOURCE — col prefisso di prova del file, cosi' la pulizia lo raggiunge.
-    const [perm] = await db.insert(permission).values({
+    const [perm] = await withGlobal(tx => tx.insert(permission).values({
       kind: 'GRANT',
       origin: 'SOURCE',
       code,
@@ -112,7 +111,7 @@ describeIntegration('navigation mutations against the database', () => {
       itemTranslation: { EN: { name } },
       idParent: -1,
       orderPosition: 0,
-    }).returning({ id: permission.idPermission })
+    }).returning({ id: permission.idPermission }))
 
     // Nessun collegamento al permesso: menu_entry.id_permission e' sparito con la 0027. Le
     // due righe non condividono altro che il prefisso di test.
@@ -135,7 +134,7 @@ describeIntegration('navigation mutations against the database', () => {
       expect(await withGlobal(tx => tx.select().from(permission).where(eq(permission.idPermission, perm.id)))).toHaveLength(1)
     } finally {
       await withTenant(defaultTestTenant(), tx => tx.delete(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id)))
-      await db.delete(permission).where(eq(permission.idPermission, perm.id))
+      await withGlobal(tx => tx.delete(permission).where(eq(permission.idPermission, perm.id)))
     }
   })
 

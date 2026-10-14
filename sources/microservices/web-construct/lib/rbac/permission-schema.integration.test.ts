@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { and, eq, inArray, isNotNull, like, sql } from 'drizzle-orm'
-import { db } from '@/lib/db'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { appLanguage, menuEntry, permission, role, roleFunctionality, roleListView, rolePermission, translationKey, translationValue, users } from '@/lib/db/schema'
@@ -85,9 +84,9 @@ describe('rename delle tabelle RBAC', () => {
     const [createdRole] = await withTenant(defaultTestTenant(), tx => tx.insert(role)
       .values({ description: 'zzz_rbac_rename_test_role' })
       .returning({ idRole: role.idRole }))
-    const [createdPermission] = await db.insert(permission)
+    const [createdPermission] = await withGlobal(tx => tx.insert(permission)
       .values({ name: 'zzz_rbac_rename_test_permission', kind: 'CATEGORY' })
-      .returning({ idPermission: permission.idPermission })
+      .returning({ idPermission: permission.idPermission }))
     try {
       await withTenant(defaultTestTenant(), tx => tx.insert(rolePermission).values({
         idRole: createdRole.idRole,
@@ -99,7 +98,7 @@ describe('rename delle tabelle RBAC', () => {
       expect(row?.hasPermissions).toBe(true)
     } finally {
       await withTenant(defaultTestTenant(), tx => tx.delete(rolePermission).where(eq(rolePermission.idRole, createdRole.idRole)))
-      await db.delete(permission).where(eq(permission.idPermission, createdPermission.idPermission))
+      await withGlobal(tx => tx.delete(permission).where(eq(permission.idPermission, createdPermission.idPermission)))
       await withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, createdRole.idRole)))
     }
   })
@@ -135,14 +134,14 @@ describe('identità del permesso', () => {
   it('rifiuta un kind non ammesso', async () => {
     try {
       await expectRejectedByConstraint(
-        () => db.execute(sql`
+        () => withGlobal(tx => tx.execute(sql`
           insert into public.permission (kind, origin, description, id_parent, order_position)
           values ('BOGUS', 'CONSOLE', 'kind non valido', -1, 0)
-        `),
+        `)),
         'permission_kind_valid',
       )
     } finally {
-      await db.execute(sql`delete from public.permission where description = 'kind non valido'`)
+      await withGlobal(tx => tx.execute(sql`delete from public.permission where description = 'kind non valido'`))
     }
   })
 
@@ -150,23 +149,23 @@ describe('identità del permesso', () => {
   it('rifiuta un origin non ammesso', async () => {
     try {
       await expectRejectedByConstraint(
-        () => db.execute(sql`
+        () => withGlobal(tx => tx.execute(sql`
           insert into public.permission (kind, origin, description, id_parent, order_position)
           values ('GRANT', 'BOGUS', 'origin non valido', -1, 0)
-        `),
+        `)),
         'permission_origin_valid',
       )
     } finally {
-      await db.execute(sql`delete from public.permission where description = 'origin non valido'`)
+      await withGlobal(tx => tx.execute(sql`delete from public.permission where description = 'origin non valido'`))
     }
   })
 
   it('rifiuta un GRANT di origine SOURCE senza code', async () => {
     await expectRejectedByConstraint(
-      () => db.execute(sql`
+      () => withGlobal(tx => tx.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', null, 'SOURCE', 'senza codice', -1, 0)
-      `),
+      `)),
       'permission_code_matches_kind',
     )
   })
@@ -175,10 +174,10 @@ describe('identità del permesso', () => {
    * altrettanto una violazione del vincolo nuovo, non solo la sua assenza su una SOURCE. */
   it('rifiuta un GRANT di origine CONSOLE con un code', async () => {
     await expectRejectedByConstraint(
-      () => db.execute(sql`
+      () => withGlobal(tx => tx.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', 'non-dovrebbe-esistere', 'CONSOLE', 'con codice', -1, 0)
-      `),
+      `)),
       'permission_code_matches_kind',
     )
   })
@@ -195,14 +194,14 @@ describe('identità del permesso', () => {
   it('rifiuta una CATEGORY di origine SOURCE con un code', async () => {
     try {
       await expectRejectedByConstraint(
-        () => db.execute(sql`
+        () => withGlobal(tx => tx.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
           values ('CATEGORY', 'test-categoria-source-con-code', 'SOURCE', 'categoria con codice', -1, 0)
-        `),
+        `)),
         'permission_code_matches_kind',
       )
     } finally {
-      await db.execute(sql`delete from public.permission where code = 'test-categoria-source-con-code'`)
+      await withGlobal(tx => tx.execute(sql`delete from public.permission where code = 'test-categoria-source-con-code'`))
     }
   })
 
@@ -225,19 +224,19 @@ describe('identità del permesso', () => {
     // questo test vuole esercitare.
     const code = `test-dup-${unique()}`
     try {
-      await db.execute(sql`
+      await withGlobal(tx => tx.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', ${code}, 'SOURCE', 'primo', -1, 0)
-      `)
+      `))
       await expectRejectedByConstraint(
-        () => db.execute(sql`
+        () => withGlobal(tx => tx.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
           values ('GRANT', ${code}, 'SOURCE', 'secondo', -1, 0)
-        `),
+        `)),
         'permission_code_unique',
       )
     } finally {
-      await db.execute(sql`delete from public.permission where code = ${code}`)
+      await withGlobal(tx => tx.execute(sql`delete from public.permission where code = ${code}`))
     }
   })
 })
@@ -348,17 +347,17 @@ describe('pulizia colonne e tabelle assorbite (Task 7)', () => {
  * verificare che il trigger sia sparito, non che l'operazione che falliva ora funzioni. */
 describe('trigger permission_updated_at (Task 9)', () => {
   it('accetta un UPDATE su una riga di permission', async () => {
-    const [created] = await db.insert(permission)
+    const [created] = await withGlobal(tx => tx.insert(permission)
       .values({ name: 'zzz_rbac_trigger_orphan_test', kind: 'CATEGORY' })
-      .returning({ idPermission: permission.idPermission })
+      .returning({ idPermission: permission.idPermission }))
     try {
       await expect(
-        db.update(permission)
+        withGlobal(tx => tx.update(permission)
           .set({ description: 'aggiornata dal test' })
-          .where(eq(permission.idPermission, created.idPermission)),
+          .where(eq(permission.idPermission, created.idPermission))),
       ).resolves.not.toThrow()
     } finally {
-      await db.delete(permission).where(eq(permission.idPermission, created.idPermission))
+      await withGlobal(tx => tx.delete(permission).where(eq(permission.idPermission, created.idPermission)))
     }
   })
 })

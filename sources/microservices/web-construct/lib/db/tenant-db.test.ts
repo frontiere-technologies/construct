@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import type { SQL } from 'drizzle-orm'
-import { toTenantId } from '@/lib/tenancy/tenant-id'
+import { tenantIdForTest } from '@/lib/tenancy/testing'
 import type { Database } from './client'
 import { createTenantAccess } from './tenant-db'
 
@@ -24,7 +24,7 @@ describe('withTenant', () => {
   it('sets the tenant as a transaction-local parameter before running the callback', async () => {
     const { database, executed } = fakeDatabase()
     const { withTenant } = createTenantAccess(database)
-    const result = await withTenant(toTenantId(7), async () => 'done')
+    const result = await withTenant(tenantIdForTest(7), async () => 'done')
     expect(result).toBe('done')
     expect(executed).toHaveLength(1)
     const rendered = dialect.sqlToQuery(executed[0])
@@ -35,7 +35,7 @@ describe('withTenant', () => {
   it('passes the transaction options through unchanged', async () => {
     const { database, configs } = fakeDatabase()
     const { withTenant } = createTenantAccess(database)
-    await withTenant(toTenantId(1), async () => null, { isolationLevel: 'repeatable read', accessMode: 'read only' })
+    await withTenant(tenantIdForTest(1), async () => null, { isolationLevel: 'repeatable read', accessMode: 'read only' })
     expect(configs).toEqual([{ isolationLevel: 'repeatable read', accessMode: 'read only' }])
   })
 

@@ -51,6 +51,11 @@ const config = [
       // no-restricted-imports guarda invece la stringa scritta nel file, che e'
       // esattamente cio' che la regola vuole vincolare.
       'no-restricted-imports': ['error', {
+        paths: [
+          { name: 'postgres', message: 'Il driver si usa solo in lib/db/: passa da withTenant o withGlobal (@/lib/db/tenant-db).' },
+          { name: 'drizzle-orm/postgres-js', message: 'Il driver si usa solo in lib/db/: passa da withTenant o withGlobal (@/lib/db/tenant-db).' },
+          { name: '@/lib/db/client', message: 'Il client si usa solo in lib/db/: passa da withTenant o withGlobal (@/lib/db/tenant-db).' },
+        ],
         patterns: [{
           group: ['../*', '../**'],
           message: 'Niente risalita nei percorsi relativi: usa l\'alias @/ fra feature, e i relativi (./) solo dentro lo stesso modulo locale.',
@@ -137,6 +142,20 @@ const config = [
     // - context/I18nContext.tsx: avviso dev-only per una traduzione mancante.
     files: ['app/(protected)/error.tsx', 'context/I18nContext.tsx'],
     rules: { 'no-console': ['error', { allow: ['warn', 'error'] }] },
+  },
+  {
+    // Le eccezioni al divieto sul driver (specifica 2026-10-13, §3.5): lo strato dati stesso, e i
+    // file di test (connessioni proprie per lock e fixture, Drizzle finti). La regola sui percorsi
+    // relativi resta accesa anche qui.
+    files: ['lib/db/**/*.ts', '**/*.test.ts', '**/*.test.tsx'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{
+          group: ['../*', '../**'],
+          message: 'Niente risalita nei percorsi relativi: usa l\'alias @/ fra feature, e i relativi (./) solo dentro lo stesso modulo locale.',
+        }],
+      }],
+    },
   },
 ]
 

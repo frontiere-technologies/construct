@@ -1,7 +1,6 @@
 import { afterEach, expect, it } from 'vitest'
 import { eq, like } from 'drizzle-orm'
-import { db } from '@/lib/db'
-import { withTenant } from '@/lib/db/tenant-db'
+import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
@@ -27,8 +26,8 @@ async function readerOf(code: string, status = USER_STATUS_ACTIVE): Promise<{ us
 }
 
 afterEach(async () => {
-  // Le scritture su `permission` restano su `db` finché il Task 9 non le sposta su `withOwner`.
-  await db.update(permission).set({ deprecatedAt: null }).where(eq(permission.code, 'read-menu'))
+  // Le scritture su `permission` passano da `withGlobal` finché il Task 9 non le sposta su `withOwner`.
+  await withGlobal(tx => tx.update(permission).set({ deprecatedAt: null }).where(eq(permission.code, 'read-menu')))
   await withTenant(defaultTestTenant(), async tx => {
     await tx.delete(users).where(like(users.email, `${PREFIX}%`))
     await tx.delete(role).where(like(role.description, `${PREFIX}%`))
@@ -45,7 +44,7 @@ describeIntegration('resolveActor', () => {
 
   it('does not count a deprecated permission, even while the grant row still exists', async () => {
     const { userId } = await readerOf('read-menu')
-    await db.update(permission).set({ deprecatedAt: new Date().toISOString() }).where(eq(permission.code, 'read-menu'))
+    await withGlobal(tx => tx.update(permission).set({ deprecatedAt: new Date().toISOString() }).where(eq(permission.code, 'read-menu')))
     const actor = await resolveActor(defaultTestTenant(), userId)
     expect(actor && [...actor.permissions]).toEqual([])
   })

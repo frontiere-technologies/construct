@@ -1,6 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { eq, like } from 'drizzle-orm'
-import { db } from '@/lib/db'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { menuEntry, permission, role, roleFunctionality, rolePermission } from '@/lib/db/schema'
@@ -34,10 +33,10 @@ async function makeServiceRole(): Promise<number> {
 }
 
 async function makePermission(kind: 'CATEGORY' | 'GRANT'): Promise<number> {
-  const [created] = await db
+  const [created] = await withGlobal(tx => tx
     .insert(permission)
     .values({ name: name(), kind, origin: 'CONSOLE' })
-    .returning({ idPermission: permission.idPermission })
+    .returning({ idPermission: permission.idPermission }))
   return created.idPermission
 }
 
@@ -64,7 +63,7 @@ describeIntegration('updateRolePermissions against the database', () => {
     // role_permission e role_functionality cascatano via id_role -> role; permission e
     // menu_entry invece restano finché non le si cancella esplicitamente qui.
     await withTenant(defaultTestTenant(), tx => tx.delete(role).where(like(role.description, `${PREFIX}%`)))
-    await db.delete(permission).where(like(permission.name, `${PREFIX}%`))
+    await withGlobal(tx => tx.delete(permission).where(like(permission.name, `${PREFIX}%`)))
     await withTenant(defaultTestTenant(), tx => tx.delete(menuEntry).where(like(menuEntry.name, `${PREFIX}%`)))
   })
 
