@@ -1,6 +1,6 @@
 import { describe } from 'vitest'
 import { like, or } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { appLanguage, translationKey } from '@/lib/db/schema'
 
 /** Every row these tests create carries this prefix so cleanup is unambiguous. */
@@ -26,9 +26,11 @@ export function testKey(suffix: string): string {
  * the two parent tables need sweeping.
  */
 export async function cleanupTestData(): Promise<void> {
-  await db.delete(translationKey).where(like(translationKey.key, `${TEST_PREFIX}%`))
-  await db.delete(appLanguage).where(or(
-    like(appLanguage.name, `${TEST_PREFIX}%`),
-    like(appLanguage.nativeName, `${TEST_PREFIX}%`),
-  )!)
+  await withGlobal(async tx => {
+    await tx.delete(translationKey).where(like(translationKey.key, `${TEST_PREFIX}%`))
+    await tx.delete(appLanguage).where(or(
+      like(appLanguage.name, `${TEST_PREFIX}%`),
+      like(appLanguage.nativeName, `${TEST_PREFIX}%`),
+    )!)
+  })
 }

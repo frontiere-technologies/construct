@@ -2,7 +2,7 @@ import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
 import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { appLanguage, users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { listLanguages } from './language-service'
@@ -50,12 +50,12 @@ async function profileLanguageCode(): Promise<string | null> {
   const userId = session?.user?.id
   if (!userId) return null
   try {
-    const [row] = await db
+    const [row] = await withGlobal(tx => tx
       .select({ code: appLanguage.code })
       .from(users)
       .leftJoin(appLanguage, eq(appLanguage.idLanguage, users.idLanguage))
       .where(eq(users.id, userId))
-      .limit(1)
+      .limit(1))
     return row?.code ?? null
   } catch (err) {
     log.error({ err }, 'failed to read the user language preference')

@@ -1,6 +1,6 @@
 import { cache } from 'react'
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, lt, or, sql, type SQL } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { listActiveLanguages } from './language-service'
@@ -214,7 +214,7 @@ export async function listTranslations(query: TranslationsQuery): Promise<Transl
   let keyRows: (typeof translationKey.$inferSelect)[]
   let total: number
   try {
-    const page = await db.transaction(async tx => {
+    const page = await withGlobal(async tx => {
       const rows = await tx.select().from(translationKey).where(where)
         .orderBy(...translationOrderBy(query))
         .limit(query.size).offset(query.page * query.size)
@@ -230,7 +230,7 @@ export async function listTranslations(query: TranslationsQuery): Promise<Transl
   if (keyRows.length === 0) return { total, elements: [] }
 
   const keyIds = keyRows.map(r => Number(r.idTranslationKey))
-  const valueRows = await db
+  const valueRows = await withGlobal(tx => tx
     .select({
       id: translationValue.idTranslationValue,
       keyId: translationValue.idTranslationKey,
@@ -240,20 +240,20 @@ export async function listTranslations(query: TranslationsQuery): Promise<Transl
     })
     .from(translationValue)
     .innerJoin(appLanguage, eq(appLanguage.idLanguage, translationValue.idLanguage))
-    .where(inArray(translationValue.idTranslationKey, keyIds))
+    .where(inArray(translationValue.idTranslationKey, keyIds)))
 
   return { total, elements: buildTranslationRows(keyRows, valueRows, languages) }
 }
 
 export const listNamespaces = cache(async (): Promise<string[]> => {
-  const rows = await db.selectDistinct({ namespace: translationKey.namespace })
-    .from(translationKey).orderBy(asc(translationKey.namespace))
+  const rows = await withGlobal(tx => tx.selectDistinct({ namespace: translationKey.namespace })
+    .from(translationKey).orderBy(asc(translationKey.namespace)))
   return rows.map(r => r.namespace)
 })
 
 export const listModules = cache(async (): Promise<string[]> => {
-  const rows = await db.selectDistinct({ module: translationKey.module })
-    .from(translationKey).where(isNotNull(translationKey.module)).orderBy(asc(translationKey.module))
+  const rows = await withGlobal(tx => tx.selectDistinct({ module: translationKey.module })
+    .from(translationKey).where(isNotNull(translationKey.module)).orderBy(asc(translationKey.module)))
   // `isNotNull` already excludes nulls at the SQL level; this narrows the type
   // to match rather than re-filtering behaviour the query already guarantees.
   return rows.map(r => r.module).filter((m): m is string => m !== null)
@@ -276,21 +276,23 @@ export async function getTranslationKeyRow(id: number): Promise<TranslationRowDt
   if (!Number.isInteger(id) || id <= 0) return null
   const languages = await listActiveLanguages()
 
-  const [keyRow] = await db.select().from(translationKey)
-    .where(eq(translationKey.idTranslationKey, id)).limit(1)
-  if (!keyRow) return null
+  return withGlobal(async tx => {
+    const [keyRow] = await tx.select().from(translationKey)
+      .where(eq(translationKey.idTranslationKey, id)).limit(1)
+    if (!keyRow) return null
 
-  const valueRows = await db
-    .select({
-      id: translationValue.idTranslationValue,
-      keyId: translationValue.idTranslationKey,
-      code: appLanguage.code,
-      value: translationValue.value,
-      version: translationValue.version,
-    })
-    .from(translationValue)
-    .innerJoin(appLanguage, eq(appLanguage.idLanguage, translationValue.idLanguage))
-    .where(eq(translationValue.idTranslationKey, id))
+    const valueRows = await tx
+      .select({
+        id: translationValue.idTranslationValue,
+        keyId: translationValue.idTranslationKey,
+        code: appLanguage.code,
+        value: translationValue.value,
+        version: translationValue.version,
+      })
+      .from(translationValue)
+      .innerJoin(appLanguage, eq(appLanguage.idLanguage, translationValue.idLanguage))
+      .where(eq(translationValue.idTranslationKey, id))
 
-  return buildTranslationRows([keyRow], valueRows, languages)[0] ?? null
+    return buildTranslationRows([keyRow], valueRows, languages)[0] ?? null
+  })
 }

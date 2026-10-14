@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers'
 import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { appLanguage, users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { allowSelfService } from '@/lib/rbac/access-declarations'
@@ -32,7 +32,7 @@ export async function setPreferredLanguage(code: string): Promise<{ error: strin
   const userId = session?.user?.id
   if (userId) {
     try {
-      await db.update(users).set({ idLanguage: language.id }).where(eq(users.id, userId))
+      await withGlobal(tx => tx.update(users).set({ idLanguage: language.id }).where(eq(users.id, userId)))
     } catch (err) {
       log.error({ err }, 'failed to persist the user language preference')
       return { error: 'Impossibile salvare la preferenza di lingua.' }
@@ -58,12 +58,12 @@ export async function getPreferredLanguage(): Promise<string | null> {
   const userId = session?.user?.id
   if (!userId) return null
   try {
-    const [row] = await db
+    const [row] = await withGlobal(tx => tx
       .select({ code: appLanguage.code })
       .from(users)
       .leftJoin(appLanguage, eq(appLanguage.idLanguage, users.idLanguage))
       .where(eq(users.id, userId))
-      .limit(1)
+      .limit(1))
     return row?.code ?? null
   } catch (err) {
     log.error({ err }, 'failed to read the user language preference')
