@@ -1222,12 +1222,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
     l'import di `db` da `@/lib/db` con un `vi.mock('@/lib/db/tenant-db', …)` il cui `withGlobal`
     chiama la callback con quel Drizzle finto.
 
-- [ ] **Step 1: Convertire `test-support/db-fixtures.ts`:** `cleanupTestData` usa
+- [✅] **Step 1: Convertire `test-support/db-fixtures.ts`:** `cleanupTestData` usa
   `withGlobal(async tx => { … })`.
 
-- [ ] **Step 2: Convertire i moduli** secondo R1–R4, poi i test dell'area (R5).
+- [✅] **Step 2: Convertire i moduli** secondo R1–R4, poi i test dell'area (R5).
 
-- [ ] **Step 3: Verificare.**
+- [✅] **Step 3: Verificare.**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint && npm run test && npm run test:integration`
 Expected: PASS.
@@ -1239,7 +1239,7 @@ Expected: PASS.
 
   Atteso: tutto come prima.
 
-- [ ] **Step 5: Commit.**
+- [✅] **Step 5: Commit.**
 
 ```bash
 git add sources/microservices/web-construct/lib/i18n
