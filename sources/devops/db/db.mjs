@@ -384,55 +384,62 @@ async function runDatabaseCommand(command, argument) {
   const testCommands = new Set(['test-query', 'test-reset-e2e', 'test-delete-user'])
   const sql = postgres(testCommands.has(command) ? testDatabaseUrl() : applicationDatabaseUrl(), {
     prepare: false,
-    max: 1, // una sola connessione: il tenant impostato sotto vale per ogni istruzione del comando
     connect_timeout: 30,
     idle_timeout: 5,
     onnotice: notice => console.log(`NOTICE: ${notice.message}`),
   })
-  // Dalla 0046 le tabelle di tenant ricevono id_tenant dal contesto, e dalla 0047 lo pretendono.
-  // Questi comandi lavorano sempre sul tenant predefinito: è l'unico in questo pezzo (specifica
-  // 2026-10-13, MTF-DEC-2). La connessione è dedicata al comando, quindi un set_config di sessione
-  // non arriva a nessun altro.
-  const [{ hasTenantTable }] = await sql`select to_regclass('public.tenant') is not null as "hasTenantTable"`
-  if (hasTenantTable) {
-    await sql`select set_config('app.tenant_id', (select id::text from public.tenant where slug = 'default'), false)`
-  }
   try {
-    if (command === 'test-reset-e2e') {
-      const emails = [process.env.TEST_EMAIL, process.env.TEST_EMAIL_USER].filter(Boolean)
-      if (!emails.length) throw new Error('TEST_EMAIL or TEST_EMAIL_USER is required')
-      // Lingua, tema e dimensione del testo stanno sul profilo, e il colore dell'app e' globale:
-      // un test che li cambia e non li rimette a posto altera tutti quelli dopo, senza che
-      // l'errore nomini mai la causa (vedi conftest.py, clean_language_preferences).
-      const result = await sql`
-        update users set id_language = null, theme_mode = 'system', text_scale = 100
-        where email = any(${emails})
-      `
-      // Anche il colore del modo scuro (0038) e le quattro superfici per modo (0033): null vuol dire
-      // «ricavato dal chiaro» e «il valore fisso».
-      await sql`
-        update app_theme set primary_color = '#4f46e5', primary_dark = null,
-          background_light = null, card_light = null, accent_light = null, sidebar_light = null,
-          background_dark = null, card_dark = null, accent_dark = null, sidebar_dark = null,
-          date_mod = now()
-      `
-      console.log(`reset language and appearance for ${result.count} E2E fixture user(s) and the app theme`)
-    } else if (command === 'test-delete-user') {
-      const email = process.env.E2E_REGISTER_EMAIL
-      if (!email) throw new Error('E2E_REGISTER_EMAIL is required')
-      const result = await sql`delete from users where email = ${email}`
-      console.log(`deleted ${result.count} E2E registration fixture user(s)`)
-    } else {
-      if (!argument) throw new Error('query requires a SQL argument')
-      const result = await sql.unsafe(argument).simple()
-      const resultSets = Array.isArray(result[0]) ? result : [result]
-      for (const rows of resultSets) {
-        if (rows.length) console.table([...rows])
-        else console.log('(0 rows)')
+    // Dalla 0046 le tabelle di tenant ricevono id_tenant dal contesto, e dalla 0047 lo pretendono.
+    // Questi comandi lavorano sempre sul tenant predefinito: è l'unico in questo pezzo (specifica
+    // 2026-10-13, MTF-DEC-2). Nessuno stato di sessione (MTF-DEC-7): dietro il pooler in modalità
+    // transazione ogni istruzione fuori da una transazione può finire su un altro processo del
+    // server, e un set_config di sessione resterebbe lì per chiunque arrivi dopo. Il comando gira
+    // quindi in una transazione sola, con il tenant impostato a livello di transazione.
+    const [{ hasTenantTable }] = await sql`select to_regclass('public.tenant') is not null as "hasTenantTable"`
+    await sql.begin(async tx => {
+      if (hasTenantTable) {
+        await tx`select set_config('app.tenant_id', (select id::text from public.tenant where slug = 'default'), true)`
       }
-    }
+      await runCommandBody(tx, command, argument)
+    })
   } finally {
     await sql.end({ timeout: 5 })
+  }
+}
+
+async function runCommandBody(sql, command, argument) {
+  if (command === 'test-reset-e2e') {
+    const emails = [process.env.TEST_EMAIL, process.env.TEST_EMAIL_USER].filter(Boolean)
+    if (!emails.length) throw new Error('TEST_EMAIL or TEST_EMAIL_USER is required')
+    // Lingua, tema e dimensione del testo stanno sul profilo, e il colore dell'app e' globale:
+    // un test che li cambia e non li rimette a posto altera tutti quelli dopo, senza che
+    // l'errore nomini mai la causa (vedi conftest.py, clean_language_preferences).
+    const result = await sql`
+      update users set id_language = null, theme_mode = 'system', text_scale = 100
+      where email = any(${emails})
+    `
+    // Anche il colore del modo scuro (0038) e le quattro superfici per modo (0033): null vuol dire
+    // «ricavato dal chiaro» e «il valore fisso».
+    await sql`
+      update app_theme set primary_color = '#4f46e5', primary_dark = null,
+        background_light = null, card_light = null, accent_light = null, sidebar_light = null,
+        background_dark = null, card_dark = null, accent_dark = null, sidebar_dark = null,
+        date_mod = now()
+    `
+    console.log(`reset language and appearance for ${result.count} E2E fixture user(s) and the app theme`)
+  } else if (command === 'test-delete-user') {
+    const email = process.env.E2E_REGISTER_EMAIL
+    if (!email) throw new Error('E2E_REGISTER_EMAIL is required')
+    const result = await sql`delete from users where email = ${email}`
+    console.log(`deleted ${result.count} E2E registration fixture user(s)`)
+  } else {
+    if (!argument) throw new Error('query requires a SQL argument')
+    const result = await sql.unsafe(argument).simple()
+    const resultSets = Array.isArray(result[0]) ? result : [result]
+    for (const rows of resultSets) {
+      if (rows.length) console.table([...rows])
+      else console.log('(0 rows)')
+    }
   }
 }
 
