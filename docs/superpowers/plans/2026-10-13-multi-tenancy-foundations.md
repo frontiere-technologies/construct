@@ -126,7 +126,7 @@ migrazioni può creare `construct_owner`, cedergli la proprietà degli oggetti e
 
 **Files:** nessuno nel repository. Gli script stanno nella cartella scratchpad della sessione.
 
-- [ ] **Step 1: Ricreare da zero il database usa e getta.** Serve un database con tutte le
+- [✅] **Step 1: Ricreare da zero il database usa e getta.** Serve un database con tutte le
   migrazioni applicate. Lanciare dalla radice del repository:
 
 ```bash
@@ -135,7 +135,7 @@ set -a && . ./sources/devops/db/operator.env && set +a && TEST_DATABASE_DISPOSAB
 
 Atteso: `applied migration(s): …` oppure `database schema is up to date`.
 
-- [ ] **Step 2: Eseguire la prova sul database usa e getta, come utente delle migrazioni.**
+- [✅] **Step 2: Eseguire la prova sul database usa e getta, come utente delle migrazioni.**
 
 ```bash
 set -a && . ./sources/devops/db/operator.env && set +a && DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" node sources/devops/db/db.mjs query "
@@ -160,12 +160,12 @@ rollback;
 Atteso: la tabella finale elenca le tre relazioni con proprietario `construct_owner_probe`, e
 nessun `ERROR`. Il `rollback` lascia il database com'era.
 
-- [ ] **Step 3: Decidere.**
+- [✅] **Step 3: Decidere.**
   - **Se la prova passa**, proseguire con il Task 2.
   - **Se fallisce**, fermarsi e riportare l'errore esatto al proprietario del progetto: va rivista
     la §2.1 della specifica (MTF-RISK-1) prima di qualunque altro task.
 
-- [ ] **Step 4: Segnare MTF-1 e MTF-RISK-1** come `- [✅]` nella specifica e committare.
+- [✅] **Step 4: Segnare MTF-1 e MTF-RISK-1** come `- [✅]` nella specifica e committare.
 
 ```bash
 git add docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md
@@ -362,8 +362,9 @@ $$;
 grant construct_owner to current_user;
 
 -- Permessi di creazione, non attributi del ruolo: servono per creare tabelle in public (0002
--- l'ha chiuso a PUBLIC) e per creare lo schema app_private (0046).
-grant create on schema public to construct_owner;
+-- l'ha chiuso a PUBLIC) e per creare lo schema app_private (0046). Anche usage: 0002 l'ha tolto a
+-- PUBLIC, e senza di esso come construct_owner nessun nome di public si risolve (prova di MTF-1).
+grant usage, create on schema public to construct_owner;
 do $$
 begin
   execute format('grant create on database %I to construct_owner', current_database());

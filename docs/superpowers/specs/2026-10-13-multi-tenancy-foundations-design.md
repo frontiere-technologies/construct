@@ -140,7 +140,9 @@ utente amministrativo: l'esecutore fa `set local role` solo se `construct_owner`
 **Permessi di creazione.** Perché le migrazioni possano creare oggetti lavorando come
 `construct_owner`, la stessa migrazione concede `create` sullo schema `public` (che 0002 ha tolto
 a PUBLIC) e `create` sul database, che serve per creare `app_private`. Sono permessi, non
-attributi del ruolo: `construct_owner` resta NOCREATEDB e NOCREATEROLE.
+attributi del ruolo: `construct_owner` resta NOCREATEDB e NOCREATEROLE. Serve anche `usage` su
+`public`, che 0002 ha tolto a PUBLIC: senza, lavorando come `construct_owner` non si risolve
+nessun nome dello schema (prova di MTF-1).
 
 **Permessi predefiniti** (`alter default privileges for role construct_owner`): gli oggetti futuri
 concedono `select, insert, update, delete` sulle tabelle e `usage, select` sulle sequenze a
@@ -493,7 +495,7 @@ Nuovo file `lib/db/tenant-concurrency.integration.test.ts`.
 Ogni passo si rilascia da solo e lascia l'app funzionante. I numeri di migrazione partono da
 0044.
 
-- [ ] ID=MTF-1, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Prova della cessione di proprietà, Fix description=Su un database usa e getta Supabase: creare `construct_owner`, renderne membro l'utente delle migrazioni, concedergli `create` su `public` e sul database, cedergli tabelle, sequenze, funzioni e vista, eseguire una migrazione con `set local role construct_owner` che crea uno schema e una tabella. Se fallisce, si torna a §2.1 prima di proseguire.
+- [✅] ID=MTF-1, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Prova della cessione di proprietà, Fix description=Su un database usa e getta Supabase: creare `construct_owner`, renderne membro l'utente delle migrazioni, concedergli `create` su `public` e sul database, cedergli tabelle, sequenze, funzioni e vista, eseguire una migrazione con `set local role construct_owner` che crea uno schema e una tabella. Se fallisce, si torna a §2.1 prima di proseguire. **Esito (2026-10-14):** riuscita su Supabase 17.6 come `postgres` (non superuser), a due condizioni: il ruolo ha bisogno anche di `usage` su `public`, che la 0002 ha tolto a PUBLIC, altrimenti come `construct_owner` non risolve i nomi (`42501 permission denied for schema public`); e una sequenza legata a una colonna non si cede da sola (`0A000`), segue la sua tabella.
 - [ ] ID=MTF-2, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Migrazione: rischi di oggi, Fix description=`replace_menu_entry_tags` INVOKER con `search_path = ''`; via `user_info`, `role_history`, `trg_role_delete`, `replace_user_roles`; Drizzle e contratto di schema allineati.
 - [ ] ID=MTF-3, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Migrazione: `construct_owner`, Fix description=Ruolo, proprietà di tutti gli oggetti, permessi predefiniti spostati su `construct_owner`, esecutore di `db.mjs` con `set local role` e `reset role`, `provision-runtime-role` e contratto aggiornati.
 - [ ] ID=MTF-4, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=days, Title=Codice: nuovo strato dati, Fix description=`lib/db/client.ts`, `lib/db/tenant-db.ts`, `lib/tenancy/` (con il tenant predefinito come costante finché non esiste la tabella); tutti i servizi, le azioni, le route e i callback con la nuova forma (§3.4); ESLint e test AST. `set_config` viene già chiamato, ma nessuna policy lo legge ancora: comportamento identico.
@@ -528,7 +530,7 @@ Il progetto non ha migrazioni all'indietro.
 
 ## 6. Rischi e verifiche
 
-- [ ] ID=MTF-RISK-1, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Cessione di proprietà su Supabase, Fix description=Non provata: è MTF-1. Se `postgres` non può cedere la proprietà a `construct_owner` o fare `set role`, va trovata un'alternativa che mantenga MTF-DEC-4 prima di MTF-3.
+- [✅] ID=MTF-RISK-1, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Cessione di proprietà su Supabase, Fix description=Non provata: è MTF-1. Se `postgres` non può cedere la proprietà a `construct_owner` o fare `set role`, va trovata un'alternativa che mantenga MTF-DEC-4 prima di MTF-3. **Chiuso il 2026-10-14** dalla prova di MTF-1: la cessione funziona, con `usage` su `public` in più.
 - [ ] ID=MTF-RISK-2, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Costo delle transazioni nel callback `jwt`, Fix description=Il callback gira a ogni richiesta del middleware e ora apre una transazione breve con `set_config`. Misurare la latenza prima e dopo MTF-4 sulle pagine principali; se sale in modo sensibile, unire le letture dell'autorizzazione in una sola query.
 - [ ] ID=MTF-RISK-3, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Letture parallele eseguite in serie, Fix description=I loader con `Promise.all` dentro una sola transazione eseguono le query una dopo l'altra. Misurare le pagine con più loader (menu, griglie); dividere in più `withTenant` dove serve.
 - [ ] ID=MTF-RISK-4, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Pipelining di postgres.js in modalità transazione, Fix description=Supabase lo indica come fonte di righe sbagliate fuori dalle transazioni. Con ogni query in transazione il rischio è coperto, e il test di §4.3 lo verifica.
