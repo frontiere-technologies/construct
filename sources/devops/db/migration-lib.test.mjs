@@ -262,4 +262,21 @@ test('parseApplyArguments reads an optional --to <version>', () => {
   assert.throws(() => parseApplyArguments(['--to']), /--to requires a version/i)
   assert.throws(() => parseApplyArguments(['--to', '0045', 'extra']), /unexpected argument/i)
   assert.throws(() => parseApplyArguments(['0045']), /unexpected argument/i)
+  assert.throws(() => parseApplyArguments(['--to=0045']), /use --to 0045/)
+})
+
+// Una migrazione in sospeso sotto la versione scelta, con una più recente già applicata, si applica
+// comunque: --to taglia in alto, non decide da dove ripartire.
+test('applyPendingMigrations with a target applies an older pending migration below it', async () => {
+  const calls = []
+  const adapter = {
+    loadHistory: async () => [{ version: '0002', checksum: '0002'.repeat(16), completedAt: new Date() }],
+    markStarted: async migration => calls.push(`start:${migration.version}`),
+    runInTransaction: async migration => calls.push(`run:${migration.version}`),
+  }
+
+  const applied = await applyPendingMigrations(adapter, stagedMigrations, { to: '0003' })
+
+  assert.deepEqual(applied, ['0001', '0003'])
+  assert.deepEqual(calls, ['start:0001', 'run:0001', 'start:0003', 'run:0003'])
 })

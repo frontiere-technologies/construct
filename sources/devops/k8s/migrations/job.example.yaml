@@ -11,6 +11,9 @@ spec:
       containers:
         - name: migrate
           image: ghcr.io/example/construct-migrations@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          # Rilascio a tappe (README, "Rilascio in produzione"): per fermarsi a una versione,
+          # command: ["node", "sources/devops/db/db.mjs", "apply", "--to", "0045"]
+          # L'immagine di questo job deve contenere `--to` (ramo finale o development dopo l'unione).
           command: ["node", "sources/devops/db/db.mjs", "apply"]
           env:
             - name: MIGRATION_DATABASE_URL

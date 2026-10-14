@@ -76,6 +76,9 @@ export function selectMigrationsUpTo(migrations, to) {
 
 export function parseApplyArguments(args) {
   if (args.length === 0) return { to: undefined }
+  if (args[0].startsWith('--to=')) {
+    throw new Error(`Unexpected argument "${args[0]}": use --to ${args[0].slice('--to='.length)}`)
+  }
   if (args[0] !== '--to') throw new Error(`Unexpected argument "${args[0]}"`)
   if (args.length < 2) throw new Error('--to requires a version, for example --to 0045')
   if (args.length > 2) throw new Error(`Unexpected argument "${args[2]}"`)
@@ -83,10 +86,10 @@ export function parseApplyArguments(args) {
 }
 
 export async function applyPendingMigrations(adapter, migrations, { to } = {}) {
-  // La selezione avviene prima di toccare il database, cosi' una versione inesistente fallisce subito.
+  // La selezione avviene prima di toccare il database, così una versione inesistente fallisce subito.
   const selected = selectMigrationsUpTo(migrations, to)
   const historyRows = await adapter.loadHistory()
-  // Il controllo dei checksum vale per l'elenco intero, non per quello tagliato: una migrazione gia'
+  // Il controllo dei checksum vale per l'elenco intero, non per quello tagliato: una migrazione già
   // applicata oltre la versione scelta non e' "assente dal repository".
   assertAppliedMigrationChecksums(migrations, historyRows)
   const historyByVersion = new Map(historyRows.map(row => [row.version, row]))

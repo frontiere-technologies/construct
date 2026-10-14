@@ -152,17 +152,27 @@ fallire il comando prima di toccare il database; se è già applicata, il comand
 |---|---|---|---|
 | R1 | Tutto il codice fino a MTF-4: ogni accesso ai dati passa da `withTenant` o `withGlobal` | `db.mjs apply --to 0045` | Il codice nuovo funziona anche sul database vecchio, e le migrazioni 0044 e 0045 non rompono i pod vecchi. Va prima di tutto il resto: dalla 0046 `id_tenant` ha come valore predefinito una funzione che richiede il contesto del tenant, e solo il codice di R1 lo imposta sempre. |
 | R2 | Il tenant preso dal contesto della richiesta e i ruoli di sistema cercati per chiave (MTF-6) | `db.mjs apply --to 0046` | La 0046 aggiunge la tabella dei tenant, cambia chiavi e colonne (per esempio toglie `app_theme.id`) e dà a `id_tenant` il valore predefinito che richiede il contesto. Il codice che non imposta il contesto, o che usa le colonne tolte, sbaglia. |
-| R3 | Nessun codice nuovo | `db.mjs apply` (applica la 0047) | La 0047 accende la sicurezza per riga (RLS): da lì **ogni** lettura e scrittura delle tabelle di tenant richiede il contesto, anche l'accesso. Si lancia solo quando tutti i pod di R2 sono in esecuzione e non ne è rimasto nessuno più vecchio. |
+| R3 | Nessun codice nuovo | `db.mjs apply --to 0047` | La 0047 accende la sicurezza per riga (RLS): da lì **ogni** lettura e scrittura delle tabelle di tenant richiede il contesto, anche l'accesso. `--to 0047` evita di trascinare migrazioni più recenti arrivate nel frattempo su `development`. Si lancia solo quando tutti i pod di R2 sono in esecuzione e non ne è rimasto nessuno più vecchio. |
 
 Cosa tenere presente:
 
-- R1 e R2 sono due immagini diverse, costruite da due punti diversi della storia del ramo: R1 dal
-  commit che chiude MTF-4 (`e0868d5`, «the database is reachable only through withTenant and
-  withGlobal»), R2 da quello che chiude MTF-6 (`0b19314`, «system roles are found by key in the
-  request tenant»). Il codice finale del ramo, che contiene anche la 0046 e la 0047, non funziona
-  su un database fermo alla 0045. Chi unisce il ramo in `development` in un colpo solo deve
-  comunque rilasciare in tre tappe, costruendo le immagini da quei due punti (o da commit
-  equivalenti dopo l'unione).
+- Le immagini dell'app e quella del job delle migrazioni sono cose diverse.
+  - **Immagini dell'app (R1 e R2):** costruite da due punti diversi della storia del ramo. R1 dal
+    commit che chiude MTF-4 (`e0868d5`, «the database is reachable only through withTenant and
+    withGlobal»), R2 da quello che chiude MTF-6 (`0b19314`, «system roles are found by key in the
+    request tenant»). Il codice finale del ramo, che contiene anche la 0046 e la 0047, non funziona
+    su un database fermo alla 0045. Prima di una unione con squash conviene dare a quei due commit
+    un'etichetta (tag), altrimenti non si ritrovano più.
+  - **Immagine del job delle migrazioni (`construct-migrations`, vedi
+    `sources/devops/k8s/migrations/job.example.yaml`):** viene sempre da un albero che contiene
+    `--to`, cioè il ramo finale o `development` dopo l'unione. A `e0868d5` e a `0b19314` `db.mjs`
+    non conosce `--to` e le migrazioni si fermano alla 0045 e alla 0046: un job costruito da lì
+    ignorerebbe `--to` in silenzio. È `--to` che, nel job costruito dal ramo finale, impedisce di
+    applicare più del dovuto.
+  - Un'unione in `development` in un colpo solo rilascia quindi comunque in tre tappe: app da
+    `e0868d5`, poi da `0b19314`, e ogni volta il job dal ramo finale con il suo `--to`.
+- Finestra di R2: tra il job con la 0046 e la sostituzione dell'ultimo pod di R1, salvare il tema
+  fallisce nei pod di R1 (la 0046 toglie `app_theme.id`); leggerlo continua a funzionare.
 - La tappa successiva non parte finché la precedente non è completa su tutti i pod.
 - Ritorno indietro: il progetto non ha migrazioni all'indietro. Per le tappe di solo codice si torna
   all'immagine precedente. Se dopo R3 emerge un errore, una migrazione di correzione rimette sulle
