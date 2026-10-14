@@ -578,7 +578,7 @@ export async function withOwner<T>(fn: (tx: OwnerTx) => Promise<T>, tenantId?: T
 export async function closeOwner(): Promise<void>
 ```
 
-- [ ] **Step 1: Test unitari di `TenantId`.** Creare `lib/tenancy/tenant-id.test.ts`:
+- [✅] **Step 1: Test unitari di `TenantId`.** Creare `lib/tenancy/tenant-id.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest'
@@ -599,7 +599,7 @@ describe('toTenantId', () => {
 })
 ```
 
-- [ ] **Step 2: Test unitari di `withTenant` e `withGlobal`.** Creare `lib/db/tenant-db.test.ts`.
+- [✅] **Step 2: Test unitari di `withTenant` e `withGlobal`.** Creare `lib/db/tenant-db.test.ts`.
   Usano un database finto: `createTenantAccess` riceve qualunque oggetto con `transaction`.
 
 ```ts
@@ -662,12 +662,12 @@ describe('withGlobal', () => {
 })
 ```
 
-- [ ] **Step 3: Verificare che falliscano.**
+- [✅] **Step 3: Verificare che falliscano.**
 
 Run: `cd sources/microservices/web-construct && npx vitest run lib/db/tenant-db.test.ts lib/tenancy/tenant-id.test.ts`
 Expected: FAIL, `Cannot find module './tenant-db'` e `'./tenant-id'`.
 
-- [ ] **Step 4: Scrivere `lib/tenancy/tenant-id.ts`.**
+- [✅] **Step 4: Scrivere `lib/tenancy/tenant-id.ts`.**
 
 ```ts
 /**
@@ -687,7 +687,7 @@ export function toTenantId(value: number): TenantId {
 }
 ```
 
-- [ ] **Step 5: Scrivere `lib/tenancy/request-tenant.ts`**, versione del Task 4: il tenant
+- [✅] **Step 5: Scrivere `lib/tenancy/request-tenant.ts`**, versione del Task 4: il tenant
   predefinito come costante, perché la tabella `tenant` arriva nel Task 7.
 
 ```ts
@@ -701,7 +701,7 @@ import { toTenantId, type TenantId } from './tenant-id'
 export const resolveRequestTenant = cache(async (): Promise<TenantId> => toTenantId(1))
 ```
 
-- [ ] **Step 6: Scrivere `lib/tenancy/testing.ts`.**
+- [✅] **Step 6: Scrivere `lib/tenancy/testing.ts`.**
 
 ```ts
 import { toTenantId, type TenantId } from './tenant-id'
@@ -717,7 +717,7 @@ export function tenantIdForTest(id: number): TenantId {
 }
 ```
 
-- [ ] **Step 7: Scrivere `lib/db/client.ts`.** Il contenuto di oggi di `lib/db.ts` diventa una
+- [✅] **Step 7: Scrivere `lib/db/client.ts`.** Il contenuto di oggi di `lib/db.ts` diventa una
   fabbrica.
 
 ```ts
@@ -748,7 +748,7 @@ export function createDatabase(url: string, options: { max?: number } = {}) {
 export const db: Database = createDatabase(resolveDatabaseUrl(process.env)).database
 ```
 
-- [ ] **Step 8: Scrivere `lib/db/tenant-db.ts`.**
+- [✅] **Step 8: Scrivere `lib/db/tenant-db.ts`.**
 
 ```ts
 import { sql } from 'drizzle-orm'
@@ -816,7 +816,7 @@ export const withTenant = access.withTenant
 export const withGlobal = access.withGlobal
 ```
 
-- [ ] **Step 9: Rendere `lib/db.ts` una riesportazione transitoria.** Viene rimosso nel Task 6,
+- [✅] **Step 9: Rendere `lib/db.ts` una riesportazione transitoria.** Viene rimosso nel Task 6,
   quando nessuno lo importa più. Sostituirne il contenuto con:
 
 ```ts
@@ -825,7 +825,7 @@ export const withGlobal = access.withGlobal
 export { db } from './db/client'
 ```
 
-- [ ] **Step 10: Aiuto per i test che scrivono come proprietario.** Creare `lib/db/testing.ts`.
+- [✅] **Step 10: Aiuto per i test che scrivono come proprietario.** Creare `lib/db/testing.ts`.
 
 ```ts
 import { sql } from 'drizzle-orm'
@@ -864,7 +864,7 @@ export async function closeOwner(): Promise<void> {
 }
 ```
 
-- [ ] **Step 11: Rendere disponibile `TEST_MIGRATION_DATABASE_URL` ai test di integrazione.**
+- [✅] **Step 11: Rendere disponibile `TEST_MIGRATION_DATABASE_URL` ai test di integrazione.**
   - **In CI** è già nell'ambiente del job.
   - **In locale** sta in `sources/devops/db/operator.env`, che non deve finire in
     `.env.test.local`, perché quel file viene caricato in un processo Next.
@@ -887,12 +887,12 @@ if (process.env.TEST_MIGRATION_DATABASE_URL === undefined && existsSync(operator
   Poi aggiungere in cima gli import `import { existsSync, readFileSync } from 'node:fs'` e
   `import { parseEnv } from 'node:util'`.
 
-- [ ] **Step 12: Verificare che i test passino.**
+- [✅] **Step 12: Verificare che i test passino.**
 
 Run: `cd sources/microservices/web-construct && npx vitest run lib/db/tenant-db.test.ts lib/tenancy/tenant-id.test.ts && npx tsc --noEmit && npm run test`
 Expected: PASS. Nessun errore di tipo: per ora `lib/db.ts` riesporta lo stesso `db`.
 
-- [ ] **Step 13: Commit.**
+- [✅] **Step 13: Commit.**
 
 ```bash
 git add sources/microservices/web-construct/lib/db sources/microservices/web-construct/lib/tenancy \
