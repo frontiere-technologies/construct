@@ -155,9 +155,9 @@ describeIntegration('updateRolePermissions against the database', () => {
   })
 
   // Revisione Task 4, giro 1 (RILIEVO 1): le quattro guardie sopra rifiutano PRIMA di
-  // eseguire qualunque `tx.execute` — il che le rende vere anche con due `db.execute` nudi,
-  // senza transazione, perché la scrittura rifiutata non viene mai nemmeno tentata. Non
-  // difendono quindi la proprietà che il commento di updateRolePermissions dichiara: «un
+  // eseguire qualunque `tx.execute` — il che le rende vere anche con due transazioni
+  // `withTenant` separate, una per albero, perché la scrittura rifiutata non viene mai
+  // nemmeno tentata. Non difendono quindi la proprietà che il commento di updateRolePermissions dichiara: «un
   // rifiuto su un albero non deve lasciare scritto l'altro».
   //
   // Per esercitare DAVVERO quella proprietà serve una scrittura che fallisca DOPO che
@@ -169,10 +169,10 @@ describeIntegration('updateRolePermissions against the database', () => {
   // `role_functionality.id_menu_entry` verso `menu_entry` — un rifiuto del DATABASE, non di
   // una guardia JS, e arriva DOPO che la scrittura delle operazioni è già stata eseguita
   // (l'ordine nel codice è: guardie di entrambi gli alberi, poi esecuzione di entrambi,
-  // operazioni prima). Verificato spostando temporaneamente la transazione a due
-  // `db.execute` indipendenti: senza transazione questo test fallisce (`grantId` resta
-  // scritto in `role_permission`); con la transazione passa. Vedi il rapporto del Task 4
-  // per la prova.
+  // operazioni prima). Verificato spostando temporaneamente la scrittura in due
+  // transazioni `withTenant` indipendenti, una per albero: senza una transazione comune
+  // questo test fallisce (`grantId` resta scritto in `role_permission`); con la
+  // transazione passa. Vedi il rapporto del Task 4 per la prova.
   it('un fallimento sulla scrittura delle funzionalità annulla anche la scrittura delle operazioni già eseguita, nella stessa transazione', async () => {
     const roleId = await makeServiceRole()
     const grantId = await makePermission('GRANT')

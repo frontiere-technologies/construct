@@ -266,7 +266,8 @@ describeIntegration('navigation mutations against the database', () => {
       .from(menuEntry)
       .where(like(menuEntry.name, `${PREFIX}%`)))
     expect(new Set(rows.map(row => row.position)).size).toBe(rows.length)
-  })
+    // DB remoto, un UPDATE per fratello dentro il lock del menu: ~5-6 s, oltre il timeout predefinito.
+  }, 15_000)
 
   it('serializes subtree deletion with every other navigation write', async () => {
     const { id } = await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`))

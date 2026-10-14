@@ -71,20 +71,6 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
     throw new Error('Invalid input')
   }
 
-  // Una cartella non riceve mai una riga di concessione (DEC-20). L'invariante viveva solo
-  // nelle funzioni pure lato client, ed è la classe di errore che ha prodotto HOLE-5: una
-  // regola affidata alla buona educazione del chiamante, che regge finché tutti i chiamanti
-  // sono quelli che conosci. Una server action è un endpoint HTTP: la sua sicurezza non può
-  // dipendere da quale modulo la chiama.
-  //
-  // Politica severa e non tollerante, su ENTRAMBI gli alberi: un delta verso una cartella
-  // rifiuta l'INTERA chiamata invece di essere scartato in silenzio. Scartarlo nasconderebbe
-  // un chiamante difettoso di domani — lo stesso silenzio che in applyToggle ha prodotto
-  // HOLE-5, spostato di un livello.
-  //
-  // Il criterio è dedotto dai DATI SALVATI, non dall'input: `kind` sulla riga di permission,
-  // `id_functionality_type` nullo sulla voce di menu. Nessuna forma dell'input può spacciare
-  // una cartella per una foglia.
   await withTenant(actor.tenantId, async tx => {
     if ((await getRoleType(tx, roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
 
@@ -100,6 +86,20 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
       assertCanGrantFunctionalities(actor, visible, grantedFunctionalities)
     }
 
+    // Una cartella non riceve mai una riga di concessione (DEC-20). L'invariante viveva solo
+    // nelle funzioni pure lato client, ed è la classe di errore che ha prodotto HOLE-5: una
+    // regola affidata alla buona educazione del chiamante, che regge finché tutti i chiamanti
+    // sono quelli che conosci. Una server action è un endpoint HTTP: la sua sicurezza non può
+    // dipendere da quale modulo la chiama.
+    //
+    // Politica severa e non tollerante, su ENTRAMBI gli alberi: un delta verso una cartella
+    // rifiuta l'INTERA chiamata invece di essere scartato in silenzio. Scartarlo nasconderebbe
+    // un chiamante difettoso di domani — lo stesso silenzio che in applyToggle ha prodotto
+    // HOLE-5, spostato di un livello.
+    //
+    // Il criterio è dedotto dai DATI SALVATI, non dall'input: `kind` sulla riga di permission,
+    // `id_functionality_type` nullo sulla voce di menu. Nessuna forma dell'input può spacciare
+    // una cartella per una foglia.
     if (deltas.operations.length) {
       const targeted = await tx
         .select({ idPermission: permission.idPermission, kind: permission.kind })
