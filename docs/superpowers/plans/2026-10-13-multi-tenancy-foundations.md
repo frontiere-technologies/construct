@@ -189,7 +189,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces: in `public` non resta nessuna funzione SECURITY DEFINER; spariscono `role_history`,
   `user_info`, `trg_role_delete`, `replace_user_roles`.
 
-- [ ] **Step 1: Scrivere il test che fallisce.** In `lib/schema-contract.integration.test.ts`,
+- [✅] **Step 1: Scrivere il test che fallisce.** In `lib/schema-contract.integration.test.ts`,
   aggiungere dentro `describeIntegration('database runtime boundary', …)`, dopo
   `uses an invoker-rights view…`:
 
@@ -206,12 +206,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   })
 ```
 
-- [ ] **Step 2: Verificare che fallisca.**
+- [✅] **Step 2: Verificare che fallisca.**
 
 Run: `cd sources/microservices/web-construct && npm run test:integration -- lib/schema-contract.integration.test.ts`
 Expected: FAIL, `expected [ 'replace_menu_entry_tags' ] to deeply equal []`.
 
-- [ ] **Step 3: Scrivere la migrazione** `0044_tenancy_risk_cleanup.sql`:
+- [✅] **Step 3: Scrivere la migrazione** `0044_tenancy_risk_cleanup.sql`:
 
 ```sql
 -- Multi-tenancy, pezzo 1 (specifica 2026-10-13, MTF-2): via i rischi di oggi prima di
@@ -248,7 +248,7 @@ drop table if exists public.user_info;
 drop function if exists public.replace_user_roles(uuid, bigint[]);
 ```
 
-- [ ] **Step 4: Allineare Drizzle.**
+- [✅] **Step 4: Allineare Drizzle.**
   - In `lib/db/schema.ts`, cancellare le dichiarazioni `export const roleHistory = …` e
     `export const userInfo = …` con il loro blocco.
   - Verificare che nessun altro file le usi:
@@ -256,7 +256,7 @@ drop function if exists public.replace_user_roles(uuid, bigint[]);
 Run: `cd sources/microservices/web-construct && grep -rn "roleHistory\|userInfo\|replace_user_roles(" app lib components | grep -v guarded`
 Expected: nessuna riga.
 
-- [ ] **Step 5: Applicare e rigenerare lo snapshot.**
+- [✅] **Step 5: Applicare e rigenerare lo snapshot.**
 
 ```bash
 set -a && . ./sources/devops/db/operator.env && set +a && TEST_DATABASE_DISPOSABLE=1 node sources/devops/db/db.mjs test-apply
@@ -266,17 +266,17 @@ node sources/devops/db/db.mjs schema-check
 
 Expected: `applied migration(s): 0044`, poi `schema.sql matches ordered migrations`.
 
-- [ ] **Step 6: Verificare che il contratto passi.**
+- [✅] **Step 6: Verificare che il contratto passi.**
 
 Run: `cd sources/microservices/web-construct && npm run test:integration -- lib/schema-contract.integration.test.ts`
 Expected: PASS, compreso il confronto fra catalogo e modello Drizzle senza le due tabelle.
 
-- [ ] **Step 7: Lanciare tutta la suite di integrazione e quella unitaria.**
+- [✅] **Step 7: Lanciare tutta la suite di integrazione e quella unitaria.**
 
 Run: `cd sources/microservices/web-construct && npm run test && npm run test:integration`
 Expected: PASS.
 
-- [ ] **Step 8: Commit e checkbox.** Segnare MTF-2 come `- [✅]` nella specifica.
+- [✅] **Step 8: Commit e checkbox.** Segnare MTF-2 come `- [✅]` nella specifica.
 
 ```bash
 git add sources/devops/db/migrations/0044_tenancy_risk_cleanup.sql sources/devops/db/schema.sql \
