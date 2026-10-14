@@ -1161,20 +1161,20 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | `theme-actions.ts`, `saveAppTheme` | `withTenant(actor.tenantId, …)` | invariata; `returning({ id: appTheme.id })` resta fino al Task 7 |
 | route e pagine dell'elenco | `withGlobal` | invariata |
 
-- [ ] **Step 1: Aggiornare i test unitari di `theme-server`** (`lib/theme-server.test.ts`): ogni
+- [✅] **Step 1: Aggiornare i test unitari di `theme-server`** (`lib/theme-server.test.ts`): ogni
   chiamata diventa `getAppTheme(defaultTestTenant())`.
 
 Run: `npx tsc --noEmit`
 Expected: FAIL, numero di argomenti di `getAppTheme`.
 
-- [ ] **Step 2: Convertire i moduli della tabella** secondo R1–R4.
+- [✅] **Step 2: Convertire i moduli della tabella** secondo R1–R4.
   - In `app/layout.tsx` la chiamata diventa `getAppTheme(await resolveRequestTenant())`: è la
     lettura di dati di tenant prima dell'accesso (Review Focus 4).
   - In `health/ready/route.ts` diventa `await withGlobal(tx => tx.execute(sql\`select 1\`))`.
 
-- [ ] **Step 3: Convertire i test di integrazione dell'area** (R5).
+- [✅] **Step 3: Convertire i test di integrazione dell'area** (R5).
 
-- [ ] **Step 4: Verificare.**
+- [✅] **Step 4: Verificare.**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint && npm run test && npm run test:integration`
 Expected: PASS.
@@ -1188,7 +1188,7 @@ Expected: PASS.
 
   Atteso: tutto funziona come prima e la sonda risponde 200.
 
-- [ ] **Step 6: Commit.**
+- [✅] **Step 6: Commit.**
 
 ```bash
 git add sources/microservices/web-construct/lib sources/microservices/web-construct/app
