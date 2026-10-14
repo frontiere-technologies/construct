@@ -2324,7 +2324,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   (`defaultTestTenant`, `tenantIdForTest`), Task 9 (RLS attiva).
 - Produces: niente per altri task; è la prova di MTF-OK-3.
 
-- [ ] **Step 1: Scrivere il test.**
+- [✅] **Step 1: Scrivere il test.**
 
 ```ts
 import postgres from 'postgres'
@@ -2484,13 +2484,13 @@ describeIntegration('tenant isolation in the database', () => {
 })
 ```
 
-- [ ] **Step 2: Lanciare il test.**
+- [✅] **Step 2: Lanciare il test.**
 
 Run: `cd sources/microservices/web-construct && npm run test:integration -- lib/db/tenant-isolation.integration.test.ts`
 Expected: PASS. Se un caso fallisce, è un buco nel confine: va corretto nella migrazione o nel
 codice del task che lo possiede, **non** nel test.
 
-- [ ] **Step 3: Verificare che il test morda.** Su un database usa e getta, togliere a mano la
+- [✅] **Step 3: Verificare che il test morda.** Su un database usa e getta, togliere a mano la
   policy restrittiva da `role`:
 
 ```bash
@@ -2504,7 +2504,7 @@ DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" node sources/devops/db/db.mjs query 
 DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" node sources/devops/db/db.mjs query "set role construct_owner; select app_private.protect_tenant_table('public.role')"
 ```
 
-- [ ] **Step 4: Commit e checkbox.** Segnare MTF-OK-3 come `- [✅]`.
+- [✅] **Step 4: Commit e checkbox.** Segnare MTF-OK-3 come `- [✅]`.
 
 ```bash
 git add sources/microservices/web-construct/lib/db/tenant-isolation.integration.test.ts docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md

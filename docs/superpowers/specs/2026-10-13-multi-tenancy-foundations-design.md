@@ -110,7 +110,7 @@ Tutto quello che segue è nel
 
 - [✅] ID=MTF-OK-1, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Nessun cambiamento visibile, Fix description=L'E2E pytest e i test di integrazione esistenti passano senza modifiche al loro comportamento atteso.
 - [✅] ID=MTF-OK-2, Severity=Critical, Complexity=Low, Priority=P0, Estimate=minutes, Title=Classificazione obbligatoria, Fix description=Il contratto di schema fallisce se una tabella di `public` non è registrata, o se una tabella di tenant non rispetta le regole di §2.4.
-- [ ] ID=MTF-OK-3, Severity=Critical, Complexity=Low, Priority=P0, Estimate=minutes, Title=Isolamento nel database, Fix description=Con il contesto di A le righe di B sono invisibili e non modificabili; senza contesto ogni tabella di tenant dà 42501.
+- [✅] ID=MTF-OK-3, Severity=Critical, Complexity=Low, Priority=P0, Estimate=minutes, Title=Isolamento nel database, Fix description=Con il contesto di A le righe di B sono invisibili e non modificabili; senza contesto ogni tabella di tenant dà 42501.
 - [ ] ID=MTF-OK-4, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Isolamento sotto concorrenza, Fix description=Lo stesso vale con transazioni A e B in parallelo attraverso il pooler, in modalità sessione e transazione.
 - [✅] ID=MTF-OK-5, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Nessun accesso diretto, Fix description=Nessun file fuori da `lib/db/` importa `postgres`, `drizzle-orm/postgres-js` o il client: lo verificano ESLint e un test AST.
 
