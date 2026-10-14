@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Sits above vi.hoisted()/vi.mock() on purpose: Vitest hoists both above every
 // import regardless of source position, and the factories below close over
 // nothing imported — so this order cannot change which mocks apply.
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { POST } from '@/app/api/rbac/roles-grid/route'
 
 const mocks = vi.hoisted(() => ({
@@ -26,7 +27,7 @@ function request(body: unknown): NextRequest {
 describe('POST /api/rbac/roles-grid', () => {
   beforeEach(() => {
     mocks.logError.mockClear()
-    mocks.requirePermission.mockResolvedValue({ userId: 'admin', roleIds: [0, 1], isAdmin: true, permissions: new Set() })
+    mocks.requirePermission.mockResolvedValue({ userId: 'admin', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() })
     mocks.listRoles.mockResolvedValue({ elements: [], total: 0, pagination: { currentElements: 0, currentPage: 0, totalPages: 1 } })
   })
 
@@ -81,6 +82,6 @@ describe('POST /api/rbac/roles-grid', () => {
     const response = await POST(request(payload))
 
     expect(response.status).toBe(200)
-    expect(mocks.listRoles).toHaveBeenCalledWith(payload)
+    expect(mocks.listRoles).toHaveBeenCalledWith(defaultTestTenant(), payload)
   })
 })

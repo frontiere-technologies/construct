@@ -10,6 +10,7 @@ import { users, allowedDomains } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { authConfig, mergeAuthCallbacks } from '@/lib/auth.config'
 import { resolveUserAuthorization } from '@/lib/rbac/auth-roles'
+import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
 import {
   assertSafeAuthConfiguration,
   isActiveAccount,
@@ -210,12 +211,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
         token.userId = userId
         if (userId) {
-          const authorization = await resolveUserAuthorization(userId, true)
+          const authorization = await resolveUserAuthorization(await resolveRequestTenant(), userId, true)
           token.accountActive = authorization.accountActive
           token.roleIds = authorization.roleIds
         }
       } else if (token.userId) {
-        const authorization = await resolveUserAuthorization(token.userId as string)
+        const authorization = await resolveUserAuthorization(await resolveRequestTenant(), token.userId as string)
         token.accountActive = authorization.accountActive
         token.roleIds = authorization.roleIds
       }

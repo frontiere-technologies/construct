@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
+import { withTenant, withGlobal } from '@/lib/db/tenant-db'
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import type { Actor } from './actor'
@@ -8,10 +10,15 @@ import type { Actor } from './actor'
 const guard = vi.hoisted(() => ({
   actor: { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() },
 }))
-vi.mock('@/lib/rbac/auth-guard', () => ({
-  requirePermission: async () => guard.actor,
-  requireAdministrator: async () => guard.actor,
-}))
+vi.mock('@/lib/rbac/auth-guard', async () => {
+  // Il guscio dell'attore sta nel guard; il tenant lo aggiunge la guardia vera, qui il predefinito.
+  const { defaultTestTenant } = await import('@/lib/tenancy/testing')
+  const current = () => ({ ...guard.actor, tenantId: defaultTestTenant() })
+  return {
+    requirePermission: async () => current(),
+    requireAdministrator: async () => current(),
+  }
+})
 
 const { updateUserRoles, setUserStatus } = await import('./users-actions')
 const { assignableRoleIds } = await import('./grant-service')
@@ -24,18 +31,18 @@ const createdPermissions: number[] = []
 
 /** Un ruolo di servizio con le sole concessioni indicate (id di riga `permission`). */
 async function makeRole(permissionIds: number[]): Promise<number> {
-  const [created] = await db.insert(role)
+  const [created] = await withTenant(defaultTestTenant(), tx => tx.insert(role)
     .values({ description: `zzz_grants_${unique()}`, idRoleType: ROLE_TYPE_SERVICE })
-    .returning({ idRole: role.idRole })
+    .returning({ idRole: role.idRole }))
   createdRoles.push(created.idRole)
   if (permissionIds.length) {
-    await db.insert(rolePermission).values(permissionIds.map(idPermission => ({ idRole: created.idRole, idPermission })))
+    await withTenant(defaultTestTenant(), tx => tx.insert(rolePermission).values(permissionIds.map(idPermission => ({ idRole: created.idRole, idPermission }))))
   }
   return created.idRole
 }
 
 async function permissionId(code: string): Promise<number> {
-  const [row] = await db.select({ id: permission.idPermission }).from(permission).where(eq(permission.code, code))
+  const [row] = await withGlobal(tx => tx.select({ id: permission.idPermission }).from(permission).where(eq(permission.code, code)))
   expect(row).toBeDefined()
   return row.id
 }
@@ -50,22 +57,22 @@ async function makeUncodedGrant(): Promise<number> {
 }
 
 async function makeUser(roleIds: number[]): Promise<string> {
-  const [user] = await db.insert(users).values({
+  const [user] = await withGlobal(tx => tx.insert(users).values({
     email: `zzz_grants_${unique()}@example.com`,
     authProvider: 'credentials',
     idUserStatus: ACTIVE,
-  }).returning({ id: users.id })
+  }).returning({ id: users.id }))
   created.push(user.id)
-  await db.insert(userRole).values(roleIds.map(idRole => ({ userId: user.id, idRole })))
+  await withTenant(defaultTestTenant(), tx => tx.insert(userRole).values(roleIds.map(idRole => ({ userId: user.id, idRole }))))
   return user.id
 }
 
 const rolesOf = async (userId: string) =>
-  (await db.select({ idRole: userRole.idRole }).from(userRole).where(eq(userRole.userId, userId)))
+  (await withTenant(defaultTestTenant(), tx => tx.select({ idRole: userRole.idRole }).from(userRole).where(eq(userRole.userId, userId))))
     .map(row => row.idRole).sort((a, b) => a - b)
 
 const statusOf = async (userId: string) =>
-  (await db.select({ s: users.idUserStatus }).from(users).where(eq(users.id, userId)))[0].s
+  (await withGlobal(tx => tx.select({ s: users.idUserStatus }).from(users).where(eq(users.id, userId))))[0].s
 
 describeIntegration('user role and status actions with a limited actor', () => {
   beforeEach(() => {
@@ -79,10 +86,10 @@ describeIntegration('user role and status actions with a limited actor', () => {
 
   afterEach(async () => {
     guard.actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set() }
-    for (const id of created.splice(0)) await db.delete(users).where(eq(users.id, id))
+    for (const id of created.splice(0)) await withGlobal(tx => tx.delete(users).where(eq(users.id, id)))
     // user_role e role_permission cascatano dal ruolo; la riga permission va tolta a parte.
     const roleIds = createdRoles.splice(0)
-    if (roleIds.length) await db.delete(role).where(inArray(role.idRole, roleIds))
+    if (roleIds.length) await withTenant(defaultTestTenant(), tx => tx.delete(role).where(inArray(role.idRole, roleIds)))
     const permissionIds = createdPermissions.splice(0)
     if (permissionIds.length) await db.delete(permission).where(inArray(permission.idPermission, permissionIds))
   })
@@ -146,14 +153,14 @@ describeIntegration('user role and status actions with a limited actor', () => {
     const reader = await makeRole([await permissionId('read-menu')])
     const manager = await makeRole([await permissionId('manage-menu')])
     const odd = await makeRole([await makeUncodedGrant()])
-    const actor: Actor = { userId: guard.actor.userId, roleIds: [0], isAdmin: false, permissions: new Set(['assign-user-roles', 'read-menu']) }
-    expect(await assignableRoleIds(actor, [1, reader, manager, odd])).toEqual([reader])
+    const actor: Actor = { userId: guard.actor.userId, tenantId: defaultTestTenant(), roleIds: [0], isAdmin: false, permissions: new Set(['assign-user-roles', 'read-menu']) }
+    expect(await withTenant(defaultTestTenant(), tx => assignableRoleIds(tx, actor, [1, reader, manager, odd]))).toEqual([reader])
   })
 
   it('offers the Administrator every role', async () => {
     const manager = await makeRole([await permissionId('manage-menu')])
-    const admin: Actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set() }
-    expect(await assignableRoleIds(admin, [1, manager])).toEqual([1, manager])
+    const admin: Actor = { userId: 'test', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+    expect(await withTenant(defaultTestTenant(), tx => assignableRoleIds(tx, admin, [1, manager]))).toEqual([1, manager])
   })
 
   it('lets a limited actor deactivate a normal user', async () => {

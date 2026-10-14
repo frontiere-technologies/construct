@@ -1,7 +1,8 @@
 import { cache } from 'react'
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, type SQL } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withTenant } from '@/lib/db/tenant-db'
 import { menuEntry, permission, roleFunctionality, rolePermission, roleListView } from '@/lib/db/schema'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { toMenuEntryRow, toPermissionRow } from './nav-row-mapper'
 import { buildNavTree } from './nav-tree-builder'
@@ -46,7 +47,7 @@ export function applyFilters(query: RolesQuery): SQL[] {
   return conditions
 }
 
-export const listRoles = cache(async (query: RolesQuery): Promise<RolesPage> => {
+export const listRoles = cache(async (tenantId: TenantId, query: RolesQuery): Promise<RolesPage> => {
   const conditions = applyFilters(query)
   const where = conditions.length ? and(...conditions) : undefined
   const sortCol = SORT_COLUMN[query.sort ?? 'id']
@@ -56,12 +57,12 @@ export const listRoles = cache(async (query: RolesQuery): Promise<RolesPage> => 
   let rows: (typeof roleListView.$inferSelect)[]
   let total: number
   try {
-    const [r, [{ value }]] = await Promise.all([
-      db.select().from(roleListView).where(where).orderBy(ascending ? asc(sortCol) : desc(sortCol)).limit(query.size).offset(from),
-      db.select({ value: count() }).from(roleListView).where(where),
-    ])
-    rows = r
-    total = value
+    ;({ rows, total } = await withTenant(tenantId, async tx => {
+      // Dentro una transazione le due letture vanno in serie sulla stessa connessione (MTF-RISK-3).
+      const r = await tx.select().from(roleListView).where(where).orderBy(ascending ? asc(sortCol) : desc(sortCol)).limit(query.size).offset(from)
+      const [{ value }] = await tx.select({ value: count() }).from(roleListView).where(where)
+      return { rows: r, total: value }
+    }))
   } catch (err) {
     throw new Error(`Failed to list roles: ${err instanceof Error ? err.message : String(err)}`)
   }
@@ -86,39 +87,39 @@ export const listRoles = cache(async (query: RolesQuery): Promise<RolesPage> => 
   }
 })
 
-export const countRoles = cache(async (query: RolesQuery): Promise<number> => {
+export const countRoles = cache(async (tenantId: TenantId, query: RolesQuery): Promise<number> => {
   const conditions = applyFilters(query)
   const where = conditions.length ? and(...conditions) : undefined
   try {
-    const [{ value }] = await db.select({ value: count() }).from(roleListView).where(where)
+    const [{ value }] = await withTenant(tenantId, tx => tx.select({ value: count() }).from(roleListView).where(where))
     return value
   } catch (err) {
     throw new Error(`Failed to count roles: ${err instanceof Error ? err.message : String(err)}`)
   }
 })
 
-export const getAllRoles = cache(async (roleTypes?: RoleType[]): Promise<{ id: number; description: string }[]> => {
+export const getAllRoles = cache(async (tenantId: TenantId, roleTypes?: RoleType[]): Promise<{ id: number; description: string }[]> => {
   const where = roleTypes?.length ? inArray(roleListView.roleType, roleTypes) : undefined
   try {
-    const rows = await db
+    const rows = await withTenant(tenantId, tx => tx
       .select({ id: roleListView.id, description: roleListView.description })
       .from(roleListView)
       .where(where)
-      .orderBy(asc(roleListView.description))
+      .orderBy(asc(roleListView.description)))
     return rows.map(r => ({ id: Number(r.id), description: String(r.description ?? '') }))
   } catch (err) {
     throw new Error(`Failed to load roles: ${err instanceof Error ? err.message : String(err)}`)
   }
 })
 
-export const getRole = cache(async (roleId: number): Promise<RoleInformationDto> => {
+export const getRole = cache(async (tenantId: TenantId, roleId: number): Promise<RoleInformationDto> => {
   let row
   try {
-    ;[row] = await db
+    ;[row] = await withTenant(tenantId, tx => tx
       .select({ id: roleListView.id, description: roleListView.description, roleType: roleListView.roleType, associatedUsers: roleListView.associatedUsers })
       .from(roleListView)
       .where(eq(roleListView.id, roleId))
-      .limit(1)
+      .limit(1))
   } catch (err) {
     throw new Error(`Failed to load role: ${err instanceof Error ? err.message : String(err)}`)
   }
@@ -142,18 +143,20 @@ export const getRole = cache(async (roleId: number): Promise<RoleInformationDto>
  * perché qui i tag non servono: servono a ritrovare una voce, non a concederla.
  */
 export const getRoleAuthorizationTree = cache(
-  async (roleId: number): Promise<RoleAuthorizationTrees> => {
+  async (tenantId: TenantId, roleId: number): Promise<RoleAuthorizationTrees> => {
     let entryRows: (typeof menuEntry.$inferSelect)[]
     let permRows: (typeof permission.$inferSelect)[]
     let functionalityGrants: { idMenuEntry: number }[]
     let permissionGrants: { idPermission: number }[]
     try {
-      ;[entryRows, permRows, functionalityGrants, permissionGrants] = await Promise.all([
-        db.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition)),
-        db.select().from(permission).where(isNull(permission.deprecatedAt)).orderBy(asc(permission.orderPosition)),
-        db.select({ idMenuEntry: roleFunctionality.idMenuEntry }).from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId)),
-        db.select({ idPermission: rolePermission.idPermission }).from(rolePermission).where(eq(rolePermission.idRole, roleId)),
-      ])
+      ;[entryRows, permRows, functionalityGrants, permissionGrants] = await withTenant(tenantId, async tx => {
+        // Dentro una transazione le quattro letture vanno in serie sulla stessa connessione (MTF-RISK-3).
+        const entries = await tx.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition))
+        const perms = await tx.select().from(permission).where(isNull(permission.deprecatedAt)).orderBy(asc(permission.orderPosition))
+        const functionalities = await tx.select({ idMenuEntry: roleFunctionality.idMenuEntry }).from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId))
+        const permissions = await tx.select({ idPermission: rolePermission.idPermission }).from(rolePermission).where(eq(rolePermission.idRole, roleId))
+        return [entries, perms, functionalities, permissions] as const
+      })
     } catch (err) {
       throw new Error(`Failed to load navigation: ${err instanceof Error ? err.message : String(err)}`)
     }

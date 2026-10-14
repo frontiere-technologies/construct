@@ -1,3 +1,4 @@
+import { withTenant } from '@/lib/db/tenant-db'
 import { getAllRoles } from '@/lib/rbac/roles-service'
 import UsersTableClient from '@/components/rbac/users/UsersTableClient'
 import { PageContainer } from '@/components/shared/PageContainer'
@@ -10,11 +11,11 @@ import { assignableRoleIds } from '@/lib/rbac/grant-service'
 export default async function UserManagementPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const actor = await requirePagePermission('read-users')
   const sp = await searchParams
-  const allRolesRaw = await getAllRoles()
+  const allRolesRaw = await getAllRoles(actor.tenantId)
   const allRoles = allRolesRaw.map(r => ({ id: r.id, name: r.description }))
   const canAssignRoles = hasPermission(actor, 'assign-user-roles')
   // Il dialogo dei ruoli offre solo ciò che updateUserRoles accetterebbe (DEC-29, DEC-32).
-  const assignable = canAssignRoles ? await assignableRoleIds(actor, allRoles.map(r => r.id)) : []
+  const assignable = canAssignRoles ? await withTenant(actor.tenantId, tx => assignableRoleIds(tx, actor, allRoles.map(r => r.id))) : []
   const { t } = await getI18n()
   const params = parseUsersGridUrlParams(sp)
 

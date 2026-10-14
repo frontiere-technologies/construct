@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 import type { Actor } from './actor'
 import type { PermissionCode } from './permission-catalog'
 import {
@@ -7,9 +8,9 @@ import {
 } from './grant-guards'
 
 function limited(codes: PermissionCode[]): Actor {
-  return { userId: 'u1', roleIds: [0, 7], isAdmin: false, permissions: new Set(codes) }
+  return { userId: 'u1', tenantId: defaultTestTenant(), roleIds: [0, 7], isAdmin: false, permissions: new Set(codes) }
 }
-const admin: Actor = { userId: 'a1', roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+const admin: Actor = { userId: 'a1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() }
 
 describe('assertCanGrantPermissions (DEC-6)', () => {
   it('lets an actor grant what it holds', () => {

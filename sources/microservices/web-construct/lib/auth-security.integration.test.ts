@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { passwordSetTokens, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { resolveUserAuthorization } from '@/lib/rbac/auth-roles'
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 
 const createdUserIds: string[] = []
 
@@ -26,14 +27,14 @@ describeIntegration('authentication security invariants against the database', (
   it('revokes a live authorization state immediately after deactivation or demotion', async () => {
     const userId = await createUser()
     await db.insert(userRole).values([{ userId, idRole: 0 }, { userId, idRole: 1 }])
-    expect(await resolveUserAuthorization(userId)).toMatchObject({ accountActive: true, isAdmin: true })
+    expect(await resolveUserAuthorization(defaultTestTenant(), userId)).toMatchObject({ accountActive: true, isAdmin: true })
 
     await db.update(users).set({ idUserStatus: 1 }).where(eq(users.id, userId))
-    expect(await resolveUserAuthorization(userId)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(await resolveUserAuthorization(defaultTestTenant(), userId)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
 
     await db.update(users).set({ idUserStatus: 2 }).where(eq(users.id, userId))
     await db.delete(userRole).where(and(eq(userRole.userId, userId), eq(userRole.idRole, 1)))
-    expect(await resolveUserAuthorization(userId)).toMatchObject({ accountActive: true, isAdmin: false })
+    expect(await resolveUserAuthorization(defaultTestTenant(), userId)).toMatchObject({ accountActive: true, isAdmin: false })
   })
 
   it('allows only one concurrent password-token claim and invalidates sibling links', async () => {

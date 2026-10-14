@@ -2,12 +2,15 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { count, eq, like } from 'drizzle-orm'
 import postgres from 'postgres'
 import { db } from '@/lib/db'
+import { withTenant, withGlobal } from '@/lib/db/tenant-db'
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { permission, menuEntry, role, roleFunctionality } from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
 import type { CreateNavItemInput } from './types'
 
-vi.mock('@/lib/rbac/auth-guard', () => {
-  const admin = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+vi.mock('@/lib/rbac/auth-guard', async () => {
+  const { defaultTestTenant } = await import('@/lib/tenancy/testing')
+  const admin = { userId: 'test', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
   return {
     requirePermission: async () => admin,
     requireAdministrator: async () => admin,
@@ -62,16 +65,16 @@ describeIntegration('navigation mutations against the database', () => {
     // menu_entry e permission non hanno più relazione dopo la 0027 (Task 6): questa riga di
     // pulizia è difensiva, nel caso un test qui sotto inserisca ancora un permesso con questo
     // prefisso — nessuno lo fa più oggi.
-    await db.delete(menuEntry).where(like(menuEntry.name, `${PREFIX}%`))
+    await withTenant(defaultTestTenant(), tx => tx.delete(menuEntry).where(like(menuEntry.name, `${PREFIX}%`)))
     await db.delete(permission).where(like(permission.name, `${PREFIX}%`))
   })
 
   it('non crea alcun permesso gemello per una funzionalità nuova (via la sincronizzazione)', async () => {
     const nome = `${PREFIX}${sequence++}`
-    const primaDi = await db.select({ n: count() }).from(permission)
+    const primaDi = await withGlobal(tx => tx.select({ n: count() }).from(permission))
     const { id } = await createNavigationItem(functionalityInput(nome))
     try {
-      const dopoDi = await db.select({ n: count() }).from(permission)
+      const dopoDi = await withGlobal(tx => tx.select({ n: count() }).from(permission))
       expect(dopoDi[0].n).toBe(primaDi[0].n)
     } finally {
       await deleteNavigationItem(id)
@@ -113,7 +116,7 @@ describeIntegration('navigation mutations against the database', () => {
 
     // Nessun collegamento al permesso: menu_entry.id_permission e' sparito con la 0027. Le
     // due righe non condividono altro che il prefisso di test.
-    const [entry] = await db.insert(menuEntry).values({
+    const [entry] = await withTenant(defaultTestTenant(), tx => tx.insert(menuEntry).values({
       idParent: null,
       name,
       idFunctionalityType: 3,
@@ -121,17 +124,17 @@ describeIntegration('navigation mutations against the database', () => {
       openInNewTab: 1,
       itemTranslation: { EN: { name } },
       orderPosition: 0,
-    }).returning({ id: menuEntry.idMenuEntry })
+    }).returning({ id: menuEntry.idMenuEntry }))
 
     try {
       await deleteNavigationItem(entry.id)
 
-      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id))).toHaveLength(0)
+      expect(await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id)))).toHaveLength(0)
       // Il permesso SOURCE sopravvive: lo possiede il sorgente, non la console, e
       // deleteNavigationItem non tocca mai `permission`.
-      expect(await db.select().from(permission).where(eq(permission.idPermission, perm.id))).toHaveLength(1)
+      expect(await withGlobal(tx => tx.select().from(permission).where(eq(permission.idPermission, perm.id)))).toHaveLength(1)
     } finally {
-      await db.delete(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id))
+      await withTenant(defaultTestTenant(), tx => tx.delete(menuEntry).where(eq(menuEntry.idMenuEntry, entry.id)))
       await db.delete(permission).where(eq(permission.idPermission, perm.id))
     }
   })
@@ -139,7 +142,7 @@ describeIntegration('navigation mutations against the database', () => {
   it('annulla la creazione della voce se la sostituzione dei tag fallisce', async () => {
     const name = `${PREFIX}${sequence++}`
     await expect(createNavigationItem(functionalityInput(name, 'x'.repeat(51)))).rejects.toThrow(/Failed to create item/)
-    expect(await db.select().from(menuEntry).where(eq(menuEntry.name, name))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.name, name)))).toHaveLength(0)
   })
 
   it('rifiuta la conversione di una categoria in funzionalità: id_functionality_type resta nullo', async () => {
@@ -148,19 +151,19 @@ describeIntegration('navigation mutations against the database', () => {
 
     await expect(updateNavigationItem(id, functionalityInput(name))).rejects.toThrow(/Cannot change item type/)
 
-    const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    const [row] = await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
     expect(row.idFunctionalityType).toBeNull()
   })
 
   it('rifiuta la conversione di una funzionalità in categoria: id_functionality_type resta quello di prima', async () => {
     const name = `${PREFIX}${sequence++}`
     const { id } = await createNavigationItem(functionalityInput(name))
-    const [before] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    const [before] = await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
     expect(before.idFunctionalityType).not.toBeNull()
 
     await expect(updateNavigationItem(id, categoryInput(name))).rejects.toThrow(/Cannot change item type/)
 
-    const [after] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    const [after] = await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
     expect(after.idFunctionalityType).toBe(before.idFunctionalityType)
   })
 
@@ -178,8 +181,8 @@ describeIntegration('navigation mutations against the database', () => {
 
     // La coppia incoerente sarebbe stata la voce pubblica e ingovernabile: nessuna delle
     // due righe deve esistere, nemmeno il permesso da solo.
-    expect(await db.select().from(menuEntry).where(eq(menuEntry.name, name))).toHaveLength(0)
-    expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.name, name)))).toHaveLength(0)
+    expect(await withGlobal(tx => tx.select().from(permission).where(eq(permission.name, name)))).toHaveLength(0)
   })
 
   it('rifiuta la creazione di una funzionalità senza tipo di funzionalità: non scrive né voce né permesso', async () => {
@@ -189,8 +192,8 @@ describeIntegration('navigation mutations against the database', () => {
       createNavigationItem({ ...functionalityInput(name), idFunctionalityType: null }),
     ).rejects.toThrow(/Inconsistent item type/)
 
-    expect(await db.select().from(menuEntry).where(eq(menuEntry.name, name))).toHaveLength(0)
-    expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.name, name)))).toHaveLength(0)
+    expect(await withGlobal(tx => tx.select().from(permission).where(eq(permission.name, name)))).toHaveLength(0)
   })
 
   // La ri-revisione ha smontato l'invariante con una tabella di verita' e ha trovato la
@@ -208,8 +211,8 @@ describeIntegration('navigation mutations against the database', () => {
       createNavigationItem(senzaTipo),
     ).rejects.toThrow(/Inconsistent item type/)
 
-    expect(await db.select().from(menuEntry).where(eq(menuEntry.name, name))).toHaveLength(0)
-    expect(await db.select().from(permission).where(eq(permission.name, name))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.name, name)))).toHaveLength(0)
+    expect(await withGlobal(tx => tx.select().from(permission).where(eq(permission.name, name)))).toHaveLength(0)
   })
 
   it('accetta una categoria con il tipo OMESSO: assenza e nullo dicono la stessa cosa', async () => {
@@ -218,7 +221,7 @@ describeIntegration('navigation mutations against the database', () => {
 
     const { id } = await createNavigationItem(senzaTipo)
 
-    const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    const [row] = await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
     expect(row.idFunctionalityType).toBeNull()
   })
 
@@ -236,7 +239,7 @@ describeIntegration('navigation mutations against the database', () => {
 
     await updateNavigationItem(id, omitFunctionalityType(categoryInput(rinominata)))
 
-    const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    const [row] = await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
     expect(row.name).toBe(rinominata)
     expect(row.idFunctionalityType).toBeNull()
   })
@@ -245,7 +248,7 @@ describeIntegration('navigation mutations against the database', () => {
     const original = `${PREFIX}${sequence++}`
     const { id } = await createNavigationItem(functionalityInput(original))
     await expect(updateNavigationItem(id, functionalityInput(`${PREFIX}changed`, 'x'.repeat(51)))).rejects.toThrow(/Failed to update item/)
-    const [row] = await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+    const [row] = await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
     expect(row.name).toBe(original)
     expect(row.idParent).toBeNull()
   })
@@ -257,9 +260,9 @@ describeIntegration('navigation mutations against the database', () => {
       createNavigationItem(categoryInput(`${PREFIX}${sequence++}`)),
     ])
     await Promise.all(ids.map(({ id }, index) => moveNavigationItem(id, { targetParentId: null, orderPosition: 2 - index })))
-    const rows = await db.select({ position: menuEntry.orderPosition })
+    const rows = await withTenant(defaultTestTenant(), tx => tx.select({ position: menuEntry.orderPosition })
       .from(menuEntry)
-      .where(like(menuEntry.name, `${PREFIX}%`))
+      .where(like(menuEntry.name, `${PREFIX}%`)))
     expect(new Set(rows.map(row => row.position)).size).toBe(rows.length)
   })
 
@@ -275,7 +278,7 @@ describeIntegration('navigation mutations against the database', () => {
       expect(completed).toBe(false)
       await connection`select pg_advisory_unlock(49374201)`
       await deleting
-      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))).toHaveLength(0)
+      expect(await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))).toHaveLength(0)
     } finally {
       connection.release()
       await sql.end({ timeout: 5 })
@@ -290,19 +293,19 @@ describeIntegration('navigation mutations against the database', () => {
     const { id: catId } = await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`))
     const { id: subId } = await createNavigationItem({ ...categoryInput(`${PREFIX}${sequence++}`), idItemParent: catId })
     const { id: funcId } = await createNavigationItem({ ...functionalityInput(`${PREFIX}${sequence++}`), idItemParent: subId })
-    const [ruolo] = await db.insert(role).values({ description: `${PREFIX}non_vuota`, idRoleType: 2 }).returning({ idRole: role.idRole })
+    const [ruolo] = await withTenant(defaultTestTenant(), tx => tx.insert(role).values({ description: `${PREFIX}non_vuota`, idRoleType: 2 }).returning({ idRole: role.idRole }))
     try {
-      await db.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: funcId })
+      await withTenant(defaultTestTenant(), tx => tx.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: funcId }))
 
       await expect(deleteNavigationItem(catId)).rejects.toThrow(/not empty/)
       await expect(deleteNavigationItem(subId)).rejects.toThrow(/not empty/)
 
       for (const id of [catId, subId, funcId]) {
-        expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id))).toHaveLength(1)
+        expect(await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))).toHaveLength(1)
       }
-      expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idMenuEntry, funcId))).toHaveLength(1)
+      expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idMenuEntry, funcId)))).toHaveLength(1)
     } finally {
-      await db.delete(role).where(eq(role.idRole, ruolo.idRole))
+      await withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, ruolo.idRole)))
     }
   })
 
@@ -312,17 +315,17 @@ describeIntegration('navigation mutations against the database', () => {
   it('svuotata dal fondo, la cartella si cancella e le concessioni delle voci se ne vanno con loro', async () => {
     const { id: catId } = await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`))
     const { id: funcId } = await createNavigationItem({ ...functionalityInput(`${PREFIX}${sequence++}`), idItemParent: catId })
-    const [ruolo] = await db.insert(role).values({ description: `${PREFIX}svuotata`, idRoleType: 2 }).returning({ idRole: role.idRole })
+    const [ruolo] = await withTenant(defaultTestTenant(), tx => tx.insert(role).values({ description: `${PREFIX}svuotata`, idRoleType: 2 }).returning({ idRole: role.idRole }))
     try {
-      await db.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: funcId })
+      await withTenant(defaultTestTenant(), tx => tx.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: funcId }))
 
       await deleteNavigationItem(funcId)
-      expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idMenuEntry, funcId))).toHaveLength(0)
+      expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idMenuEntry, funcId)))).toHaveLength(0)
       await deleteNavigationItem(catId)
 
-      expect(await db.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, catId))).toHaveLength(0)
+      expect(await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, catId)))).toHaveLength(0)
     } finally {
-      await db.delete(role).where(eq(role.idRole, ruolo.idRole))
+      await withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, ruolo.idRole)))
     }
   })
 })

@@ -1,7 +1,9 @@
 import { cache } from 'react'
 import { and, asc, desc, count, eq, exists, gte, ilike, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { QueryBuilder } from 'drizzle-orm/pg-core'
+import { withTenant } from '@/lib/db/tenant-db'
 import { users, userRole } from '@/lib/db/schema'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { getAllRoles } from './roles-service'
 import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
@@ -48,8 +50,9 @@ export function applyUserFilters(query: UsersQuery, roleIds: number[] | undefine
     conditions.push(lt(users.updatedAt, nextDay(query.updatedTo)))
   }
   if (roleIds?.length) {
+    // Una sottoquery senza connessione: costruita con QueryBuilder, non esegue niente da sola.
     conditions.push(exists(
-      db.select({ one: sql`1` })
+      new QueryBuilder().select({ one: sql`1` })
         .from(userRole)
         .where(and(eq(userRole.userId, users.id), inArray(userRole.idRole, roleIds))),
     ))
@@ -57,7 +60,7 @@ export function applyUserFilters(query: UsersQuery, roleIds: number[] | undefine
   return conditions
 }
 
-export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserDto[]; total: number }> => {
+export const listUsers = cache(async (tenantId: TenantId, query: UsersQuery): Promise<{ users: UserDto[]; total: number }> => {
   const conditions = applyUserFilters(query, query.roleIds)
   const where = conditions.length ? and(...conditions) : undefined
   const ascending = (query.direction ?? 'DESC') === 'ASC'
@@ -67,11 +70,12 @@ export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserD
     ? [ascending ? asc(users.firstName) : desc(users.firstName), ascending ? asc(users.lastName) : desc(users.lastName), ascending ? asc(users.email) : desc(users.email)]
     : [ascending ? asc(sortCol) : desc(sortCol)]
 
-  let userRows: UserRow[]
-  let total: number
-  try {
-    const [rows, [{ value }]] = await Promise.all([
-      db
+  const { userRows, userRoleRows, total } = await withTenant(tenantId, async tx => {
+    let userRows: UserRow[]
+    let total: number
+    try {
+      // Dentro una transazione le letture vanno in serie sulla stessa connessione (MTF-RISK-3).
+      const rows = await tx
         .select({
           id: users.id, first_name: users.firstName, last_name: users.lastName, email: users.email,
           created_at: users.createdAt, updated_at: users.updatedAt, id_user_status: users.idUserStatus,
@@ -80,35 +84,36 @@ export const listUsers = cache(async (query: UsersQuery): Promise<{ users: UserD
         .where(where)
         .orderBy(...orderBy)
         .limit(query.size)
-        .offset(from),
-      db.select({ value: count() }).from(users).where(where),
-    ])
-    userRows = rows as unknown as UserRow[]
-    total = value
-  } catch (err) {
-    throw new Error(`Failed to list users: ${err instanceof Error ? err.message : String(err)}`)
-  }
-
-  const pageIds = userRows.map(u => u.id)
-  let userRoleRows: UserRoleRow[] = []
-  if (pageIds.length) {
-    try {
-      const ur = await db.select({ user_id: userRole.userId, id_role: userRole.idRole }).from(userRole).where(inArray(userRole.userId, pageIds))
-      userRoleRows = ur as UserRoleRow[]
+        .offset(from)
+      const [{ value }] = await tx.select({ value: count() }).from(users).where(where)
+      userRows = rows as unknown as UserRow[]
+      total = value
     } catch (err) {
-      throw new Error(`Failed to load user roles: ${err instanceof Error ? err.message : String(err)}`)
+      throw new Error(`Failed to list users: ${err instanceof Error ? err.message : String(err)}`)
     }
-  }
-  const allRoles = await getAllRoles()
+
+    const pageIds = userRows.map(u => u.id)
+    let userRoleRows: UserRoleRow[] = []
+    if (pageIds.length) {
+      try {
+        const ur = await tx.select({ user_id: userRole.userId, id_role: userRole.idRole }).from(userRole).where(inArray(userRole.userId, pageIds))
+        userRoleRows = ur as UserRoleRow[]
+      } catch (err) {
+        throw new Error(`Failed to load user roles: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+    return { userRows, userRoleRows, total }
+  })
+  const allRoles = await getAllRoles(tenantId)
   const roleNameById = new Map<number, string>(allRoles.map(r => [r.id, r.description]))
   return { users: buildUserDtos(userRows, userRoleRows, roleNameById), total }
 })
 
-export const countUsers = cache(async (query: UsersQuery): Promise<number> => {
+export const countUsers = cache(async (tenantId: TenantId, query: UsersQuery): Promise<number> => {
   const conditions = applyUserFilters(query, query.roleIds)
   const where = conditions.length ? and(...conditions) : undefined
   try {
-    const [{ value }] = await db.select({ value: count() }).from(users).where(where)
+    const [{ value }] = await withTenant(tenantId, tx => tx.select({ value: count() }).from(users).where(where))
     return value
   } catch (err) {
     throw new Error(`Failed to count users: ${err instanceof Error ? err.message : String(err)}`)

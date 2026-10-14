@@ -1,3 +1,4 @@
+import { withTenant } from '@/lib/db/tenant-db'
 import { getRole, getRoleAuthorizationTree } from '@/lib/rbac/roles-service'
 import RoleDetailClient from '@/components/rbac/roles/RoleDetailClient'
 import { requirePagePermission } from '@/lib/rbac/auth-guard'
@@ -10,16 +11,16 @@ export default async function RoleDetailPage({ params }: { params: Promise<{ rol
   const { roleId } = await params
   const id = Number(roleId)
   const [role, trees] = await Promise.all([
-    getRole(id),
-    getRoleAuthorizationTree(id),
+    getRole(actor.tenantId, id),
+    getRoleAuthorizationTree(actor.tenantId, id),
   ])
   const canGrant = hasPermission(actor, 'grant-role-permissions')
   // Gli alberi lasciano accendere solo ciò che updateRolePermissions accetterebbe (DEC-6, DEC-29, DEC-32).
   const grantable = canGrant
-    ? await grantableItemIds(actor, {
+    ? await withTenant(actor.tenantId, tx => grantableItemIds(tx, actor, {
       operationIds: [...buildAuthMap(trees.operations).keys()],
       functionalityIds: [...buildAuthMap(trees.functionalities).keys()],
-    })
+    }))
     : { operationIds: [], functionalityIds: [] }
   return (
     <RoleDetailClient

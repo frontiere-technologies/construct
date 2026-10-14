@@ -5,9 +5,9 @@ import { toNavigationLocales } from '@/lib/rbac/navigation-locales'
 import { requirePagePermission } from '@/lib/rbac/auth-guard'
 
 export default async function CreateFunctionalityPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  await requirePagePermission('manage-menu')
+  const actor = await requirePagePermission('manage-menu')
   const sp = await searchParams
-  const [parents, languages] = await Promise.all([getParentList(), listLanguages()])
+  const [parents, languages] = await Promise.all([getParentList(actor.tenantId), listLanguages()])
   const parentId = sp.parent ? Number(sp.parent) : null
   return (
     <FunctionalityForm

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const rolesPage = await listRoles(parsed.data)
+    const rolesPage = await listRoles(actor.tenantId, parsed.data)
     return NextResponse.json(rolesPage)
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Errore interno.' }, { status: 500 })

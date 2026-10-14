@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Sits above vi.hoisted()/vi.mock() on purpose: Vitest hoists both above every
 // import regardless of source position, and the factories below close over
 // nothing imported — so this order cannot change which mocks apply.
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { POST } from '@/app/api/rbac/users-grid/route'
 
 const mocks = vi.hoisted(() => ({
@@ -26,8 +27,8 @@ function request(body: unknown): NextRequest {
 describe('POST /api/rbac/users-grid', () => {
   beforeEach(() => {
     mocks.logError.mockClear()
-    mocks.requirePermission.mockResolvedValue({ userId: 'admin', roleIds: [0, 1], isAdmin: true, permissions: new Set() })
-    mocks.listUsers.mockImplementation(async (query: { updatedTo?: string }) => {
+    mocks.requirePermission.mockResolvedValue({ userId: 'admin', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() })
+    mocks.listUsers.mockImplementation(async (_tenantId: unknown, query: { updatedTo?: string }) => {
       if (query.updatedTo === 'not-a-date') throw new RangeError('Invalid time value')
       return { users: [], total: 0 }
     })
@@ -73,5 +74,6 @@ describe('POST /api/rbac/users-grid', () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ users: [], total: 0 })
+    expect(mocks.listUsers).toHaveBeenCalledWith(defaultTestTenant(), expect.objectContaining({ page: 0, size: 50 }))
   })
 })

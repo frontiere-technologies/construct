@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 import type { Actor } from './actor'
 import type { PermissionCode } from './permission-catalog'
 
@@ -17,7 +18,7 @@ vi.mock('./actor', () => ({ resolveActor: mocks.resolveActor }))
 const { requireAdministrator, requireAdministratorPage, requirePagePermission, requirePermission } = await import('./auth-guard')
 
 function actor(codes: PermissionCode[], isAdmin = false): Actor {
-  return { userId: 'u1', roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, permissions: new Set(codes) }
+  return { userId: 'u1', tenantId: defaultTestTenant(), roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, permissions: new Set(codes) }
 }
 
 describe('requirePermission', () => {
