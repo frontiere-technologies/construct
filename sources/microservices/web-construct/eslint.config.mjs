@@ -3,6 +3,14 @@ import typescript from 'eslint-config-next/typescript'
 import importX from 'eslint-plugin-import-x'
 import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript'
 
+// Gli helper di fixture costruiscono un TenantId da un numero (lib/tenancy/testing) o scrivono come
+// proprietario (lib/db/testing): chi li importa da codice dell'app riapre la porta che il confine
+// del tenant chiude. Solo i file di test possono usarli.
+const TESTING_PATHS = [
+  { name: '@/lib/tenancy/testing', message: 'Gli helper di lib/tenancy/testing costruiscono un TenantId da un numero: si importano solo nei file di test.' },
+  { name: '@/lib/db/testing', message: 'Gli helper di lib/db/testing scrivono come proprietario, fuori dal confine del tenant: si importano solo nei file di test.' },
+]
+
 const config = [
   ...coreWebVitals,
   ...typescript,
@@ -55,6 +63,7 @@ const config = [
           { name: 'postgres', message: 'Il driver si usa solo in lib/db/: passa da withTenant o withGlobal (@/lib/db/tenant-db).' },
           { name: 'drizzle-orm/postgres-js', message: 'Il driver si usa solo in lib/db/: passa da withTenant o withGlobal (@/lib/db/tenant-db).' },
           { name: '@/lib/db/client', message: 'Il client si usa solo in lib/db/: passa da withTenant o withGlobal (@/lib/db/tenant-db).' },
+          ...TESTING_PATHS,
         ],
         patterns: [{
           group: ['../*', '../**'],
@@ -146,8 +155,23 @@ const config = [
   {
     // Le eccezioni al divieto sul driver (specifica 2026-10-13, §3.5): lo strato dati stesso, e i
     // file di test (connessioni proprie per lock e fixture, Drizzle finti). La regola sui percorsi
-    // relativi resta accesa anche qui.
-    files: ['lib/db/**/*.ts', '**/*.test.ts', '**/*.test.tsx'],
+    // relativi resta accesa anche qui, e anche lo strato dati non importa gli helper di test: solo
+    // i file di test, nel blocco sotto, possono farlo.
+    files: ['lib/db/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: TESTING_PATHS,
+        patterns: [{
+          group: ['../*', '../**'],
+          message: 'Niente risalita nei percorsi relativi: usa l\'alias @/ fra feature, e i relativi (./) solo dentro lo stesso modulo locale.',
+        }],
+      }],
+    },
+  },
+  {
+    // I file di test: il driver e gli helper di test sono permessi. Viene dopo il blocco di lib/db/,
+    // cosi' i test in lib/db/ ereditano questa regola e non quella.
+    files: ['**/*.test.ts', '**/*.test.tsx'],
     rules: {
       'no-restricted-imports': ['error', {
         patterns: [{
