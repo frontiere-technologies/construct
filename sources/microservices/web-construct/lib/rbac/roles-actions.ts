@@ -2,7 +2,7 @@
 
 import { eq, inArray, sql } from 'drizzle-orm'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { db } from '@/lib/db'
+import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { permission, menuEntry, role, roleType } from '@/lib/db/schema'
 import { rolePermissionDeltasSchema, roleIdSchema } from './action-input-schemas'
 import {
@@ -18,12 +18,12 @@ const arrayLiteral = (ids: number[]) => `{${ids.join(',')}}`
 
 const ROLE_TYPE_SERVICE = 2
 
-async function getRoleType(roleId: number): Promise<RoleTypeStr> {
+async function getRoleType(tx: TenantTx, roleId: number): Promise<RoleTypeStr> {
   // Embedded-resource select (PostgREST `role_type:role_type(description)`) becomes an
   // explicit leftJoin (spec §2 pattern 5).
   let row: { description: string | null } | undefined
   try {
-    ;[row] = await db
+    ;[row] = await tx
       .select({ description: roleType.description })
       .from(role)
       .leftJoin(roleType, eq(role.idRoleType, roleType.idRoleType))
@@ -37,27 +37,31 @@ async function getRoleType(roleId: number): Promise<RoleTypeStr> {
 }
 
 export async function createRole(roleName: string): Promise<{ id: number }> {
-  await requirePermission('manage-roles')
+  const actor = await requirePermission('manage-roles')
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
   try {
-    const [created] = await db.insert(role).values({ description: name, idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole })
-    return { id: created.idRole }
+    return await withTenant(actor.tenantId, async tx => {
+      const [created] = await tx.insert(role).values({ description: name, idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole })
+      return { id: created.idRole }
+    })
   } catch (err) {
     throw new Error(`Failed to create role: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
 export async function renameRole(roleId: number, roleName: string): Promise<void> {
-  await requirePermission('manage-roles')
+  const actor = await requirePermission('manage-roles')
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
-  if ((await getRoleType(roleId)) !== 'SERVICE') throw new Error('This role cannot be renamed')
-  try {
-    await db.update(role).set({ description: name, dateMod: new Date().toISOString() }).where(eq(role.idRole, roleId))
-  } catch (err) {
-    throw new Error(`Failed to rename role: ${err instanceof Error ? err.message : String(err)}`)
-  }
+  await withTenant(actor.tenantId, async tx => {
+    if ((await getRoleType(tx, roleId)) !== 'SERVICE') throw new Error('This role cannot be renamed')
+    try {
+      await tx.update(role).set({ description: name, dateMod: new Date().toISOString() }).where(eq(role.idRole, roleId))
+    } catch (err) {
+      throw new Error(`Failed to rename role: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  })
 }
 
 export async function updateRolePermissions(roleId: number, deltas: RolePermissionDeltas): Promise<void> {
@@ -66,37 +70,36 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
   if (!roleIdSchema.safeParse(roleId).success || !rolePermissionDeltasSchema.safeParse(deltas).success) {
     throw new Error('Invalid input')
   }
-  if ((await getRoleType(roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
 
-  // Non si concede ciò che non si possiede (DEC-6, DEC-29): vale per chi concede, non per chi
-  // revoca, e l'Amministratore ne è esente. Va prima della transazione perché è un rifiuto
-  // dell'intera chiamata, come il controllo sulle cartelle che segue.
-  if (!actor.isAdmin) {
-    const grantedOperations = deltas.operations.filter(d => d.authorization).map(d => d.idItem)
-    const grantedFunctionalities = deltas.functionalities.filter(d => d.authorization).map(d => d.idItem)
-    const [codes, visible] = await Promise.all([
-      permissionCodesByIds(grantedOperations),
-      functionalityIdsForRoles(actor.roleIds),
-    ])
-    assertCanGrantPermissions(actor, codes)
-    assertCanGrantFunctionalities(actor, visible, grantedFunctionalities)
-  }
+  await withTenant(actor.tenantId, async tx => {
+    if ((await getRoleType(tx, roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
 
-  // Una cartella non riceve mai una riga di concessione (DEC-20). L'invariante viveva solo
-  // nelle funzioni pure lato client, ed è la classe di errore che ha prodotto HOLE-5: una
-  // regola affidata alla buona educazione del chiamante, che regge finché tutti i chiamanti
-  // sono quelli che conosci. Una server action è un endpoint HTTP: la sua sicurezza non può
-  // dipendere da quale modulo la chiama.
-  //
-  // Politica severa e non tollerante, su ENTRAMBI gli alberi: un delta verso una cartella
-  // rifiuta l'INTERA chiamata invece di essere scartato in silenzio. Scartarlo nasconderebbe
-  // un chiamante difettoso di domani — lo stesso silenzio che in applyToggle ha prodotto
-  // HOLE-5, spostato di un livello.
-  //
-  // Il criterio è dedotto dai DATI SALVATI, non dall'input: `kind` sulla riga di permission,
-  // `id_functionality_type` nullo sulla voce di menu. Nessuna forma dell'input può spacciare
-  // una cartella per una foglia.
-  await db.transaction(async tx => {
+    // Non si concede ciò che non si possiede (DEC-6, DEC-29): vale per chi concede, non per chi
+    // revoca, e l'Amministratore ne è esente. Viene prima delle scritture perché è un rifiuto
+    // dell'intera chiamata, come il controllo sulle cartelle che segue.
+    if (!actor.isAdmin) {
+      const grantedOperations = deltas.operations.filter(d => d.authorization).map(d => d.idItem)
+      const grantedFunctionalities = deltas.functionalities.filter(d => d.authorization).map(d => d.idItem)
+      const codes = await permissionCodesByIds(tx, grantedOperations)
+      const visible = await functionalityIdsForRoles(tx, actor.roleIds)
+      assertCanGrantPermissions(actor, codes)
+      assertCanGrantFunctionalities(actor, visible, grantedFunctionalities)
+    }
+
+    // Una cartella non riceve mai una riga di concessione (DEC-20). L'invariante viveva solo
+    // nelle funzioni pure lato client, ed è la classe di errore che ha prodotto HOLE-5: una
+    // regola affidata alla buona educazione del chiamante, che regge finché tutti i chiamanti
+    // sono quelli che conosci. Una server action è un endpoint HTTP: la sua sicurezza non può
+    // dipendere da quale modulo la chiama.
+    //
+    // Politica severa e non tollerante, su ENTRAMBI gli alberi: un delta verso una cartella
+    // rifiuta l'INTERA chiamata invece di essere scartato in silenzio. Scartarlo nasconderebbe
+    // un chiamante difettoso di domani — lo stesso silenzio che in applyToggle ha prodotto
+    // HOLE-5, spostato di un livello.
+    //
+    // Il criterio è dedotto dai DATI SALVATI, non dall'input: `kind` sulla riga di permission,
+    // `id_functionality_type` nullo sulla voce di menu. Nessuna forma dell'input può spacciare
+    // una cartella per una foglia.
     if (deltas.operations.length) {
       const targeted = await tx
         .select({ idPermission: permission.idPermission, kind: permission.kind })
@@ -139,11 +142,13 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
 }
 
 export async function deleteRole(roleId: number): Promise<void> {
-  await requirePermission('manage-roles')
-  if ((await getRoleType(roleId)) === 'SYSTEM') throw new Error('System roles cannot be deleted')
-  try {
-    await db.delete(role).where(eq(role.idRole, roleId))
-  } catch (err) {
-    throw new Error(`Failed to delete role: ${err instanceof Error ? err.message : String(err)}`)
-  }
+  const actor = await requirePermission('manage-roles')
+  await withTenant(actor.tenantId, async tx => {
+    if ((await getRoleType(tx, roleId)) === 'SYSTEM') throw new Error('System roles cannot be deleted')
+    try {
+      await tx.delete(role).where(eq(role.idRole, roleId))
+    } catch (err) {
+      throw new Error(`Failed to delete role: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  })
 }

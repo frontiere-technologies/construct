@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { users, total } = await listUsers(parsed.data)
+    const { users, total } = await listUsers(actor.tenantId, parsed.data)
     return NextResponse.json({ users, total })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Errore interno.' }, { status: 500 })

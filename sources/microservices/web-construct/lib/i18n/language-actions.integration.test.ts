@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { appLanguage } from '@/lib/db/schema'
 import { cleanupTestData, describeIntegration, unique } from './test-support/db-fixtures'
 
@@ -31,11 +31,11 @@ describeIntegration('language actions against the database', () => {
   // "t08") and fail the very first `createLanguage` call with a validation error.
   beforeEach(async () => {
     code = unique().slice(-3).replace(/[0-9]/g, d => String.fromCharCode(97 + Number(d)))
-    const [original] = await db.select({ id: appLanguage.idLanguage }).from(appLanguage).where(eq(appLanguage.isDefault, true))
+    const [original] = await withGlobal(tx => tx.select({ id: appLanguage.idLanguage }).from(appLanguage).where(eq(appLanguage.isDefault, true)))
     originalDefaultId = Number(original.id)
   })
   afterEach(async () => {
-    await db.transaction(async tx => {
+    await withGlobal(async tx => {
       await tx.update(appLanguage).set({ isDefault: false }).where(eq(appLanguage.isDefault, true))
       await tx.update(appLanguage).set({ isDefault: true }).where(eq(appLanguage.idLanguage, originalDefaultId))
     })
@@ -51,7 +51,7 @@ describeIntegration('language actions against the database', () => {
 
   it('creates a language', async () => {
     expect(await createLanguage(input())).toEqual({ error: null })
-    const [row] = await db.select().from(appLanguage).where(eq(appLanguage.code, code))
+    const [row] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.code, code)))
     expect(row.isActive).toBe(true)
     expect(row.isDefault).toBe(false)
   })
@@ -70,54 +70,54 @@ describeIntegration('language actions against the database', () => {
 
   it('updates a language', async () => {
     await createLanguage(input())
-    const [row] = await db.select().from(appLanguage).where(eq(appLanguage.code, code))
+    const [row] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.code, code)))
     expect(await updateLanguage(Number(row.idLanguage), input({ isActive: false }))).toEqual({ error: null })
-    const [after] = await db.select().from(appLanguage).where(eq(appLanguage.code, code))
+    const [after] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.code, code)))
     expect(after.isActive).toBe(false)
   })
 
   it('activates and deactivates a language', async () => {
     await createLanguage(input())
-    const [row] = await db.select().from(appLanguage).where(eq(appLanguage.code, code))
+    const [row] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.code, code)))
     await setLanguageActive(Number(row.idLanguage), false)
-    const [off] = await db.select().from(appLanguage).where(eq(appLanguage.code, code))
+    const [off] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.code, code)))
     expect(off.isActive).toBe(false)
     await setLanguageActive(Number(row.idLanguage), true)
-    const [on] = await db.select().from(appLanguage).where(eq(appLanguage.code, code))
+    const [on] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.code, code)))
     expect(on.isActive).toBe(true)
   })
 
   it('switches the default atomically, leaving exactly one default', async () => {
     await createLanguage(input())
-    const [row] = await db.select().from(appLanguage).where(eq(appLanguage.code, code))
-    const [{ code: previousDefault }] = await db
-      .select({ code: appLanguage.code }).from(appLanguage).where(eq(appLanguage.isDefault, true))
+    const [row] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.code, code)))
+    const [{ code: previousDefault }] = await withGlobal(tx => tx
+      .select({ code: appLanguage.code }).from(appLanguage).where(eq(appLanguage.isDefault, true)))
 
     expect(await setDefaultLanguage(Number(row.idLanguage))).toEqual({ error: null })
-    const defaults = await db.select({ code: appLanguage.code }).from(appLanguage).where(eq(appLanguage.isDefault, true))
+    const defaults = await withGlobal(tx => tx.select({ code: appLanguage.code }).from(appLanguage).where(eq(appLanguage.isDefault, true)))
     expect(defaults).toHaveLength(1)
     expect(defaults[0].code).toBe(code)
 
     // Restore the original default before cleanup — deleting the default is refused.
-    const [original] = await db.select().from(appLanguage).where(eq(appLanguage.code, previousDefault))
+    const [original] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.code, previousDefault)))
     await setDefaultLanguage(Number(original.idLanguage))
   })
 
   it('refuses to deactivate the default language', async () => {
-    const [current] = await db.select().from(appLanguage).where(eq(appLanguage.isDefault, true))
+    const [current] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.isDefault, true)))
     const result = await setLanguageActive(Number(current.idLanguage), false)
     expect(result.error).toMatch(/predefinita/i)
   })
 
   it('refuses to delete the default language', async () => {
-    const [current] = await db.select().from(appLanguage).where(eq(appLanguage.isDefault, true))
+    const [current] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.isDefault, true)))
     expect((await deleteLanguage(Number(current.idLanguage))).error).toMatch(/predefinita/i)
   })
 
   it('deletes a non-default language and cascades its values', async () => {
     await createLanguage(input())
-    const [row] = await db.select().from(appLanguage).where(eq(appLanguage.code, code))
+    const [row] = await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.code, code)))
     expect(await deleteLanguage(Number(row.idLanguage))).toEqual({ error: null })
-    expect(await db.select().from(appLanguage).where(eq(appLanguage.code, code))).toHaveLength(0)
+    expect(await withGlobal(tx => tx.select().from(appLanguage).where(eq(appLanguage.code, code)))).toHaveLength(0)
   })
 })

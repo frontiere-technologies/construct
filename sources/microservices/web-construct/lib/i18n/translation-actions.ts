@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { and, eq, sql } from 'drizzle-orm'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { auditI18n } from './audit'
 import { invalidateDictionary, refreshLanguageVersions } from './dictionary-service'
@@ -77,12 +77,12 @@ export async function createTranslationKey(input: TranslationKeyInput): Promise<
   if (invalid) return { error: invalid }
 
   try {
-    const [created] = await db.insert(translationKey).values({
+    const [created] = await withGlobal(tx => tx.insert(translationKey).values({
       key: input.key.trim(),
       description: input.description?.trim() || null,
       namespace: input.namespace.trim(),
       module: input.module?.trim() || null,
-    }).returning({ id: translationKey.idTranslationKey })
+    }).returning({ id: translationKey.idTranslationKey }))
     await auditI18n('translation_key.create', { keyId: Number(created.id), key: input.key.trim() })
     // A brand-new key has no values yet, so no cached dictionary is actually
     // stale — the statement-level trigger on translation_key already bumps
@@ -103,11 +103,15 @@ export async function createTranslationKey(input: TranslationKeyInput): Promise<
 export async function deleteTranslationKey(id: number): Promise<{ error: string | null }> {
   await requirePermission('manage-translation-keys')
   try {
-    const [row] = await db.select({ key: translationKey.key }).from(translationKey)
-      .where(eq(translationKey.idTranslationKey, id)).limit(1)
+    const row = await withGlobal(async tx => {
+      const [found] = await tx.select({ key: translationKey.key }).from(translationKey)
+        .where(eq(translationKey.idTranslationKey, id)).limit(1)
+      if (!found) return null
+      // translation_value rows cascade — the FK is ON DELETE CASCADE.
+      await tx.delete(translationKey).where(eq(translationKey.idTranslationKey, id))
+      return found
+    })
     if (!row) return { error: 'Chiave non trovata.' }
-    // translation_value rows cascade — the FK is ON DELETE CASCADE.
-    await db.delete(translationKey).where(eq(translationKey.idTranslationKey, id))
     await auditI18n('translation_key.delete', { keyId: id, key: row.key })
     invalidateDictionary()
     revalidatePath('/', 'layout')
@@ -151,7 +155,7 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
   const touchedCodes = new Set<string>()
 
   try {
-    await db.transaction(async tx => {
+    await withGlobal(async tx => {
       const [keyRow] = await tx.select().from(translationKey)
         .where(eq(translationKey.idTranslationKey, input.keyId)).limit(1)
       if (!keyRow) throw new Error('__NOT_FOUND__')

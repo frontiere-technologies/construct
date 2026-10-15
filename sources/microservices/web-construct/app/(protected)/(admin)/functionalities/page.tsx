@@ -5,6 +5,6 @@ import { hasPermission } from '@/lib/rbac/actor'
 
 export default async function FunctionalitiesPage() {
   const actor = await requirePagePermission('read-menu')
-  const tree = await getNavigationSubtree()
+  const tree = await getNavigationSubtree(actor.tenantId)
   return <FunctionalitiesTreeClient tree={tree} canManage={hasPermission(actor, 'manage-menu')} />
 }

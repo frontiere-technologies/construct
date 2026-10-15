@@ -6,11 +6,11 @@ import { toNavigationLocales } from '@/lib/rbac/navigation-locales'
 import { requirePagePermission } from '@/lib/rbac/auth-guard'
 
 export default async function EditFunctionalityPage({ params }: { params: Promise<{ funcId: string }> }) {
-  await requirePagePermission('manage-menu')
+  const actor = await requirePagePermission('manage-menu')
   const { funcId } = await params
   const id = Number(funcId)
   // getParentList(id) leaves out the item's own subtree, so a category can't become its own child.
-  const [item, parents, languages] = await Promise.all([getNavigationItem(id), getParentList(id), listLanguages()])
+  const [item, parents, languages] = await Promise.all([getNavigationItem(actor.tenantId, id), getParentList(actor.tenantId, id), listLanguages()])
   return (
     <FunctionalityForm
       mode="edit"

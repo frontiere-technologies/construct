@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 import type { Actor } from './actor'
 import type { PermissionCode } from './permission-catalog'
 
@@ -10,6 +11,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))
+// Il tenant della richiesta ora si legge dal database: un test unitario non lo apre.
+vi.mock('@/lib/tenancy/request-tenant', async () => {
+  const { defaultTestTenant } = await import('@/lib/tenancy/testing')
+  return { resolveRequestTenant: async () => defaultTestTenant() }
+})
 // Mock completo, non parziale: il modulo vero importa `@/lib/db`, e un test unitario non deve
 // aprire una connessione. `auth-guard` da `./actor` usa solo `resolveActor` e il tipo `Actor`.
 vi.mock('./actor', () => ({ resolveActor: mocks.resolveActor }))
@@ -17,7 +23,7 @@ vi.mock('./actor', () => ({ resolveActor: mocks.resolveActor }))
 const { requireAdministrator, requireAdministratorPage, requirePagePermission, requirePermission } = await import('./auth-guard')
 
 function actor(codes: PermissionCode[], isAdmin = false): Actor {
-  return { userId: 'u1', roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, permissions: new Set(codes) }
+  return { userId: 'u1', tenantId: defaultTestTenant(), roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, permissions: new Set(codes) }
 }
 
 describe('requirePermission', () => {

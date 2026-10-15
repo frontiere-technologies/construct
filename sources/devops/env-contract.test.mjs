@@ -69,13 +69,9 @@ const NOT_CONFIGURED_BY_HAND = {
  * with the report, so the next reader is not left deciding whether the entry is
  * leftover.
  */
-const CONSUMED_OUTSIDE_THE_CODE = {
-  TEST_DATABASE_POOLED_URL:
-    'consumed by the command that starts the app against the disposable database — the '
-    + 'web-construct-e2e configuration in .claude/launch.json and its README equivalent — not by '
-    + 'any module. Separate from TEST_DATABASE_URL because the app needs the transaction pooler '
-    + '(6543) while the integration suite needs session affinity (5432).',
-}
+// Vuota: TEST_DATABASE_POOLED_URL, che stava qui, ora la legge il test di concorrenza
+// (lib/db/tenant-concurrency.integration.test.ts), oltre al comando che avvia il server E2E.
+const CONSUMED_OUTSIDE_THE_CODE = {}
 
 function documentedVariables() {
   const documented = new Map()

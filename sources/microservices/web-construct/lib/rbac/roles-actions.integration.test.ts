@@ -1,6 +1,8 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, expect, it, vi } from 'vitest'
 import { eq, like } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withTenant, withGlobal } from '@/lib/db/tenant-db'
+import { closeOwner, withOwner } from '@/lib/db/testing'
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { menuEntry, permission, role, roleFunctionality, rolePermission } from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
 import type { Actor } from './actor'
@@ -8,10 +10,15 @@ import type { Actor } from './actor'
 const guard = vi.hoisted(() => ({
   actor: { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() },
 }))
-vi.mock('@/lib/rbac/auth-guard', () => ({
-  requirePermission: async () => guard.actor,
-  requireAdministrator: async () => guard.actor,
-}))
+vi.mock('@/lib/rbac/auth-guard', async () => {
+  // Il guscio dell'attore sta nel guard; il tenant lo aggiunge la guardia vera, qui il predefinito.
+  const { defaultTestTenant } = await import('@/lib/tenancy/testing')
+  const current = () => ({ ...guard.actor, tenantId: defaultTestTenant() })
+  return {
+    requirePermission: async () => current(),
+    requireAdministrator: async () => current(),
+  }
+})
 
 const { updateRolePermissions } = await import('./roles-actions')
 const { grantableItemIds } = await import('./grant-service')
@@ -22,20 +29,20 @@ let sequence = 0
 const name = () => `${PREFIX}${sequence++}`
 
 async function makeServiceRole(): Promise<number> {
-  const [created] = await db.insert(role).values({ description: name(), idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole })
+  const [created] = await withTenant(defaultTestTenant(), tx => tx.insert(role).values({ description: name(), idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole }))
   return created.idRole
 }
 
 async function makePermission(kind: 'CATEGORY' | 'GRANT'): Promise<number> {
-  const [created] = await db
+  const [created] = await withOwner(tx => tx
     .insert(permission)
     .values({ name: name(), kind, origin: 'CONSOLE' })
-    .returning({ idPermission: permission.idPermission })
+    .returning({ idPermission: permission.idPermission }))
   return created.idPermission
 }
 
 async function makeMenuEntry(kind: 'container' | 'functionality'): Promise<number> {
-  const [created] = await db
+  const [created] = await withTenant(defaultTestTenant(), tx => tx
     .insert(menuEntry)
     .values({
       name: name(),
@@ -43,7 +50,7 @@ async function makeMenuEntry(kind: 'container' | 'functionality'): Promise<numbe
       // distingue una cartella da una foglia, e la guardia lo deduce dai dati salvati.
       idFunctionalityType: kind === 'functionality' ? 3 : null,
     })
-    .returning({ id: menuEntry.idMenuEntry })
+    .returning({ id: menuEntry.idMenuEntry }))
   return created.id
 }
 
@@ -52,13 +59,15 @@ const adminActor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions
 
 const nessunDelta = { functionalities: [], operations: [] }
 
+afterAll(closeOwner)
+
 describeIntegration('updateRolePermissions against the database', () => {
   afterEach(async () => {
     // role_permission e role_functionality cascatano via id_role -> role; permission e
     // menu_entry invece restano finché non le si cancella esplicitamente qui.
-    await db.delete(role).where(like(role.description, `${PREFIX}%`))
-    await db.delete(permission).where(like(permission.name, `${PREFIX}%`))
-    await db.delete(menuEntry).where(like(menuEntry.name, `${PREFIX}%`))
+    await withTenant(defaultTestTenant(), tx => tx.delete(role).where(like(role.description, `${PREFIX}%`)))
+    await withOwner(tx => tx.delete(permission).where(like(permission.name, `${PREFIX}%`)))
+    await withTenant(defaultTestTenant(), tx => tx.delete(menuEntry).where(like(menuEntry.name, `${PREFIX}%`)))
   })
 
   // IMP-2 (revisione Task 6): senza questo presidio lato server, un delta verso una categoria
@@ -78,7 +87,7 @@ describeIntegration('updateRolePermissions against the database', () => {
       ],
     })).rejects.toThrow(/category permission/)
 
-    expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(rolePermission).where(eq(rolePermission.idRole, roleId)))).toHaveLength(0)
   })
 
   it('rifiuta anche una revoca verso una categoria, non solo una concessione', async () => {
@@ -97,7 +106,7 @@ describeIntegration('updateRolePermissions against the database', () => {
 
     await updateRolePermissions(roleId, { ...nessunDelta, operations: [{ idItem: grantId, authorization: true }] })
 
-    const rows = await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))
+    const rows = await withTenant(defaultTestTenant(), tx => tx.select().from(rolePermission).where(eq(rolePermission.idRole, roleId)))
     expect(rows.map(r => r.idPermission)).toEqual([grantId])
   })
 
@@ -117,7 +126,7 @@ describeIntegration('updateRolePermissions against the database', () => {
       ],
     })).rejects.toThrow(/container/)
 
-    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId)))).toHaveLength(0)
   })
 
   it('concede e revoca una voce di menu', async () => {
@@ -125,10 +134,10 @@ describeIntegration('updateRolePermissions against the database', () => {
     const funcId = await makeMenuEntry('functionality')
 
     await updateRolePermissions(roleId, { ...nessunDelta, functionalities: [{ idItem: funcId, authorization: true }] })
-    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId))).toHaveLength(1)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId)))).toHaveLength(1)
 
     await updateRolePermissions(roleId, { ...nessunDelta, functionalities: [{ idItem: funcId, authorization: false }] })
-    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId)))).toHaveLength(0)
   })
 
   it('scrive i due alberi nella stessa chiamata', async () => {
@@ -141,14 +150,14 @@ describeIntegration('updateRolePermissions against the database', () => {
       operations: [{ idItem: grantId, authorization: true }],
     })
 
-    expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(1)
-    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId))).toHaveLength(1)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(rolePermission).where(eq(rolePermission.idRole, roleId)))).toHaveLength(1)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId)))).toHaveLength(1)
   })
 
   // Revisione Task 4, giro 1 (RILIEVO 1): le quattro guardie sopra rifiutano PRIMA di
-  // eseguire qualunque `tx.execute` — il che le rende vere anche con due `db.execute` nudi,
-  // senza transazione, perché la scrittura rifiutata non viene mai nemmeno tentata. Non
-  // difendono quindi la proprietà che il commento di updateRolePermissions dichiara: «un
+  // eseguire qualunque `tx.execute` — il che le rende vere anche con due transazioni
+  // `withTenant` separate, una per albero, perché la scrittura rifiutata non viene mai
+  // nemmeno tentata. Non difendono quindi la proprietà che il commento di updateRolePermissions dichiara: «un
   // rifiuto su un albero non deve lasciare scritto l'altro».
   //
   // Per esercitare DAVVERO quella proprietà serve una scrittura che fallisca DOPO che
@@ -160,10 +169,10 @@ describeIntegration('updateRolePermissions against the database', () => {
   // `role_functionality.id_menu_entry` verso `menu_entry` — un rifiuto del DATABASE, non di
   // una guardia JS, e arriva DOPO che la scrittura delle operazioni è già stata eseguita
   // (l'ordine nel codice è: guardie di entrambi gli alberi, poi esecuzione di entrambi,
-  // operazioni prima). Verificato spostando temporaneamente la transazione a due
-  // `db.execute` indipendenti: senza transazione questo test fallisce (`grantId` resta
-  // scritto in `role_permission`); con la transazione passa. Vedi il rapporto del Task 4
-  // per la prova.
+  // operazioni prima). Verificato spostando temporaneamente la scrittura in due
+  // transazioni `withTenant` indipendenti, una per albero: senza una transazione comune
+  // questo test fallisce (`grantId` resta scritto in `role_permission`); con la
+  // transazione passa. Vedi il rapporto del Task 4 per la prova.
   it('un fallimento sulla scrittura delle funzionalità annulla anche la scrittura delle operazioni già eseguita, nella stessa transazione', async () => {
     const roleId = await makeServiceRole()
     const grantId = await makePermission('GRANT')
@@ -174,12 +183,12 @@ describeIntegration('updateRolePermissions against the database', () => {
       operations: [{ idItem: grantId, authorization: true }],
     })).rejects.toThrow()
 
-    expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(rolePermission).where(eq(rolePermission.idRole, roleId)))).toHaveLength(0)
   })
 
   it('refuses a limited actor granting a permission it does not hold (DEC-6)', async () => {
     const roleId = await makeServiceRole()
-    const [perm] = await db.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'manage-menu'))
+    const [perm] = await withGlobal(tx => tx.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'manage-menu')))
     expect(perm).toBeDefined()
     guard.actor = limitedActor
     try {
@@ -204,7 +213,7 @@ describeIntegration('updateRolePermissions against the database', () => {
     } finally {
       guard.actor = adminActor
     }
-    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, roleId)))).toHaveLength(0)
   })
 
   it('refuses a limited actor granting a GRANT row that has no catalog code', async () => {
@@ -219,14 +228,14 @@ describeIntegration('updateRolePermissions against the database', () => {
     } finally {
       guard.actor = adminActor
     }
-    expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(rolePermission).where(eq(rolePermission.idRole, roleId)))).toHaveLength(0)
   })
 
   // Il rovescio dei rifiuti sopra (I2 della revisione finale): DEC-6 limita, non blocca. Chi ha
   // read-menu e grant-role-permissions concede read-menu a un ruolo di servizio, e la riga c'è.
   it('lets a limited actor grant a permission it holds (DEC-6)', async () => {
     const roleId = await makeServiceRole()
-    const [perm] = await db.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'read-menu'))
+    const [perm] = await withGlobal(tx => tx.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'read-menu')))
     expect(perm).toBeDefined()
     guard.actor = { ...limitedActor, permissions: new Set<string>(['read-menu', 'grant-role-permissions']) }
     try {
@@ -234,33 +243,33 @@ describeIntegration('updateRolePermissions against the database', () => {
     } finally {
       guard.actor = adminActor
     }
-    const rows = await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))
+    const rows = await withTenant(defaultTestTenant(), tx => tx.select().from(rolePermission).where(eq(rolePermission.idRole, roleId)))
     expect(rows.map(r => r.idPermission)).toEqual([perm.idPermission])
   })
 
   // I3 della revisione finale: la pagina offre solo ciò che l'azione accetterebbe.
   it('offers a limited actor only the permissions it holds and the menu entries it sees', async () => {
-    const codes = await db.select({ id: permission.idPermission, code: permission.code }).from(permission)
+    const codes = await withGlobal(tx => tx.select({ id: permission.idPermission, code: permission.code }).from(permission))
     const idOf = (code: string) => codes.find(c => c.code === code)!.id
     const uncoded = await makePermission('GRANT')
     const hidden = await makeMenuEntry('functionality')
     const seen = await makeMenuEntry('functionality')
     const actorRole = await makeServiceRole()
-    await db.insert(roleFunctionality).values({ idRole: actorRole, idMenuEntry: seen })
-    const actor: Actor = { userId: 'test', roleIds: [actorRole], isAdmin: false, permissions: new Set(['read-menu', 'grant-role-permissions']) }
+    await withTenant(defaultTestTenant(), tx => tx.insert(roleFunctionality).values({ idRole: actorRole, idMenuEntry: seen }))
+    const actor: Actor = { userId: 'test', tenantId: defaultTestTenant(), roleIds: [actorRole], isAdmin: false, permissions: new Set(['read-menu', 'grant-role-permissions']) }
 
-    const grantable = await grantableItemIds(actor, {
+    const grantable = await withTenant(defaultTestTenant(), tx => grantableItemIds(tx, actor, {
       operationIds: [idOf('read-menu'), idOf('manage-menu'), uncoded],
       functionalityIds: [hidden, seen],
-    })
+    }))
     expect(grantable).toEqual({ operationIds: [idOf('read-menu')], functionalityIds: [seen] })
   })
 
   it('offers the Administrator every candidate, code-less GRANT rows included', async () => {
     const uncoded = await makePermission('GRANT')
     const hidden = await makeMenuEntry('functionality')
-    const admin: Actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set() }
-    const grantable = await grantableItemIds(admin, { operationIds: [uncoded], functionalityIds: [hidden] })
+    const admin: Actor = { userId: 'test', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+    const grantable = await withTenant(defaultTestTenant(), tx => grantableItemIds(tx, admin, { operationIds: [uncoded], functionalityIds: [hidden] }))
     expect(grantable).toEqual({ operationIds: [uncoded], functionalityIds: [hidden] })
   })
 
@@ -276,6 +285,6 @@ describeIntegration('updateRolePermissions against the database', () => {
     } finally {
       guard.actor = adminActor
     }
-    expect(await db.select().from(rolePermission).where(eq(rolePermission.idRole, roleId))).toHaveLength(0)
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(rolePermission).where(eq(rolePermission.idRole, roleId)))).toHaveLength(0)
   })
 })

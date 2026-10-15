@@ -44,13 +44,14 @@ function render(
   allRoles: { id: number; name: string }[] = [],
   assignableRoleIds: number[] = [],
   target: UserDto = user,
+  registeredRoleId = 0,
 ) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
   act(() => root?.render(
     <ManageRolesModal
-      user={target} allRoles={allRoles} assignableRoleIds={assignableRoleIds}
+      user={target} allRoles={allRoles} assignableRoleIds={assignableRoleIds} registeredRoleId={registeredRoleId}
       onClose={() => {}} onSaved={() => {}}
     />,
   ))
@@ -120,5 +121,14 @@ describe('manage roles modal, roles the actor cannot assign', () => {
     const el = render(roles, [0, 7], { ...user, roles: [{ id: 1, name: 'Administrator' }, { id: 7, name: 'Reader' }] })
     expect(el.querySelector('[aria-label="users.roles.remove_label"]')).not.toBe(null)
     expect(el.querySelectorAll('[aria-label="users.roles.remove_label"]')).toHaveLength(1)
+  })
+
+  it('locks the base role of the tenant, whatever its id', () => {
+    const tenantRoles = [{ id: 31, name: 'Registered' }, { id: 32, name: 'Administrator' }, { id: 7, name: 'Reader' }]
+    const el = render(tenantRoles, [31, 7], { ...user, roles: [{ id: 31, name: 'Registered' }] }, 31)
+    expect(checkbox(el, 31).disabled).toBe(true)
+    expect(el.textContent).toContain('Registered (users.roles.always_assigned)')
+    expect(el.querySelectorAll('[aria-label="users.roles.remove_label"]')).toHaveLength(0)
+    expect(checkbox(el, 7).disabled).toBe(false)
   })
 })

@@ -2,7 +2,7 @@
 
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@/lib/db'
+import { withTenant } from '@/lib/db/tenant-db'
 import { appTheme } from '@/lib/db/schema'
 import { requireAdministrator } from '@/lib/rbac/auth-guard'
 import { createLogger } from '@/lib/logger'
@@ -68,14 +68,15 @@ export async function saveAppTheme(
   theme: AppTheme,
   options?: { acknowledgeWarnings?: boolean },
 ): Promise<SaveThemeResult> {
-  try {
-    await requireAdministrator()
-  } catch (err) {
+  // La guardia deve essere la prima istruzione (guards/permission-declared.test.ts), quindi il
+  // rifiuto si cattura qui con `.catch` e non con un try attorno.
+  const actor = await requireAdministrator().catch((err: unknown) => {
     // Un rifiuto vero e' normale; qualunque altro errore (database fuori uso) va
     // lasciato in traccia, anche se all'utente si risponde nello stesso modo.
     if (!(err instanceof Error && err.message === 'Unauthorized')) log.error({ err }, 'admin check failed')
-    return { saved: false, error: 'unauthorized' }
-  }
+    return null
+  })
+  if (!actor) return { saved: false, error: 'unauthorized' }
 
   // Un'azione server riceve quello che il client manda, non quello che dice il tipo:
   // vale come conferma solo un `true` vero, e un null non deve far lanciare.
@@ -92,7 +93,7 @@ export async function saveAppTheme(
   if (warnings.length > 0 && !acknowledged) return { saved: false, error: null, warnings }
 
   try {
-    const rows = await db.update(appTheme).set({
+    const rows = await withTenant(actor.tenantId, tx => tx.update(appTheme).set({
       primaryColor,
       primaryDark,
       backgroundLight: light.background ?? null,
@@ -104,7 +105,7 @@ export async function saveAppTheme(
       accentDark: dark.accent ?? null,
       sidebarDark: dark.sidebar ?? null,
       dateMod: sql`now()`,
-    }).returning({ id: appTheme.id })
+    }).returning({ idTenant: appTheme.idTenant }))
     if (rows.length === 0) {
       log.error('app_theme has no row to update')
       return { saved: false, error: 'failed' }

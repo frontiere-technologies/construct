@@ -3,9 +3,6 @@ import type { TextSearch } from '@/lib/grid-text-search'
 export type Locale = string
 export const DEFAULT_LOCALE: Locale = 'EN'
 
-export const ROLE_REGISTERED = 0
-export const ROLE_ADMINISTRATOR = 1
-
 export const USER_STATUS_DEACTIVATED = 1
 export const USER_STATUS_ACTIVE = 2
 

@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { and, eq, inArray, isNotNull, like, sql } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withTenant, withGlobal } from '@/lib/db/tenant-db'
+import { closeOwner, withOwner } from '@/lib/db/testing'
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { appLanguage, menuEntry, permission, role, roleFunctionality, roleListView, rolePermission, translationKey, translationValue, users } from '@/lib/db/schema'
 import { unique } from '@/lib/i18n/test-support/db-fixtures'
 import { PERMISSION_CODES } from './permission-catalog'
@@ -8,9 +10,9 @@ import { PERMISSION_CODES } from './permission-catalog'
 /** Il rename è riuscito solo se i nomi vecchi sono spariti: una vista o una
  *  funzione lasciata indietro punterebbe ancora là e fallirebbe a runtime, non qui. */
 async function tableExists(name: string): Promise<boolean> {
-  const rows = await db.execute(
+  const rows = await withGlobal(tx => tx.execute(
     sql`select 1 from information_schema.tables where table_schema = 'public' and table_name = ${name}`,
-  )
+  ))
   return rows.length > 0
 }
 
@@ -39,6 +41,8 @@ async function expectRejectedByConstraint(run: () => Promise<unknown>, constrain
   expect(cause?.constraint_name).toBe(constraint)
 }
 
+afterAll(closeOwner)
+
 describe('rename delle tabelle RBAC', () => {
   it('espone permission e role_permission, e non più i nomi vecchi', async () => {
     expect(await tableExists('permission')).toBe(true)
@@ -48,30 +52,30 @@ describe('rename delle tabelle RBAC', () => {
   })
 
   it('rinomina la chiave primaria in id_permission su entrambe', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
       select table_name, column_name from information_schema.columns
       where table_schema = 'public'
         and table_name in ('permission', 'role_permission')
         and column_name = 'id_permission'
       order by table_name
-    `)
+    `))
     expect(rows.map(r => r.table_name)).toEqual(['permission', 'role_permission'])
   })
 
   it('conserva privilegi e policy RLS che il rename non deve perdere', async () => {
-    const grants = await db.execute(sql`
+    const grants = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
       select table_name from information_schema.role_table_grants
       where table_schema = 'public' and grantee = 'construct_runtime'
         and table_name in ('permission', 'role_permission')
       group by table_name order by table_name
-    `)
+    `))
     expect(grants.map(r => r.table_name)).toEqual(['permission', 'role_permission'])
   })
 
   it('mantiene eseguibile apply_role_permission_deltas dopo il rename', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
       select 1 from pg_proc where proname = 'apply_role_permission_deltas'
-    `)
+    `))
     expect(rows.length).toBe(1)
   })
 
@@ -80,35 +84,35 @@ describe('rename delle tabelle RBAC', () => {
    *  = concessione, DEC-7), quindi non c'e' più un valore da far scivolare nella condizione —
    *  ma la vista non deve comunque aggiungere un filtro che quella colonna non porta più. */
   it('has_permissions resta vero per qualunque riga di role_permission, indipendentemente da come è nata', async () => {
-    const [createdRole] = await db.insert(role)
+    const [createdRole] = await withTenant(defaultTestTenant(), tx => tx.insert(role)
       .values({ description: 'zzz_rbac_rename_test_role' })
-      .returning({ idRole: role.idRole })
-    const [createdPermission] = await db.insert(permission)
+      .returning({ idRole: role.idRole }))
+    const [createdPermission] = await withOwner(tx => tx.insert(permission)
       .values({ name: 'zzz_rbac_rename_test_permission', kind: 'CATEGORY' })
-      .returning({ idPermission: permission.idPermission })
+      .returning({ idPermission: permission.idPermission }))
     try {
-      await db.insert(rolePermission).values({
+      await withTenant(defaultTestTenant(), tx => tx.insert(rolePermission).values({
         idRole: createdRole.idRole,
         idPermission: createdPermission.idPermission,
-      })
-      const [row] = await db.select({ hasPermissions: roleListView.hasPermissions })
+      }))
+      const [row] = await withTenant(defaultTestTenant(), tx => tx.select({ hasPermissions: roleListView.hasPermissions })
         .from(roleListView)
-        .where(eq(roleListView.id, createdRole.idRole))
+        .where(eq(roleListView.id, createdRole.idRole)))
       expect(row?.hasPermissions).toBe(true)
     } finally {
-      await db.delete(rolePermission).where(eq(rolePermission.idRole, createdRole.idRole))
-      await db.delete(permission).where(eq(permission.idPermission, createdPermission.idPermission))
-      await db.delete(role).where(eq(role.idRole, createdRole.idRole))
+      await withTenant(defaultTestTenant(), tx => tx.delete(rolePermission).where(eq(rolePermission.idRole, createdRole.idRole)))
+      await withOwner(tx => tx.delete(permission).where(eq(permission.idPermission, createdPermission.idPermission)))
+      await withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, createdRole.idRole)))
     }
   })
 })
 
 describe('identità del permesso', () => {
   it('assegna kind a ogni riga esistente', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withGlobal(tx => tx.execute(sql`
       select count(*)::int as orfane from public.permission
       where kind not in ('CATEGORY', 'GRANT')
-    `)
+    `))
     expect(rows[0].orfane).toBe(0)
   })
 
@@ -116,10 +120,10 @@ describe('identità del permesso', () => {
    * Sui dati di oggi ogni riga è origin = 'CONSOLE' (0015): l'unica cosa vera da verificare
    * qui è che nessuna di loro porti ancora un code — la migrazione 0019 li ha azzerati. */
   it('non lascia un code su nessuna riga CONSOLE', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withGlobal(tx => tx.execute(sql`
       select count(*)::int as violazioni from public.permission
       where origin = 'CONSOLE' and code is not null
-    `)
+    `))
     expect(rows[0].violazioni).toBe(0)
   })
 
@@ -133,14 +137,14 @@ describe('identità del permesso', () => {
   it('rifiuta un kind non ammesso', async () => {
     try {
       await expectRejectedByConstraint(
-        () => db.execute(sql`
+        () => withOwner(tx => tx.execute(sql`
           insert into public.permission (kind, origin, description, id_parent, order_position)
           values ('BOGUS', 'CONSOLE', 'kind non valido', -1, 0)
-        `),
+        `)),
         'permission_kind_valid',
       )
     } finally {
-      await db.execute(sql`delete from public.permission where description = 'kind non valido'`)
+      await withOwner(tx => tx.execute(sql`delete from public.permission where description = 'kind non valido'`))
     }
   })
 
@@ -148,23 +152,23 @@ describe('identità del permesso', () => {
   it('rifiuta un origin non ammesso', async () => {
     try {
       await expectRejectedByConstraint(
-        () => db.execute(sql`
+        () => withOwner(tx => tx.execute(sql`
           insert into public.permission (kind, origin, description, id_parent, order_position)
           values ('GRANT', 'BOGUS', 'origin non valido', -1, 0)
-        `),
+        `)),
         'permission_origin_valid',
       )
     } finally {
-      await db.execute(sql`delete from public.permission where description = 'origin non valido'`)
+      await withOwner(tx => tx.execute(sql`delete from public.permission where description = 'origin non valido'`))
     }
   })
 
   it('rifiuta un GRANT di origine SOURCE senza code', async () => {
     await expectRejectedByConstraint(
-      () => db.execute(sql`
+      () => withOwner(tx => tx.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', null, 'SOURCE', 'senza codice', -1, 0)
-      `),
+      `)),
       'permission_code_matches_kind',
     )
   })
@@ -173,10 +177,10 @@ describe('identità del permesso', () => {
    * altrettanto una violazione del vincolo nuovo, non solo la sua assenza su una SOURCE. */
   it('rifiuta un GRANT di origine CONSOLE con un code', async () => {
     await expectRejectedByConstraint(
-      () => db.execute(sql`
+      () => withOwner(tx => tx.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', 'non-dovrebbe-esistere', 'CONSOLE', 'con codice', -1, 0)
-      `),
+      `)),
       'permission_code_matches_kind',
     )
   })
@@ -193,14 +197,14 @@ describe('identità del permesso', () => {
   it('rifiuta una CATEGORY di origine SOURCE con un code', async () => {
     try {
       await expectRejectedByConstraint(
-        () => db.execute(sql`
+        () => withOwner(tx => tx.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
           values ('CATEGORY', 'test-categoria-source-con-code', 'SOURCE', 'categoria con codice', -1, 0)
-        `),
+        `)),
         'permission_code_matches_kind',
       )
     } finally {
-      await db.execute(sql`delete from public.permission where code = 'test-categoria-source-con-code'`)
+      await withOwner(tx => tx.execute(sql`delete from public.permission where code = 'test-categoria-source-con-code'`))
     }
   })
 
@@ -223,19 +227,19 @@ describe('identità del permesso', () => {
     // questo test vuole esercitare.
     const code = `test-dup-${unique()}`
     try {
-      await db.execute(sql`
+      await withOwner(tx => tx.execute(sql`
         insert into public.permission (kind, code, origin, description, id_parent, order_position)
         values ('GRANT', ${code}, 'SOURCE', 'primo', -1, 0)
-      `)
+      `))
       await expectRejectedByConstraint(
-        () => db.execute(sql`
+        () => withOwner(tx => tx.execute(sql`
           insert into public.permission (kind, code, origin, description, id_parent, order_position)
           values ('GRANT', ${code}, 'SOURCE', 'secondo', -1, 0)
-        `),
+        `)),
         'permission_code_unique',
       )
     } finally {
-      await db.execute(sql`delete from public.permission where code = ${code}`)
+      await withOwner(tx => tx.execute(sql`delete from public.permission where code = ${code}`))
     }
   })
 })
@@ -257,7 +261,7 @@ describe('travaso in menu_entry', () => {
   // sottoalbero (MIG-5), e la colonna sparita da menu_entry (MIG-4).
 
   it('lascia in permission solo operations e il suo sottoalbero (MIG-5)', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withGlobal(tx => tx.execute(sql`
       with recursive code_permissions as (
         select id_permission from public.permission where id_permission = -1
         union all
@@ -267,7 +271,7 @@ describe('travaso in menu_entry', () => {
       select count(*)::int as estranee
       from public.permission
       where id_permission not in (select id_permission from code_permissions)
-    `)
+    `))
     expect(rows[0].estranee).toBe(0)
 
     // «Nessuna estranea» da sola non basta: una tabella permission svuotata darebbe 0 anche a
@@ -277,25 +281,25 @@ describe('travaso in menu_entry', () => {
     // È irraggiungibile oggi (0001_baseline.sql semina -1 prima), ma solo la metà positiva se
     // ne accorgerebbe: operations, le cinque categorie e i quindici permessi del catalogo che la
     // 0041 ha messo al posto degli otto segnaposto della baseline, ventuno righe in tutto.
-    const [{ totali }] = await db.execute(sql`select count(*)::int as totali from public.permission`)
+    const [{ totali }] = await withGlobal(tx => tx.execute(sql`select count(*)::int as totali from public.permission`))
     expect(totali).toBe(21)
   })
 
   it('non ha più una colonna id_permission su menu_entry (MIG-4)', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
       select 1 from information_schema.columns
       where table_schema = 'public' and table_name = 'menu_entry' and column_name = 'id_permission'
-    `)
+    `))
     expect(rows).toHaveLength(0)
   })
 
   it('concede la tabella nuova al ruolo di runtime', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
       select count(*)::int as concesse from information_schema.role_table_grants
       where table_schema = 'public' and grantee = 'construct_runtime'
         and table_name in ('menu_entry', 'menu_entry_tag')
         and privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
-    `)
+    `))
     expect(rows[0].concesse).toBe(8)
   })
 
@@ -303,10 +307,10 @@ describe('travaso in menu_entry', () => {
 
 describe('pulizia colonne e tabelle assorbite (Task 7)', () => {
   it('lascia su permission le sole colonne del modello', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withGlobal(tx => tx.execute(sql`
       select column_name from information_schema.columns
       where table_schema = 'public' and table_name = 'permission' order by column_name
-    `)
+    `))
     // Lista letta dalle colonne effettive del database prima di scriverla (non quella
     // ipotizzata dal brief, che includeva date_ins/date_mod: permission non li ha mai
     // avuti, portava created_at/updated_at, e questa migrazione toglie anche quelli).
@@ -317,10 +321,10 @@ describe('pulizia colonne e tabelle assorbite (Task 7)', () => {
   })
 
   it('toglie authorized da role_permission', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
       select 1 from information_schema.columns
       where table_schema = 'public' and table_name = 'role_permission' and column_name = 'authorized'
-    `)
+    `))
     expect(rows.length).toBe(0)
   })
 
@@ -330,9 +334,9 @@ describe('pulizia colonne e tabelle assorbite (Task 7)', () => {
   })
 
   it('elimina replace_item_tags insieme alla tabella che citava', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withGlobal(tx => tx.execute(sql`
       select 1 from pg_proc where proname = 'replace_item_tags'
-    `)
+    `))
     expect(rows.length).toBe(0)
   })
 })
@@ -346,17 +350,17 @@ describe('pulizia colonne e tabelle assorbite (Task 7)', () => {
  * verificare che il trigger sia sparito, non che l'operazione che falliva ora funzioni. */
 describe('trigger permission_updated_at (Task 9)', () => {
   it('accetta un UPDATE su una riga di permission', async () => {
-    const [created] = await db.insert(permission)
+    const [created] = await withOwner(tx => tx.insert(permission)
       .values({ name: 'zzz_rbac_trigger_orphan_test', kind: 'CATEGORY' })
-      .returning({ idPermission: permission.idPermission })
+      .returning({ idPermission: permission.idPermission }))
     try {
       await expect(
-        db.update(permission)
+        withOwner(tx => tx.update(permission)
           .set({ description: 'aggiornata dal test' })
-          .where(eq(permission.idPermission, created.idPermission)),
+          .where(eq(permission.idPermission, created.idPermission))),
       ).resolves.not.toThrow()
     } finally {
-      await db.delete(permission).where(eq(permission.idPermission, created.idPermission))
+      await withOwner(tx => tx.delete(permission).where(eq(permission.idPermission, created.idPermission)))
     }
   })
 })
@@ -374,7 +378,7 @@ describe('trigger permission_updated_at (Task 9)', () => {
  * buco di copertura. */
 describe('trigger set_updated_at, su ogni tabella che lo esegue (Task 9, giro 2)', () => {
   async function tablesWithSetUpdatedAtTrigger(): Promise<string[]> {
-    const rows = await db.execute(sql`
+    const rows = await withGlobal(tx => tx.execute(sql`
       select distinct c.relname as table_name
       from pg_trigger t
       join pg_class c on c.oid = t.tgrelid
@@ -382,7 +386,7 @@ describe('trigger set_updated_at, su ogni tabella che lo esegue (Task 9, giro 2)
       join pg_namespace n on n.oid = c.relnamespace
       where not t.tgisinternal and n.nspname = 'public' and p.proname = 'set_updated_at'
       order by 1
-    `)
+    `))
     return rows.map(row => row.table_name as string)
   }
 
@@ -391,15 +395,15 @@ describe('trigger set_updated_at, su ogni tabella che lo esegue (Task 9, giro 2)
   // riga propria è sempre praticabile, quindi non serve la via di ripiego.
   const exerciseByTable: Record<string, () => Promise<void>> = {
     async users() {
-      const [created] = await db.insert(users)
+      const [created] = await withGlobal(tx => tx.insert(users)
         .values({ email: `zzz_rbac_trigger_test_${unique()}@example.com` })
-        .returning({ id: users.id })
+        .returning({ id: users.id }))
       try {
         await expect(
-          db.update(users).set({ name: 'aggiornato dal test' }).where(eq(users.id, created.id)),
+          withGlobal(tx => tx.update(users).set({ name: 'aggiornato dal test' }).where(eq(users.id, created.id))),
         ).resolves.not.toThrow()
       } finally {
-        await db.delete(users).where(eq(users.id, created.id))
+        await withGlobal(tx => tx.delete(users).where(eq(users.id, created.id)))
       }
     },
     async app_language() {
@@ -415,53 +419,53 @@ describe('trigger set_updated_at, su ogni tabella che lo esegue (Task 9, giro 2)
       // i18n che non c'entravano niente. Randomizzare il solo code non basta a essere
       // collision-free se un altro campo unico resta costante.
       const code = unique().slice(-3).replace(/[0-9]/g, digit => String.fromCharCode(97 + Number(digit)))
-      const [created] = await db.insert(appLanguage)
+      const [created] = await withGlobal(tx => tx.insert(appLanguage)
         .values({
           code, locale: `${code}-ZZ`, isDefault: false,
           name: `zzz_rbac_trigger_test_${code}`, nativeName: `zzz_rbac_trigger_test_${code}`,
         })
-        .returning({ idLanguage: appLanguage.idLanguage })
+        .returning({ idLanguage: appLanguage.idLanguage }))
       try {
         await expect(
-          db.update(appLanguage).set({ name: 'aggiornata dal test' }).where(eq(appLanguage.idLanguage, created.idLanguage)),
+          withGlobal(tx => tx.update(appLanguage).set({ name: 'aggiornata dal test' }).where(eq(appLanguage.idLanguage, created.idLanguage))),
         ).resolves.not.toThrow()
       } finally {
-        await db.delete(appLanguage).where(eq(appLanguage.idLanguage, created.idLanguage))
+        await withGlobal(tx => tx.delete(appLanguage).where(eq(appLanguage.idLanguage, created.idLanguage)))
       }
     },
     async translation_key() {
-      const [created] = await db.insert(translationKey)
+      const [created] = await withGlobal(tx => tx.insert(translationKey)
         .values({ key: `zzz_rbac_trigger_test_${unique()}.label`, namespace: 'zzz_rbac_trigger_test' })
-        .returning({ idTranslationKey: translationKey.idTranslationKey })
+        .returning({ idTranslationKey: translationKey.idTranslationKey }))
       try {
         await expect(
-          db.update(translationKey).set({ description: 'aggiornata dal test' })
-            .where(eq(translationKey.idTranslationKey, created.idTranslationKey)),
+          withGlobal(tx => tx.update(translationKey).set({ description: 'aggiornata dal test' })
+            .where(eq(translationKey.idTranslationKey, created.idTranslationKey))),
         ).resolves.not.toThrow()
       } finally {
-        await db.delete(translationKey).where(eq(translationKey.idTranslationKey, created.idTranslationKey))
+        await withGlobal(tx => tx.delete(translationKey).where(eq(translationKey.idTranslationKey, created.idTranslationKey)))
       }
     },
     async translation_value() {
       // id_translation_key non è nullable: serve una riga propria di translation_key da
       // referenziare. id_language invece è solo letto da una lingua che già esiste (mai
       // scritto, mai modificato) — non serve una lingua di prova propria per questa riga.
-      const [key] = await db.insert(translationKey)
+      const [key] = await withGlobal(tx => tx.insert(translationKey)
         .values({ key: `zzz_rbac_trigger_test_${unique()}.label`, namespace: 'zzz_rbac_trigger_test' })
-        .returning({ idTranslationKey: translationKey.idTranslationKey })
+        .returning({ idTranslationKey: translationKey.idTranslationKey }))
       try {
-        const [language] = await db.select({ idLanguage: appLanguage.idLanguage }).from(appLanguage).limit(1)
-        const [created] = await db.insert(translationValue)
+        const [language] = await withGlobal(tx => tx.select({ idLanguage: appLanguage.idLanguage }).from(appLanguage).limit(1))
+        const [created] = await withGlobal(tx => tx.insert(translationValue)
           .values({ idTranslationKey: key.idTranslationKey, idLanguage: language.idLanguage, value: 'valore di prova' })
-          .returning({ idTranslationValue: translationValue.idTranslationValue })
+          .returning({ idTranslationValue: translationValue.idTranslationValue }))
         await expect(
-          db.update(translationValue).set({ value: 'valore aggiornato dal test' })
-            .where(eq(translationValue.idTranslationValue, created.idTranslationValue)),
+          withGlobal(tx => tx.update(translationValue).set({ value: 'valore aggiornato dal test' })
+            .where(eq(translationValue.idTranslationValue, created.idTranslationValue))),
         ).resolves.not.toThrow()
         // Niente delete qui: il delete della chiave subito sotto (finally esterno) cancella
         // anche questa riga per ON DELETE CASCADE (translation_value → translation_key).
       } finally {
-        await db.delete(translationKey).where(eq(translationKey.idTranslationKey, key.idTranslationKey))
+        await withGlobal(tx => tx.delete(translationKey).where(eq(translationKey.idTranslationKey, key.idTranslationKey)))
       }
     },
   }
@@ -482,30 +486,38 @@ describe('role_functionality (0024)', () => {
 
   afterEach(async () => {
     // role_functionality cascata via id_role -> role: basta spazzare il ruolo.
-    await db.delete(role).where(like(role.description, `${PREFIX}%`))
+    await withTenant(defaultTestTenant(), tx => tx.delete(role).where(like(role.description, `${PREFIX}%`)))
   })
 
   it('concede la tabella nuova al ruolo di runtime', async () => {
-    const rows = await db.execute(sql`
+    const rows = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
       select count(*)::int as concesse from information_schema.role_table_grants
       where table_schema = 'public' and grantee = 'construct_runtime'
         and table_name = 'role_functionality'
         and privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
-    `)
+    `))
     expect(rows[0].concesse).toBe(4)
   })
 
-  it('ha la policy RLS che il confine di runtime richiede', async () => {
-    const rows = await db.execute(sql`
-      select c.relrowsecurity as rls, count(p.polname)::int as policy
+  // Dalla 0047 la policy permissiva `construct_runtime_server_access` di 0002 non c'e' piu': il
+  // confine e' la coppia di tenant (una restrittiva sul tenant, una permissiva), con la RLS forzata.
+  it('ha la RLS forzata e le due policy di tenant che il confine di runtime richiede', async () => {
+    const rows = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
+      select c.relrowsecurity as rls, c.relforcerowsecurity as forced,
+        count(p.polname) filter (where p.polname = 'tenant_boundary' and not p.polpermissive)::int as boundary,
+        count(p.polname) filter (where p.polname = 'tenant_access' and p.polpermissive)::int as access,
+        count(p.polname)::int as total
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
-      left join pg_policy p on p.polrelid = c.oid and p.polname = 'construct_runtime_server_access'
+      left join pg_policy p on p.polrelid = c.oid
       where n.nspname = 'public' and c.relname = 'role_functionality'
-      group by c.relrowsecurity
-    `)
+      group by c.relrowsecurity, c.relforcerowsecurity
+    `))
     expect(rows[0].rls).toBe(true)
-    expect(rows[0].policy).toBe(1)
+    expect(rows[0].forced).toBe(true)
+    expect(rows[0].boundary).toBe(1)
+    expect(rows[0].access).toBe(1)
+    expect(rows[0].total).toBe(2)
   })
 
   // 'non lascia in role_permission nessuna concessione su una voce di menu (travaso
@@ -519,92 +531,92 @@ describe('role_functionality (0024)', () => {
   // sono state cancellate insieme ai permessi che citavano, dalla stessa 0027.
 
   it('has_permissions è vero per un ruolo che concede solo una voce di menu', async () => {
-    const [created] = await db
+    const [created] = await withTenant(defaultTestTenant(), tx => tx
       .insert(role)
       .values({ description: `${PREFIX}solo_menu`, idRoleType: 2 })
-      .returning({ idRole: role.idRole })
-    const [entry] = await db.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1)
+      .returning({ idRole: role.idRole }))
+    const [entry] = await withTenant(defaultTestTenant(), tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1))
 
-    await db.insert(roleFunctionality).values({ idRole: created.idRole, idMenuEntry: entry.id })
+    await withTenant(defaultTestTenant(), tx => tx.insert(roleFunctionality).values({ idRole: created.idRole, idMenuEntry: entry.id }))
 
-    const rows = await db.execute(sql`
+    const rows = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
       select has_permissions from public.role_list_view where id = ${created.idRole}
-    `)
+    `))
     expect(rows[0].has_permissions).toBe(true)
   })
 
   it('cancella le concessioni con il ruolo, per cascata', async () => {
-    const [created] = await db
+    const [created] = await withTenant(defaultTestTenant(), tx => tx
       .insert(role)
       .values({ description: `${PREFIX}cascata`, idRoleType: 2 })
-      .returning({ idRole: role.idRole })
-    const [entry] = await db.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1)
-    await db.insert(roleFunctionality).values({ idRole: created.idRole, idMenuEntry: entry.id })
+      .returning({ idRole: role.idRole }))
+    const [entry] = await withTenant(defaultTestTenant(), tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1))
+    await withTenant(defaultTestTenant(), tx => tx.insert(roleFunctionality).values({ idRole: created.idRole, idMenuEntry: entry.id }))
 
-    await db.delete(role).where(eq(role.idRole, created.idRole))
+    await withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, created.idRole)))
 
-    const rows = await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole))
+    const rows = await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole)))
     expect(rows).toHaveLength(0)
   })
 
   it('apply_role_functionality_deltas concede, revoca e timbra date_mod', async () => {
-    const [created] = await db
+    const [created] = await withTenant(defaultTestTenant(), tx => tx
       .insert(role)
       .values({ description: `${PREFIX}deltas`, idRoleType: 2 })
-      .returning({ idRole: role.idRole })
-    const [entry] = await db.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1)
+      .returning({ idRole: role.idRole }))
+    const [entry] = await withTenant(defaultTestTenant(), tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1))
 
-    await db.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, ${`{${entry.id}}`}::bigint[], '{}'::bigint[])`)
-    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole))).toHaveLength(1)
+    await withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, ${`{${entry.id}}`}::bigint[], '{}'::bigint[])`))
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole)))).toHaveLength(1)
 
     // Ripetere la concessione è idempotente: on conflict do nothing, non un errore di chiave.
-    await db.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, ${`{${entry.id}}`}::bigint[], '{}'::bigint[])`)
-    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole))).toHaveLength(1)
+    await withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, ${`{${entry.id}}`}::bigint[], '{}'::bigint[])`))
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole)))).toHaveLength(1)
 
-    const [conDataMod] = await db.execute(sql`select date_mod from public.role where id_role = ${created.idRole}`)
+    const [conDataMod] = await withTenant(defaultTestTenant(), tx => tx.execute(sql`select date_mod from public.role where id_role = ${created.idRole}`))
     expect(conDataMod.date_mod).not.toBeNull()
 
-    await db.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, '{}'::bigint[], ${`{${entry.id}}`}::bigint[])`)
-    expect(await db.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole))).toHaveLength(0)
+    await withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, '{}'::bigint[], ${`{${entry.id}}`}::bigint[])`))
+    expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole)))).toHaveLength(0)
   })
 })
 
 describe('catalogo dei permessi (0041)', () => {
   it('contiene esattamente i codici del catalogo, di origine SOURCE e immutabili', async () => {
-    const rows = await db
+    const rows = await withGlobal(tx => tx
       .select({ code: permission.code, origin: permission.origin, kind: permission.kind, isImmutable: permission.isImmutable })
       .from(permission)
-      .where(isNotNull(permission.code))
+      .where(isNotNull(permission.code)))
     expect(rows.map(r => r.code).sort()).toEqual([...PERMISSION_CODES].sort())
     expect(rows.every(r => r.origin === 'SOURCE' && r.kind === 'GRANT' && r.isImmutable === 1)).toBe(true)
   })
 
   it('non contiene più gli 8 segnaposto della baseline', async () => {
-    const rows = await db
+    const rows = await withGlobal(tx => tx
       .select({ name: permission.name })
       .from(permission)
       .where(inArray(permission.name, [
         'USER_CREATE', 'USER_READ', 'USER_UPDATE', 'USER_DELETE',
         'PERMISSION_CREATE', 'PERMISSION_READ', 'PERMISSION_UPDATE', 'PERMISSION_DELETE',
-      ]))
+      ])))
     expect(rows).toEqual([])
   })
 
   it('appende cinque categorie SOURCE sotto operations, la prima direttamente', async () => {
-    const categories = await db
+    const categories = await withGlobal(tx => tx
       .select({ name: permission.name, idParent: permission.idParent })
       .from(permission)
-      .where(and(eq(permission.kind, 'CATEGORY'), eq(permission.origin, 'SOURCE')))
+      .where(and(eq(permission.kind, 'CATEGORY'), eq(permission.origin, 'SOURCE'))))
     expect(categories).toHaveLength(5)
     expect(categories.filter(c => c.idParent === -1).map(c => c.name)).toEqual(['Amministrazione'])
   })
 
   it("concede all'Amministratore ogni codice del catalogo (DEC-25)", async () => {
-    const rows = await db
+    const rows = await withTenant(defaultTestTenant(), tx => tx
       .select({ code: permission.code })
       .from(rolePermission)
       .innerJoin(permission, eq(permission.idPermission, rolePermission.idPermission))
-      .where(and(eq(rolePermission.idRole, 1), isNotNull(permission.code)))
+      .where(and(eq(rolePermission.idRole, 1), isNotNull(permission.code))))
     expect(rows.map(r => r.code).sort()).toEqual([...PERMISSION_CODES].sort())
   })
 })

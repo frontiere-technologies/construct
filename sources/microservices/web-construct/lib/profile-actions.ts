@@ -1,7 +1,7 @@
 'use server'
 
 import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { users } from '@/lib/db/schema'
 import { phoneSchema } from '@/lib/validations'
 import { allowSelfService } from '@/lib/rbac/access-declarations'
@@ -26,7 +26,7 @@ export async function saveProfile(profile: UserProfile): Promise<{ error: string
   }
 
   try {
-    await db
+    await withGlobal(tx => tx
       .insert(users)
       .values({
         id: session.user.id,
@@ -45,7 +45,7 @@ export async function saveProfile(profile: UserProfile): Promise<{ error: string
           phone,
           updatedAt: new Date().toISOString(),
         },
-      })
+      }))
     return { error: null }
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) }

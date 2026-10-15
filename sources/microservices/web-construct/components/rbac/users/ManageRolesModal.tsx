@@ -3,7 +3,7 @@
 import React, { useId, useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import { updateUserRoles } from '@/lib/rbac/users-actions'
-import { ROLE_REGISTERED, type UserDto } from '@/lib/rbac/types'
+import type { UserDto } from '@/lib/rbac/types'
 import { useI18n } from '@/context/I18nContext'
 import { AccessibleDialog } from '@/components/shared/AccessibleDialog'
 import { Button } from '@/components/ui/button'
@@ -15,11 +15,13 @@ interface Props {
   /** I ruoli che l'attore può assegnare e togliere (DEC-29), calcolati dalla pagina con le regole
    *  di `grant-guards.ts` (DEC-32). Gli altri restano visibili e disabilitati. */
   assignableRoleIds: number[]
+  /** Il ruolo base del tenant, sempre assegnato: lo calcola la pagina dal server (MTF-DEC-5). */
+  registeredRoleId: number
   onClose: () => void
   onSaved: () => void
 }
 
-export default function ManageRolesModal({ user, allRoles, assignableRoleIds, onClose, onSaved }: Props) {
+export default function ManageRolesModal({ user, allRoles, assignableRoleIds, registeredRoleId, onClose, onSaved }: Props) {
   const { t } = useI18n()
   const unassignable = useMemo(() => {
     const assignable = new Set(assignableRoleIds)
@@ -31,7 +33,7 @@ export default function ManageRolesModal({ user, allRoles, assignableRoleIds, on
   const titleId = useId()
 
   const toggle = (id: number) => {
-    if (id === ROLE_REGISTERED || unassignable.has(id)) return // always kept / not the actor's to change
+    if (id === registeredRoleId || unassignable.has(id)) return // always kept / not the actor's to change
     setSelected(prev => {
       const n = new Set(prev)
       if (n.has(id)) n.delete(id); else n.add(id)
@@ -69,7 +71,7 @@ export default function ManageRolesModal({ user, allRoles, assignableRoleIds, on
           options={allRoles}
           selected={selected}
           onToggle={toggle}
-          lockedId={ROLE_REGISTERED}
+          lockedId={registeredRoleId}
           lockedLabel={t('users.roles.always_assigned')}
           disabledIds={unassignable}
           disabledHint={t('users.roles.not_assignable_hint')}

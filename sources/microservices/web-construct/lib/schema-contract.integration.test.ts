@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 import { is, SQL, sql } from 'drizzle-orm'
 import { getTableConfig, getViewConfig, PgDialect, PgTable, PgView } from 'drizzle-orm/pg-core'
 import type { IndexedColumn } from 'drizzle-orm/pg-core'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import * as drizzleSchema from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
 import { assertExactCatalogSection } from './schema-contract'
@@ -14,16 +14,16 @@ describeIntegration('database runtime boundary', () => {
       .map(table => getTableConfig(table))
       .sort((left, right) => left.name.localeCompare(right.name))
     const expectedTables = tableConfigs.map(config => config.name)
-    const deployedTables = await db.execute<{ tableName: string }>(sql`
+    const deployedTables = await withGlobal(tx => tx.execute<{ tableName: string }>(sql`
       select c.relname as "tableName"
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind in ('r', 'p')
         and c.relname <> 'construct_schema_migration'
       order by c.relname
-    `)
+    `))
     assertExactCatalogSection('tables', expectedTables, deployedTables.map(row => row.tableName))
 
-    const deployedColumns = await db.execute<{
+    const deployedColumns = await withGlobal(tx => tx.execute<{
       tableName: string
       columnName: string
       sqlType: string
@@ -40,7 +40,7 @@ describeIntegration('database runtime boundary', () => {
       where n.nspname = 'public' and c.relkind in ('r', 'p')
         and c.relname <> 'construct_schema_migration'
       order by c.relname, a.attnum
-    `)
+    `))
     const normalizeType = (value: string) => value.replace('character varying', 'varchar')
     const expectedColumns = tableConfigs.flatMap(config => config.columns.map(column => ({
       tableName: config.name,
@@ -82,7 +82,7 @@ describeIntegration('database runtime boundary', () => {
         predicate: normalizeExpression(index.config.where ? dialect.sqlToQuery(index.config.where).sql : null),
       }
     })).sort((left, right) => left.indexName.localeCompare(right.indexName))
-    const deployedIndexes = await db.execute<{ indexName: string; unique: boolean; columns: string[]; predicate: string | null }>(sql`
+    const deployedIndexes = await withGlobal(tx => tx.execute<{ indexName: string; unique: boolean; columns: string[]; predicate: string | null }>(sql`
       select index_class.relname as "indexName", idx.indisunique as unique,
         array_agg(attribute.attname order by key_position.ordinality) as columns,
         pg_get_expr(idx.indpred, idx.indrelid) as predicate
@@ -96,7 +96,7 @@ describeIntegration('database runtime boundary', () => {
       where n.nspname = 'public' and constraint_row.oid is null
       group by index_class.relname, idx.indisunique, idx.indpred, idx.indrelid
       order by index_class.relname
-    `)
+    `))
     assertExactCatalogSection('indexes', expectedIndexes, deployedIndexes.map(index => ({
       ...index,
       predicate: normalizeExpression(index.predicate),
@@ -106,7 +106,7 @@ describeIntegration('database runtime boundary', () => {
       const reference = foreignKey.reference()
       return `${config.name}:${reference.columns.map(column => column.name).join(',')}->${getTableConfig(reference.foreignTable).name}:${reference.foreignColumns.map(column => column.name).join(',')}:${foreignKey.onDelete ?? 'no action'}:${foreignKey.onUpdate ?? 'no action'}`
     })).sort()
-    const deployedForeignKeys = await db.execute<{
+    const deployedForeignKeys = await withGlobal(tx => tx.execute<{
       tableName: string
       columns: string[]
       foreignTable: string
@@ -130,7 +130,7 @@ describeIntegration('database runtime boundary', () => {
       where n.nspname = 'public' and constraint_row.contype = 'f'
       group by source.relname, target.relname, constraint_row.oid
       order by source.relname, constraint_row.oid
-    `)
+    `))
     assertExactCatalogSection(
       'foreign keys',
       expectedForeignKeys,
@@ -161,7 +161,7 @@ describeIntegration('database runtime boundary', () => {
         }
       })
       .sort((left, right) => left.viewName.localeCompare(right.viewName))
-    const deployedViewColumns = await db.execute<{ viewName: string; name: string; type: string }>(sql`
+    const deployedViewColumns = await withGlobal(tx => tx.execute<{ viewName: string; name: string; type: string }>(sql`
       select view_class.relname as "viewName", attribute.attname as name,
         format_type(attribute.atttypid, attribute.atttypmod) as type
       from pg_class view_class
@@ -169,7 +169,7 @@ describeIntegration('database runtime boundary', () => {
       join pg_attribute attribute on attribute.attrelid = view_class.oid and attribute.attnum > 0 and not attribute.attisdropped
       where n.nspname = 'public' and view_class.relkind = 'v'
       order by view_class.relname, attribute.attnum
-    `)
+    `))
     const deployedViews = Array.from(new Set(deployedViewColumns.map(column => column.viewName))).map(viewName => ({
       viewName,
       columns: deployedViewColumns.filter(column => column.viewName === viewName).map(column => ({
@@ -181,7 +181,7 @@ describeIntegration('database runtime boundary', () => {
   })
 
   it('defines a non-privileged runtime role', async () => {
-    const roles = await db.execute<{
+    const roles = await withGlobal(tx => tx.execute<{
       rolcanlogin: boolean
       rolsuper: boolean
       rolcreatedb: boolean
@@ -191,7 +191,7 @@ describeIntegration('database runtime boundary', () => {
     }>(sql`
       select rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
       from pg_roles where rolname = 'construct_runtime'
-    `)
+    `))
     expect(roles).toEqual([{
       rolcanlogin: false,
       rolsuper: false,
@@ -203,13 +203,13 @@ describeIntegration('database runtime boundary', () => {
   })
 
   it('does not expose application relations through Data API roles', async () => {
-    const grants = await db.execute(sql`
+    const grants = await withGlobal(tx => tx.execute(sql`
       select grantee, table_name, privilege_type
       from information_schema.role_table_grants
       where table_schema = 'public'
         and grantee in ('PUBLIC', 'anon', 'authenticated')
         and table_name <> 'construct_schema_migration'
-    `)
+    `))
     expect(grants).toHaveLength(0)
 
     // Default privileges are recorded per owner role and per schema, and
@@ -231,7 +231,7 @@ describeIntegration('database runtime boundary', () => {
     // cover the relations that exist. See docs/reviews/2026-08-19-env-configuration.md,
     // finding DB-3.
     const PLATFORM_OWNED_ROLES = ['supabase_admin']
-    const defaultGrantOwners = await db.execute(sql`
+    const defaultGrantOwners = await withGlobal(tx => tx.execute(sql`
       select distinct defaclrole::regrole::text as owner
       from pg_default_acl defaults
       cross join lateral aclexplode(coalesce(defaults.defaclacl, acldefault(defaults.defaclobjtype, defaults.defaclrole))) acl
@@ -239,7 +239,7 @@ describeIntegration('database runtime boundary', () => {
       where grantee.rolname in ('anon', 'authenticated')
         and acl.privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'EXECUTE', 'USAGE')
         and defaults.defaclnamespace = 'public'::regnamespace
-    `)
+    `))
     const ownersWeControl = (defaultGrantOwners as unknown as { owner: string }[])
       .map(row => row.owner)
       .filter(owner => !PLATFORM_OWNED_ROLES.includes(owner))
@@ -247,30 +247,169 @@ describeIntegration('database runtime boundary', () => {
   })
 
   it('uses an invoker-rights view and declares reverse lookup indexes', async () => {
-    const views = await db.execute<{ reloptions: string[] | null }>(sql`
+    const views = await withGlobal(tx => tx.execute<{ reloptions: string[] | null }>(sql`
       select c.reloptions
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relname = 'role_list_view'
-    `)
+    `))
     expect(views[0]?.reloptions).toContain('security_invoker=true')
 
-    const indexes = await db.execute<{ indexname: string }>(sql`
+    const indexes = await withGlobal(tx => tx.execute<{ indexname: string }>(sql`
       select indexname from pg_indexes
       where schemaname = 'public'
         and indexname in ('user_role_id_role_user_id_idx', 'permission_parent_order_idx')
       order by indexname
-    `)
+    `))
     expect(indexes.map(row => row.indexname)).toEqual([
       'permission_parent_order_idx',
       'user_role_id_role_user_id_idx',
     ])
   })
 
+  it('runs every function in public and app_private with the caller rights', async () => {
+    const definers = await withGlobal(tx => tx.execute<{ name: string }>(sql`
+      select p.proname as name
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname in ('public', 'app_private') and p.prosecdef
+        and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+      order by p.proname
+    `))
+    expect(definers.map(row => row.name)).toEqual([])
+  })
+
+  it('lets construct_owner, and only it, own the application objects', async () => {
+    const [owner] = await withGlobal(tx => tx.execute<{ rolcanlogin: boolean; rolbypassrls: boolean; rolsuper: boolean }>(sql`
+      select rolcanlogin, rolbypassrls, rolsuper from pg_roles where rolname = 'construct_owner'
+    `))
+    expect(owner).toEqual({ rolcanlogin: false, rolbypassrls: false, rolsuper: false })
+
+    const strays = await withGlobal(tx => tx.execute<{ name: string; owner: string }>(sql`
+      select c.relname as name, r.rolname as owner
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      join pg_roles r on r.oid = c.relowner
+      where n.nspname in ('public', 'app_private') and c.relkind in ('r', 'p', 'v', 'S')
+        and c.relname <> 'construct_schema_migration'
+        and r.rolname <> 'construct_owner'
+        and not exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype = 'e')
+      union all
+      select p.proname, r.rolname
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      join pg_roles r on r.oid = p.proowner
+      where n.nspname in ('public', 'app_private') and r.rolname <> 'construct_owner'
+        and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+      union all
+      select n.nspname, r.rolname
+      from pg_namespace n
+      join pg_roles r on r.oid = n.nspowner
+      where n.nspname = 'app_private' and r.rolname <> 'construct_owner'
+      order by 1
+    `))
+    expect(strays).toEqual([])
+  })
+
+  it('classifies every application table', async () => {
+    const unclassified = await withGlobal(tx => tx.execute<{ name: string }>(sql`
+      select c.relname as name
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind in ('r', 'p')
+        and c.relname <> 'construct_schema_migration'
+        and not exists (select 1 from app_private.table_class tc where tc.table_name = c.relname)
+      order by 1
+    `))
+    expect(unclassified.map(row => row.name)).toEqual([])
+  })
+
+  it('forces row level security on every classified table', async () => {
+    const loose = await withGlobal(tx => tx.execute<{ name: string }>(sql`
+      select tc.table_name as name
+      from app_private.table_class tc
+      join pg_class c on c.relname = tc.table_name and c.relnamespace = 'public'::regnamespace
+      where not (c.relrowsecurity and c.relforcerowsecurity)
+      order by 1
+    `))
+    expect(loose.map(row => row.name)).toEqual([])
+  })
+
+  it('guards every tenant table with the tenant policies, a leading index and composite keys', async () => {
+    const violations = await withGlobal(tx => tx.execute<{ name: string; problem: string }>(sql`
+      with tenant_tables as (
+        select c.oid, c.relname
+        from app_private.table_class tc
+        join pg_class c on c.relname = tc.table_name and c.relnamespace = 'public'::regnamespace
+        where tc.class = 'tenant'
+      )
+      select t.relname as name, 'id_tenant' as problem from tenant_tables t
+      where not exists (select 1 from pg_attribute a where a.attrelid = t.oid and a.attname = 'id_tenant'
+                        and a.attnotnull and a.atttypid = 'int8'::regtype)
+      union all
+      select t.relname, 'tenant foreign key' from tenant_tables t
+      where not exists (
+        select 1 from pg_constraint k
+        where k.conrelid = t.oid and k.contype = 'f' and k.confrelid = 'public.tenant'::regclass
+          and k.conkey = array[(select a.attnum from pg_attribute a where a.attrelid = t.oid and a.attname = 'id_tenant')])
+      union all
+      select t.relname, 'tenant default' from tenant_tables t
+      where not exists (
+        select 1 from pg_attrdef d join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+        where d.adrelid = t.oid and a.attname = 'id_tenant'
+          and pg_get_expr(d.adbin, d.adrelid) like '%current_tenant_id%')
+      union all
+      select t.relname, 'tenant_boundary' from tenant_tables t
+      where not exists (
+        select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t.relname and p.policyname = 'tenant_boundary'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'ALL'
+          and p.roles @> array['construct_runtime', 'construct_owner']::name[]
+          and p.qual like '%current_tenant_id%' and p.with_check like '%current_tenant_id%')
+      union all
+      select t.relname, 'tenant_access' from tenant_tables t
+      where not exists (
+        select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t.relname and p.policyname = 'tenant_access'
+          and p.permissive = 'PERMISSIVE' and p.cmd = 'ALL')
+      union all
+      select t.relname, 'leading index' from tenant_tables t
+      where not exists (
+        select 1 from pg_index i join pg_attribute a on a.attrelid = i.indrelid and a.attnum = i.indkey[0]
+        where i.indrelid = t.oid and a.attname = 'id_tenant')
+      union all
+      select t.relname, 'foreign key ' || k.conname from tenant_tables t
+      join pg_constraint k on k.conrelid = t.oid and k.contype = 'f'
+      join tenant_tables target on target.oid = k.confrelid
+      where not exists (
+        select 1 from unnest(k.conkey) key_column(attnum)
+        join pg_attribute a on a.attrelid = t.oid and a.attnum = key_column.attnum
+        where a.attname = 'id_tenant')
+      order by 1, 2
+    `))
+    expect(violations).toEqual([])
+  })
+
+  it('gives global tables the policies and grants of their class', async () => {
+    const violations = await withGlobal(tx => tx.execute<{ name: string; problem: string }>(sql`
+      select tc.table_name as name, 'policy' as problem
+      from app_private.table_class tc
+      where tc.class <> 'tenant' and not exists (
+        select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = tc.table_name
+          and p.policyname = case tc.class when 'global_write' then 'global_access' else 'global_read' end)
+      union all
+      select tc.table_name, 'write grant on a read-only table'
+      from app_private.table_class tc
+      where tc.class = 'global_read'
+        and has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'insert,update,delete')
+      order by 1, 2
+    `))
+    expect(violations).toEqual([])
+  })
+
   it('keeps migration history inaccessible to the runtime role', async () => {
-    const privileges = await db.execute<{ allowed: boolean }>(sql`
+    const privileges = await withGlobal(tx => tx.execute<{ allowed: boolean }>(sql`
       select has_table_privilege('construct_runtime', 'public.construct_schema_migration', 'select') as allowed
-    `)
+    `))
     expect(privileges[0].allowed).toBe(false)
   })
 
@@ -289,7 +428,7 @@ describeIntegration('database runtime boundary', () => {
    * login, so it is what stops the split in db.mjs from being quietly undone.
    */
   it('connects through the runtime role and nothing wider', async () => {
-    const [identity] = await db.execute<{
+    const [identity] = await withGlobal(tx => tx.execute<{
       rolsuper: boolean
       rolcreatedb: boolean
       rolcreaterole: boolean
@@ -298,7 +437,7 @@ describeIntegration('database runtime boundary', () => {
     }>(sql`
       select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
       from pg_roles where rolname = current_user
-    `)
+    `))
     expect(identity).toEqual({
       rolsuper: false,
       rolcreatedb: false,
@@ -310,31 +449,31 @@ describeIntegration('database runtime boundary', () => {
     // `distinct` because a role granted by two grantors yields two rows in
     // pg_auth_members, and the platform roles are exactly the kind of membership
     // this assertion exists to reject — a duplicate must not read as a second one.
-    const memberships = await db.execute<{ granted: string }>(sql`
+    const memberships = await withGlobal(tx => tx.execute<{ granted: string }>(sql`
       select distinct granted.rolname as granted
       from pg_auth_members membership
       join pg_roles member on member.oid = membership.member
       join pg_roles granted on granted.oid = membership.roleid
       where member.rolname = current_user
       order by granted.rolname
-    `)
+    `))
     expect(memberships.map(row => row.granted)).toEqual(['construct_runtime'])
 
     // Membership alone is not enough: a login can hold privileges granted
     // directly, which inherit from nothing and so survive every check above.
-    const directGrants = await db.execute<{ source: string }>(sql`
+    const directGrants = await withGlobal(tx => tx.execute<{ source: string }>(sql`
       select 'table' as source from information_schema.role_table_grants where grantee = current_user
       union all select 'routine' from information_schema.role_routine_grants where grantee = current_user
       union all select 'usage' from information_schema.role_usage_grants where grantee = current_user
-    `)
+    `))
     expect(directGrants.map(row => row.source)).toEqual([])
 
     // The same probe the boundary is described by, asked of the live connection
     // rather than of the role name — this is the one that was reported false while
     // the connection in front of it answered true.
-    const history = await db.execute<{ allowed: boolean }>(sql`
+    const history = await withGlobal(tx => tx.execute<{ allowed: boolean }>(sql`
       select has_table_privilege(current_user, 'public.construct_schema_migration', 'select') as allowed
-    `)
+    `))
     expect(history[0].allowed).toBe(false)
   })
 })

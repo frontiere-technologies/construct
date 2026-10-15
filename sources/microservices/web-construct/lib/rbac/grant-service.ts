@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import type { TenantTx } from '@/lib/db/tenant-db'
 import { permission, roleFunctionality, rolePermission, userRole } from '@/lib/db/schema'
+import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import type { Actor } from './actor'
 import { canChangeRole, canGrantCode, canGrantFunctionality, type RoleGrants } from './grant-guards'
 import type { GrantableItemIds } from './types'
@@ -9,9 +10,9 @@ import type { GrantableItemIds } from './types'
  *  `updateRolePermissions` per conto suo, con il proprio messaggio. Una riga GRANT senza code
  *  non è nel catalogo e nessuno la possiede: si rifiuta qui, altrimenti sparirebbe dal controllo
  *  e un non amministratore potrebbe concederla senza verifica. */
-export async function permissionCodesByIds(ids: number[]): Promise<string[]> {
+export async function permissionCodesByIds(tx: TenantTx, ids: number[]): Promise<string[]> {
   if (!ids.length) return []
-  const rows = await db
+  const rows = await tx
     .select({ idPermission: permission.idPermission, kind: permission.kind, code: permission.code })
     .from(permission)
     .where(inArray(permission.idPermission, ids))
@@ -20,9 +21,9 @@ export async function permissionCodesByIds(ids: number[]): Promise<string[]> {
   return rows.flatMap(row => (row.code ? [row.code] : []))
 }
 
-export async function functionalityIdsForRoles(roleIds: number[]): Promise<Set<number>> {
+export async function functionalityIdsForRoles(tx: TenantTx, roleIds: number[]): Promise<Set<number>> {
   if (!roleIds.length) return new Set()
-  const rows = await db
+  const rows = await tx
     .select({ idMenuEntry: roleFunctionality.idMenuEntry })
     .from(roleFunctionality)
     .where(inArray(roleFunctionality.idRole, roleIds))
@@ -32,19 +33,18 @@ export async function functionalityIdsForRoles(roleIds: number[]): Promise<Set<n
 /** Le concessioni di ciascun ruolo. Una riga GRANT senza code finisce in `uncataloguedIds`, non
  *  sparisce: per `assertCanChangeRoles` è una concessione che nessuno possiede, come per
  *  `permissionCodesByIds` quando la si vuole concedere. */
-export async function grantsForRoles(roleIds: number[]): Promise<RoleGrants[]> {
+export async function grantsForRoles(tx: TenantTx, roleIds: number[]): Promise<RoleGrants[]> {
   if (!roleIds.length) return []
-  const [codes, functionalities] = await Promise.all([
-    db.select({
-      idRole: rolePermission.idRole, idPermission: permission.idPermission, kind: permission.kind, code: permission.code,
-    })
-      .from(rolePermission)
-      .innerJoin(permission, eq(permission.idPermission, rolePermission.idPermission))
-      .where(and(inArray(rolePermission.idRole, roleIds), isNull(permission.deprecatedAt))),
-    db.select({ idRole: roleFunctionality.idRole, idMenuEntry: roleFunctionality.idMenuEntry })
-      .from(roleFunctionality)
-      .where(inArray(roleFunctionality.idRole, roleIds)),
-  ])
+  // Dentro una transazione le letture vanno in serie sulla stessa connessione (MTF-RISK-3).
+  const codes = await tx.select({
+    idRole: rolePermission.idRole, idPermission: permission.idPermission, kind: permission.kind, code: permission.code,
+  })
+    .from(rolePermission)
+    .innerJoin(permission, eq(permission.idPermission, rolePermission.idPermission))
+    .where(and(inArray(rolePermission.idRole, roleIds), isNull(permission.deprecatedAt)))
+  const functionalities = await tx.select({ idRole: roleFunctionality.idRole, idMenuEntry: roleFunctionality.idMenuEntry })
+    .from(roleFunctionality)
+    .where(inArray(roleFunctionality.idRole, roleIds))
   return roleIds.map(idRole => ({
     idRole,
     codes: codes.flatMap(row => (row.idRole === idRole && row.code ? [row.code] : [])),
@@ -55,8 +55,8 @@ export async function grantsForRoles(roleIds: number[]): Promise<RoleGrants[]> {
   }))
 }
 
-export async function currentRoleIds(userId: string): Promise<number[]> {
-  const rows = await db.select({ idRole: userRole.idRole }).from(userRole).where(eq(userRole.userId, userId))
+export async function currentRoleIds(tx: TenantTx, userId: string): Promise<number[]> {
+  const rows = await tx.select({ idRole: userRole.idRole }).from(userRole).where(eq(userRole.userId, userId))
   return rows.map(row => row.idRole)
 }
 
@@ -65,9 +65,11 @@ export async function currentRoleIds(userId: string): Promise<number[]> {
  * quelle di `assertCanChangeRoles`, lette da `grant-guards.ts`: la pagina Utenti non offre un
  * ruolo che `updateUserRoles` rifiuterebbe (I3 della revisione finale, DEC-32).
  */
-export async function assignableRoleIds(actor: Actor, roleIds: number[]): Promise<number[]> {
-  const [visible, grants] = await Promise.all([functionalityIdsForRoles(actor.roleIds), grantsForRoles(roleIds)])
-  return grants.filter(g => canChangeRole(actor, visible, g)).map(g => g.idRole)
+export async function assignableRoleIds(tx: TenantTx, actor: Actor, roleIds: number[]): Promise<number[]> {
+  const visible = await functionalityIdsForRoles(tx, actor.roleIds)
+  const grants = await grantsForRoles(tx, roleIds)
+  const { tenantAdmin } = await getSystemRoleIds(tx)
+  return grants.filter(g => canChangeRole(actor, visible, g, tenantAdmin)).map(g => g.idRole)
 }
 
 /**
@@ -76,15 +78,13 @@ export async function assignableRoleIds(actor: Actor, roleIds: number[]): Promis
  * si concede mai e non compare. Le regole sono quelle di `updateRolePermissions`, lette da
  * `grant-guards.ts`.
  */
-export async function grantableItemIds(actor: Actor, candidates: GrantableItemIds): Promise<GrantableItemIds> {
-  const [rows, visible] = await Promise.all([
-    candidates.operationIds.length
-      ? db.select({ idPermission: permission.idPermission, kind: permission.kind, code: permission.code })
-        .from(permission)
-        .where(inArray(permission.idPermission, candidates.operationIds))
-      : Promise.resolve([]),
-    functionalityIdsForRoles(actor.roleIds),
-  ])
+export async function grantableItemIds(tx: TenantTx, actor: Actor, candidates: GrantableItemIds): Promise<GrantableItemIds> {
+  const rows = candidates.operationIds.length
+    ? await tx.select({ idPermission: permission.idPermission, kind: permission.kind, code: permission.code })
+      .from(permission)
+      .where(inArray(permission.idPermission, candidates.operationIds))
+    : []
+  const visible = await functionalityIdsForRoles(tx, actor.roleIds)
   return {
     operationIds: rows
       .filter(row => row.kind === 'GRANT' && canGrantCode(actor, row.code))

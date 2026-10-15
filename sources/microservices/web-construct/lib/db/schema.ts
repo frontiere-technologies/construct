@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   pgTable, pgView, uuid, text, jsonb, timestamp, bigint, integer, smallint,
-  boolean, varchar, primaryKey, unique, index, uniqueIndex, type AnyPgColumn,
+  boolean, varchar, primaryKey, unique, index, uniqueIndex, foreignKey, type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
 export const userStatus = pgTable('user_status', {
@@ -63,9 +63,24 @@ export const users = pgTable('users', {
   idLanguage: bigint('id_language', { mode: 'number' }).references(() => appLanguage.idLanguage, { onDelete: 'set null' }),
 }, (t) => [index('users_id_language_idx').on(t.idLanguage)])
 
-/** Il colore principale dell'app: una riga sola, garantita dal database (0031). */
+const tenantIdColumn = () => bigint('id_tenant', { mode: 'number' })
+  .notNull()
+  .default(sql`app_private.current_tenant_id()`)
+  .references(() => tenant.id)
+
+/** I tenant (specifica 2026-10-13, §2.3). Globale, in sola lettura per l'app dalla 0047. */
+export const tenant = pgTable('tenant', {
+  id: bigint('id', { mode: 'number' }).primaryKey().default(sql`nextval('public.s_id_tenant')`),
+  slug: text('slug').notNull().unique(),
+  name: text('name').notNull(),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+})
+
+/** Il colore principale dell'app: una riga per tenant (0046; era una riga sola, 0031). */
 export const appTheme = pgTable('app_theme', {
-  id: boolean('id').primaryKey().default(true),
+  idTenant: bigint('id_tenant', { mode: 'number' }).primaryKey().default(sql`app_private.current_tenant_id()`).references(() => tenant.id),
   primaryColor: varchar('primary_color', { length: 7 }).notNull(),
   // Il colore principale scelto per il modo scuro (DEC-10, 0038): null vuol dire «ricavato dal chiaro».
   primaryDark: varchar('primary_dark', { length: 7 }),
@@ -118,27 +133,26 @@ export const authRateLimit = pgTable('auth_rate_limit', {
 
 export const role = pgTable('role', {
   idRole: bigint('id_role', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_role')`),
+  idTenant: tenantIdColumn(),
   idRoleType: bigint('id_role_type', { mode: 'number' }).references(() => roleType.idRoleType),
   description: text('description').notNull(),
+  systemKey: text('system_key', { enum: ['REGISTERED', 'TENANT_ADMIN'] }),
   dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }).defaultNow(),
   dateMod: timestamp('date_mod', { withTimezone: true, mode: 'string' }),
-})
-
-export const roleHistory = pgTable('role_history', {
-  idRole: bigint('id_role', { mode: 'number' }).notNull(),
-  hDateIns: timestamp('h_date_ins', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
-  description: text('description').notNull(),
-  dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }),
-  dateMod: timestamp('date_mod', { withTimezone: true, mode: 'string' }),
-}, (t) => [primaryKey({ columns: [t.idRole, t.hDateIns] })])
+}, (t) => [
+  unique('role_tenant_role_key').on(t.idTenant, t.idRole),
+  uniqueIndex('role_tenant_system_key_idx').on(t.idTenant, t.systemKey).where(sql`${t.systemKey} is not null`),
+])
 
 export const userRole = pgTable('user_role', {
+  idTenant: tenantIdColumn(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  idRole: bigint('id_role', { mode: 'number' }).notNull().references(() => role.idRole, { onDelete: 'cascade' }),
+  idRole: bigint('id_role', { mode: 'number' }).notNull(),
   dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
 }, (t) => [
-  primaryKey({ columns: [t.userId, t.idRole] }),
-  index('user_role_id_role_user_id_idx').on(t.idRole, t.userId),
+  primaryKey({ columns: [t.idTenant, t.userId, t.idRole] }),
+  foreignKey({ name: 'user_role_role_fkey', columns: [t.idTenant, t.idRole], foreignColumns: [role.idTenant, role.idRole] }).onDelete('cascade'),
+  index('user_role_id_role_user_id_idx').on(t.idTenant, t.idRole, t.userId),
 ])
 
 export const permission = pgTable('permission', {
@@ -159,13 +173,18 @@ export const permission = pgTable('permission', {
 ])
 
 export const rolePermission = pgTable('role_permission', {
-  idRole: bigint('id_role', { mode: 'number' }).notNull().references(() => role.idRole, { onDelete: 'cascade' }),
+  idTenant: tenantIdColumn(),
+  idRole: bigint('id_role', { mode: 'number' }).notNull(),
   idPermission: bigint('id_permission', { mode: 'number' }).notNull().references(() => permission.idPermission, { onDelete: 'cascade' }),
-}, (t) => [primaryKey({ columns: [t.idRole, t.idPermission] })])
+}, (t) => [
+  primaryKey({ columns: [t.idTenant, t.idRole, t.idPermission] }),
+  foreignKey({ name: 'role_permission_role_fkey', columns: [t.idTenant, t.idRole], foreignColumns: [role.idTenant, role.idRole] }).onDelete('cascade'),
+])
 
 export const menuEntry = pgTable('menu_entry', {
   idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).primaryKey().default(sql`nextval('s_id_menu_entry')`),
-  idParent: bigint('id_parent', { mode: 'number' }).references((): AnyPgColumn => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
+  idTenant: tenantIdColumn(),
+  idParent: bigint('id_parent', { mode: 'number' }),
   name: text('name'),
   orderPosition: integer('order_position').notNull().default(0),
   navbarPosition: text('navbar_position', { enum: ['TOP', 'BOTTOM'] }),
@@ -178,31 +197,36 @@ export const menuEntry = pgTable('menu_entry', {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (t) => [
-  index('menu_entry_parent_order_idx').on(t.idParent, t.orderPosition),
+  unique('menu_entry_tenant_entry_key').on(t.idTenant, t.idMenuEntry),
+  // DEFERRABLE INITIALLY DEFERRED nel database (0046): Drizzle non lo esprime, e il contratto
+  // confronta solo colonne e azioni.
+  foreignKey({ name: 'menu_entry_parent_fkey', columns: [t.idTenant, t.idParent], foreignColumns: [t.idTenant, t.idMenuEntry] }).onDelete('cascade'),
+  index('menu_entry_parent_order_idx').on(t.idTenant, t.idParent, t.orderPosition),
 ])
 
 export const menuEntryTag = pgTable('menu_entry_tag', {
-  idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).notNull().references(() => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
+  idTenant: tenantIdColumn(),
+  idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).notNull(),
   tagLan: varchar('tag_lan', { length: 5 }).notNull(),
   tag: varchar('tag', { length: 50 }).notNull(),
   dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
-}, (t) => [primaryKey({ columns: [t.idMenuEntry, t.tagLan, t.tag] })])
+}, (t) => [
+  primaryKey({ columns: [t.idTenant, t.idMenuEntry, t.tagLan, t.tag] }),
+  foreignKey({ name: 'menu_entry_tag_entry_fkey', columns: [t.idTenant, t.idMenuEntry], foreignColumns: [menuEntry.idTenant, menuEntry.idMenuEntry] }).onDelete('cascade'),
+])
 
 /** La concessione su una VOCE DI MENU. Una funzionalità è il proprio permesso (DEC-17), quindi
  *  la concessione punta alla voce e non a una riga gemella in `permission`. Presenza della riga
  *  = concessione (DEC-7): nessuna colonna `authorized`, revocare cancella la riga. */
 export const roleFunctionality = pgTable('role_functionality', {
-  idRole: bigint('id_role', { mode: 'number' }).notNull().references(() => role.idRole, { onDelete: 'cascade' }),
-  idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).notNull().references(() => menuEntry.idMenuEntry, { onDelete: 'cascade' }),
-}, (t) => [primaryKey({ columns: [t.idRole, t.idMenuEntry] })])
-
-export const userInfo = pgTable('user_info', {
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  attributeType: varchar('attribute_type', { length: 30 }).notNull(),
-  attributeValue: text('attribute_value').notNull(),
-  dateIns: timestamp('date_ins', { withTimezone: true, mode: 'string' }).defaultNow(),
-  dateMod: timestamp('date_mod', { withTimezone: true, mode: 'string' }),
-}, (t) => [primaryKey({ columns: [t.userId, t.attributeType] })])
+  idTenant: tenantIdColumn(),
+  idRole: bigint('id_role', { mode: 'number' }).notNull(),
+  idMenuEntry: bigint('id_menu_entry', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.idTenant, t.idRole, t.idMenuEntry] }),
+  foreignKey({ name: 'role_functionality_role_fkey', columns: [t.idTenant, t.idRole], foreignColumns: [role.idTenant, role.idRole] }).onDelete('cascade'),
+  foreignKey({ name: 'role_functionality_entry_fkey', columns: [t.idTenant, t.idMenuEntry], foreignColumns: [menuEntry.idTenant, menuEntry.idMenuEntry] }).onDelete('cascade'),
+])
 
 // Read-only — created by schema.sql, never migrated by drizzle-kit (DEC-4).
 export const roleListView = pgView('role_list_view', {

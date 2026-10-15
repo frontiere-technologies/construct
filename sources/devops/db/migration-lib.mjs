@@ -64,13 +64,38 @@ export function assertAppliedMigrationChecksums(migrations, historyRows) {
   }
 }
 
-export async function applyPendingMigrations(adapter, migrations) {
+// Rilascio a tappe (specifica 2026-10-13, §5.1): `apply --to <versione>` applica le migrazioni in
+// sospeso fino a quella versione compresa, poi si ferma. Senza versione restituisce l'elenco intero.
+export function selectMigrationsUpTo(migrations, to) {
+  if (to === undefined) return migrations
+  if (!/^\d{4}$/.test(to)) throw new Error(`Migration version must be four digits, got "${to}"`)
+  const index = migrations.findIndex(migration => migration.version === to)
+  if (index === -1) throw new Error(`Migration ${to} does not exist`)
+  return migrations.slice(0, index + 1)
+}
+
+export function parseApplyArguments(args) {
+  if (args.length === 0) return { to: undefined }
+  if (args[0].startsWith('--to=')) {
+    throw new Error(`Unexpected argument "${args[0]}": use --to ${args[0].slice('--to='.length)}`)
+  }
+  if (args[0] !== '--to') throw new Error(`Unexpected argument "${args[0]}"`)
+  if (args.length < 2) throw new Error('--to requires a version, for example --to 0045')
+  if (args.length > 2) throw new Error(`Unexpected argument "${args[2]}"`)
+  return { to: args[1] }
+}
+
+export async function applyPendingMigrations(adapter, migrations, { to } = {}) {
+  // La selezione avviene prima di toccare il database, così una versione inesistente fallisce subito.
+  const selected = selectMigrationsUpTo(migrations, to)
   const historyRows = await adapter.loadHistory()
+  // Il controllo dei checksum vale per l'elenco intero, non per quello tagliato: una migrazione già
+  // applicata oltre la versione scelta non e' "assente dal repository".
   assertAppliedMigrationChecksums(migrations, historyRows)
   const historyByVersion = new Map(historyRows.map(row => [row.version, row]))
   const applied = []
 
-  for (const migration of migrations) {
+  for (const migration of selected) {
     if (historyByVersion.get(migration.version)?.completedAt) continue
     await adapter.markStarted(migration)
     await adapter.runInTransaction(migration)

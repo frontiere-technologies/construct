@@ -9,7 +9,9 @@ import {
   assertAppliedMigrationChecksums,
   discoverMigrations,
   migrationChecksum,
+  parseApplyArguments,
   renderSchemaSnapshot,
+  selectMigrationsUpTo,
 } from './migration-lib.mjs'
 
 const tempDirectories = []
@@ -173,4 +175,108 @@ test('applies only pending or incomplete migrations in order', async () => {
 
   assert.deepEqual(calls, ['start:0002', 'run:0002', 'start:0003', 'run:0003'])
   assert.deepEqual(applied, ['0002', '0003'])
+})
+
+// --to <versione>: rilascio a tappe (specifica 2026-10-13, §5.1). La selezione e' pura: db.mjs si
+// limita a passarla all'esecutore.
+const stagedMigrations = ['0001', '0002', '0003', '0004'].map(version => ({
+  version,
+  name: `m${version}`,
+  filename: `${version}_m${version}.sql`,
+  sql: 'select 1;',
+  checksum: version.repeat(16),
+}))
+
+test('selectMigrationsUpTo keeps every migration up to and including the target version', () => {
+  assert.deepEqual(
+    selectMigrationsUpTo(stagedMigrations, '0003').map(migration => migration.version),
+    ['0001', '0002', '0003'],
+  )
+  assert.deepEqual(
+    selectMigrationsUpTo(stagedMigrations, '0004').map(migration => migration.version),
+    ['0001', '0002', '0003', '0004'],
+  )
+})
+
+test('selectMigrationsUpTo without a target returns everything', () => {
+  assert.equal(selectMigrationsUpTo(stagedMigrations, undefined), stagedMigrations)
+})
+
+test('selectMigrationsUpTo rejects a version that is not among the migrations', () => {
+  assert.throws(() => selectMigrationsUpTo(stagedMigrations, '9999'), /migration 9999 does not exist/i)
+  assert.throws(() => selectMigrationsUpTo(stagedMigrations, '3'), /four digits/i)
+  assert.throws(() => selectMigrationsUpTo(stagedMigrations, ''), /four digits/i)
+})
+
+test('applyPendingMigrations with a target stops after it and leaves later migrations pending', async () => {
+  const calls = []
+  const adapter = {
+    loadHistory: async () => [{ version: '0001', checksum: '0001'.repeat(16), completedAt: new Date() }],
+    markStarted: async migration => calls.push(`start:${migration.version}`),
+    runInTransaction: async migration => calls.push(`run:${migration.version}`),
+  }
+
+  const applied = await applyPendingMigrations(adapter, stagedMigrations, { to: '0003' })
+
+  assert.deepEqual(calls, ['start:0002', 'run:0002', 'start:0003', 'run:0003'])
+  assert.deepEqual(applied, ['0002', '0003'])
+})
+
+test('applyPendingMigrations with a target already applied applies nothing', async () => {
+  const calls = []
+  const done = new Date()
+  const adapter = {
+    loadHistory: async () => [
+      { version: '0001', checksum: '0001'.repeat(16), completedAt: done },
+      { version: '0002', checksum: '0002'.repeat(16), completedAt: done },
+      { version: '0003', checksum: '0003'.repeat(16), completedAt: done },
+    ],
+    markStarted: async migration => calls.push(`start:${migration.version}`),
+    runInTransaction: async migration => calls.push(`run:${migration.version}`),
+  }
+
+  assert.deepEqual(await applyPendingMigrations(adapter, stagedMigrations, { to: '0002' }), [])
+  assert.deepEqual(calls, [])
+})
+
+// I checksum delle migrazioni gia' applicate oltre la versione scelta si controllano comunque:
+// tagliare l'elenco prima del controllo farebbe dire "migrazione assente dal repository".
+test('applyPendingMigrations with a target still verifies history rows beyond it', async () => {
+  const adapter = {
+    loadHistory: async () => [
+      { version: '0004', checksum: 'f'.repeat(64), completedAt: new Date() },
+    ],
+    markStarted: async () => {},
+    runInTransaction: async () => {},
+  }
+
+  await assert.rejects(
+    applyPendingMigrations(adapter, stagedMigrations, { to: '0002' }),
+    /checksum mismatch for applied migration 0004/i,
+  )
+})
+
+test('parseApplyArguments reads an optional --to <version>', () => {
+  assert.deepEqual(parseApplyArguments([]), { to: undefined })
+  assert.deepEqual(parseApplyArguments(['--to', '0045']), { to: '0045' })
+  assert.throws(() => parseApplyArguments(['--to']), /--to requires a version/i)
+  assert.throws(() => parseApplyArguments(['--to', '0045', 'extra']), /unexpected argument/i)
+  assert.throws(() => parseApplyArguments(['0045']), /unexpected argument/i)
+  assert.throws(() => parseApplyArguments(['--to=0045']), /use --to 0045/)
+})
+
+// Una migrazione in sospeso sotto la versione scelta, con una più recente già applicata, si applica
+// comunque: --to taglia in alto, non decide da dove ripartire.
+test('applyPendingMigrations with a target applies an older pending migration below it', async () => {
+  const calls = []
+  const adapter = {
+    loadHistory: async () => [{ version: '0002', checksum: '0002'.repeat(16), completedAt: new Date() }],
+    markStarted: async migration => calls.push(`start:${migration.version}`),
+    runInTransaction: async migration => calls.push(`run:${migration.version}`),
+  }
+
+  const applied = await applyPendingMigrations(adapter, stagedMigrations, { to: '0003' })
+
+  assert.deepEqual(applied, ['0001', '0003'])
+  assert.deepEqual(calls, ['start:0001', 'run:0001', 'start:0003', 'run:0003'])
 })

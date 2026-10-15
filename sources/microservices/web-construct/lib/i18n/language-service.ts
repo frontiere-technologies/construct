@@ -1,7 +1,7 @@
 import { cache } from 'react'
 import { and, asc, count, desc, eq, gte, lt, lte, ne, or, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
-import { db } from '@/lib/db'
+import { withGlobal, type GlobalTx } from '@/lib/db/tenant-db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
@@ -35,7 +35,7 @@ function toDto(row: LanguageBaseRow): LanguageDto {
  */
 export const listLanguages = cache(async (): Promise<LanguageDto[]> => {
   try {
-    const rows = await db.select().from(appLanguage).orderBy(asc(appLanguage.code))
+    const rows = await withGlobal(tx => tx.select().from(appLanguage).orderBy(asc(appLanguage.code)))
     return rows.map(toDto)
   } catch (err) {
     log.error({ err }, 'failed to load languages — falling back to the built-in default')
@@ -79,17 +79,19 @@ export interface LanguageStats {
  */
 export const getLanguageStats = cache(async (): Promise<Map<string, LanguageStats>> => {
   try {
-    const [[{ total }], perLanguage] = await Promise.all([
-      db.select({ total: sql<number>`count(*)::int` }).from(translationKey),
-      db
+    // Dentro una transazione le due letture vanno in serie sulla stessa connessione (MTF-RISK-3).
+    const [[{ total }], perLanguage] = await withGlobal(async tx => {
+      const totalRows = await tx.select({ total: sql<number>`count(*)::int` }).from(translationKey)
+      const perLanguageRows = await tx
         .select({ code: appLanguage.code, translated: sql<number>`count(${translationValue.idTranslationValue})::int` })
         .from(appLanguage)
         .leftJoin(
           translationValue,
           and(eq(translationValue.idLanguage, appLanguage.idLanguage), ne(translationValue.value, '')),
         )
-        .groupBy(appLanguage.code),
-    ])
+        .groupBy(appLanguage.code)
+      return [totalRows, perLanguageRows] as const
+    })
     return new Map(perLanguage.map(r => [r.code, { code: r.code, translated: r.translated, missing: total - r.translated }]))
   } catch (err) {
     throw new Error(`Failed to compute language stats: ${err instanceof Error ? err.message : String(err)}`)
@@ -218,7 +220,7 @@ export function applyLanguageFilters(
   return conditions
 }
 
-type LanguageQueryExecutor = Pick<typeof db, 'select'>
+type LanguageQueryExecutor = Pick<GlobalTx, 'select'>
 
 export function buildLanguageRowsQuery(executor: LanguageQueryExecutor) {
   const languageBase = alias(appLanguage, 'language_base')
@@ -283,7 +285,7 @@ export function buildLanguageTotalQuery(executor: LanguageQueryExecutor, query: 
  */
 export async function listLanguagesPage(query: LanguagesQuery): Promise<LanguagesPage> {
   try {
-    return await db.transaction(async tx => {
+    return await withGlobal(async tx => {
       const rows = await buildLanguagePageQuery(tx, query)
       const [{ value: total }] = await buildLanguageTotalQuery(tx, query)
       const elements: LanguagePageItemDto[] = rows.map(row => ({

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { db } from '@/lib/db'
+import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { menuEntry } from '@/lib/db/schema'
 import { toMenuEntryRow } from './nav-row-mapper'
 import { sanitizeSvg } from './svg-sanitize'
@@ -11,38 +11,36 @@ import { canDeleteSubtree, hasChildren, isDescendant } from './nav-tree-builder'
 import type { CreateNavItemInput, UpdateNavItemInput, MoveInput, MenuEntryRow } from './types'
 import { ITEM_TYPE_CATEGORY } from './types'
 
-type NavigationDatabase = Pick<typeof db, 'select' | 'insert' | 'update' | 'delete' | 'execute'>
-
-async function lockNavigationWrites(database: NavigationDatabase) {
-  await database.execute(sql`select pg_advisory_xact_lock(49374201)`)
+async function lockNavigationWrites(tx: TenantTx) {
+  await tx.execute(sql`select pg_advisory_xact_lock(49374201)`)
 }
 
-async function writeMenuEntryTags(database: NavigationDatabase, idMenuEntry: number, tagTranslations: Record<string, string[]>) {
+async function writeMenuEntryTags(tx: TenantTx, idMenuEntry: number, tagTranslations: Record<string, string[]>) {
   const rows: { tag_lan: string; tag: string }[] = []
   for (const [lan, tags] of Object.entries(tagTranslations)) {
     for (const tag of tags) if (tag.trim()) rows.push({ tag_lan: lan, tag: tag.trim() })
   }
   // Atomic replace (delete + insert in one transaction) via the schema.sql RPC (DEC-3).
   try {
-    await database.execute(sql`select public.replace_menu_entry_tags(${idMenuEntry}, ${JSON.stringify(rows)}::jsonb)`)
+    await tx.execute(sql`select public.replace_menu_entry_tags(${idMenuEntry}, ${JSON.stringify(rows)}::jsonb)`)
   } catch (err) {
     throw new Error(`Failed to write tags: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
-async function loadMenuItems(database: NavigationDatabase = db): Promise<MenuEntryRow[]> {
+async function loadMenuItems(tx: TenantTx): Promise<MenuEntryRow[]> {
   try {
-    const rows = await database.select().from(menuEntry)
+    const rows = await tx.select().from(menuEntry)
     return rows.map(toMenuEntryRow)
   } catch (err) {
     throw new Error(`Failed to load items: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
-async function assertMutable(id: number, database: NavigationDatabase = db) {
+async function assertMutable(id: number, tx: TenantTx) {
   let row: { isImmutable: number } | undefined
   try {
-    ;[row] = await database.select({ isImmutable: menuEntry.isImmutable }).from(menuEntry).where(eq(menuEntry.idMenuEntry, id)).limit(1)
+    ;[row] = await tx.select({ isImmutable: menuEntry.isImmutable }).from(menuEntry).where(eq(menuEntry.idMenuEntry, id)).limit(1)
   } catch (err) {
     throw new Error(`Item not found: ${err instanceof Error ? err.message : String(err)}`)
   }
@@ -59,7 +57,7 @@ async function assertMutable(id: number, database: NavigationDatabase = db) {
  * unlike the old ROOT_ID/OPERATIONS_ID sentinels. Callers must have asserted `id` is mutable.
  */
 async function reparent(
-  database: NavigationDatabase,
+  tx: TenantTx,
   items: MenuEntryRow[],
   id: number,
   targetParentId: number | null,
@@ -81,7 +79,7 @@ async function reparent(
   dest.splice(idx, 0, id)
   for (let pos = 0; pos < dest.length; pos++) {
     try {
-      await database.update(menuEntry).set({ idParent: targetParentId, orderPosition: pos }).where(eq(menuEntry.idMenuEntry, dest[pos]))
+      await tx.update(menuEntry).set({ idParent: targetParentId, orderPosition: pos }).where(eq(menuEntry.idMenuEntry, dest[pos]))
     } catch (err) {
       throw new Error(`Failed to move item: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -89,7 +87,7 @@ async function reparent(
 }
 
 export async function createNavigationItem(input: CreateNavItemInput): Promise<{ id: number }> {
-  await requirePermission('manage-menu')
+  const actor = await requirePermission('manage-menu')
   if (!input.name.trim()) throw new Error('Name is required')
   // Una categoria di menu non è un permesso: raggruppa voci, non protegge niente.
   const isCategory = input.idItemType === ITEM_TYPE_CATEGORY
@@ -112,7 +110,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   }
 
   try {
-    const created = await db.transaction(async tx => {
+    const created = await withTenant(actor.tenantId, async tx => {
       await lockNavigationWrites(tx)
 
       // Le voci di primo livello hanno id_parent nullo: append-at-end fra i fratelli veri
@@ -153,10 +151,10 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
 // percorso di creazione, invece, idItemType è l'unica fonte e createNavigationItem lo
 // valida contro idFunctionalityType.
 export async function updateNavigationItem(id: number, input: UpdateNavItemInput): Promise<void> {
-  await requirePermission('manage-menu')
+  const actor = await requirePermission('manage-menu')
   if (!input.name.trim()) throw new Error('Name is required')
   try {
-    await db.transaction(async tx => {
+    await withTenant(actor.tenantId, async tx => {
       await lockNavigationWrites(tx)
       await assertMutable(id, tx)
 
@@ -210,8 +208,8 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
 }
 
 export async function moveNavigationItem(id: number, move: MoveInput): Promise<void> {
-  await requirePermission('manage-menu')
-  await db.transaction(async tx => {
+  const actor = await requirePermission('manage-menu')
+  await withTenant(actor.tenantId, async tx => {
     await lockNavigationWrites(tx)
     await assertMutable(id, tx)
     const items = await loadMenuItems(tx)
@@ -221,9 +219,9 @@ export async function moveNavigationItem(id: number, move: MoveInput): Promise<v
 }
 
 export async function deleteNavigationItem(id: number): Promise<void> {
-  await requirePermission('manage-menu')
+  const actor = await requirePermission('manage-menu')
   try {
-    await db.transaction(async tx => {
+    await withTenant(actor.tenantId, async tx => {
       await lockNavigationWrites(tx)
       const items = await loadMenuItems(tx)
       if (!items.some(i => i.id_menu_entry === id)) return

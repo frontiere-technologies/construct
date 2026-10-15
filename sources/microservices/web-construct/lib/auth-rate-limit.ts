@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 
 export class AuthRateLimitExceeded extends Error {
   constructor() {
@@ -40,10 +40,10 @@ export async function enforceAuthRateLimit({
   if (!secret) throw new Error('AUTH_SECRET is required for authentication rate limiting')
   const ipHash = hashRateLimitIdentifier(clientIp(request), secret)
   const accountHash = hashRateLimitIdentifier(account.toLowerCase().trim(), secret)
-  const rows = await db.execute<{ allowed: boolean }>(sql`
+  const rows = await withGlobal(tx => tx.execute<{ allowed: boolean }>(sql`
     select public.check_auth_rate_limit(
       ${scope}, ${ipHash}, ${accountHash}, ${ipLimit}, ${accountLimit}, ${windowSeconds}
     ) as allowed
-  `)
+  `))
   if (!rows[0]?.allowed) throw new AuthRateLimitExceeded()
 }

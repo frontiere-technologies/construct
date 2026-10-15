@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers'
 import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { shouldUseSecureCookies } from '@/lib/i18n/cookie-security'
@@ -38,11 +38,11 @@ export async function saveAppearance(
   if (parsed.data.scale !== undefined) values.textScale = parsed.data.scale
 
   try {
-    const [row] = await db
+    const [row] = await withGlobal(tx => tx
       .update(users)
       .set(values)
       .where(eq(users.id, userId))
-      .returning({ themeMode: users.themeMode, textScale: users.textScale })
+      .returning({ themeMode: users.themeMode, textScale: users.textScale }))
     if (!row) return { error: 'Not authenticated' }
 
     const appearance = toAppearance(row)

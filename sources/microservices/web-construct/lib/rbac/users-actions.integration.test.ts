@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withTenant, withGlobal } from '@/lib/db/tenant-db'
+import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 
@@ -24,55 +25,55 @@ describeIntegration('atomic last-active-administrator invariant', () => {
   }
 
   beforeEach(async () => {
-    originalAdmins = await db.execute(sql`
+    originalAdmins = await withTenant(defaultTestTenant(), tx => tx.execute(sql`
       select distinct u.id as "userId", u.id_user_status as status
       from users u join user_role ur on ur.user_id = u.id
       where ur.id_role = 1
-    `)
-    await db.execute(sql`
+    `))
+    await withTenant(defaultTestTenant(), tx => tx.execute(sql`
       update users set id_user_status = 1
       where id in (select user_id from user_role where id_role = 1)
-    `)
+    `))
   })
 
   afterEach(async () => {
     for (const row of originalAdmins) {
-      await db.update(users).set({ idUserStatus: row.status }).where(eq(users.id, row.userId))
+      await withGlobal(tx => tx.update(users).set({ idUserStatus: row.status }).where(eq(users.id, row.userId)))
     }
-    for (const id of created.splice(0)) await db.delete(users).where(eq(users.id, id))
+    for (const id of created.splice(0)) await withGlobal(tx => tx.delete(users).where(eq(users.id, id)))
   })
 
   async function admin() {
-    const [user] = await db.insert(users).values({
+    const [user] = await withGlobal(tx => tx.insert(users).values({
       email: `zzz_admin_invariant_${unique()}@example.com`,
       authProvider: 'credentials',
       idUserStatus: 2,
-    }).returning({ id: users.id })
+    }).returning({ id: users.id }))
     created.push(user.id)
-    await db.insert(userRole).values([{ userId: user.id, idRole: 0 }, { userId: user.id, idRole: 1 }])
+    await withTenant(defaultTestTenant(), tx => tx.insert(userRole).values([{ userId: user.id, idRole: 0 }, { userId: user.id, idRole: 1 }]))
     return user.id
   }
 
   it('rejects removal or deactivation of the only active administrator', async () => {
     const id = await admin()
-    await expectLastAdminConflict(db.execute(sql`select public.replace_user_roles_guarded(${id}, array[0]::bigint[])`))
-    await expectLastAdminConflict(db.execute(sql`select public.set_user_status_guarded(${id}, 1)`))
+    await expectLastAdminConflict(withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.replace_user_roles_guarded(${id}, array[0]::bigint[])`)))
+    await expectLastAdminConflict(withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.set_user_status_guarded(${id}, 1)`)))
   })
 
   it('serializes competing mutations so one active administrator remains', async () => {
     const first = await admin()
     const second = await admin()
     const results = await Promise.allSettled([
-      db.execute(sql`select public.replace_user_roles_guarded(${first}, array[0]::bigint[])`),
-      db.execute(sql`select public.set_user_status_guarded(${second}, 1)`),
+      withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.replace_user_roles_guarded(${first}, array[0]::bigint[])`)),
+      withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.set_user_status_guarded(${second}, 1)`)),
     ])
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)
-    const [{ count }] = await db.execute<{ count: string }>(sql`
+    const [{ count }] = await withTenant(defaultTestTenant(), tx => tx.execute<{ count: string }>(sql`
       select count(distinct u.id)::text as count
       from users u join user_role ur on ur.user_id = u.id
       where u.id_user_status = 2 and ur.id_role = 1
-    `)
+    `))
     expect(count).toBe('1')
   })
 })

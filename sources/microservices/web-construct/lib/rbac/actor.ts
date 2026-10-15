@@ -1,13 +1,15 @@
 import { cache } from 'react'
 import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withTenant } from '@/lib/db/tenant-db'
 import { permission, rolePermission } from '@/lib/db/schema'
-import { resolveUserAuthorization } from './auth-roles'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
+import { selectUserAuthorization } from './auth-roles'
 import { PERMISSION_CODES, isPermissionCode, type PermissionCode } from './permission-catalog'
 
 /** Chi sta facendo la richiesta, letto dal database e mai dal token (DEC-4). */
 export interface Actor {
   userId: string
+  tenantId: TenantId
   roleIds: number[]
   isAdmin: boolean
   permissions: ReadonlySet<PermissionCode>
@@ -20,6 +22,7 @@ export interface Actor {
  */
 export function buildActor(
   userId: string,
+  tenantId: TenantId,
   authorization: { accountActive: boolean; roleIds: number[]; isAdmin: boolean },
   grantedCodes: string[],
 ): Actor | null {
@@ -27,7 +30,7 @@ export function buildActor(
   const permissions = new Set<PermissionCode>(
     authorization.isAdmin ? PERMISSION_CODES : grantedCodes.filter(isPermissionCode),
   )
-  return { userId, roleIds: authorization.roleIds, isAdmin: authorization.isAdmin, permissions }
+  return { userId, tenantId, roleIds: authorization.roleIds, isAdmin: authorization.isAdmin, permissions }
 }
 
 export function hasPermission(actor: Actor | null, code: PermissionCode): boolean {
@@ -41,21 +44,22 @@ export function hasPermission(actor: Actor | null, code: PermissionCode): boolea
  *
  * Un permesso deprecato non conta anche se la concessione esiste ancora.
  */
-export const resolveActor = cache(async (userId: string): Promise<Actor | null> => {
-  const authorization = await resolveUserAuthorization(userId)
-  if (!authorization.accountActive) return null
-  let codes: string[] = []
-  if (!authorization.isAdmin && authorization.roleIds.length) {
-    const rows = await db
-      .selectDistinct({ code: permission.code })
-      .from(rolePermission)
-      .innerJoin(permission, eq(permission.idPermission, rolePermission.idPermission))
-      .where(and(
-        inArray(rolePermission.idRole, authorization.roleIds),
-        isNull(permission.deprecatedAt),
-        isNotNull(permission.code),
-      ))
-    codes = rows.flatMap(row => (row.code ? [row.code] : []))
-  }
-  return buildActor(userId, authorization, codes)
-})
+export const resolveActor = cache(async (tenantId: TenantId, userId: string): Promise<Actor | null> =>
+  withTenant(tenantId, async tx => {
+    const authorization = await selectUserAuthorization(tx, userId)
+    if (!authorization.accountActive) return null
+    let codes: string[] = []
+    if (!authorization.isAdmin && authorization.roleIds.length) {
+      const rows = await tx
+        .selectDistinct({ code: permission.code })
+        .from(rolePermission)
+        .innerJoin(permission, eq(permission.idPermission, rolePermission.idPermission))
+        .where(and(
+          inArray(rolePermission.idRole, authorization.roleIds),
+          isNull(permission.deprecatedAt),
+          isNotNull(permission.code),
+        ))
+      codes = rows.flatMap(row => (row.code ? [row.code] : []))
+    }
+    return buildActor(userId, tenantId, authorization, codes)
+  }))

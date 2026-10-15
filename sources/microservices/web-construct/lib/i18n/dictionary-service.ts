@@ -1,5 +1,5 @@
 import { asc, eq } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { DictionaryStore } from './dictionary-cache'
@@ -24,9 +24,9 @@ async function getVersions(): Promise<Map<string, number>> {
   const now = Date.now()
   if (versionCache && versionCache.expiresAt > now) return versionCache.versions
   try {
-    const rows = await db
+    const rows = await withGlobal(tx => tx
       .select({ code: appLanguage.code, version: appLanguage.dictionaryVersion })
-      .from(appLanguage)
+      .from(appLanguage))
     const versions = new Map(rows.map(r => [r.code, Number(r.version)]))
     versionCache = { versions, expiresAt: now + VERSION_TTL_MS }
     return versions
@@ -37,13 +37,13 @@ async function getVersions(): Promise<Map<string, number>> {
 }
 
 async function loadDictionary(code: string): Promise<Dictionary> {
-  const rows = await db
+  const rows = await withGlobal(tx => tx
     .select({ key: translationKey.key, value: translationValue.value })
     .from(translationValue)
     .innerJoin(translationKey, eq(translationKey.idTranslationKey, translationValue.idTranslationKey))
     .innerJoin(appLanguage, eq(appLanguage.idLanguage, translationValue.idLanguage))
     .where(eq(appLanguage.code, code))
-    .orderBy(asc(translationKey.key))
+    .orderBy(asc(translationKey.key)))
 
   const dict: Dictionary = {}
   for (const row of rows) dict[row.key] = row.value

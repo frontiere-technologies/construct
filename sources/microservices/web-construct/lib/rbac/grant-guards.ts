@@ -1,6 +1,5 @@
 import type { Actor } from './actor'
 import { isPermissionCode } from './permission-catalog'
-import { ROLE_ADMINISTRATOR } from './types'
 
 /**
  * Non si concede ciò che non si possiede (DEC-6 della specifica 2026-09-01, esteso da DEC-29 del
@@ -54,9 +53,10 @@ function roleChangeRefusal(
   actor: Actor,
   actorFunctionalityIds: ReadonlySet<number>,
   touched: RoleGrants[],
+  tenantAdminId: number,
 ): string | null {
   if (actor.isAdmin) return null
-  if (touched.some(r => r.idRole === ROLE_ADMINISTRATOR)) {
+  if (touched.some(r => r.idRole === tenantAdminId)) {
     return 'Only an administrator can assign or remove the Administrator role'
   }
   for (const grants of touched) {
@@ -77,15 +77,21 @@ export function assertCanChangeRoles(
   actor: Actor,
   actorFunctionalityIds: ReadonlySet<number>,
   touched: RoleGrants[],
+  tenantAdminId: number,
 ): void {
-  const refusal = roleChangeRefusal(actor, actorFunctionalityIds, touched)
+  const refusal = roleChangeRefusal(actor, actorFunctionalityIds, touched, tenantAdminId)
   if (refusal) throw new Error(refusal)
 }
 
 /** Lo stesso giudizio di `assertCanChangeRoles` su un ruolo solo, per la pagina che deve sapere
  *  in anticipo quali ruoli offrire. */
-export function canChangeRole(actor: Actor, actorFunctionalityIds: ReadonlySet<number>, grants: RoleGrants): boolean {
-  return roleChangeRefusal(actor, actorFunctionalityIds, [grants]) === null
+export function canChangeRole(
+  actor: Actor,
+  actorFunctionalityIds: ReadonlySet<number>,
+  grants: RoleGrants,
+  tenantAdminId: number,
+): boolean {
+  return roleChangeRefusal(actor, actorFunctionalityIds, [grants], tenantAdminId) === null
 }
 
 export function assertCanChangeStatus(actor: Actor, targetIsAdmin: boolean): void {

@@ -1,16 +1,16 @@
 import { cache } from 'react'
 import { asc } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { menuEntry, menuEntryTag } from '@/lib/db/schema'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { toMenuEntryRow } from './nav-row-mapper'
 import { buildNavTree, mapRowToDto, selectableParents } from './nav-tree-builder'
 import { type UserNavigationTreeDto, type ParentOption } from './types'
 
-async function loadNavAndTags() {
-  const [navRows, tagRows] = await Promise.all([
-    db.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition)),
-    db.select().from(menuEntryTag),
-  ])
+async function loadNavAndTags(tx: TenantTx) {
+  // Dentro una transazione le due letture vanno in serie sulla stessa connessione (MTF-RISK-3).
+  const navRows = await tx.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition))
+  const tagRows = await tx.select().from(menuEntryTag)
   const tagsByItem = new Map<number, { tag_lan: string; tag: string }[]>()
   for (const t of tagRows) {
     const arr = tagsByItem.get(t.idMenuEntry) ?? []
@@ -22,13 +22,13 @@ async function loadNavAndTags() {
 
 // L'albero mostrato dalla pagina Funzionalità è l'albero del menu, non quello dei permessi:
 // un solo albero, radicato nell'assenza di genitore (Task 5) — non più due (root/operations).
-export const getNavigationSubtree = cache(async (): Promise<UserNavigationTreeDto[]> => {
-  const { items, tagsByItem } = await loadNavAndTags()
+export const getNavigationSubtree = cache(async (tenantId: TenantId): Promise<UserNavigationTreeDto[]> => {
+  const { items, tagsByItem } = await withTenant(tenantId, loadNavAndTags)
   return buildNavTree(items, tagsByItem)
 })
 
-export const getNavigationItem = cache(async (id: number): Promise<UserNavigationTreeDto> => {
-  const { items, tagsByItem } = await loadNavAndTags()
+export const getNavigationItem = cache(async (tenantId: TenantId, id: number): Promise<UserNavigationTreeDto> => {
+  const { items, tagsByItem } = await withTenant(tenantId, loadNavAndTags)
   const it = items.find(i => i.id_menu_entry === id)
   if (!it) throw new Error(`Navigation item ${id} not found`)
   const tagTranslations: Record<string, string[]> = {}
@@ -37,7 +37,7 @@ export const getNavigationItem = cache(async (id: number): Promise<UserNavigatio
 })
 
 /** Genitore choices. Pass the id of the item being edited so its own subtree is left out. */
-export const getParentList = cache(async (excludeSubtreeOf?: number): Promise<ParentOption[]> => {
-  const { items } = await loadNavAndTags()
+export const getParentList = cache(async (tenantId: TenantId, excludeSubtreeOf?: number): Promise<ParentOption[]> => {
+  const { items } = await withTenant(tenantId, loadNavAndTags)
   return selectableParents(items, excludeSubtreeOf)
 })

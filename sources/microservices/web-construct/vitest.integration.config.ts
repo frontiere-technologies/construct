@@ -1,4 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { parseEnv } from 'node:util'
 import { defineConfig } from 'vitest/config'
 import { loadEnv } from 'vite'
 
@@ -19,6 +21,17 @@ import { loadEnv } from 'vite'
 // `TEST_DATABASE_URL=... npm run test:integration` still overrides the files.
 for (const [key, value] of Object.entries(loadEnv('test', __dirname, ''))) {
   if (process.env[key] === undefined) process.env[key] = value
+}
+
+// L'identità delle migrazioni del database di test serve a lib/db/testing.ts (withOwner) per i
+// fixture che scrivono cataloghi in sola lettura per l'app. Vive in operator.env, non in
+// .env.test.local: quel file finisce in un processo Next (vedi db.mjs, testMigrationDatabaseUrl).
+// Si legge solo questa variabile: MIGRATION_DATABASE_URL, che sta nello stesso file, non deve
+// entrare nel processo dei test.
+const operatorEnv = resolve(__dirname, '../../devops/db/operator.env')
+if (process.env.TEST_MIGRATION_DATABASE_URL === undefined && existsSync(operatorEnv)) {
+  const parsed = parseEnv(readFileSync(operatorEnv, 'utf8'))
+  if (parsed.TEST_MIGRATION_DATABASE_URL) process.env.TEST_MIGRATION_DATABASE_URL = parsed.TEST_MIGRATION_DATABASE_URL
 }
 
 // Separate from vitest.config.ts's `exclude: ['**/*.integration.test.ts']`:

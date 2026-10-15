@@ -4,16 +4,21 @@ import type { AppTheme } from '@/lib/theme-vars'
 const mocks = vi.hoisted(() => ({
   requireAdministrator: vi.fn(),
   set: vi.fn(),
+  withTenant: vi.fn(),
   logError: vi.fn(),
 }))
 
 vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdministrator: mocks.requireAdministrator }))
-vi.mock('@/lib/db', () => ({
-  db: { update: () => ({ set: (values: unknown) => ({ returning: () => mocks.set(values) }) }) },
+vi.mock('@/lib/db/tenant-db', () => ({
+  withTenant: (tenantId: unknown, fn: (tx: unknown) => unknown) => {
+    mocks.withTenant(tenantId)
+    return fn({ update: () => ({ set: (values: unknown) => ({ returning: () => mocks.set(values) }) }) })
+  },
 }))
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: mocks.logError }) }))
 
 const { saveAppTheme } = await import('./theme-actions')
+const { defaultTestTenant } = await import('@/lib/tenancy/testing')
 
 const theme = (primaryColor: string, surfaces: Partial<AppTheme['surfaces']> = {}): AppTheme => ({
   primaryColor,
@@ -31,8 +36,9 @@ const allNull = {
 
 describe('saveAppTheme', () => {
   beforeEach(() => {
-    mocks.requireAdministrator.mockReset().mockResolvedValue({ userId: 'admin-1', roleIds: [0, 1], isAdmin: true, permissions: new Set() })
+    mocks.requireAdministrator.mockReset().mockResolvedValue({ userId: 'admin-1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() })
     mocks.set.mockReset().mockResolvedValue([{ id: 1 }])
+    mocks.withTenant.mockReset()
     mocks.logError.mockReset()
   })
 
@@ -63,6 +69,11 @@ describe('saveAppTheme', () => {
   it('refuses a payload that is not a theme', async () => {
     expect(await saveAppTheme('#4f46e5' as unknown as AppTheme)).toEqual({ saved: false, error: 'invalid' })
     expect(mocks.set).not.toHaveBeenCalled()
+  })
+
+  it("writes inside the administrator's own tenant", async () => {
+    await saveAppTheme(theme('#123456'))
+    expect(mocks.withTenant).toHaveBeenCalledWith(defaultTestTenant())
   })
 
   it('stores every colour in lower case, and null for a surface left unchanged', async () => {

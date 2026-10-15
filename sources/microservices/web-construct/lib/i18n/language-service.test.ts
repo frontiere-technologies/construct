@@ -2,18 +2,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import * as schema from '@/lib/db/schema'
-import { db } from '@/lib/db'
 import {
   applyLanguageFilters, buildLanguagePageQuery, buildLanguageRowsQuery,
   buildLanguageTotalQuery, languageOrderBy, listLanguagesPage,
 } from './language-service'
 import type { LanguagesQuery } from './types'
 
+const { withGlobal } = vi.hoisted(() => ({ withGlobal: vi.fn() }))
+vi.mock('@/lib/db/tenant-db', () => ({ withGlobal }))
+
 const dialect = new PgDialect()
 const baseQuery: LanguagesQuery = { page: 0, size: 50 }
 const queryDb = drizzle.mock({ schema })
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  withGlobal.mockReset()
+})
 
 function render(query: LanguagesQuery) {
   return applyLanguageFilters(query).map(condition => dialect.sqlToQuery(condition))
@@ -156,12 +161,7 @@ describe('language page query snapshot', () => {
       [[1, 'it', 'it-IT', 'Italian', 'Italiano', true, true, '2026-07-01', '2026-07-02', 10, 2]],
       [[1]],
     ])
-    const transaction = vi.spyOn(db, 'transaction').mockImplementation(
-      async callback => callback(database as never),
-    )
-    vi.spyOn(db, 'select').mockImplementation(() => {
-      throw new Error('page path must not query outside its transaction')
-    })
+    withGlobal.mockImplementation(async callback => callback(database as never))
 
     await expect(listLanguagesPage(baseQuery)).resolves.toEqual({
       total: 1,
@@ -171,7 +171,7 @@ describe('language page query snapshot', () => {
         createdAt: '2026-07-01', updatedAt: '2026-07-02',
       }],
     })
-    expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
+    expect(withGlobal).toHaveBeenCalledWith(expect.any(Function), {
       isolationLevel: 'repeatable read',
       accessMode: 'read only',
     })
@@ -180,9 +180,7 @@ describe('language page query snapshot', () => {
 
   it('still reads the filtered total when the requested page is empty', async () => {
     const { database, unsafe } = resultDatabase([[], [[7]]])
-    vi.spyOn(db, 'transaction').mockImplementation(
-      async callback => callback(database as never),
-    )
+    withGlobal.mockImplementation(async callback => callback(database as never))
 
     await expect(listLanguagesPage({ ...baseQuery, page: 5 })).resolves.toEqual({
       total: 7,

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { and, eq, sql } from 'drizzle-orm'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { translationKey, translationValue } from '@/lib/db/schema'
 import { MAX_VALUE_LENGTH, type SaveTranslationsInput } from './types'
 import { cleanupTestData, describeIntegration, testKey, unique } from './test-support/db-fixtures'
@@ -92,7 +92,7 @@ describeIntegration('translation actions against the database', () => {
     }))
     expect(result).toEqual({ ok: true })
 
-    const rows = await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))
+    const rows = await withGlobal(tx => tx.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId)))
     expect(rows).toHaveLength(2)
     for (const row of rows) expect(row.version).toBe(1)
 
@@ -110,7 +110,7 @@ describeIntegration('translation actions against the database', () => {
     }))
     expect(first).toEqual({ ok: true })
 
-    const [keyRow] = await db.select().from(translationKey).where(eq(translationKey.idTranslationKey, keyId))
+    const [keyRow] = await withGlobal(tx => tx.select().from(translationKey).where(eq(translationKey.idTranslationKey, keyId)))
     expect(keyRow.version).toBe(2)
 
     // Retried with the original (now-stale) keyVersion: 1.
@@ -122,7 +122,7 @@ describeIntegration('translation actions against the database', () => {
     expect(stale.ok).toBe(false)
     expect(!stale.ok && 'error' in stale ? stale.error : null).toMatch(/modificata/i)
 
-    const [valueRow] = await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))
+    const [valueRow] = await withGlobal(tx => tx.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId)))
     expect(valueRow.value).toBe('Ciao')
   })
 
@@ -136,7 +136,7 @@ describeIntegration('translation actions against the database', () => {
    */
   it('rejects a stale keyVersion via the real DB-level race (concurrent transaction wins the lock first)', async () => {
     const keyId = await createKey()
-    const [initialKeyRow] = await db.select().from(translationKey).where(eq(translationKey.idTranslationKey, keyId))
+    const [initialKeyRow] = await withGlobal(tx => tx.select().from(translationKey).where(eq(translationKey.idTranslationKey, keyId)))
     expect(initialKeyRow.version).toBe(1)
 
     // Signals that flip a manually-driven "locker" transaction between its
@@ -147,7 +147,7 @@ describeIntegration('translation actions against the database', () => {
     let releaseLocker!: () => void
     const lockerMayContinue = new Promise<void>(resolve => { releaseLocker = resolve })
 
-    const lockerDone = db.transaction(async lockerTx => {
+    const lockerDone = withGlobal(async lockerTx => {
       // A plain SELECT takes no lock under READ COMMITTED — FOR UPDATE is
       // what makes the racing saveTranslations() call below actually block
       // on ITS update instead of racing ahead of us.
@@ -187,7 +187,7 @@ describeIntegration('translation actions against the database', () => {
     expect(stale.ok).toBe(false)
     expect(!stale.ok && 'error' in stale ? stale.error : null).toMatch(/modificata/i)
 
-    const [finalKeyRow] = await db.select().from(translationKey).where(eq(translationKey.idTranslationKey, keyId))
+    const [finalKeyRow] = await withGlobal(tx => tx.select().from(translationKey).where(eq(translationKey.idTranslationKey, keyId)))
     // The locker's write won; the racer's blocked UPDATE found 0 matching
     // rows once it unblocked and was correctly rejected, not silently lost.
     expect(finalKeyRow.version).toBe(2)
@@ -216,7 +216,7 @@ describeIntegration('translation actions against the database', () => {
       { languageCode: 'it', currentValue: 'Ciao concorrente', attemptedValue: 'Ciao ormai vecchio' },
     ])
 
-    const [valueRow] = await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))
+    const [valueRow] = await withGlobal(tx => tx.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId)))
     expect(valueRow.value).toBe('Ciao concorrente')
   })
 
@@ -232,7 +232,7 @@ describeIntegration('translation actions against the database', () => {
     await saveTranslations(saveInput(keyId, {
       values: [{ languageCode: 'it', value: 'Ciao', version: null }],
     }))
-    const [initialValueRow] = await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))
+    const [initialValueRow] = await withGlobal(tx => tx.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId)))
     const valueId = initialValueRow.idTranslationValue
     expect(initialValueRow.version).toBe(1)
 
@@ -241,7 +241,7 @@ describeIntegration('translation actions against the database', () => {
     let releaseLocker!: () => void
     const lockerMayContinue = new Promise<void>(resolve => { releaseLocker = resolve })
 
-    const lockerDone = db.transaction(async lockerTx => {
+    const lockerDone = withGlobal(async lockerTx => {
       // Takes the row lock a plain SELECT never would under READ COMMITTED —
       // this is what makes saveTranslations()'s own UPDATE below block
       // instead of racing to completion first.
@@ -279,7 +279,7 @@ describeIntegration('translation actions against the database', () => {
       { languageCode: 'it', currentValue: 'Ciao concorrente', attemptedValue: 'Ciao ormai vecchio' },
     ])
 
-    const [finalValueRow] = await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))
+    const [finalValueRow] = await withGlobal(tx => tx.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId)))
     // The locker's write won; the racer's blocked UPDATE found 0 matching
     // rows once it unblocked and was correctly rejected, not silently lost.
     expect(finalValueRow.value).toBe('Ciao concorrente')
@@ -296,7 +296,7 @@ describeIntegration('translation actions against the database', () => {
     }))
     expect(deleted).toEqual({ ok: true })
 
-    const rows = await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))
+    const rows = await withGlobal(tx => tx.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId)))
     expect(rows).toHaveLength(0)
 
     const page = await listTranslations({ page: 0, size: 50, search: key })
@@ -345,8 +345,8 @@ describeIntegration('translation actions against the database', () => {
     }))
 
     expect(await deleteTranslationKey(keyId)).toEqual({ error: null })
-    expect(await db.select().from(translationKey).where(eq(translationKey.idTranslationKey, keyId))).toHaveLength(0)
-    expect(await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))).toHaveLength(0)
+    expect(await withGlobal(tx => tx.select().from(translationKey).where(eq(translationKey.idTranslationKey, keyId)))).toHaveLength(0)
+    expect(await withGlobal(tx => tx.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId)))).toHaveLength(0)
   })
 
   it('rejects a value over the length limit before writing anything', async () => {
@@ -358,7 +358,7 @@ describeIntegration('translation actions against the database', () => {
     expect(result.ok).toBe(false)
     expect(!result.ok && 'error' in result ? result.error : null).toMatch(new RegExp(String(MAX_VALUE_LENGTH)))
 
-    const rows = await db.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId))
+    const rows = await withGlobal(tx => tx.select().from(translationValue).where(eq(translationValue.idTranslationKey, keyId)))
     expect(rows).toHaveLength(0)
   })
 })

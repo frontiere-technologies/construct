@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { withGlobal } from '@/lib/db/tenant-db'
 import { users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { passwordSchema } from '@/lib/validations'
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
-  const [user] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, session.user.id)).limit(1)
+  const [user] = await withGlobal(tx => tx.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, session.user.id)).limit(1))
 
   if (!user?.passwordHash) {
     return NextResponse.json({ error: 'Nessuna password impostata per questo account.' }, { status: 400 })
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
   const newHash = await bcrypt.hash(newPassword, 12)
   try {
-    await db.update(users).set({ passwordHash: newHash }).where(eq(users.id, session.user.id))
+    await withGlobal(tx => tx.update(users).set({ passwordHash: newHash }).where(eq(users.id, session.user.id)))
   } catch (err) {
     log.error({ err }, 'failed to update password hash')
     return NextResponse.json({ error: 'Errore interno. Riprova.' }, { status: 500 })

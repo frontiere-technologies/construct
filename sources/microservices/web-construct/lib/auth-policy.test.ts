@@ -46,9 +46,14 @@ describe('authentication policy', () => {
   })
 
   it('removes all authority from a missing or deactivated account', () => {
-    expect(evaluateAuthorization(null, [1])).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
-    expect(evaluateAuthorization(1, [1])).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
-    expect(evaluateAuthorization(2, [0, 1])).toEqual({ accountActive: true, roleIds: [0, 1], isAdmin: true })
+    expect(evaluateAuthorization(null, [1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(evaluateAuthorization(1, [1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(evaluateAuthorization(2, [0, 1], 1)).toEqual({ accountActive: true, roleIds: [0, 1], isAdmin: true })
+  })
+
+  it('reads administrator status from the tenant admin role id, not from a fixed id', () => {
+    expect(evaluateAuthorization(2, [0, 57], 57).isAdmin).toBe(true)
+    expect(evaluateAuthorization(2, [0, 1], 57).isAdmin).toBe(false)
   })
 
   it('returns the same false result for unknown, passwordless, deactivated, and wrong-password accounts', async () => {
