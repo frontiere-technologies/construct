@@ -1110,7 +1110,7 @@ async function currentActor(): Promise<Actor | null> {
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint && npm run test && npm run test:integration`
 Expected: tutto PASS. Nessun test esistente cambia il proprio atteso.
 
-- [ ] **Step 7: Verificare nel browser.** Avviare l'anteprima `web-construct` e accedere come
+- [✅] **Step 7: Verificare nel browser.** Avviare l'anteprima `web-construct` e accedere come *(Verificato il 2026-10-15 nel browser sul database di prova con il confine acceso: menu laterale, Utenti, Ruoli & Permessi e Funzionalità; ruolo di prova creato, con funzionalità e permesso, rinominato e cancellato. Lo spostamento di una voce di menu è coperto dall'E2E (144/144).)*
   amministratore.
   - Controllare che il menu laterale sia completo.
   - Aprire Utenti, Ruoli & Permessi e Funzionalità.
@@ -1179,7 +1179,7 @@ Expected: FAIL, numero di argomenti di `getAppTheme`.
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint && npm run test && npm run test:integration`
 Expected: PASS.
 
-- [ ] **Step 5: Verificare nel browser** (Review Focus 4).
+- [✅] **Step 5: Verificare nel browser** (Review Focus 4). *(Verificato il 2026-10-15 nel browser sul database di prova con il confine acceso: `/login` con il colore dell'app, tema cambiato, salvato, ricaricato e ripristinato, `/api/health/ready` 200. Il cambio di aspetto nel profilo è coperto dall'E2E (144/144).)*
   - Da disconnessi, aprire `/login`: deve mostrare il colore principale dell'app.
   - Accedere con credenziali di test e aprire il profilo; cambiare aspetto (chiaro e scuro) e
     tornare indietro.
@@ -1232,7 +1232,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint && npm run test && npm run test:integration`
 Expected: PASS.
 
-- [ ] **Step 4: Verificare nel browser.**
+- [✅] **Step 4: Verificare nel browser.** *(Verificato il 2026-10-15 nel browser sul database di prova con il confine acceso: `/api/i18n/dictionary?code=it` e `/api/i18n/languages` da disconnessi. Cambio di lingua e modifica di una traduzione sono coperti dall'E2E (144/144).)*
   - Cambiare lingua dal pannello utente.
   - Aprire Lingue e Traduzioni e modificare una traduzione di prova, poi ripristinarla.
   - Da disconnessi, `GET /api/i18n/dictionary?code=it` e `GET /api/i18n/languages`.
@@ -2071,7 +2071,7 @@ Expected: nessuna riga.
 Run: `npx tsc --noEmit && npm run lint && npm run test && npm run test:integration`
 Expected: PASS, compresi i due nuovi test.
 
-- [ ] **Step 7: Verificare nel browser.**
+- [✅] **Step 7: Verificare nel browser.** *(Verificato il 2026-10-15 nel browser sul database di prova con il confine acceso: "Gestisci ruoli" con il ruolo base bloccato; un utente non amministratore non vede le voci di amministrazione, la griglia utenti risponde 403 e la pagina lo rimanda alla home.)*
   - Come amministratore aprire Utenti, aprire "Gestisci ruoli" su un utente di prova e
     controllare che il ruolo base sia bloccato come prima.
   - Come utente non amministratore controllare che le voci di amministrazione non compaiano.
