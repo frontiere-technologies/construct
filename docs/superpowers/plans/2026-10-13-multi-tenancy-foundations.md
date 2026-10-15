@@ -2626,7 +2626,7 @@ Expected: PASS.
 Run: `uv run pytest`
 Expected: PASS.
 
-- [ ] **Step 3: Misure di MTF-RISK-2 e MTF-RISK-3.** Con l'anteprima di sviluppo misurare il tempo
+- [✅] **Step 3: Misure di MTF-RISK-2 e MTF-RISK-3.** Con l'anteprima di sviluppo misurare il tempo
   di risposta, mediana di 10 caricamenti, di `/`, `/user-management` e `/functionalities`
   sull'ultimo commit di `development` e su questo branch.
   - Se la differenza supera il 20%, **segnalarlo** al proprietario del progetto con i numeri,
@@ -2635,7 +2635,7 @@ Expected: PASS.
   - Se resta sotto, segnare MTF-RISK-2 e MTF-RISK-3 come `- [✅]` annotando i numeri nella
     descrizione.
 
-- [ ] **Step 4: `boundary-check` sul database di sviluppo** (sola lettura). Va fatto dopo aver
+- [✅] **Step 4: `boundary-check` sul database di sviluppo** (sola lettura). Va fatto dopo aver
   applicato le migrazioni 0044–0047 allo sviluppo con `db.mjs apply`, solo su conferma del
   proprietario del progetto.
 
