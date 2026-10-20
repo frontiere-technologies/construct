@@ -343,8 +343,10 @@ export async function withTenant<T>(
   fn: (tx: TenantTx) => Promise<T>,
   options?: TransactionOptions,          // isolamento e sola lettura, come oggi
 ): Promise<T>
-// apre la transazione, esegue `select set_config('app.tenant_id', $1, true)` con il valore come
-// parametro (mai sql.raw), poi chiama fn(tx). Rifiuta id non interi o non positivi.
+// apre la transazione e imposta set_config('app.tenant_id', '<n>', true). Il numero è scritto nel
+// testo, solo dopo averlo verificato come intero sicuro e positivo (specifica 2026-10-15,
+// MTP-DEC-3): con prepare: false un parametro costerebbe un viaggio in più. Rifiuta id non interi
+// o non positivi.
 
 export async function withGlobal<T>(
   fn: (tx: GlobalTx) => Promise<T>,

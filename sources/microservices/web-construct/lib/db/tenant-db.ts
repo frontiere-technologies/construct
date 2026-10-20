@@ -29,9 +29,14 @@ function isTenantBoundaryError(error: unknown): boolean {
 }
 
 /**
- * Le due sole porte verso il database (specifica 2026-10-13, §3.1, MTF-DEC-6). Il tenant entra
- * come parametro con set_config(..., true): vale fino alla fine della transazione e mai oltre,
- * quindi una connessione restituita al pooler non porta il tenant al cliente successivo.
+ * Le due sole porte verso il database (specifica 2026-10-13, §3.1, MTF-DEC-6). Il tenant vale
+ * fino alla fine della transazione e mai oltre (set_config(..., true)), quindi una connessione
+ * restituita al pooler non porta il tenant al cliente successivo.
+ *
+ * Il numero del tenant è scritto nel testo, non passato come parametro (specifica 2026-10-15,
+ * MTP-DEC-3): con prepare: false un parametro costa un viaggio in più. È sicuro perché il valore
+ * è appena stato verificato come intero positivo: nel testo può finire solo un numero. È l'unico
+ * punto del progetto dove il tenant entra nel testo SQL.
  */
 export function createTenantAccess(database: Database) {
   async function withTenant<T>(
@@ -42,8 +47,15 @@ export function createTenantAccess(database: Database) {
     if (!Number.isSafeInteger(tenantId) || tenantId <= 0) throw new Error('invalid tenant id')
     try {
       return await database.transaction(async tx => {
-        await tx.execute(sql`select set_config('app.tenant_id', ${String(tenantId)}, true)`)
-        return fn(tx as TenantTx)
+        // Senza parametri e senza attenderne la risposta: postgres.js lo scrive subito sulla
+        // connessione della transazione, prima della prima query della funzione, e Postgres esegue
+        // le istruzioni nell'ordine in cui arrivano (MTP §2.3). Le query di Drizzle partono solo
+        // quando qualcuno chiama `then`: lo si chiama qui, subito, per spedirlo per primo.
+        const tenantSet = tx
+          .execute(sql.raw(`select set_config('app.tenant_id', '${tenantId}', true)`))
+          .then(() => undefined)
+        const [, result] = await Promise.all([tenantSet, fn(tx as TenantTx)])
+        return result
       }, options)
     } catch (error) {
       // Un 42501 qui è sempre un errore di programmazione, mai di chi usa l'app (§5.2).

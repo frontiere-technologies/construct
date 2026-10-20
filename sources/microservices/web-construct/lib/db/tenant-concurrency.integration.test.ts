@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { createDatabase } from '@/lib/db/client'
 import { menuEntry, tenant } from '@/lib/db/schema'
 import { createTenantAccess, type TenantTx } from '@/lib/db/tenant-db'
@@ -120,6 +120,26 @@ describeIntegration('tenant isolation under concurrency', () => {
         expect(writers.filter(result => !result.sawOwnRow)).toEqual([])
         // Entrambi i tenant hanno righe: senza questo un risultato vuoto passerebbe per isolato.
         expect(results.every(result => result.seen.length > 0)).toBe(true)
+      } finally {
+        await close()
+      }
+    }, 60_000)
+
+    // set_config parte in coda senza attenderne la risposta (MTP §2.3): la primissima query della
+    // funzione deve comunque vedere già il tenant, su ogni modalità del pooler.
+    it(`sees the tenant in the very first query of every transaction (${target.mode})`, async () => {
+      const tenantB = B!
+      const { database, close } = createDatabase(target.url, { max: 10 })
+      const { withTenant } = createTenantAccess(database)
+      try {
+        const seen = await Promise.all(Array.from({ length: 200 }, (_, index) => {
+          const expected = index % 2 === 0 ? A : tenantB
+          return withTenant(expected, async tx => {
+            const [row] = await tx.execute<{ tenant: string }>(sql`select current_setting('app.tenant_id', true) as tenant`)
+            return { expected, tenant: row.tenant }
+          })
+        }))
+        expect(seen.filter(item => item.tenant !== String(item.expected))).toEqual([])
       } finally {
         await close()
       }
