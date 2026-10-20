@@ -42,7 +42,9 @@ function lazyDatabase(options: { failSetConfig?: boolean } = {}) {
     }),
   }
   const database = {
-    transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(tx),
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      try { return await fn(tx) } finally { events.push('transaction settled') }
+    },
   } as unknown as Database
   return { database, events, executed, isSetConfigSettled: () => setConfigSettled }
 }
@@ -66,7 +68,7 @@ describe('withTenant, set_config', () => {
       settledWhenCallbackStarted = isSetConfigSettled()
       return null
     })
-    expect(events).toEqual(['set_config sent', 'callback started'])
+    expect(events).toEqual(['set_config sent', 'callback started', 'transaction settled'])
     expect(settledWhenCallbackStarted).toBe(false)
   })
 
@@ -74,6 +76,37 @@ describe('withTenant, set_config', () => {
     const { database } = lazyDatabase({ failSetConfig: true })
     const { withTenant } = createTenantAccess(database)
     await expect(withTenant(tenantIdForTest(7), async () => 'done')).rejects.toThrow('set_config failed')
+  })
+
+  it('does not end the transaction while the callback is still running, even if set_config fails first', async () => {
+    const { database, events } = lazyDatabase({ failSetConfig: true })
+    const { withTenant } = createTenantAccess(database)
+    await expect(withTenant(tenantIdForTest(7), async () => {
+      await new Promise(resolve => setTimeout(resolve, 40))
+      events.push('callback done')
+      return 'done'
+    })).rejects.toThrow('set_config failed')
+    expect(events).toEqual(['set_config sent', 'callback done', 'transaction settled'])
+  })
+
+  it('turns a synchronous throw of the callback into a rejection, with no unhandled rejection left behind', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason) }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const failing = lazyDatabase({ failSetConfig: true })
+      await expect(createTenantAccess(failing.database).withTenant(tenantIdForTest(7), (() => {
+        throw new Error('sync boom')
+      }) as never)).rejects.toThrow('set_config failed')
+      const healthy = lazyDatabase()
+      await expect(createTenantAccess(healthy.database).withTenant(tenantIdForTest(7), (() => {
+        throw new Error('sync boom')
+      }) as never)).rejects.toThrow('sync boom')
+      await new Promise(resolve => setTimeout(resolve, 30))
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
   })
 })
 

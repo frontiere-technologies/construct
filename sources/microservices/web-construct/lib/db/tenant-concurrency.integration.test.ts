@@ -144,5 +144,25 @@ describeIntegration('tenant isolation under concurrency', () => {
         await close()
       }
     }, 60_000)
+
+    // Lo stesso, ma con un query builder di Drizzle come prima query: è l'altro ramo di esecuzione
+    // (PgSelect.then, non tx.execute) e tocca una tabella di tenant, quindi senza tenant darebbe 42501.
+    it(`sees the tenant in a query-builder first query of every transaction (${target.mode})`, async () => {
+      const tenantB = B!
+      const { database, close } = createDatabase(target.url, { max: 10 })
+      const { withTenant } = createTenantAccess(database)
+      try {
+        const seen = await Promise.all(Array.from({ length: 200 }, (_, index) => {
+          const expected = index % 2 === 0 ? A : tenantB
+          return withTenant(expected, async tx => {
+            const rows = await tx.select({ t: menuEntry.idTenant }).from(menuEntry).limit(1)
+            return { expected, tenant: rows[0]?.t }
+          })
+        }))
+        expect(seen.filter(item => item.tenant !== item.expected)).toEqual([])
+      } finally {
+        await close()
+      }
+    }, 60_000)
   }
 })

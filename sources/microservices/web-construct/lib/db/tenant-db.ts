@@ -47,15 +47,26 @@ export function createTenantAccess(database: Database) {
     if (!Number.isSafeInteger(tenantId) || tenantId <= 0) throw new Error('invalid tenant id')
     try {
       return await database.transaction(async tx => {
-        // Senza parametri e senza attenderne la risposta: postgres.js lo scrive subito sulla
-        // connessione della transazione, prima della prima query della funzione, e Postgres esegue
-        // le istruzioni nell'ordine in cui arrivano (MTP §2.3). Le query di Drizzle partono solo
-        // quando qualcuno chiama `then`: lo si chiama qui, subito, per spedirlo per primo.
+        // Senza parametri e senza attenderne la risposta prima di far partire la funzione. L'ordine
+        // non lo garantisce una scrittura immediata sul socket: viene dalle microattività in ordine
+        // FIFO, perché set_config e la prima query della funzione percorrono catene di chiamate di
+        // pari lunghezza (Drizzle QueryPromise.then -> execute -> Query.handle di postgres.js), e
+        // set_config parte per primo perché `then` si chiama qui, subito (le query di Drizzle
+        // partono solo allora). Se l'ordine si rompesse, la query della funzione vedrebbe il tenant
+        // mancante e fallirebbe con 42501: mai il tenant di un altro, perché l'impostazione vale
+        // solo nella transazione e la transazione sopravvive alla funzione (si attendono entrambe,
+        // poi si rilancia). Contro un aggiornamento delle librerie che cambi la lunghezza delle
+        // catene vigila tenant-concurrency.integration.test.ts (ordine della prima query, in ogni
+        // modalità del pooler, per entrambi i rami di esecuzione di Drizzle).
         const tenantSet = tx
           .execute(sql.raw(`select set_config('app.tenant_id', '${tenantId}', true)`))
           .then(() => undefined)
-        const [, result] = await Promise.all([tenantSet, fn(tx as TenantTx)])
-        return result
+        // L'async trasforma anche un throw sincrono in un rifiuto, così nessuna promessa resta senza gestore.
+        const work = (async () => fn(tx as TenantTx))()
+        const [tenantOutcome, workOutcome] = await Promise.allSettled([tenantSet, work])
+        if (tenantOutcome.status === 'rejected') throw tenantOutcome.reason
+        if (workOutcome.status === 'rejected') throw workOutcome.reason
+        return workOutcome.value
       }, options)
     } catch (error) {
       // Un 42501 qui è sempre un errore di programmazione, mai di chi usa l'app (§5.2).
