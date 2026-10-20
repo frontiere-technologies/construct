@@ -546,7 +546,7 @@ git commit -m "perf(rbac): one statement reads who the user is in the tenant"
   - `getSession(): Promise<Session | null>` = `auth()` memorizzata per richiesta;
   - `getUserPreferences(userId: string): Promise<{ languageCode: string | null; themeMode: string | null; textScale: number | null } | null>`, memorizzata per richiesta, una `withGlobal`.
 
-- [ ] **Step 1: La guardia, che fallisce.** Creare `guards/session-access.test.ts`. Sullo stile di `guards/tenant-boundary.test.ts` (stesse radici sorgente, stesso modo di leggere gli import con il compilatore TypeScript): nessun file fuori da `lib/auth.ts`, `lib/auth-session.ts` e `proxy.ts` importa il simbolo `auth` da `@/lib/auth` (né lo riesporta); i file di test sono esclusi.
+- [✅] **Step 1: La guardia, che fallisce.** Creare `guards/session-access.test.ts`. Sullo stile di `guards/tenant-boundary.test.ts` (stesse radici sorgente, stesso modo di leggere gli import con il compilatore TypeScript): nessun file fuori da `lib/auth.ts`, `lib/auth-session.ts` e `proxy.ts` importa il simbolo `auth` da `@/lib/auth` (né lo riesporta); i file di test sono esclusi.
 
 ```ts
 /**
@@ -562,7 +562,7 @@ const ALLOWED = new Set(['lib/auth.ts', 'lib/auth-session.ts', 'proxy.ts'])
 Run: `npx vitest run guards/session-access.test.ts`
 Expected: FAIL con i 12 file elencati sopra (e nessun altro).
 
-- [ ] **Step 2: `lib/auth-session.ts`.**
+- [✅] **Step 2: `lib/auth-session.ts`.**
 
 ```ts
 import { cache } from 'react'
@@ -577,12 +577,12 @@ import { auth } from '@/lib/auth'
 export const getSession = cache(async () => auth())
 ```
 
-- [ ] **Step 3: Sostituire `auth()` con `getSession()`** nei 12 file, cambiando solo import e chiamata. Aggiornare i mock dei loro test unitari (`grep -rln "vi.mock('@/lib/auth'" lib app components`): dove il modulo sotto test ora importa `@/lib/auth-session`, il mock segue.
+- [✅] **Step 3: Sostituire `auth()` con `getSession()`** nei 12 file, cambiando solo import e chiamata. Aggiornare i mock dei loro test unitari (`grep -rln "vi.mock('@/lib/auth'" lib app components`): dove il modulo sotto test ora importa `@/lib/auth-session`, il mock segue.
 
 Run: `npx vitest run guards/session-access.test.ts && npx tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 4: Test delle preferenze, che fallisce.** Creare `lib/user-preferences.test.ts` (unit, con `vi.mock('@/lib/db/tenant-db', …)` il cui `withGlobal` chiama la callback con un finto `tx` che registra la query, come in `language-service.test.ts`):
+- [✅] **Step 4: Test delle preferenze, che fallisce.** Creare `lib/user-preferences.test.ts` (unit, con `vi.mock('@/lib/db/tenant-db', …)` il cui `withGlobal` chiama la callback con un finto `tx` che registra la query, come in `language-service.test.ts`):
   - una sola `withGlobal` restituisce `{ languageCode, themeMode, textScale }` per l'utente;
   - utente non trovato: `null`.
 
@@ -593,7 +593,7 @@ Expected: PASS.
 Run: `npx vitest run lib/user-preferences.test.ts lib/appearance.test.ts lib/i18n`
 Expected: FAIL (`./user-preferences` non esiste).
 
-- [ ] **Step 5: `lib/user-preferences.ts`.**
+- [✅] **Step 5: `lib/user-preferences.ts`.**
 
 ```ts
 import { cache } from 'react'
@@ -624,7 +624,7 @@ export const getUserPreferences = cache(async (userId: string): Promise<UserPref
 
   Se i tipi di `themeMode` e `textScale` nello schema sono diversi da quelli qui sopra, usare quelli dello schema (`toAppearance` deve continuare a ricevere quello che riceve oggi).
 
-- [ ] **Step 6: Usarla in lingua e aspetto.**
+- [✅] **Step 6: Usarla in lingua e aspetto.**
   - `lib/appearance-server.ts`: `const session = await getSession()`; con un utente, `const row = await getUserPreferences(userId)` dentro il `try` di oggi, e `if (row) return toAppearance({ themeMode: row.themeMode, textScale: row.textScale })`. Il messaggio di log resta.
   - `lib/i18n/server.ts`: `profileLanguageCode()` usa `getSession()` e `getUserPreferences(userId)`, restituisce `row?.languageCode ?? null`, con lo stesso `try/catch` e lo stesso log. In `getI18n` la lettura delle lingue e la sessione partono insieme:
 
@@ -641,7 +641,7 @@ export const getUserPreferences = cache(async (userId: string): Promise<UserPref
 Run: `npx vitest run lib/user-preferences.test.ts lib/appearance.test.ts lib/i18n && npx tsc --noEmit && npm run lint`
 Expected: PASS.
 
-- [ ] **Step 7: Suite, browser e commit.**
+- [✅] **Step 7: Suite, browser e commit.**
 
 Run: `npm run test && npm run test:integration`
 Expected: PASS (base delle 8 Sidebar a parte).
