@@ -89,7 +89,7 @@ viaggi e fissa un tetto per ogni operazione.
   - `createDatabase(url, { max?, onQuery? })`, dove `onQuery: (query: string, parameters: readonly unknown[]) => void`;
   - `withTenant` invariata nella firma.
 
-- [ ] **Step 1: Test del conteggio.** Creare `lib/db/round-trips.test.ts`:
+- [✅] **Step 1: Test del conteggio.** Creare `lib/db/round-trips.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest'
@@ -110,7 +110,7 @@ describe('countRoundTrips', () => {
 })
 ```
 
-- [ ] **Step 2: Aggiornare i test di `withTenant`.** In `lib/db/tenant-db.test.ts`:
+- [✅] **Step 2: Aggiornare i test di `withTenant`.** In `lib/db/tenant-db.test.ts`:
   - il falso database deve imitare Drizzle: `tx.execute` restituisce un oggetto che parte solo quando qualcuno chiama `then` (come `QueryPromise`), e registra l'ordine degli eventi;
   - sostituire il test "sets the tenant as a transaction-local parameter…" con i tre test qui sotto.
 
@@ -172,12 +172,12 @@ describe('withTenant, set_config', () => {
 
   Il test che rifiuta `[0, -1, 1.5, NaN, Infinity]` resta com'è: nessuna istruzione partita.
 
-- [ ] **Step 3: Verificare che falliscano.**
+- [✅] **Step 3: Verificare che falliscano.**
 
 Run: `cd sources/microservices/web-construct && npx vitest run lib/db/round-trips.test.ts lib/db/tenant-db.test.ts`
 Expected: FAIL. `./round-trips` non esiste; il testo atteso contiene `'7'` ma oggi c'è `$1`; l'ordine atteso fallisce perché oggi `set_config` viene atteso prima della funzione.
 
-- [ ] **Step 4: Scrivere `lib/db/round-trips.ts`.**
+- [✅] **Step 4: Scrivere `lib/db/round-trips.ts`.**
 
 ```ts
 /**
@@ -206,7 +206,7 @@ export function countRoundTrips(recorded: readonly RecordedStatement[]): RoundTr
 }
 ```
 
-- [ ] **Step 5: `onQuery` in `lib/db/client.ts`.** La firma di `createDatabase` diventa:
+- [✅] **Step 5: `onQuery` in `lib/db/client.ts`.** La firma di `createDatabase` diventa:
 
 ```ts
 export function createDatabase(
@@ -230,7 +230,7 @@ export function createDatabase(
 
   Aggiungere una riga al commento in testa alla funzione su `onQuery`.
 
-- [ ] **Step 6: `set_config` leggero in `lib/db/tenant-db.ts`.** Sostituire il corpo della transazione di `withTenant` e aggiornare il commento di `createTenantAccess`:
+- [✅] **Step 6: `set_config` leggero in `lib/db/tenant-db.ts`.** Sostituire il corpo della transazione di `withTenant` e aggiornare il commento di `createTenantAccess`:
 
 ```ts
 /**
@@ -262,12 +262,12 @@ export function createDatabase(
     } catch (error) {
 ```
 
-- [ ] **Step 7: Verificare che i test unitari passino.**
+- [✅] **Step 7: Verificare che i test unitari passino.**
 
 Run: `npx vitest run lib/db/round-trips.test.ts lib/db/tenant-db.test.ts && npx tsc --noEmit && npm run lint`
 Expected: PASS; lint pulito (la guardia `guards/tenant-boundary.test.ts` permette `app.tenant_id` in `lib/db/`).
 
-- [ ] **Step 8: Test d'ordine sotto concorrenza.** In `lib/db/tenant-concurrency.integration.test.ts`, dentro il blocco che gira per ogni modalità (`targets`), aggiungere:
+- [✅] **Step 8: Test d'ordine sotto concorrenza.** In `lib/db/tenant-concurrency.integration.test.ts`, dentro il blocco che gira per ogni modalità (`targets`), aggiungere:
 
 ```ts
     it('sees the tenant in the very first query of every transaction', async () => {
@@ -290,7 +290,7 @@ Expected: PASS; lint pulito (la guardia `guards/tenant-boundary.test.ts` permett
 
   Aggiungere `sql` all'import da `drizzle-orm` se manca.
 
-- [ ] **Step 9: Il file dei tetti, con la prima voce.** Creare `lib/db/round-trip-budget.integration.test.ts`:
+- [✅] **Step 9: Il file dei tetti, con la prima voce.** Creare `lib/db/round-trip-budget.integration.test.ts`:
 
 ```ts
 import { afterAll, beforeEach, expect, it, vi } from 'vitest'
@@ -335,14 +335,14 @@ describeIntegration('round-trip budget', () => {
 })
 ```
 
-- [ ] **Step 10: Verificare i test di integrazione toccati.**
+- [✅] **Step 10: Verificare i test di integrazione toccati.**
 
 Run: `npm run test:integration -- lib/db/round-trip-budget.integration.test.ts lib/db/tenant-concurrency.integration.test.ts`
 Expected: PASS. Il conto di una `withTenant` vuota è 3 (prima era 4); il test d'ordine non trova nessuna transazione senza tenant nelle due modalità. Riportare nel rapporto i viaggi contati e le query registrate.
 
   **Se il test d'ordine fallisce** (MTP-RISK-1): non indebolire il test. In `withTenant` tornare ad attendere `tenantSet` prima di chiamare `fn` (il testo senza parametri resta: 1 viaggio invece di 2), e riportare l'esito.
 
-- [ ] **Step 11: Aggiornare la specifica del pezzo 1.** In `docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md`, nel commento di `withTenant` della §3.1, sostituire "con il valore come parametro (mai sql.raw)" con:
+- [✅] **Step 11: Aggiornare la specifica del pezzo 1.** In `docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md`, nel commento di `withTenant` della §3.1, sostituire "con il valore come parametro (mai sql.raw)" con:
 
 ```
 // apre la transazione e imposta set_config('app.tenant_id', '<n>', true). Il numero è scritto nel
@@ -351,7 +351,7 @@ Expected: PASS. Il conto di una `withTenant` vuota è 3 (prima era 4); il test d
 // o non positivi.
 ```
 
-- [ ] **Step 12: Suite e commit.**
+- [✅] **Step 12: Suite e commit.**
 
 Run: `npm run test && npm run test:integration`
 Expected: PASS, a parte la base delle 8 Sidebar.
