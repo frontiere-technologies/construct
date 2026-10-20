@@ -774,26 +774,26 @@ git commit -m "perf(rbac): menu, tree and user management read together, in fewe
 - Modify: `docs/superpowers/specs/2026-10-15-multi-tenancy-performance-design.md` (checkbox, numeri)
 - Modify: `docs/superpowers/specs/2026-10-13-multi-tenancy-foundations-design.md` (MTF-RISK-2, MTF-RISK-3)
 
-- [ ] **Step 1: Tutte le porte di qualità.**
+- [✅] **Step 1: Tutte le porte di qualità.**
 
 Run: `cd sources/microservices/web-construct && npm run lint && npm run test && npm run test:integration && npm run build && npm run test:migrations && npm run test:env-contract && npm run test:i18n-keys && npm run test:docs-contract && npm run test:collection && node ../../devops/db/db.mjs schema-check`
 Expected: PASS (base delle 8 Sidebar a parte). `boundary-check` sul database di prova: tutto `ok`.
 
-- [ ] **Step 2: E2E completo**, a integrazione ferma, con il computer sveglio.
+- [✅] **Step 2: E2E completo**, a integrazione ferma, con il computer sveglio.
 
 Run: `caffeinate -dims uv run pytest` (dalla radice del repository, con il server `web-construct-e2e` avviato)
 Expected: 144 passati.
 
-- [ ] **Step 3: Percorso critico stimato.** Con i numeri del file dei tetti, ricalcolare il percorso critico delle tre pagine come nella §3 della specifica e scriverlo nella specifica: deve restare entro 20, 33, 31 (MTP-OK-1).
+- [✅] **Step 3: Percorso critico stimato.** Con i numeri del file dei tetti, ricalcolare il percorso critico delle tre pagine come nella §3 della specifica e scriverlo nella specifica: deve restare entro 20, 33, 31 (MTP-OK-1).
 
-- [ ] **Step 4: Misura sul database di sviluppo** (MTP-OK-2), stesso metodo del 2026-10-15:
+- [✅] **Step 4: Misura sul database di sviluppo** (MTP-OK-2), stesso metodo del 2026-10-15:
   - server `web-construct` sulla porta 3000 (il ritorno da Google è su `localhost:3000`), sessione da amministratore nel riquadro del browser (il proprietario entra se serve);
   - per `/`, `/user-management`, `/functionalities`: 2 caricamenti di riscaldamento, 10 misurati con `fetch` del corpo completo, mediana;
   - confronto con 690, 798, 702 ms: obiettivo entro circa 830, 960, 840 ms.
 
   Se un valore resta sopra, riportarlo al proprietario con i numeri prima di proporre altro.
 
-- [ ] **Step 5: Specifiche e commit.**
+- [✅] **Step 5: Specifiche e commit.**
   - Nella specifica delle prestazioni: segnare MTP-OK-1…4 e MTP-RISK-1…4 verificati, con i numeri.
   - Nella specifica del pezzo 1: MTF-RISK-2 e MTF-RISK-3 con le misure finali, segnati se dentro l'obiettivo.
 
