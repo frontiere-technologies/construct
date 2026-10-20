@@ -18,6 +18,7 @@ import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from './types'
  * servizio e le loro assegnazioni, mai i ruoli di sistema.
  */
 const TENANT = defaultTestTenant()
+const ROLE_TYPE_SYSTEM = 1
 const ROLE_TYPE_SERVICE = 2
 
 let system: SystemRoleIds
@@ -29,6 +30,14 @@ let deactivatedAdminUserId: string
 let revokedAdminUserId: string
 let registeredOnlyUserId: string
 let emptyTenant: ReturnType<typeof tenantIdForTest> | undefined
+// Un secondo tenant con i propri ruoli di sistema e un ruolo di servizio che concede read-users.
+let otherTenant: ReturnType<typeof tenantIdForTest> | undefined
+let otherRegisteredId: number
+let otherServiceRoleId: number
+// Ruoli in entrambi i tenant: lettore in A (read-menu) e in B (read-users).
+let bothTenantsUserId: string
+// Amministratore in A, soltanto ruolo base in B.
+let adminInAOnlyUserId: string
 const createdUserIds: string[] = []
 
 async function createUser(status: number): Promise<string> {
@@ -82,6 +91,29 @@ describeIntegration('authorization reads', () => {
       .values({ slug: `zzz-authroles-${unique()}`.slice(0, 40), name: 'Authorization without system roles' })
       .returning({ id: tenant.id }))
     emptyTenant = tenantIdForTest(created.id)
+
+    // Il tenant B: una volta creato l'id, la pulizia lo trova anche se i passi dopo falliscono.
+    const [other] = await withOwner(tx => tx.insert(tenant)
+      .values({ slug: `zzz-authroles-b-${unique()}`.slice(0, 40), name: 'Authorization other tenant' })
+      .returning({ id: tenant.id }))
+    otherTenant = tenantIdForTest(other.id)
+    bothTenantsUserId = await createUser(USER_STATUS_ACTIVE)
+    adminInAOnlyUserId = await createUser(USER_STATUS_ACTIVE)
+    await grantRoles(bothTenantsUserId, [readerRoleId])
+    await grantRoles(adminInAOnlyUserId, [system.registered, system.tenantAdmin])
+    await withOwner(async tx => {
+      const [registered] = await tx.insert(role).values({ description: 'B registered', idRoleType: ROLE_TYPE_SYSTEM, systemKey: 'REGISTERED' }).returning({ idRole: role.idRole })
+      await tx.insert(role).values({ description: 'B admin', idRoleType: ROLE_TYPE_SYSTEM, systemKey: 'TENANT_ADMIN' })
+      const [service] = await tx.insert(role).values({ description: `zzz_authroles_b_${unique()}`, idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole })
+      const [perm] = await tx.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'read-users'))
+      await tx.insert(rolePermission).values({ idRole: service.idRole, idPermission: perm.idPermission })
+      await tx.insert(userRole).values([
+        { userId: bothTenantsUserId, idRole: service.idRole },
+        { userId: adminInAOnlyUserId, idRole: registered.idRole },
+      ])
+      otherRegisteredId = registered.idRole
+      otherServiceRoleId = service.idRole
+    }, otherTenant)
   }, 60_000)
 
   afterAll(async () => {
@@ -90,6 +122,14 @@ describeIntegration('authorization reads', () => {
     // user_role e role_permission spariscono con gli utenti e con il ruolo (ON DELETE CASCADE).
     if (readerRoleId !== undefined) await step(() => withTenant(TENANT, tx => tx.delete(role).where(eq(role.idRole, readerRoleId))))
     if (createdUserIds.length > 0) await step(() => withGlobal(tx => tx.delete(users).where(inArray(users.id, createdUserIds))))
+    if (otherTenant !== undefined) {
+      // Ogni delete nomina il tenant B: senza la sua policy un delete senza where toccherebbe anche A.
+      await step(() => withOwner(async tx => {
+        await tx.delete(userRole).where(eq(userRole.idTenant, otherTenant!))
+        await tx.delete(role).where(eq(role.idTenant, otherTenant!))
+      }, otherTenant))
+      await step(() => withOwner(tx => tx.delete(tenant).where(eq(tenant.id, otherTenant!))))
+    }
     if (emptyTenant !== undefined) await step(() => withOwner(tx => tx.delete(tenant).where(eq(tenant.id, emptyTenant!))))
     await step(() => closeOwner())
     if (errors.length > 0) throw errors[0]
@@ -170,5 +210,34 @@ describeIntegration('authorization reads', () => {
     const off = await createUser(USER_STATUS_DEACTIVATED)
     expect(await authorizationOf(off, true)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
     expect(await rolesOf(off)).toEqual([])
+  })
+
+  it('the snapshot of a tenant never includes the roles or permission codes of another tenant', async () => {
+    // Lo stesso utente ha ruoli in due tenant: ognuno vede solo i propri, e i codici sono quelli
+    // concessi dai ruoli del proprio tenant.
+    const inA = await resolveActor(TENANT, bothTenantsUserId)
+    expect(inA?.roleIds).toEqual([readerRoleId])
+    expect([...(inA?.permissions ?? [])]).toEqual(['read-menu'])
+    expect(await authorizationOf(bothTenantsUserId)).toEqual({ accountActive: true, roleIds: [readerRoleId], isAdmin: false })
+
+    // Controllo contro un passaggio a vuoto: B ha davvero dei ruoli per questo utente.
+    const inB = await resolveActor(otherTenant!, bothTenantsUserId)
+    expect(inB?.roleIds).toEqual([otherServiceRoleId])
+    expect([...(inB?.permissions ?? [])]).toEqual(['read-users'])
+    const authorizationInB = await resolveUserAuthorization(otherTenant!, bothTenantsUserId)
+    expect(authorizationInB).toEqual({ accountActive: true, roleIds: [otherServiceRoleId], isAdmin: false })
+  })
+
+  it('administrator in one tenant is not administrator in another', async () => {
+    const inA = await resolveActor(TENANT, adminInAOnlyUserId)
+    expect(inA?.isAdmin).toBe(true)
+    expect([...(inA?.permissions ?? [])].sort()).toEqual([...PERMISSION_CODES].sort())
+
+    const inB = await resolveActor(otherTenant!, adminInAOnlyUserId)
+    expect(inB?.isAdmin).toBe(false)
+    expect(inB?.roleIds).toEqual([otherRegisteredId])
+    expect([...(inB?.permissions ?? [])]).toEqual([])
+    expect(await resolveUserAuthorization(otherTenant!, adminInAOnlyUserId))
+      .toEqual({ accountActive: true, roleIds: [otherRegisteredId], isAdmin: false })
   })
 })
