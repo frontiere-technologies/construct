@@ -142,7 +142,7 @@ Effetto: `set_config` passa da 2 viaggi a circa 0 sul percorso critico di ogni `
 ### 2.5 Letture indipendenti di nuovo insieme
 
 Dentro una transazione, le letture che non dipendono l'una dall'altra si lanciano insieme
-(`Promise.all`), così postgres.js le mette in coda sulla stessa connessione:
+(`allInTransaction`, `lib/db/`), così postgres.js le mette in coda sulla stessa connessione:
 
 - menu laterale (`getSidebarMenu`: voci e funzionalità concesse);
 - albero delle funzionalità (`getNavigationSubtree`: voci ed etichette);
@@ -161,11 +161,11 @@ quando la connessione non si svuota (postgres.js 3.4.9, `connection.js` e `index
   in serie con 2 viaggi ciascuna: le due letture di `grantsForRoles` e quelle di
   `assignableRoleIds` (`functionalityIdsForRoles` e `grantsForRoles`).
 
-Il `Promise.all` resta comunque utile in quei punti (non costa nulla e rende le letture
+Lanciarle insieme con `allInTransaction` resta comunque utile in quei punti (non costa nulla e rende le letture
 indipendenti), ma non ne va contato il guadagno nel percorso critico.
 
-Ogni ramo di un `Promise.all` dentro una transazione deve essere una sola istruzione, oppure
-attendere tutto ciò che avvia, e va atteso con `allInTransaction` (`lib/db/`), che non
+Ogni ramo di un `allInTransaction` dentro una transazione deve essere una sola istruzione, oppure
+attendere tutto ciò che avvia: `allInTransaction` (`lib/db/`) sostituisce `Promise.all` perché non
 lascia terminare la transazione finché un ramo può ancora inviare istruzioni.
 
 I commenti MTF-RISK-3 nel codice vanno aggiornati di conseguenza.

@@ -4,6 +4,7 @@ import type { LanguageDto } from './types'
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getUserPreferences: vi.fn(),
+  logError: vi.fn(),
   listLanguages: vi.fn(),
   cookieValues: {} as Record<string, string>,
   acceptLanguage: null as string | null,
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth-session', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/user-preferences', () => ({ getUserPreferences: mocks.getUserPreferences }))
+vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: mocks.logError, warn: vi.fn() }) }))
 vi.mock('next/headers', () => ({
   cookies: async () => ({ get: (name: string) => (name in mocks.cookieValues ? { value: mocks.cookieValues[name] } : undefined) }),
   headers: async () => ({ get: () => mocks.acceptLanguage }),
@@ -63,10 +65,12 @@ describe('getI18n', () => {
 
   it('falls through to the other sources when the preferences cannot be read', async () => {
     mocks.getSession.mockResolvedValue({ user: { id: 'user-1' } })
-    mocks.getUserPreferences.mockRejectedValue(new Error('boom'))
+    const failure = new Error('boom')
+    mocks.getUserPreferences.mockRejectedValue(failure)
     mocks.cookieValues = { construct_lang: 'en' }
 
     expect((await getI18n()).language.code).toBe('en')
+    expect(mocks.logError).toHaveBeenCalledWith({ err: failure }, 'failed to read the user language preference')
   })
 
   // Nei route handler React cache() non memorizza: ogni getSession() in più è una transazione
