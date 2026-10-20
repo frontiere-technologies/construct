@@ -669,7 +669,7 @@ git commit -m "perf(auth): the session is read once per request, user preference
   - `selectAllRoles(tx: TenantTx, roleTypes?: RoleType[]): Promise<{ id: number; description: string }[]>`; `getAllRoles(tenantId, roleTypes?)` diventa `withTenant(tenantId, tx => selectAllRoles(tx, roleTypes))` con lo stesso `cache()` e la stessa gestione d'errore;
   - `loadUserManagementPage(actor: Actor): Promise<{ allRoles: { id: number; name: string }[]; assignable: number[]; registeredRoleId: number }>`.
 
-- [ ] **Step 1: Tetti, che falliscono.** Aggiungere a `round-trip-budget.integration.test.ts`:
+- [✅] **Step 1: Tetti, che falliscono.** Aggiungere a `round-trip-budget.integration.test.ts`:
 
 ```ts
   it('the sidebar menu costs at most 6 trips', async () => {
@@ -698,7 +698,7 @@ git commit -m "perf(auth): the session is read once per request, user preference
 Run: `npm run test:integration -- lib/db/round-trip-budget.integration.test.ts`
 Expected: FAIL. `user-management-loader` non esiste; il menu e l'albero passano già dal Task 1 o vanno sopra di poco. Riportare i numeri.
 
-- [ ] **Step 2: Letture insieme.**
+- [✅] **Step 2: Letture insieme.**
   - `getSidebarMenu`: le due letture partono insieme.
 
 ```ts
@@ -719,7 +719,7 @@ Expected: FAIL. `user-management-loader` non esiste; il menu e l'albero passano 
   - `assignableRoleIds`: `const [visible, grants, { tenantAdmin }] = await Promise.all([functionalityIdsForRoles(tx, actor.roleIds), grantsForRoles(tx, roleIds), getSystemRoleIds(tx)])`.
   - Sostituire i commenti MTF-RISK-3 ("vanno in serie") con il commento della §2.5.
 
-- [ ] **Step 3: La pagina utenti in una transazione.** In `lib/rbac/roles-service.ts` estrarre `selectAllRoles(tx, roleTypes?)` dal corpo di `getAllRoles` (stessa query, stesso mapping) e far chiamare `getAllRoles` attraverso di lei. Creare `lib/rbac/user-management-loader.ts`:
+- [✅] **Step 3: La pagina utenti in una transazione.** In `lib/rbac/roles-service.ts` estrarre `selectAllRoles(tx, roleTypes?)` dal corpo di `getAllRoles` (stessa query, stesso mapping) e far chiamare `getAllRoles` attraverso di lei. Creare `lib/rbac/user-management-loader.ts`:
 
 ```ts
 import { withTenant } from '@/lib/db/tenant-db'
@@ -749,12 +749,12 @@ export async function loadUserManagementPage(actor: Actor) {
 
   In `app/(protected)/(admin)/user-management/page.tsx` sostituire `getAllRoles`, la `withTenant` e il calcolo di `registeredRoleId` con `const { allRoles, assignable, registeredRoleId } = await loadUserManagementPage(actor)`. Il resto della pagina e le props di `UsersTableClient` non cambiano.
 
-- [ ] **Step 4: Verificare.**
+- [✅] **Step 4: Verificare.**
 
 Run: `npx tsc --noEmit && npm run lint && npx vitest run lib/rbac && npm run test:integration -- lib/db/round-trip-budget.integration.test.ts lib/rbac`
 Expected: PASS, con i tetti rispettati. Riportare i numeri finali di tutte le voci del file dei tetti.
 
-- [ ] **Step 5: Suite, browser e commit.**
+- [✅] **Step 5: Suite, browser e commit.**
 
 Run: `npm run test && npm run test:integration`
 Expected: PASS (base delle 8 Sidebar a parte).
