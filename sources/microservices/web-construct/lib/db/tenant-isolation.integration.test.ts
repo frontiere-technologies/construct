@@ -80,7 +80,9 @@ describeIntegration('tenant isolation in the database', () => {
       bRoleId = service.idRole
       bEntryId = entry.idMenuEntry
     }, B)
-  })
+    // DB remoto: il tenant, due utenti e tutte le righe di B in sequenza, misurato 2,2-4,8 s (il
+    // limite predefinito di un hook è 10 s). Il limite esplicito toglie la dipendenza dalla latenza.
+  }, 30_000)
 
   // Pulisce anche quando un caso o la preparazione sono falliti a metà: le cancellazioni a cascata
   // portano via tag, funzionalità e permessi di B insieme a ruoli e voci.
@@ -104,7 +106,8 @@ describeIntegration('tenant isolation in the database', () => {
     if (userIds.length > 0) await step(() => withGlobal(tx => tx.delete(users).where(inArray(users.id, userIds))))
     await step(() => closeOwner())
     if (errors.length > 0) throw errors[0]
-  })
+    // DB remoto: sei cancellazioni in sequenza, ~1 s misurato; stesso margine di beforeAll.
+  }, 30_000)
 
   it('shows tenant A only its own rows', async () => {
     const tenants = await withTenant(A, async tx => [

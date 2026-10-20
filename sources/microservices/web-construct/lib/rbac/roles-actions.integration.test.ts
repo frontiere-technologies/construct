@@ -88,7 +88,10 @@ describeIntegration('updateRolePermissions against the database', () => {
     })).rejects.toThrow(/category permission/)
 
     expect(await withTenant(defaultTestTenant(), tx => tx.select().from(rolePermission).where(eq(rolePermission.idRole, roleId)))).toHaveLength(0)
-  })
+    // DB remoto: tre creazioni, la chiamata rifiutata e una lettura, ~2,2 s misurati (fino a oltre la
+    // metà dei 5 s di default quando la rete è lenta). Nessun lock da attendere: un blocco vero
+    // resterebbe comunque entro 15 s.
+  }, 15_000)
 
   it('rifiuta anche una revoca verso una categoria, non solo una concessione', async () => {
     const roleId = await makeServiceRole()

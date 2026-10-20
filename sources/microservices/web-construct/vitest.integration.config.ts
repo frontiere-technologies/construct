@@ -56,6 +56,9 @@ export default defineConfig({
     // that was never released, a short timeout surfaces it in seconds instead of
     // hiding it behind a generous limit. TEST_DATABASE_URL must therefore point at
     // a connection with session affinity — see the note in .env.template.
+    // A spec or hook that is slow only because the database is remote (measured above 3 s) gets
+    // its own explicit, commented timeout (15-30 s) next to it. Specs that wait on a lock keep a
+    // bound of their own as well (a deadline inside the spec), so a real hang still fails.
   },
   resolve: {
     alias: { '@': resolve(__dirname, '.') },
