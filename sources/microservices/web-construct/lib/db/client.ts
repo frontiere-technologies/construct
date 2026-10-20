@@ -18,18 +18,28 @@ export type Database = PostgresJsDatabase<typeof schema>
  * un timeout più corto fa emergere subito un esaurimento vero.
  * onQuery, se passato, riceve ogni istruzione che postgres.js invia (anche begin e commit): serve
  * solo ai test che contano i viaggi (specifica 2026-10-15, MTP-DEC-5).
+ * onAnswer, se passato, scatta quando arriva dal server la descrizione delle colonne di una lettura
+ * (la prima risposta a un'istruzione con risultato): insieme a onQuery dice se due istruzioni sono
+ * partite in coda o una dopo la risposta all'altra. postgres.js non ha un gancio per le risposte;
+ * `transform.column.from` è l'unico punto che vede il flusso in arrivo senza toccare il socket
+ * (funziona anche con TLS) e restituisce il nome invariato.
  */
 export function createDatabase(
   url: string,
-  options: { max?: number; onQuery?: (query: string, parameters: readonly unknown[]) => void } = {},
+  options: {
+    max?: number
+    onQuery?: (query: string, parameters: readonly unknown[]) => void
+    onAnswer?: () => void
+  } = {},
 ) {
-  const { onQuery } = options
+  const { onQuery, onAnswer } = options
   const client = postgres(url, {
     prepare: false,
     max: options.max ?? 20,
     connect_timeout: 10,
     // Solo i test che contano i viaggi lo passano (round-trip-budget.integration.test.ts).
     debug: onQuery ? (_connection, query, parameters) => onQuery(query, parameters) : false,
+    ...(onAnswer ? { transform: { column: { from: (name: string) => { onAnswer(); return name } } } } : {}),
   })
   return {
     database: drizzle(client, { schema }) as Database,
