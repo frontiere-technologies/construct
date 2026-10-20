@@ -377,7 +377,7 @@ git commit -m "perf(db): set_config goes out without a parameter, ahead of the f
   - `selectAuthorizationSnapshot(tx: TenantTx, userId: string, options?: { permissionCodes?: boolean }): Promise<AuthorizationSnapshot>`, con `AuthorizationSnapshot = { userExists: boolean; status: number | null; roleIds: number[]; system: SystemRoleIds; permissionCodes: string[] }`;
   - `resolveActor(tenantId, userId)` — firma invariata.
 
-- [ ] **Step 1: Casi limite, test che fissa il comportamento.** Creare `lib/rbac/auth-roles.integration.test.ts`. Prepara gli utenti con le funzioni già usate dagli altri test dell'area (`withGlobal` per `users`, `withTenant(defaultTestTenant(), …)` per `user_role`, `withOwner` per un tenant senza ruoli di sistema) e li cancella in `afterAll` (solo le righe create, filtrate per id). Casi, ognuno con `resolveUserAuthorization(defaultTestTenant(), userId)` e `resolveActor(defaultTestTenant(), userId)`:
+- [✅] **Step 1: Casi limite, test che fissa il comportamento.** Creare `lib/rbac/auth-roles.integration.test.ts`. Prepara gli utenti con le funzioni già usate dagli altri test dell'area (`withGlobal` per `users`, `withTenant(defaultTestTenant(), …)` per `user_role`, `withOwner` per un tenant senza ruoli di sistema) e li cancella in `afterAll` (solo le righe create, filtrate per id). Casi, ognuno con `resolveUserAuthorization(defaultTestTenant(), userId)` e `resolveActor(defaultTestTenant(), userId)`:
 
 | Caso | `resolveUserAuthorization` | `resolveActor` |
 |---|---|---|
@@ -391,7 +391,7 @@ git commit -m "perf(db): set_config goes out without a parameter, ahead of the f
 
   Più `ensureRegisteredRole`: per un utente attivo senza ruoli, `resolveUserAuthorization(tenant, id, true)` restituisce `roleIds` con il ruolo REGISTERED e la riga esiste in `user_role`.
 
-- [ ] **Step 2: Tetti nel file dei tetti.** Aggiungere a `round-trip-budget.integration.test.ts` (con utenti di prova creati in `beforeAll` e cancellati in `afterAll`):
+- [✅] **Step 2: Tetti nel file dei tetti.** Aggiungere a `round-trip-budget.integration.test.ts` (con utenti di prova creati in `beforeAll` e cancellati in `afterAll`):
 
 ```ts
   it('one authorization read (the jwt callback) costs at most 5 trips', async () => {
@@ -407,12 +407,12 @@ git commit -m "perf(db): set_config goes out without a parameter, ahead of the f
   })
 ```
 
-- [ ] **Step 3: Verificare.** I casi limite passano già oggi (fissano il comportamento); i tetti falliscono.
+- [✅] **Step 3: Verificare.** I casi limite passano già oggi (fissano il comportamento); i tetti falliscono.
 
 Run: `npm run test:integration -- lib/rbac/auth-roles.integration.test.ts lib/db/round-trip-budget.integration.test.ts`
 Expected: casi limite PASS; tetti FAIL con circa 8 viaggi per il callback e 8–10 per `resolveActor`. Riportare i numeri.
 
-- [ ] **Step 4: L'istruzione unica in `lib/rbac/auth-roles.ts`.**
+- [✅] **Step 4: L'istruzione unica in `lib/rbac/auth-roles.ts`.**
 
 ```ts
 import { sql } from 'drizzle-orm'
@@ -499,7 +499,7 @@ export async function selectUserAuthorization(
 
   `resolveUserAuthorization` resta com'è.
 
-- [ ] **Step 5: `resolveActor` sull'istruzione unica.** In `lib/rbac/actor.ts`, il corpo diventa:
+- [✅] **Step 5: `resolveActor` sull'istruzione unica.** In `lib/rbac/actor.ts`, il corpo diventa:
 
 ```ts
 export const resolveActor = cache(async (tenantId: TenantId, userId: string): Promise<Actor | null> =>
@@ -517,12 +517,12 @@ export const resolveActor = cache(async (tenantId: TenantId, userId: string): Pr
 
   Aggiornare gli import (via `and`, `eq`, `inArray`, `isNotNull`, `isNull`, `permission`, `rolePermission`, `selectUserAuthorization` se non più usati; aggiungere `selectAuthorizationSnapshot` e `evaluateAuthorization`). Il commento sopra `resolveActor` resta, con "Una lettura per richiesta" che ora è letteralmente un'istruzione. Un permesso deprecato non conta: lo filtra `p.deprecated_at is null`.
 
-- [ ] **Step 6: Verificare.**
+- [✅] **Step 6: Verificare.**
 
 Run: `npx tsc --noEmit && npm run lint && npx vitest run lib/rbac && npm run test:integration -- lib/rbac/auth-roles.integration.test.ts lib/db/round-trip-budget.integration.test.ts lib/rbac/actor.integration.test.ts`
 Expected: PASS. Tetti: callback ≤ 5, `resolveActor` ≤ 5. Riportare i numeri.
 
-- [ ] **Step 7: Suite e commit.**
+- [✅] **Step 7: Suite e commit.**
 
 Run: `npm run test && npm run test:integration`
 Expected: PASS (base delle 8 Sidebar a parte).
