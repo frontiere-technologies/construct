@@ -1,6 +1,6 @@
 'use server'
 
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/auth-session'
 import { withGlobal } from '@/lib/db/tenant-db'
 import { users } from '@/lib/db/schema'
 import { phoneSchema } from '@/lib/validations'
@@ -15,7 +15,7 @@ export interface UserProfile {
 
 export async function saveProfile(profile: UserProfile): Promise<{ error: string | null }> {
   allowSelfService()
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user?.id) return { error: 'Not authenticated' }
 
   let phone = profile.phone

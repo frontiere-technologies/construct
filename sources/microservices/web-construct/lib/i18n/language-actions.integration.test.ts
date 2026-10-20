@@ -15,7 +15,7 @@ vi.mock('@/lib/rbac/auth-guard', () => {
   }
 })
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
-vi.mock('@/lib/auth', () => ({ auth: async () => ({ user: { id: 'test' } }) }))
+vi.mock('@/lib/auth-session', () => ({ getSession: async () => ({ user: { id: 'test' } }) }))
 
 const { createLanguage, deleteLanguage, setDefaultLanguage, setLanguageActive, updateLanguage } =
   await import('./language-actions')

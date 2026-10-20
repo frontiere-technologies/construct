@@ -4,12 +4,12 @@ import type { Actor } from './actor'
 import type { PermissionCode } from './permission-catalog'
 
 const mocks = vi.hoisted(() => ({
-  auth: vi.fn(),
+  getSession: vi.fn(),
   resolveActor: vi.fn(),
   redirect: vi.fn((url: string) => { throw new Error(`NEXT_REDIRECT ${url}`) }),
 }))
 
-vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
+vi.mock('@/lib/auth-session', () => ({ getSession: mocks.getSession }))
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))
 // Il tenant della richiesta ora si legge dal database: un test unitario non lo apre.
 vi.mock('@/lib/tenancy/request-tenant', async () => {
@@ -28,7 +28,7 @@ function actor(codes: PermissionCode[], isAdmin = false): Actor {
 
 describe('requirePermission', () => {
   beforeEach(() => {
-    mocks.auth.mockReset().mockResolvedValue({ user: { id: 'u1' } })
+    mocks.getSession.mockReset().mockResolvedValue({ user: { id: 'u1' } })
     mocks.resolveActor.mockReset()
     mocks.redirect.mockClear()
   })
@@ -45,7 +45,7 @@ describe('requirePermission', () => {
   })
 
   it('rejects without a session, without asking the database', async () => {
-    mocks.auth.mockResolvedValue(null)
+    mocks.getSession.mockResolvedValue(null)
     await expect(requirePermission('read-menu')).rejects.toThrow('Unauthorized')
     expect(mocks.resolveActor).not.toHaveBeenCalled()
   })
@@ -58,7 +58,7 @@ describe('requirePermission', () => {
 
 describe('requirePagePermission', () => {
   beforeEach(() => {
-    mocks.auth.mockReset().mockResolvedValue({ user: { id: 'u1' } })
+    mocks.getSession.mockReset().mockResolvedValue({ user: { id: 'u1' } })
     mocks.resolveActor.mockReset()
     mocks.redirect.mockClear()
   })
@@ -78,7 +78,7 @@ describe('requirePagePermission', () => {
 
 describe('requireAdministrator', () => {
   beforeEach(() => {
-    mocks.auth.mockReset().mockResolvedValue({ user: { id: 'u1' } })
+    mocks.getSession.mockReset().mockResolvedValue({ user: { id: 'u1' } })
     mocks.resolveActor.mockReset()
     mocks.redirect.mockClear()
   })

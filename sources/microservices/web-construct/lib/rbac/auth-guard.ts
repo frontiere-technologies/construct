@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/auth-session'
 import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
 import { resolveActor, type Actor } from './actor'
 import type { PermissionCode } from './permission-catalog'
@@ -15,7 +15,7 @@ import type { PermissionCode } from './permission-catalog'
  */
 
 async function currentActor(): Promise<Actor | null> {
-  const session = await auth()
+  const session = await getSession()
   const userId = session?.user?.id
   if (!userId) return null
   return resolveActor(await resolveRequestTenant(), userId)
