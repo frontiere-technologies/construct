@@ -102,4 +102,30 @@ describeIntegration('round-trip budget', () => {
     const count = await measure(() => resolveActor(defaultTestTenant(), kind === 'admin' ? adminUserId : readerUserId))
     expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(5)
   })
+
+  it('the sidebar menu costs at most 6 trips', async () => {
+    const { getSidebarMenu } = await import('@/lib/rbac/navigation-service')
+    const count = await measure(() => getSidebarMenu(defaultTestTenant(), [adminRoleId], 'it', 'it'))
+    expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(6)
+  })
+
+  it('the functionalities tree costs at most 5 trips', async () => {
+    const { getNavigationSubtree } = await import('@/lib/rbac/functionalities-service')
+    const count = await measure(() => getNavigationSubtree(defaultTestTenant()))
+    expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(5)
+  })
+
+  it('the user management page data costs at most 11 trips for an administrator', async () => {
+    const { resolveActor } = await import('@/lib/rbac/actor')
+    const { loadUserManagementPage } = await import('@/lib/rbac/user-management-loader')
+    const actor = await resolveActor(defaultTestTenant(), adminUserId)
+    let page: Awaited<ReturnType<typeof loadUserManagementPage>> | undefined
+    const count = await measure(async () => { page = await loadUserManagementPage(actor!) })
+    expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(11)
+    // Stessi dati di prima, non solo meno viaggi: l'amministratore può assegnare il ruolo di prova.
+    expect(page!.allRoles.map(r => r.id)).toEqual(expect.arrayContaining([adminRoleId, readerRoleId]))
+    expect(page!.assignable).toContain(readerRoleId)
+    // Il ruolo base è uno dei ruoli del tenant (l'id 0 è valido: è il ruolo base del tenant predefinito).
+    expect(page!.allRoles.map(r => r.id)).toContain(page!.registeredRoleId)
+  })
 })

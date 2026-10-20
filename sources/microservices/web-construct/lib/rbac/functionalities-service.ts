@@ -8,9 +8,11 @@ import { buildNavTree, mapRowToDto, selectableParents } from './nav-tree-builder
 import { type UserNavigationTreeDto, type ParentOption } from './types'
 
 async function loadNavAndTags(tx: TenantTx) {
-  // Dentro una transazione le due letture vanno in serie sulla stessa connessione (MTF-RISK-3).
-  const navRows = await tx.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition))
-  const tagRows = await tx.select().from(menuEntryTag)
+  // Insieme: postgres.js le mette in coda sulla stessa connessione (specifica 2026-10-15, §2.5).
+  const [navRows, tagRows] = await Promise.all([
+    tx.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition)),
+    tx.select().from(menuEntryTag),
+  ])
   const tagsByItem = new Map<number, { tag_lan: string; tag: string }[]>()
   for (const t of tagRows) {
     const arr = tagsByItem.get(t.idMenuEntry) ?? []

@@ -14,14 +14,15 @@ export const getSidebarMenu = cache(async (
   locale: Locale = DEFAULT_LOCALE,
   fallbackLocale: Locale = DEFAULT_LOCALE,
 ): Promise<MenuItem[]> => withTenant(tenantId, async tx => {
-  // Dentro una transazione le due letture vanno in serie sulla stessa connessione (MTF-RISK-3).
-  const entryRows = await tx.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition))
-  const grantRows = roleIds.length
-    ? await tx
-      .select({ id_role: roleFunctionality.idRole, id_menu_entry: roleFunctionality.idMenuEntry })
-      .from(roleFunctionality)
-      .where(inArray(roleFunctionality.idRole, roleIds))
-    : []
+  // Insieme: postgres.js le mette in coda sulla stessa connessione (specifica 2026-10-15, §2.5).
+  const [entryRows, grantRows] = await Promise.all([
+    tx.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition)),
+    roleIds.length
+      ? tx.select({ id_role: roleFunctionality.idRole, id_menu_entry: roleFunctionality.idMenuEntry })
+        .from(roleFunctionality)
+        .where(inArray(roleFunctionality.idRole, roleIds))
+      : Promise.resolve([]),
+  ])
   const entries = entryRows.map(toMenuEntryRow)
   const granted = resolveGrantedFunctionalityIds(grantRows, roleIds)
   return mapMenuToSidebar(entries, granted, locale, fallbackLocale)

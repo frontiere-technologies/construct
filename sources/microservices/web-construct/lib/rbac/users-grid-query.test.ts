@@ -7,10 +7,10 @@ import {
 } from './users-grid-query'
 
 vi.mock('@/lib/rbac/auth-guard', () => ({ requirePagePermission: vi.fn().mockResolvedValue({ permissions: new Set() }) }))
-// La pagina chiede al database l'id del ruolo base del tenant: qui basta una transazione finta.
-vi.mock('@/lib/db/tenant-db', () => ({ withTenant: (_tenantId: unknown, fn: (tx: unknown) => unknown) => fn({}) }))
-vi.mock('@/lib/tenancy/system-roles', () => ({ getSystemRoleIds: vi.fn().mockResolvedValue({ registered: 0, tenantAdmin: 1 }) }))
-vi.mock('@/lib/rbac/roles-service', () => ({ getAllRoles: vi.fn().mockResolvedValue([]) }))
+// La pagina chiede al database i ruoli e l'id del ruolo base del tenant: qui basta un caricatore finto.
+vi.mock('@/lib/rbac/user-management-loader', () => ({
+  loadUserManagementPage: vi.fn().mockResolvedValue({ allRoles: [], assignable: [], registeredRoleId: 0 }),
+}))
 vi.mock('@/lib/i18n/server', () => ({ getI18n: vi.fn().mockResolvedValue({ t: (key: string) => key }) }))
 vi.mock('@/components/rbac/users/UsersTableClient', () => ({ default: () => null }))
 
