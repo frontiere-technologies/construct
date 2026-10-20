@@ -1,3 +1,4 @@
+import { allInTransaction } from '@/lib/db/all-in-transaction'
 import { withTenant } from '@/lib/db/tenant-db'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { hasPermission, type Actor } from './actor'
@@ -11,8 +12,9 @@ import { selectAllRoles } from './roles-service'
  */
 export async function loadUserManagementPage(actor: Actor) {
   return withTenant(actor.tenantId, async tx => {
-    // Insieme: postgres.js le mette in coda sulla stessa connessione (specifica 2026-10-15, §2.5).
-    const [roles, system] = await Promise.all([selectAllRoles(tx), getSystemRoleIds(tx)])
+    // Due istruzioni senza parametri: postgres.js le mette in coda insieme sulla stessa connessione
+    // (specifica 2026-10-15, §2.5). Ogni ramo è una sola istruzione.
+    const [roles, system] = await allInTransaction([selectAllRoles(tx), getSystemRoleIds(tx)])
     const allRoles = roles.map(r => ({ id: r.id, name: r.description }))
     const canAssignRoles = hasPermission(actor, 'assign-user-roles')
     const assignable = canAssignRoles ? await assignableRoleIds(tx, actor, allRoles.map(r => r.id), system) : []

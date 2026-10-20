@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { asc } from 'drizzle-orm'
+import { allInTransaction } from '@/lib/db/all-in-transaction'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { menuEntry, menuEntryTag } from '@/lib/db/schema'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
@@ -8,8 +9,9 @@ import { buildNavTree, mapRowToDto, selectableParents } from './nav-tree-builder
 import { type UserNavigationTreeDto, type ParentOption } from './types'
 
 async function loadNavAndTags(tx: TenantTx) {
-  // Insieme: postgres.js le mette in coda sulla stessa connessione (specifica 2026-10-15, §2.5).
-  const [navRows, tagRows] = await Promise.all([
+  // Due istruzioni senza parametri: postgres.js le mette in coda insieme sulla stessa connessione
+  // (specifica 2026-10-15, §2.5). Ogni ramo è una sola istruzione.
+  const [navRows, tagRows] = await allInTransaction([
     tx.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition)),
     tx.select().from(menuEntryTag),
   ])

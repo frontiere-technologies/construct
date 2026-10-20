@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { allInTransaction } from '@/lib/db/all-in-transaction'
 import type { TenantTx } from '@/lib/db/tenant-db'
 import { permission, roleFunctionality, rolePermission, userRole } from '@/lib/db/schema'
 import { getSystemRoleIds, type SystemRoleIds } from '@/lib/tenancy/system-roles'
@@ -35,8 +36,10 @@ export async function functionalityIdsForRoles(tx: TenantTx, roleIds: number[]):
  *  `permissionCodesByIds` quando la si vuole concedere. */
 export async function grantsForRoles(tx: TenantTx, roleIds: number[]): Promise<RoleGrants[]> {
   if (!roleIds.length) return []
-  // Insieme: postgres.js le mette in coda sulla stessa connessione (specifica 2026-10-15, §2.5).
-  const [codes, functionalities] = await Promise.all([
+  // Lanciate insieme, ma con parametri: con prepare: false postgres.js non le sovrappone, la seconda
+  // aspetta la fine della prima (2 viaggi ciascuna, specifica 2026-10-15, §2.5). Ogni ramo è una
+  // sola istruzione.
+  const [codes, functionalities] = await allInTransaction([
     tx.select({
       idRole: rolePermission.idRole, idPermission: permission.idPermission, kind: permission.kind, code: permission.code,
     })
@@ -71,8 +74,10 @@ export async function currentRoleIds(tx: TenantTx, userId: string): Promise<numb
  * viaggio in più.
  */
 export async function assignableRoleIds(tx: TenantTx, actor: Actor, roleIds: number[], system?: SystemRoleIds): Promise<number[]> {
-  // Insieme: postgres.js le mette in coda sulla stessa connessione (specifica 2026-10-15, §2.5).
-  const [visible, grants, { tenantAdmin }] = await Promise.all([
+  // Le prime due letture hanno parametri e restano in serie con prepare: false (specifica
+  // 2026-10-15, §2.5); i ruoli di sistema, se non sono già dati, sono senza parametri. Ogni ramo
+  // deve essere una sola istruzione, oppure attendere tutto ciò che avvia.
+  const [visible, grants, { tenantAdmin }] = await allInTransaction([
     functionalityIdsForRoles(tx, actor.roleIds),
     grantsForRoles(tx, roleIds),
     system ?? getSystemRoleIds(tx),
