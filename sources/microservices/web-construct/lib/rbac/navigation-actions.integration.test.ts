@@ -310,7 +310,9 @@ describeIntegration('navigation mutations against the database', () => {
     } finally {
       await withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, ruolo.idRole)))
     }
-  })
+    // DB remoto, tre voci, un ruolo e due cancellazioni rifiutate: misurati 3,2-3,4 s su 5 s. Nessun
+    // lock da attendere: il margine serve solo alla latenza, un blocco vero resterebbe comunque entro 15 s.
+  }, 15_000)
 
   // Cancellare una voce porta via le sue concessioni ai ruoli per cascata
   // (role_functionality.id_menu_entry, migrazione 0024): nessun percorso applicativo deve

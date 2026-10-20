@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { eq, inArray } from 'drizzle-orm'
-import { countRoundTrips, type RecordedStatement } from '@/lib/db/round-trips'
+import { answersBetween, countRoundTrips, type RecordedStatement, type TripEvent } from '@/lib/db/round-trips'
 import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
@@ -11,12 +11,18 @@ import { defaultTestTenant } from '@/lib/tenancy/testing'
  * con le loro withTenant/withGlobal. I tetti sono totali (piano, "Deviazione dalla specifica").
  */
 const recorded = vi.hoisted(() => [] as { query: string; parameterCount: number }[])
+/** Le stesse istruzioni, in ordine con le risposte del server: dice se due letture sono in coda insieme. */
+const events = vi.hoisted(() => [] as TripEvent[])
 
 vi.mock('@/lib/db/client', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/db/client')>()
   const { database, close } = actual.createDatabase(process.env.TEST_DATABASE_URL ?? '', {
     max: 1,
-    onQuery: (query, parameters) => recorded.push({ query, parameterCount: parameters.length }),
+    onQuery: (query, parameters) => {
+      recorded.push({ query, parameterCount: parameters.length })
+      events.push({ type: 'sent', query })
+    },
+    onAnswer: () => events.push({ type: 'answer' }),
   })
   return { ...actual, db: database, __closeCountingClient: close }
 })
@@ -31,11 +37,19 @@ let readerRoleId: number
 
 async function measure(operation: () => Promise<unknown>) {
   recorded.length = 0
+  events.length = 0
   await operation()
   const count = countRoundTrips(recorded as RecordedStatement[])
   // Un client che non registra darebbe 0 viaggi e ogni tetto passerebbe a vuoto.
   expect(count.statements, 'the counting client recorded nothing: onQuery is not wired').toBeGreaterThan(0)
   return count
+}
+
+/** Le due letture di allInTransaction partono in coda: la seconda prima di ogni risposta alla prima. */
+function expectQueuedTogether(first: RegExp, second: RegExp) {
+  // Senza risposte registrate answersBetween darebbe sempre 0 e il controllo passerebbe a vuoto.
+  expect(events.some(event => event.type === 'answer'), 'the counting client saw no answer: onAnswer is not wired').toBe(true)
+  expect(answersBetween(events, first, second), 'the two reads were sent one after the other, not queued together').toBe(0)
 }
 
 describeIntegration('round-trip budget', () => {
@@ -70,7 +84,7 @@ describeIntegration('round-trip budget', () => {
       ])
     })
   }, 30_000)
-  beforeEach(() => { recorded.length = 0 })
+  beforeEach(() => { recorded.length = 0; events.length = 0 })
   afterAll(async () => {
     // Ogni passo di pulizia è indipendente: uno che fallisce non lascia indietro gli altri.
     const { withTenant, withGlobal } = await import('@/lib/db/tenant-db')
@@ -107,12 +121,15 @@ describeIntegration('round-trip budget', () => {
     const { getSidebarMenu } = await import('@/lib/rbac/navigation-service')
     const count = await measure(() => getSidebarMenu(defaultTestTenant(), [adminRoleId], 'it', 'it'))
     expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(6)
+    // Il tetto totale non vede se le due letture di allInTransaction sono in coda o in serie: qui sì.
+    expectQueuedTogether(/from "menu_entry"/, /from "role_functionality"/)
   })
 
   it('the functionalities tree costs at most 5 trips', async () => {
     const { getNavigationSubtree } = await import('@/lib/rbac/functionalities-service')
     const count = await measure(() => getNavigationSubtree(defaultTestTenant()))
     expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(5)
+    expectQueuedTogether(/from "menu_entry"/, /from "menu_entry_tag"/)
   })
 
   it('the user management page data costs at most 11 trips for an administrator', async () => {

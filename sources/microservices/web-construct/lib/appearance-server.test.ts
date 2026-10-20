@@ -4,10 +4,12 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getUserPreferences: vi.fn(),
   cookieGet: vi.fn(),
+  logError: vi.fn(),
 }))
 
 vi.mock('@/lib/auth-session', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/user-preferences', () => ({ getUserPreferences: mocks.getUserPreferences }))
+vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: mocks.logError }) }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: mocks.cookieGet }) }))
 
 const { getAppearance } = await import('./appearance-server')
@@ -45,8 +47,13 @@ describe('getAppearance', () => {
     await getAppearance()
     expect(mocks.cookieGet).toHaveBeenCalledTimes(1)
 
-    mocks.getUserPreferences.mockRejectedValueOnce(new Error('boom'))
+    // Una riga mancante non è un errore: niente log. Un errore di lettura sì.
+    expect(mocks.logError).not.toHaveBeenCalled()
+
+    const failure = new Error('boom')
+    mocks.getUserPreferences.mockRejectedValueOnce(failure)
     await getAppearance()
     expect(mocks.cookieGet).toHaveBeenCalledTimes(2)
+    expect(mocks.logError).toHaveBeenCalledWith({ err: failure }, 'failed to read the appearance preference')
   })
 })

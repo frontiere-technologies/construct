@@ -43,9 +43,7 @@ function reportMissing(key: string, code: string): void {
   log.warn({ key, language: code }, 'missing translation')
 }
 
-async function profileLanguageCode(): Promise<string | null> {
-  const session = await getSession()
-  const userId = session?.user?.id
+async function profileLanguageCode(userId: string | undefined): Promise<string | null> {
   if (!userId) return null
   try {
     const row = await getUserPreferences(userId)
@@ -68,9 +66,11 @@ async function profileLanguageCode(): Promise<string | null> {
  * server, not as a static export.
  */
 export const getI18n = cache(async (): Promise<ServerI18n> => {
-  const [cookieStore, headerList, languages] = await Promise.all([
+  // La sessione si legge una volta sola, qui: nei route handler cache() non memorizza e ogni
+  // getSession() in più è una transazione del callback jwt. Va in parallelo perché la
+  // risoluzione la richiede comunque; l'id passa poi a profileLanguageCode.
+  const [cookieStore, headerList, languages, session] = await Promise.all([
     cookies(), headers(), listLanguages(),
-    // In parallelo: l'aspetto la legge comunque, e getSession() è memorizzata per richiesta.
     getSession(),
   ])
 
@@ -84,7 +84,7 @@ export const getI18n = cache(async (): Promise<ServerI18n> => {
   // cookie or the browser, demoting the user's saved preference.
   const profileCode = findUsableLanguage(sessionChoice, languages)
     ? null
-    : await profileLanguageCode()
+    : await profileLanguageCode(session?.user?.id)
 
   const { language } = resolveActiveLanguage({
     sessionChoice,
