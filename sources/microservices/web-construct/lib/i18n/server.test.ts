@@ -68,4 +68,29 @@ describe('getI18n', () => {
 
     expect((await getI18n()).language.code).toBe('en')
   })
+
+  // Nei route handler React cache() non memorizza: ogni getSession() in più è una transazione
+  // del callback jwt di Auth.js. Una sola lettura per chiamata, su ogni percorso.
+  describe('reads the session once per call', () => {
+    it('anonymous', async () => {
+      mocks.getSession.mockResolvedValue(null)
+      await getI18n()
+      expect(mocks.getSession).toHaveBeenCalledTimes(1)
+    })
+
+    it('with a usable session choice', async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 'user-1' } })
+      mocks.cookieValues = { construct_lang_session: 'en' }
+      await getI18n()
+      expect(mocks.getSession).toHaveBeenCalledTimes(1)
+    })
+
+    it('when the profile is needed', async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 'user-1' } })
+      mocks.getUserPreferences.mockResolvedValue({ languageCode: 'de', themeMode: 'system', textScale: 100 })
+      mocks.cookieValues = { construct_lang_session: 'xx' }
+      await getI18n()
+      expect(mocks.getSession).toHaveBeenCalledTimes(1)
+    })
+  })
 })
