@@ -76,7 +76,7 @@ README. Questo lavoro è solo codice: si rilascia in una volta.
 
 ### 1.3 Criteri di successo
 
-- [✅] ID=MTP-OK-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Budget rispettato, Fix description=Il test dei viaggi passa con i tetti di §3 e il percorso critico stimato delle tre pagine resta entro MTP-DEC-1. **Esito (2026-10-20):** tetti del test rispettati (`withTenant` vuota 3, callback `jwt` 5, `resolveActor` 5, menu 6, albero 5, pagina utenti 11 viaggi in totale); percorso critico stimato 16, 27, 23 contro 20, 33, 31.
+- [✅] ID=MTP-OK-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Budget rispettato, Fix description=Il test dei viaggi passa con i tetti di §3 e il percorso critico stimato delle tre pagine resta entro MTP-DEC-1. **Esito (2026-10-20):** tetti del test rispettati (`withTenant` vuota 3, callback `jwt` 5, `resolveActor` 5, menu 6, albero 5, pagina utenti 11 viaggi in totale); percorso critico stimato 17, 31, 25 contro 20, 33, 31. **Correzione dopo la revisione finale:** la misura iniziale (16, 27, 23) dava un credito di sovrapposizione anche a due letture con parametri messe in coda insieme, ma postgres.js 3.4.9 con `prepare: false` non le sovrappone (vedi §2.5): la seconda aspetta la fine della prima. Il percorso critico senza quel credito è 17, 31, 25, sempre entro l'obiettivo.
 - [✅] ID=MTP-OK-2, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Misura confermata, Fix description=Sul database di sviluppo, con lo stesso metodo del 2026-10-15, ogni pagina resta entro il 20% del tempo di prima del pezzo 1 (al massimo circa 830, 960, 840 ms), o la differenza residua è spiegata e accettata dal proprietario. **Esito (2026-10-20), accettato dal proprietario:** stessa giornata, stesso metodo, database di sviluppo: `development` (pezzo 1 senza ottimizzazione) 1560, 1979, 1557 ms; con l'ottimizzazione 796, 1012, 798 ms (−49%); proxy da 455 a circa 195 ms. Contro la misura del 2026-10-15 prima del pezzo 1 (690, 798, 702 ms, fatta con un viaggio da 72 ms invece dei 45 di oggi): +15%, +27%, +14%. La differenza residua di `/user-management` è accettata: l'obiettivo in viaggi è raggiunto, il resto è lavoro del server da indagare se servirà.
 - [✅] ID=MTP-OK-3, Severity=Critical, Complexity=Low, Priority=P0, Estimate=minutes, Title=Isolamento invariato, Fix description=Contratto di schema, test di isolamento, test di concorrenza nelle due modalità del pooler, `boundary-check` e guardie passano senza modifiche alle attese. **Esito (2026-10-20):** contratto di schema, isolamento, concorrenza nelle due modalità del pooler (con il nuovo test d'ordine) e `boundary-check` verdi.
 - [✅] ID=MTP-OK-4, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Nessun cambiamento visibile, Fix description=Unit, integrazione ed E2E passano senza cambiare le attese, comprese revoca immediata, 403 e pagine anonime. **Esito (2026-10-20):** unit (a parte le 8 Sidebar note), integrazione 170/170, E2E 144/144.
@@ -119,7 +119,7 @@ Effetto: un giro del callback `jwt` costa come prima del pezzo 1 (4 viaggi invec
   manda `select set_config('app.tenant_id', '<n>', true)` come istruzione **senza parametri**,
   con il numero scritto nel testo, e **non ne aspetta la risposta** prima di chiamare la funzione.
 - postgres.js scrive le istruzioni senza parametri sulla connessione senza aspettare la risposta
-  precedente; la prima query della funzione parte subito dopo, sulla stessa connessione. Postgres
+  precedente (un'istruzione con parametri invece sì, vedi §2.5); la prima query della funzione parte subito dopo, sulla stessa connessione. Postgres
   esegue le istruzioni di una connessione nell'ordine in cui arrivano, quindi il tenant è impostato
   prima di qualunque lettura.
 - La promessa di `set_config` viene attesa insieme al risultato della funzione: se fallisce,
@@ -142,12 +142,31 @@ Effetto: `set_config` passa da 2 viaggi a circa 0 sul percorso critico di ogni `
 ### 2.5 Letture indipendenti di nuovo insieme
 
 Dentro una transazione, le letture che non dipendono l'una dall'altra si lanciano insieme
-(`Promise.all`), così postgres.js le mette in coda sulla stessa connessione senza aspettare ogni
-risposta:
+(`Promise.all`), così postgres.js le mette in coda sulla stessa connessione:
 
 - menu laterale (`getSidebarMenu`: voci e funzionalità concesse);
 - albero delle funzionalità (`getNavigationSubtree`: voci ed etichette);
-- concessioni dei ruoli (`grantsForRoles`, `assignableRoleIds`).
+- concessioni dei ruoli (`grantsForRoles`, `assignableRoleIds`);
+- pagina utenti (`loadUserManagementPage`: ruoli e ruoli di sistema).
+
+**Quando la sovrapposizione è reale.** Con `prepare: false` un'istruzione con parametri passa
+prima da una richiesta di descrizione (`describeFirst`): postgres.js non la scrive finché la
+connessione non è libera, e la transazione mette in attesa tutte le istruzioni successive fino a
+quando la connessione non si svuota (postgres.js 3.4.9, `connection.js` e `index.js`). Quindi:
+
+- le istruzioni **senza parametri** messe in coda insieme si sovrappongono davvero: `set_config` e
+  la prima lettura, voci e concessioni del menu, voci ed etichette dell'albero, ruoli e ruoli di
+  sistema nella pagina utenti;
+- una lettura **con parametri** dopo un'altra lettura con parametri **non** si sovrappone, resta
+  in serie con 2 viaggi ciascuna: le due letture di `grantsForRoles` e quelle di
+  `assignableRoleIds` (`functionalityIdsForRoles` e `grantsForRoles`).
+
+Il `Promise.all` resta comunque utile in quei punti (non costa nulla e rende le letture
+indipendenti), ma non ne va contato il guadagno nel percorso critico.
+
+Ogni ramo di un `Promise.all` dentro una transazione deve essere una sola istruzione, oppure
+attendere tutto ciò che avvia, e va atteso con `allInTransaction` (`lib/db/`), che non
+lascia terminare la transazione finché un ramo può ancora inviare istruzioni.
 
 I commenti MTF-RISK-3 nel codice vanno aggiornati di conseguenza.
 
@@ -157,9 +176,12 @@ Viaggi sul percorso critico, contati con le regole sopra.
 
 | Pagina | Prima del pezzo 1 | Oggi | Obiettivo (MTP-DEC-1) | Stima dopo |
 |---|---|---|---|---|
-| `/` | 17 | 41 | ≤ 20 | ~16 |
-| `/user-management` | 28 | 75 | ≤ 33 | ~25 (misurato poi: 27) |
-| `/functionalities` | 26 | 65 | ≤ 31 | ~23 |
+| `/` | 17 | 41 | ≤ 20 | ~17 |
+| `/user-management` | 28 | 75 | ≤ 33 | ~31 |
+| `/functionalities` | 26 | 65 | ≤ 31 | ~25 |
+
+La stima non dà credito di sovrapposizione alle letture con parametri messe in coda insieme (§2.5):
+una prima misura che lo dava aveva trovato 16, 27, 23, un valore ottimistico.
 
 Tetti per il test (MTP-DEC-5), in viaggi, da confermare nel piano dopo una prima misura del
 client di test:

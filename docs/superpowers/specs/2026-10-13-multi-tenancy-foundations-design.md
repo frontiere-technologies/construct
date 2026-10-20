@@ -481,7 +481,7 @@ Nuovo file `lib/db/tenant-concurrency.integration.test.ts`.
 
 ### 4.4 Test unitari
 
-- `withTenant` passa il tenant come parametro e rifiuta `0`, numeri negativi, `NaN` e non interi.
+- `withTenant` scrive il tenant nel testo di `set_config` (non come parametro: MTP-DEC-3 della specifica 2026-10-15, che ha sostituito il parametro) e rifiuta `0`, numeri negativi, `NaN` e non interi.
 - `resolveRequestTenant` restituisce il tenant predefinito.
 - Le guardie restituiscono l'attore con `tenantId`.
 - `buildActor` calcola `isAdmin` da `TENANT_ADMIN`.
