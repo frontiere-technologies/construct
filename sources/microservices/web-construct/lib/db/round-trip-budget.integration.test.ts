@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
+import { eq, inArray } from 'drizzle-orm'
 import { countRoundTrips, type RecordedStatement } from '@/lib/db/round-trips'
-import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
+import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
+import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 
 /**
@@ -19,6 +21,14 @@ vi.mock('@/lib/db/client', async importOriginal => {
   return { ...actual, db: database, __closeCountingClient: close }
 })
 
+// Utenti e ruoli di prova condivisi dai tetti (anche dei compiti successivi): creati in beforeAll,
+// fuori da ogni misura, e cancellati in afterAll (solo queste righe, per id).
+let adminUserId: string
+let readerUserId: string
+/** L'id del ruolo TENANT_ADMIN del tenant predefinito, letto e mai scritto. */
+let adminRoleId: number
+let readerRoleId: number
+
 async function measure(operation: () => Promise<unknown>) {
   recorded.length = 0
   await operation()
@@ -35,16 +45,61 @@ describeIntegration('round-trip budget', () => {
   beforeAll(async () => {
     const { withGlobal } = await import('@/lib/db/tenant-db')
     await withGlobal(async () => null)
+
+    const { withTenant } = await import('@/lib/db/tenant-db')
+    const { getSystemRoleIds } = await import('@/lib/tenancy/system-roles')
+    const system = await withTenant(defaultTestTenant(), tx => getSystemRoleIds(tx))
+    adminRoleId = system.tenantAdmin
+    const created = await withGlobal(tx => tx.insert(users).values([
+      { email: `zzz_budget_admin_${unique()}@example.test`, idUserStatus: 2 },
+      { email: `zzz_budget_reader_${unique()}@example.test`, idUserStatus: 2 },
+    ]).returning({ id: users.id, email: users.email }))
+    adminUserId = created.find(row => row.email?.startsWith('zzz_budget_admin_'))!.id
+    readerUserId = created.find(row => row.email?.startsWith('zzz_budget_reader_'))!.id
+    await withTenant(defaultTestTenant(), async tx => {
+      const [service] = await tx.insert(role)
+        .values({ description: `zzz_budget_${unique()}`, idRoleType: 2 })
+        .returning({ idRole: role.idRole })
+      readerRoleId = service.idRole
+      const [perm] = await tx.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'read-menu'))
+      await tx.insert(rolePermission).values({ idRole: readerRoleId, idPermission: perm.idPermission })
+      await tx.insert(userRole).values([
+        { userId: adminUserId, idRole: system.registered },
+        { userId: adminUserId, idRole: adminRoleId },
+        { userId: readerUserId, idRole: readerRoleId },
+      ])
+    })
   }, 30_000)
   beforeEach(() => { recorded.length = 0 })
   afterAll(async () => {
+    // Ogni passo di pulizia è indipendente: uno che fallisce non lascia indietro gli altri.
+    const { withTenant, withGlobal } = await import('@/lib/db/tenant-db')
+    const errors: unknown[] = []
+    const step = async (fn: () => Promise<unknown>) => { try { await fn() } catch (error) { errors.push(error) } }
+    // user_role e role_permission spariscono con il ruolo e con gli utenti (ON DELETE CASCADE).
+    if (readerRoleId !== undefined) await step(() => withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, readerRoleId))))
+    const userIds = [adminUserId, readerUserId].filter(Boolean)
+    if (userIds.length > 0) await step(() => withGlobal(tx => tx.delete(users).where(inArray(users.id, userIds))))
     const client = await import('@/lib/db/client') as unknown as { __closeCountingClient: () => Promise<void> }
-    await client.__closeCountingClient()
+    await step(() => client.__closeCountingClient())
+    if (errors.length > 0) throw errors[0]
   })
 
   it('an empty withTenant costs at most 3 trips (BEGIN, set_config, COMMIT)', async () => {
     const { withTenant } = await import('@/lib/db/tenant-db')
     const count = await measure(() => withTenant(defaultTestTenant(), async () => null))
     expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(3)
+  })
+
+  it('one authorization read (the jwt callback) costs at most 5 trips', async () => {
+    const { resolveUserAuthorization } = await import('@/lib/rbac/auth-roles')
+    const count = await measure(() => resolveUserAuthorization(defaultTestTenant(), adminUserId))
+    expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(5)
+  })
+
+  it.each(['admin', 'reader'] as const)('resolveActor for a %s costs at most 5 trips', async kind => {
+    const { resolveActor } = await import('@/lib/rbac/actor')
+    const count = await measure(() => resolveActor(defaultTestTenant(), kind === 'admin' ? adminUserId : readerUserId))
+    expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(5)
   })
 })

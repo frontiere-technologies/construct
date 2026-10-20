@@ -1,9 +1,8 @@
 import { cache } from 'react'
-import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { withTenant } from '@/lib/db/tenant-db'
-import { permission, rolePermission } from '@/lib/db/schema'
+import { evaluateAuthorization } from '@/lib/auth-policy'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
-import { selectUserAuthorization } from './auth-roles'
+import { selectAuthorizationSnapshot } from './auth-roles'
 import { PERMISSION_CODES, isPermissionCode, type PermissionCode } from './permission-catalog'
 
 /** Chi sta facendo la richiesta, letto dal database e mai dal token (DEC-4). */
@@ -46,20 +45,12 @@ export function hasPermission(actor: Actor | null, code: PermissionCode): boolea
  */
 export const resolveActor = cache(async (tenantId: TenantId, userId: string): Promise<Actor | null> =>
   withTenant(tenantId, async tx => {
-    const authorization = await selectUserAuthorization(tx, userId)
-    if (!authorization.accountActive) return null
-    let codes: string[] = []
-    if (!authorization.isAdmin && authorization.roleIds.length) {
-      const rows = await tx
-        .selectDistinct({ code: permission.code })
-        .from(rolePermission)
-        .innerJoin(permission, eq(permission.idPermission, rolePermission.idPermission))
-        .where(and(
-          inArray(rolePermission.idRole, authorization.roleIds),
-          isNull(permission.deprecatedAt),
-          isNotNull(permission.code),
-        ))
-      codes = rows.flatMap(row => (row.code ? [row.code] : []))
-    }
-    return buildActor(userId, tenantId, authorization, codes)
+    // Stato, ruoli e codici dei permessi in un'istruzione sola (specifica 2026-10-15, §2.2).
+    const snapshot = await selectAuthorizationSnapshot(tx, userId, { permissionCodes: true })
+    const authorization = evaluateAuthorization(
+      snapshot.userExists ? snapshot.status : null,
+      snapshot.userExists ? snapshot.roleIds : [],
+      snapshot.system.tenantAdmin,
+    )
+    return buildActor(userId, tenantId, authorization, snapshot.permissionCodes)
   }))
