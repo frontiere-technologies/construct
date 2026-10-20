@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { eq } from 'drizzle-orm'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/auth-session'
 import { withGlobal } from '@/lib/db/tenant-db'
 import { users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
@@ -13,7 +13,7 @@ const log = createLogger('auth:change-password')
 
 export async function POST(req: NextRequest) {
   allowSelfService()
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Non autenticato.' }, { status: 401 })
   }

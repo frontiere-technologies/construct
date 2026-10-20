@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/auth-session'
 import { getPreferredLanguage, setPreferredLanguage } from '@/lib/i18n/user-language-actions'
 import { getActiveLanguage } from '@/lib/i18n/server'
 import { allowSelfService } from '@/lib/rbac/access-declarations'
 
 export async function GET() {
   allowSelfService()
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user?.id) return NextResponse.json({ error: 'Non autorizzato.' }, { status: 401 })
   const [preferred, active] = await Promise.all([getPreferredLanguage(), getActiveLanguage()])
   return NextResponse.json({ preferredCode: preferred, activeCode: active.code })
@@ -14,7 +14,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   allowSelfService()
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user?.id) return NextResponse.json({ error: 'Non autorizzato.' }, { status: 401 })
 
   const body = (await req.json().catch(() => null)) as { code?: unknown } | null

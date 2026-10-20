@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { asc } from 'drizzle-orm'
+import { allInTransaction } from '@/lib/db/all-in-transaction'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { menuEntry, menuEntryTag } from '@/lib/db/schema'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
@@ -8,9 +9,12 @@ import { buildNavTree, mapRowToDto, selectableParents } from './nav-tree-builder
 import { type UserNavigationTreeDto, type ParentOption } from './types'
 
 async function loadNavAndTags(tx: TenantTx) {
-  // Dentro una transazione le due letture vanno in serie sulla stessa connessione (MTF-RISK-3).
-  const navRows = await tx.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition))
-  const tagRows = await tx.select().from(menuEntryTag)
+  // Due istruzioni senza parametri: postgres.js le mette in coda insieme sulla stessa connessione
+  // (specifica 2026-10-15, §2.5). Ogni ramo è una sola istruzione.
+  const [navRows, tagRows] = await allInTransaction([
+    tx.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition)),
+    tx.select().from(menuEntryTag),
+  ])
   const tagsByItem = new Map<number, { tag_lan: string; tag: string }[]>()
   for (const t of tagRows) {
     const arr = tagsByItem.get(t.idMenuEntry) ?? []

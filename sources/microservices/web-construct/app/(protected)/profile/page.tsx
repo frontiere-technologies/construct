@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { eq } from 'drizzle-orm'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/auth-session'
 import { withGlobal } from '@/lib/db/tenant-db'
 import { users } from '@/lib/db/schema'
 import ProfileForm from '@/components/ProfileForm'
@@ -9,7 +9,7 @@ import { allowAnyAuthenticated } from '@/lib/rbac/access-declarations'
 
 export default async function ProfilePage() {
   allowAnyAuthenticated()
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user?.id) redirect('/login')
 
   const [profile] = await withGlobal(tx => tx

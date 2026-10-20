@@ -29,9 +29,14 @@ function isTenantBoundaryError(error: unknown): boolean {
 }
 
 /**
- * Le due sole porte verso il database (specifica 2026-10-13, §3.1, MTF-DEC-6). Il tenant entra
- * come parametro con set_config(..., true): vale fino alla fine della transazione e mai oltre,
- * quindi una connessione restituita al pooler non porta il tenant al cliente successivo.
+ * Le due sole porte verso il database (specifica 2026-10-13, §3.1, MTF-DEC-6). Il tenant vale
+ * fino alla fine della transazione e mai oltre (set_config(..., true)), quindi una connessione
+ * restituita al pooler non porta il tenant al cliente successivo.
+ *
+ * Il numero del tenant è scritto nel testo, non passato come parametro (specifica 2026-10-15,
+ * MTP-DEC-3): con prepare: false un parametro costa un viaggio in più. È sicuro perché il valore
+ * è appena stato verificato come intero positivo: nel testo può finire solo un numero. È l'unico
+ * punto del progetto dove il tenant entra nel testo SQL.
  */
 export function createTenantAccess(database: Database) {
   async function withTenant<T>(
@@ -42,8 +47,26 @@ export function createTenantAccess(database: Database) {
     if (!Number.isSafeInteger(tenantId) || tenantId <= 0) throw new Error('invalid tenant id')
     try {
       return await database.transaction(async tx => {
-        await tx.execute(sql`select set_config('app.tenant_id', ${String(tenantId)}, true)`)
-        return fn(tx as TenantTx)
+        // Senza parametri e senza attenderne la risposta prima di far partire la funzione. L'ordine
+        // non lo garantisce una scrittura immediata sul socket: viene dalle microattività in ordine
+        // FIFO, perché set_config e la prima query della funzione percorrono catene di chiamate di
+        // pari lunghezza (Drizzle QueryPromise.then -> execute -> Query.handle di postgres.js), e
+        // set_config parte per primo perché `then` si chiama qui, subito (le query di Drizzle
+        // partono solo allora). Se l'ordine si rompesse, la query della funzione vedrebbe il tenant
+        // mancante e fallirebbe con 42501: mai il tenant di un altro, perché l'impostazione vale
+        // solo nella transazione e la transazione sopravvive alla funzione (si attendono entrambe,
+        // poi si rilancia). Contro un aggiornamento delle librerie che cambi la lunghezza delle
+        // catene vigila tenant-concurrency.integration.test.ts (ordine della prima query, in ogni
+        // modalità del pooler, per entrambi i rami di esecuzione di Drizzle).
+        const tenantSet = tx
+          .execute(sql.raw(`select set_config('app.tenant_id', '${tenantId}', true)`))
+          .then(() => undefined)
+        // L'async trasforma anche un throw sincrono in un rifiuto, così nessuna promessa resta senza gestore.
+        const work = (async () => fn(tx as TenantTx))()
+        const [tenantOutcome, workOutcome] = await Promise.allSettled([tenantSet, work])
+        if (tenantOutcome.status === 'rejected') throw tenantOutcome.reason
+        if (workOutcome.status === 'rejected') throw workOutcome.reason
+        return workOutcome.value
       }, options)
     } catch (error) {
       // Un 42501 qui è sempre un errore di programmazione, mai di chi usa l'app (§5.2).

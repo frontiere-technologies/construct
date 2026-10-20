@@ -1,6 +1,6 @@
 import { cache } from 'react'
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, type SQL } from 'drizzle-orm'
-import { withTenant } from '@/lib/db/tenant-db'
+import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { menuEntry, permission, roleFunctionality, rolePermission, roleListView } from '@/lib/db/schema'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
@@ -98,15 +98,20 @@ export const countRoles = cache(async (tenantId: TenantId, query: RolesQuery): P
   }
 })
 
-export const getAllRoles = cache(async (tenantId: TenantId, roleTypes?: RoleType[]): Promise<{ id: number; description: string }[]> => {
+/** L'elenco dei ruoli dentro una transazione già aperta: lo usa anche il caricatore della pagina Utenti. */
+export async function selectAllRoles(tx: TenantTx, roleTypes?: RoleType[]): Promise<{ id: number; description: string }[]> {
   const where = roleTypes?.length ? inArray(roleListView.roleType, roleTypes) : undefined
+  const rows = await tx
+    .select({ id: roleListView.id, description: roleListView.description })
+    .from(roleListView)
+    .where(where)
+    .orderBy(asc(roleListView.description))
+  return rows.map(r => ({ id: Number(r.id), description: String(r.description ?? '') }))
+}
+
+export const getAllRoles = cache(async (tenantId: TenantId, roleTypes?: RoleType[]): Promise<{ id: number; description: string }[]> => {
   try {
-    const rows = await withTenant(tenantId, tx => tx
-      .select({ id: roleListView.id, description: roleListView.description })
-      .from(roleListView)
-      .where(where)
-      .orderBy(asc(roleListView.description)))
-    return rows.map(r => ({ id: Number(r.id), description: String(r.description ?? '') }))
+    return await withTenant(tenantId, tx => selectAllRoles(tx, roleTypes))
   } catch (err) {
     throw new Error(`Failed to load roles: ${err instanceof Error ? err.message : String(err)}`)
   }

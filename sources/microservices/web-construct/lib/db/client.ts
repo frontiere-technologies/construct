@@ -16,9 +16,21 @@ export type Database = PostgresJsDatabase<typeof schema>
  * di default si saturava sotto carico concorrente e bloccava le nuove connessioni per i 30s di
  * default invece di fallire subito. Un pool più largo assorbe la stessa concorrenza senza coda, e
  * un timeout più corto fa emergere subito un esaurimento vero.
+ * onQuery, se passato, riceve ogni istruzione che postgres.js invia (anche begin e commit): serve
+ * solo ai test che contano i viaggi (specifica 2026-10-15, MTP-DEC-5).
  */
-export function createDatabase(url: string, options: { max?: number } = {}) {
-  const client = postgres(url, { prepare: false, max: options.max ?? 20, connect_timeout: 10 })
+export function createDatabase(
+  url: string,
+  options: { max?: number; onQuery?: (query: string, parameters: readonly unknown[]) => void } = {},
+) {
+  const { onQuery } = options
+  const client = postgres(url, {
+    prepare: false,
+    max: options.max ?? 20,
+    connect_timeout: 10,
+    // Solo i test che contano i viaggi lo passano (round-trip-budget.integration.test.ts).
+    debug: onQuery ? (_connection, query, parameters) => onQuery(query, parameters) : false,
+  })
   return {
     database: drizzle(client, { schema }) as Database,
     close: () => client.end({ timeout: 5 }),

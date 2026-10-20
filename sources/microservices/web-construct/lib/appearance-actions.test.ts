@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  auth: vi.fn(),
+  getSession: vi.fn(),
   set: vi.fn(),
   returning: vi.fn(),
   cookieSet: vi.fn(),
 }))
 
-vi.mock('@/lib/auth', () => ({ auth: mocks.auth }))
+vi.mock('@/lib/auth-session', () => ({ getSession: mocks.getSession }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: mocks.cookieSet }) }))
 vi.mock('@/lib/db/tenant-db', () => ({
   withGlobal: (fn: (tx: unknown) => unknown) => fn({
@@ -25,12 +25,12 @@ const { saveAppearance } = await import('./appearance-actions')
 describe('saveAppearance', () => {
   beforeEach(() => {
     Object.values(mocks).forEach(mock => mock.mockReset())
-    mocks.auth.mockResolvedValue({ user: { id: 'user-1' } })
+    mocks.getSession.mockResolvedValue({ user: { id: 'user-1' } })
     mocks.returning.mockResolvedValue([{ themeMode: 'dark', textScale: 110 }])
   })
 
   it('refuses a request without a session', async () => {
-    mocks.auth.mockResolvedValue(null)
+    mocks.getSession.mockResolvedValue(null)
     expect(await saveAppearance({ mode: 'dark' })).toEqual({ error: 'Not authenticated' })
     expect(mocks.set).not.toHaveBeenCalled()
   })

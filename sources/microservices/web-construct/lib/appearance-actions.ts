@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { eq } from 'drizzle-orm'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/auth-session'
 import { withGlobal } from '@/lib/db/tenant-db'
 import { users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
@@ -24,7 +24,7 @@ export async function saveAppearance(
   patch: AppearancePatch,
 ): Promise<{ error: string | null; appearance?: Appearance }> {
   allowSelfService()
-  const session = await auth()
+  const session = await getSession()
   const userId = session?.user?.id
   if (!userId) return { error: 'Not authenticated' }
 

@@ -1,9 +1,7 @@
 import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
-import { eq } from 'drizzle-orm'
-import { auth } from '@/lib/auth'
-import { withGlobal } from '@/lib/db/tenant-db'
-import { appLanguage, users } from '@/lib/db/schema'
+import { getSession } from '@/lib/auth-session'
+import { getUserPreferences } from '@/lib/user-preferences'
 import { createLogger } from '@/lib/logger'
 import { listLanguages } from './language-service'
 import { getDictionaryBundle } from './dictionary-service'
@@ -46,17 +44,12 @@ function reportMissing(key: string, code: string): void {
 }
 
 async function profileLanguageCode(): Promise<string | null> {
-  const session = await auth()
+  const session = await getSession()
   const userId = session?.user?.id
   if (!userId) return null
   try {
-    const [row] = await withGlobal(tx => tx
-      .select({ code: appLanguage.code })
-      .from(users)
-      .leftJoin(appLanguage, eq(appLanguage.idLanguage, users.idLanguage))
-      .where(eq(users.id, userId))
-      .limit(1))
-    return row?.code ?? null
+    const row = await getUserPreferences(userId)
+    return row?.languageCode ?? null
   } catch (err) {
     log.error({ err }, 'failed to read the user language preference')
     return null
@@ -70,13 +63,15 @@ async function profileLanguageCode(): Promise<string | null> {
  * protected layout and individual pages all call it.
  *
  * Reading cookies here opts every route into dynamic rendering. That is not a
- * regression: `auth()` in the protected layout and middleware already forces it
+ * regression: `getSession()` in the protected layout and middleware already forces it
  * for the whole authenticated surface, and this app is deployed as a Node
  * server, not as a static export.
  */
 export const getI18n = cache(async (): Promise<ServerI18n> => {
   const [cookieStore, headerList, languages] = await Promise.all([
     cookies(), headers(), listLanguages(),
+    // In parallelo: l'aspetto la legge comunque, e getSession() è memorizzata per richiesta.
+    getSession(),
   ])
 
   const sessionChoice = cookieStore.get(LANG_SESSION_COOKIE)?.value ?? null

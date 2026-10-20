@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/auth-session'
 import { getNavigationItemById, getSidebarMenu } from '@/lib/rbac/navigation-service'
 import { FUNCTYPE_EMBEDDED_PAGE } from '@/lib/rbac/types'
 import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
@@ -18,7 +18,7 @@ export default async function EmbeddedItemPage({ params }: { params: Promise<{ i
   const item = await getNavigationItemById(tenantId, idItem)
   if (!item || item.id_functionality_type !== FUNCTYPE_EMBEDDED_PAGE || !item.functionality_link) notFound()
 
-  const session = await auth()
+  const session = await getSession()
   const roleIds = (session?.user as { roleIds?: number[] })?.roleIds ?? []
   const menu = await getSidebarMenu(tenantId, roleIds)
   if (!menu.some(m => m.route === `/embedded/${idItem}`)) redirect('/')

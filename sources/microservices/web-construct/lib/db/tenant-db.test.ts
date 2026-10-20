@@ -23,18 +23,94 @@ function fakeDatabase() {
 
 const dialect = new PgDialect()
 
-describe('withTenant', () => {
-  it('sets the tenant as a transaction-local parameter before running the callback', async () => {
-    const { database, executed } = fakeDatabase()
+function lazyDatabase(options: { failSetConfig?: boolean } = {}) {
+  const events: string[] = []
+  const executed: SQL[] = []
+  let setConfigSettled = false
+  const tx = {
+    execute: (query: SQL) => ({
+      then(onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) {
+        executed.push(query)
+        events.push('set_config sent')
+        const result = new Promise((resolve, reject) => setTimeout(() => {
+          setConfigSettled = true
+          if (options.failSetConfig) reject(new Error('set_config failed'))
+          else resolve([])
+        }, 5))
+        return result.then(onFulfilled, onRejected)
+      },
+    }),
+  }
+  const database = {
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      try { return await fn(tx) } finally { events.push('transaction settled') }
+    },
+  } as unknown as Database
+  return { database, events, executed, isSetConfigSettled: () => setConfigSettled }
+}
+
+describe('withTenant, set_config', () => {
+  it('writes the verified tenant into the statement text, without parameters', async () => {
+    const { database, executed } = lazyDatabase()
     const { withTenant } = createTenantAccess(database)
-    const result = await withTenant(tenantIdForTest(7), async () => 'done')
-    expect(result).toBe('done')
-    expect(executed).toHaveLength(1)
+    await withTenant(tenantIdForTest(7), async () => 'done')
     const rendered = dialect.sqlToQuery(executed[0])
-    expect(rendered.sql).toBe("select set_config('app.tenant_id', $1, true)")
-    expect(rendered.params).toEqual(['7'])
+    expect(rendered.sql).toBe("select set_config('app.tenant_id', '7', true)")
+    expect(rendered.params).toEqual([])
   })
 
+  it('sends set_config before the callback starts, without waiting for its answer', async () => {
+    const { database, events, isSetConfigSettled } = lazyDatabase()
+    const { withTenant } = createTenantAccess(database)
+    let settledWhenCallbackStarted: boolean | null = null
+    await withTenant(tenantIdForTest(7), async () => {
+      events.push('callback started')
+      settledWhenCallbackStarted = isSetConfigSettled()
+      return null
+    })
+    expect(events).toEqual(['set_config sent', 'callback started', 'transaction settled'])
+    expect(settledWhenCallbackStarted).toBe(false)
+  })
+
+  it('surfaces a set_config failure to the caller', async () => {
+    const { database } = lazyDatabase({ failSetConfig: true })
+    const { withTenant } = createTenantAccess(database)
+    await expect(withTenant(tenantIdForTest(7), async () => 'done')).rejects.toThrow('set_config failed')
+  })
+
+  it('does not end the transaction while the callback is still running, even if set_config fails first', async () => {
+    const { database, events } = lazyDatabase({ failSetConfig: true })
+    const { withTenant } = createTenantAccess(database)
+    await expect(withTenant(tenantIdForTest(7), async () => {
+      await new Promise(resolve => setTimeout(resolve, 40))
+      events.push('callback done')
+      return 'done'
+    })).rejects.toThrow('set_config failed')
+    expect(events).toEqual(['set_config sent', 'callback done', 'transaction settled'])
+  })
+
+  it('turns a synchronous throw of the callback into a rejection, with no unhandled rejection left behind', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason) }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const failing = lazyDatabase({ failSetConfig: true })
+      await expect(createTenantAccess(failing.database).withTenant(tenantIdForTest(7), (() => {
+        throw new Error('sync boom')
+      }) as never)).rejects.toThrow('set_config failed')
+      const healthy = lazyDatabase()
+      await expect(createTenantAccess(healthy.database).withTenant(tenantIdForTest(7), (() => {
+        throw new Error('sync boom')
+      }) as never)).rejects.toThrow('sync boom')
+      await new Promise(resolve => setTimeout(resolve, 30))
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+})
+
+describe('withTenant', () => {
   it('passes the transaction options through unchanged', async () => {
     const { database, configs } = fakeDatabase()
     const { withTenant } = createTenantAccess(database)

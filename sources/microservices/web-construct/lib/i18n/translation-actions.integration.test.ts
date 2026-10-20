@@ -16,7 +16,7 @@ vi.mock('@/lib/rbac/auth-guard', () => {
   }
 })
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
-vi.mock('@/lib/auth', () => ({ auth: async () => ({ user: { id: 'test' } }) }))
+vi.mock('@/lib/auth-session', () => ({ getSession: async () => ({ user: { id: 'test' } }) }))
 
 const { createTranslationKey, deleteTranslationKey, saveTranslations } = await import('./translation-actions')
 // listTranslations lives in translation-service.ts, not translation-actions.ts —

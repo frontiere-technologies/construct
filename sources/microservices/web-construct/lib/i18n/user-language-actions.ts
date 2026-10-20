@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { eq } from 'drizzle-orm'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/auth-session'
 import { withGlobal } from '@/lib/db/tenant-db'
 import { appLanguage, users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
@@ -28,7 +28,7 @@ export async function setPreferredLanguage(code: string): Promise<{ error: strin
   const language = languages.find(l => l.code === code)
   if (!language) return { error: 'Lingua non disponibile.' }
 
-  const session = await auth()
+  const session = await getSession()
   const userId = session?.user?.id
   if (userId) {
     try {
@@ -54,7 +54,7 @@ export async function setPreferredLanguage(code: string): Promise<{ error: strin
 /** The code currently stored on the authenticated user's profile, if any. */
 export async function getPreferredLanguage(): Promise<string | null> {
   allowSelfService()
-  const session = await auth()
+  const session = await getSession()
   const userId = session?.user?.id
   if (!userId) return null
   try {

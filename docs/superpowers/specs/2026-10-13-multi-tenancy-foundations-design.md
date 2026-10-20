@@ -343,8 +343,10 @@ export async function withTenant<T>(
   fn: (tx: TenantTx) => Promise<T>,
   options?: TransactionOptions,          // isolamento e sola lettura, come oggi
 ): Promise<T>
-// apre la transazione, esegue `select set_config('app.tenant_id', $1, true)` con il valore come
-// parametro (mai sql.raw), poi chiama fn(tx). Rifiuta id non interi o non positivi.
+// apre la transazione e imposta set_config('app.tenant_id', '<n>', true). Il numero è scritto nel
+// testo, solo dopo averlo verificato come intero sicuro e positivo (specifica 2026-10-15,
+// MTP-DEC-3): con prepare: false un parametro costerebbe un viaggio in più. Rifiuta id non interi
+// o non positivi.
 
 export async function withGlobal<T>(
   fn: (tx: GlobalTx) => Promise<T>,
@@ -479,7 +481,7 @@ Nuovo file `lib/db/tenant-concurrency.integration.test.ts`.
 
 ### 4.4 Test unitari
 
-- `withTenant` passa il tenant come parametro e rifiuta `0`, numeri negativi, `NaN` e non interi.
+- `withTenant` scrive il tenant nel testo di `set_config` (non come parametro: MTP-DEC-3 della specifica 2026-10-15, che ha sostituito il parametro) e rifiuta `0`, numeri negativi, `NaN` e non interi.
 - `resolveRequestTenant` restituisce il tenant predefinito.
 - Le guardie restituiscono l'attore con `tenantId`.
 - `buildActor` calcola `isAdmin` da `TENANT_ADMIN`.
@@ -531,7 +533,7 @@ Il progetto non ha migrazioni all'indietro.
 ## 6. Rischi e verifiche
 
 - [✅] ID=MTF-RISK-1, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Cessione di proprietà su Supabase, Fix description=Non provata: è MTF-1. Se `postgres` non può cedere la proprietà a `construct_owner` o fare `set role`, va trovata un'alternativa che mantenga MTF-DEC-4 prima di MTF-3. **Chiuso il 2026-10-14** dalla prova di MTF-1: la cessione funziona, con `usage` su `public` in più.
-- [ ] ID=MTF-RISK-2, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Costo delle transazioni nel callback `jwt`, Fix description=Il callback gira a ogni richiesta del middleware e ora apre una transazione breve con `set_config`. Misurare la latenza prima e dopo MTF-4 sulle pagine principali; se sale in modo sensibile, unire le letture dell'autorizzazione in una sola query. **Misura del 2026-10-15** (database di sviluppo, server di sviluppo, mediana di 10 caricamenti): il tempo del proxy, dove gira il callback `jwt`, passa da circa 200 a circa 455 ms. **Aperto:** supera di molto la soglia del 20%.
-- [ ] ID=MTF-RISK-3, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Letture parallele eseguite in serie, Fix description=I loader con `Promise.all` dentro una sola transazione eseguono le query una dopo l'altra. Misurare le pagine con più loader (menu, griglie); dividere in più `withTenant` dove serve. **Misura del 2026-10-15** (stesse condizioni): `/` da 690 a 1635 ms (+137%), `/user-management` da 798 a 2185 ms (+174%), `/functionalities` da 702 a 1723 ms (+145%); il codice della pagina passa da 490–590 a 1240–1780 ms. **Aperto:** la causa principale sono i viaggi di andata e ritorno in più verso il database (inizio e fine della transazione, `set_config`, letture in serie), ciascuno di decine di millisecondi verso Supabase.
+- [✅] ID=MTF-RISK-2, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Costo delle transazioni nel callback `jwt`, Fix description=Il callback gira a ogni richiesta del middleware e ora apre una transazione breve con `set_config`. Misurare la latenza prima e dopo MTF-4 sulle pagine principali; se sale in modo sensibile, unire le letture dell'autorizzazione in una sola query. **Misura del 2026-10-15** (database di sviluppo, server di sviluppo, mediana di 10 caricamenti): il tempo del proxy, dove gira il callback `jwt`, passa da circa 200 a circa 455 ms. **Aperto:** supera di molto la soglia del 20%. **Chiuso il 2026-10-20** dal lavoro sulle prestazioni ([specifica](2026-10-15-multi-tenancy-performance-design.md), MTP-OK-1 e MTP-OK-2): viaggi sul percorso critico di nuovo entro l'obiettivo, tempi dimezzati rispetto al pezzo 1.
+- [✅] ID=MTF-RISK-3, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Letture parallele eseguite in serie, Fix description=I loader con `Promise.all` dentro una sola transazione eseguono le query una dopo l'altra. Misurare le pagine con più loader (menu, griglie); dividere in più `withTenant` dove serve. **Misura del 2026-10-15** (stesse condizioni): `/` da 690 a 1635 ms (+137%), `/user-management` da 798 a 2185 ms (+174%), `/functionalities` da 702 a 1723 ms (+145%); il codice della pagina passa da 490–590 a 1240–1780 ms. **Aperto:** la causa principale sono i viaggi di andata e ritorno in più verso il database (inizio e fine della transazione, `set_config`, letture in serie), ciascuno di decine di millisecondi verso Supabase. **Chiuso il 2026-10-20** dal lavoro sulle prestazioni ([specifica](2026-10-15-multi-tenancy-performance-design.md), MTP-OK-1 e MTP-OK-2): viaggi sul percorso critico di nuovo entro l'obiettivo, tempi dimezzati rispetto al pezzo 1.
 - [✅] ID=MTF-RISK-4, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Pipelining di postgres.js in modalità transazione, Fix description=Supabase lo indica come fonte di righe sbagliate fuori dalle transazioni. Con ogni query in transazione il rischio è coperto, e il test di §4.3 lo verifica.
 - [✅] ID=MTF-RISK-5, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Linter che segnalano `using (true)`, Fix description=Gli avvisi sulla policy permissiva `tenant_access` sono attesi: annotarli come eccezione dove il fornitore lo permette.

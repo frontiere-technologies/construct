@@ -1,7 +1,8 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { allInTransaction } from '@/lib/db/all-in-transaction'
 import type { TenantTx } from '@/lib/db/tenant-db'
 import { permission, roleFunctionality, rolePermission, userRole } from '@/lib/db/schema'
-import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
+import { getSystemRoleIds, type SystemRoleIds } from '@/lib/tenancy/system-roles'
 import type { Actor } from './actor'
 import { canChangeRole, canGrantCode, canGrantFunctionality, type RoleGrants } from './grant-guards'
 import type { GrantableItemIds } from './types'
@@ -35,16 +36,20 @@ export async function functionalityIdsForRoles(tx: TenantTx, roleIds: number[]):
  *  `permissionCodesByIds` quando la si vuole concedere. */
 export async function grantsForRoles(tx: TenantTx, roleIds: number[]): Promise<RoleGrants[]> {
   if (!roleIds.length) return []
-  // Dentro una transazione le letture vanno in serie sulla stessa connessione (MTF-RISK-3).
-  const codes = await tx.select({
-    idRole: rolePermission.idRole, idPermission: permission.idPermission, kind: permission.kind, code: permission.code,
-  })
-    .from(rolePermission)
-    .innerJoin(permission, eq(permission.idPermission, rolePermission.idPermission))
-    .where(and(inArray(rolePermission.idRole, roleIds), isNull(permission.deprecatedAt)))
-  const functionalities = await tx.select({ idRole: roleFunctionality.idRole, idMenuEntry: roleFunctionality.idMenuEntry })
-    .from(roleFunctionality)
-    .where(inArray(roleFunctionality.idRole, roleIds))
+  // Lanciate insieme, ma con parametri: con prepare: false postgres.js non le sovrappone, la seconda
+  // aspetta la fine della prima (2 viaggi ciascuna, specifica 2026-10-15, §2.5). Ogni ramo è una
+  // sola istruzione.
+  const [codes, functionalities] = await allInTransaction([
+    tx.select({
+      idRole: rolePermission.idRole, idPermission: permission.idPermission, kind: permission.kind, code: permission.code,
+    })
+      .from(rolePermission)
+      .innerJoin(permission, eq(permission.idPermission, rolePermission.idPermission))
+      .where(and(inArray(rolePermission.idRole, roleIds), isNull(permission.deprecatedAt))),
+    tx.select({ idRole: roleFunctionality.idRole, idMenuEntry: roleFunctionality.idMenuEntry })
+      .from(roleFunctionality)
+      .where(inArray(roleFunctionality.idRole, roleIds)),
+  ])
   return roleIds.map(idRole => ({
     idRole,
     codes: codes.flatMap(row => (row.idRole === idRole && row.code ? [row.code] : [])),
@@ -64,11 +69,19 @@ export async function currentRoleIds(tx: TenantTx, userId: string): Promise<numb
  * Fra i ruoli indicati, quelli che l'attore può assegnare e togliere (DEC-29). Le regole sono
  * quelle di `assertCanChangeRoles`, lette da `grant-guards.ts`: la pagina Utenti non offre un
  * ruolo che `updateUserRoles` rifiuterebbe (I3 della revisione finale, DEC-32).
+ * Chi ha già letto i ruoli di sistema nella stessa transazione li passa in `system`, per non
+ * rileggerli: `cache()` di React non ricorda fuori da un rendering, e un'istruzione in più è un
+ * viaggio in più.
  */
-export async function assignableRoleIds(tx: TenantTx, actor: Actor, roleIds: number[]): Promise<number[]> {
-  const visible = await functionalityIdsForRoles(tx, actor.roleIds)
-  const grants = await grantsForRoles(tx, roleIds)
-  const { tenantAdmin } = await getSystemRoleIds(tx)
+export async function assignableRoleIds(tx: TenantTx, actor: Actor, roleIds: number[], system?: SystemRoleIds): Promise<number[]> {
+  // Le prime due letture hanno parametri e restano in serie con prepare: false (specifica
+  // 2026-10-15, §2.5); i ruoli di sistema, se non sono già dati, sono senza parametri. Ogni ramo
+  // deve essere una sola istruzione, oppure attendere tutto ciò che avvia.
+  const [visible, grants, { tenantAdmin }] = await allInTransaction([
+    functionalityIdsForRoles(tx, actor.roleIds),
+    grantsForRoles(tx, roleIds),
+    system ?? getSystemRoleIds(tx),
+  ])
   return grants.filter(g => canChangeRole(actor, visible, g, tenantAdmin)).map(g => g.idRole)
 }
 
