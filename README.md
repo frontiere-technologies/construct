@@ -140,6 +140,10 @@ applicato la `0045`, va concesso a mano: `grant construct_owner to <utente>;`.
 
 ### Rilascio in produzione: tre tappe (isolamento per tenant, migrazioni 0044-0047)
 
+Le tre tappe servono solo per aggiornare un ambiente già in esercizio, con dati e codice di prima
+delle migrazioni 0044-0047, senza interrompere chi lo usa. Per una nuova installazione basta
+`db.mjs apply`, che applica tutte le migrazioni, insieme al codice attuale.
+
 Il job delle migrazioni gira **prima** che i pod nuovi sostituiscano i vecchi: per qualche istante
 il codice vecchio lavora sul database già migrato. Per questo le migrazioni dell'isolamento per
 tenant non si applicano tutte insieme: `db.mjs apply --to <versione>` (e `test-apply --to
