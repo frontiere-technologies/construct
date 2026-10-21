@@ -110,6 +110,11 @@ pagina Utenti continua a mostrare le stesse persone di oggi. **Scelta di progett
 un solo tenant, quindi non ci sono appartenenze da creare altrove. Lo stato globale dell'utente
 (`users.id_user_status`) resta com'è e continua a contare (§3.1).
 
+Fa eccezione chi era già disattivato a livello globale prima del pezzo 2: fino ad allora ogni
+disattivazione arrivava dalla pagina Utenti, quindi diventa una disattivazione nel tenant. La
+migrazione 0052 gli dà un'appartenenza `deactivated` al tenant predefinito e rimette attivo il suo
+stato globale: la pagina Utenti continua a mostrarlo disattivato e a riattivarlo come oggi.
+
 ### 2.3 Tenant modello
 
 - Colonna `tenant.is_template boolean not null default false`, con un indice unico parziale
