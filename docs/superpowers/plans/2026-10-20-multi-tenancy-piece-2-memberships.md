@@ -684,7 +684,7 @@ Prima di chiedere, conta in sola lettura sul database di sviluppo (MT2-RISK-2):
 node sources/devops/db/db.mjs query "select count(*) as utenti from public.users"
 ```
 
-Mostra al proprietario il numero e le migrazioni da applicare (0048–0051). Solo dopo un sì
+Mostra al proprietario il numero e le migrazioni da applicare (0048–0052; la 0052 viene dalla revisione finale). Solo dopo un sì
 esplicito:
 
 ```bash
