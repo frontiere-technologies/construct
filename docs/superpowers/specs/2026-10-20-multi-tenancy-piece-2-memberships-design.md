@@ -78,9 +78,9 @@ pratico è lo stesso.
 
 ### 1.3 Criteri di successo
 
-- [ ] ID=MT2-OK-1, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Nessun cambiamento visibile, Fix description=L'E2E e i test di integrazione passano; dove un test verificava la disattivazione globale, ora verifica quella dell'appartenenza con lo stesso comportamento visibile.
-- [ ] ID=MT2-OK-2, Severity=Critical, Complexity=Low, Priority=P0, Estimate=hours, Title=Accesso solo con appartenenza attiva, Fix description=Una persona con appartenenza disattivata, o senza appartenenza, in un tenant non vi ha attore né ruoli; nello stesso momento, nei tenant dove è attiva, funziona normalmente.
-- [ ] ID=MT2-OK-3, Severity=Critical, Complexity=Low, Priority=P0, Estimate=hours, Title=Tenant separati, Fix description=L'amministratore di A non vede, non aggiunge per ricerca e non disattiva persone di B; la risposta all'aggiunta per email è identica per email esistenti e non.
+- [✅] ID=MT2-OK-1, Severity=High, Complexity=Low, Priority=P0, Estimate=hours, Title=Nessun cambiamento visibile, Fix description=L'E2E e i test di integrazione passano; dove un test verificava la disattivazione globale, ora verifica quella dell'appartenenza con lo stesso comportamento visibile.
+- [✅] ID=MT2-OK-2, Severity=Critical, Complexity=Low, Priority=P0, Estimate=hours, Title=Accesso solo con appartenenza attiva, Fix description=Una persona con appartenenza disattivata, o senza appartenenza, in un tenant non vi ha attore né ruoli; nello stesso momento, nei tenant dove è attiva, funziona normalmente.
+- [✅] ID=MT2-OK-3, Severity=Critical, Complexity=Low, Priority=P0, Estimate=hours, Title=Tenant separati, Fix description=L'amministratore di A non vede, non aggiunge per ricerca e non disattiva persone di B; la risposta all'aggiunta per email è identica per email esistenti e non.
 - [✅] ID=MT2-OK-4, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Tenant creato dal modello, Fix description=`db.mjs tenant-create` produce un tenant con menu, ruoli, concessioni e tema uguali al modello (con id nuovi e riferimenti interni coerenti), il primo amministratore attivo, e nessuna riga condivisa con il modello o con altri tenant. Il primo amministratore risulta amministratore **dentro il nuovo tenant** (attore risolto con `withTenant` sul nuovo tenant); entrarci dal browser arriva con il pezzo 4 (§5.3).
 
 ## 2. Database

@@ -30,12 +30,21 @@ Stop immediately if the backup cannot be listed, the authoritative legacy value 
 
 ## Repair
 
+Since multi-tenancy piece 2 every `public.user_role` row needs a matching `public.tenant_membership` row in the same tenant (foreign key `user_role_membership_fkey`), and tenant tables are row-level-security protected: the recovery session must set `app.tenant_id` first (the default tenant, as below) or the insert fails. The preflight queries above read `public.user_role` the same way, so run them after `select set_config('app.tenant_id', (select id::text from public.tenant where slug = 'default'), false);` on databases already at migration 0048 or later.
+
 - [ ] ID=RBAC-REC-4, Title=Restore assignments, Action=Inside one transaction, restore Administrator role `1` from `users.role` or another approved authoritative source.
 - [ ] ID=RBAC-REC-5, Title=Verify invariant, Action=Confirm at least one intended active administrator and compare the migrated count with the preflight count before commit.
 
 ```sql
 begin;
-lock table public.users, public.user_role in share row exclusive mode;
+lock table public.users, public.tenant_membership, public.user_role in share row exclusive mode;
+
+-- Tenant tables are written inside a tenant, and a role needs a membership (piece 2).
+select set_config('app.tenant_id', (select id::text from public.tenant where slug = 'default'), true);
+
+insert into public.tenant_membership (user_id, status)
+select id, 'active' from public.users where lower(role) = 'admin'
+on conflict (id_tenant, user_id) do nothing;
 
 insert into public.user_role (user_id, id_role)
 select id, 1 from public.users where lower(role) = 'admin'
