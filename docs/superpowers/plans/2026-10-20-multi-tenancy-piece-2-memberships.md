@@ -6,7 +6,7 @@
 un tenant vede, aggiunge per email esatta e disattiva solo i membri del suo tenant; la piattaforma
 crea un tenant da un tenant modello con un comando di `db.mjs`.
 
-**Architecture:** quattro migrazioni nuove (0048–0051) e il codice che le usa, dentro
+**Architecture:** cinque migrazioni nuove (0048–0052, la 0052 dalla revisione finale) e il codice che le usa, dentro
 l'architettura del pezzo 1. L'appartenenza è una tabella di tenant protetta dalla RLS; le regole
 che toccano più tenant (ultimo amministratore, "membro altrove", copia dal modello, primo
 amministratore) vivono in funzioni SQL `security invoker`, così l'app e il comando le chiamano
