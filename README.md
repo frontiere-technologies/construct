@@ -269,6 +269,41 @@ A database created from scratch never needs any of this: the migrations apply in
 their own checksums. Worked example of a deliberate change and why it was justified:
 `docs/reviews/2026-08-19-env-configuration.md`, entry DB-1.
 
+### Creare un tenant (`db.mjs tenant-create`)
+
+La piattaforma crea un tenant copiando il tenant modello (slug `template`) e ne registra il primo
+amministratore:
+
+```bash
+set -a && . ./sources/devops/db/operator.env && set +a
+node sources/devops/db/db.mjs tenant-create --slug acme --name "Acme Spa" --admin capo@acme.it
+```
+
+Il comando usa `MIGRATION_DATABASE_URL` e lavora come `construct_owner`, in una transazione sola:
+crea il tenant con menu, ruoli, concessioni e tema del modello (id nuovi), poi dà all'amministratore
+l'appartenenza attiva e i ruoli `REGISTERED` e `TENANT_ADMIN` del tenant nuovo, creando l'account se
+non esiste. Un errore (per esempio uno slug già usato, o fuori da `^[a-z0-9-]{3,40}$`) lascia il
+database com'era ed esce con codice 1. Se l'account non ha ancora una password, il comando stampa il
+link per impostarla, valido 48 ore, costruito su `AUTH_URL`:
+
+```
+Tenant creato: id=12 slug=acme nome=Acme Spa
+Primo amministratore: capo@acme.it (account nuovo)
+Link per impostare la password (valido 48 ore): https://construct.example.it/set-password?token=…
+```
+
+Il link contiene un token valido: va consegnato alla persona e non incollato altrove. L'invio per
+email dal comando arriverà con la console di piattaforma. `test-tenant-create` fa lo stesso sul
+database di prova usa e getta (`TEST_MIGRATION_DATABASE_URL`, con `TEST_DATABASE_DISPOSABLE=1`).
+
+Limiti noti (specifica 2026-10-20, §5.3):
+
+- **I tenant creati così si usano dal pezzo 4 della multi-tenancy.** Fino ad allora ogni richiesta
+  è servita dal tenant predefinito: il primo amministratore può impostare la password, ma non ha
+  ancora un modo per entrare nel suo tenant dal browser.
+- **Il modello si modifica solo via SQL**, finché il pezzo 4 non permetterà alla piattaforma, e
+  solo a lei, di sceglierlo come tenant corrente.
+
 ## Local Docker with Supabase
 
 Docker Compose runs only the production-style standalone Next.js container. The database remains hosted by Supabase: the container connects directly to the Supavisor transaction pooler, and no local PostgreSQL service is started.

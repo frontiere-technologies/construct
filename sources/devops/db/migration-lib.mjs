@@ -85,6 +85,40 @@ export function parseApplyArguments(args) {
   return { to: args[1] }
 }
 
+// tenant-create (specifica 2026-10-20, §3.3): le tre opzioni sono obbligatorie e ognuna compare una
+// volta sola. Lo slug segue il controllo di tenant.slug, così un valore sbagliato fallisce prima di
+// aprire la connessione; l'email si normalizza come la normalizza l'app (minuscole, senza spazi).
+const TENANT_CREATE_FLAGS = ['--slug', '--name', '--admin']
+const TENANT_SLUG = /^[a-z0-9-]{3,40}$/
+
+export function parseTenantCreateArguments(args) {
+  const values = new Map()
+  for (let index = 0; index < args.length; index += 2) {
+    const flag = args[index]
+    const equals = flag.indexOf('=')
+    if (flag.startsWith('--') && equals > 0 && TENANT_CREATE_FLAGS.includes(flag.slice(0, equals))) {
+      throw new Error(`Argomento non previsto "${flag}": usa ${flag.slice(0, equals)} ${flag.slice(equals + 1)}`)
+    }
+    if (!TENANT_CREATE_FLAGS.includes(flag)) throw new Error(`Argomento non previsto "${flag}"`)
+    if (values.has(flag)) throw new Error(`${flag} compare due volte`)
+    if (index + 1 >= args.length) throw new Error(`${flag} richiede un valore`)
+    values.set(flag, args[index + 1])
+  }
+  for (const flag of TENANT_CREATE_FLAGS) {
+    if (!values.has(flag)) throw new Error(`Manca ${flag}: tenant-create --slug <slug> --name <nome> --admin <email>`)
+  }
+
+  const slug = values.get('--slug')
+  if (!TENANT_SLUG.test(slug)) {
+    throw new Error(`Lo slug "${slug}" non è valido: da 3 a 40 caratteri fra a-z, 0-9 e -`)
+  }
+  const name = values.get('--name').trim()
+  if (!name) throw new Error('--name non può essere vuoto')
+  const admin = values.get('--admin').trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+$/.test(admin)) throw new Error(`--admin non è un indirizzo email: "${admin}"`)
+  return { slug, name, admin }
+}
+
 export async function applyPendingMigrations(adapter, migrations, { to } = {}) {
   // La selezione avviene prima di toccare il database, così una versione inesistente fallisce subito.
   const selected = selectMigrationsUpTo(migrations, to)

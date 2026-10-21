@@ -10,6 +10,7 @@ import {
   discoverMigrations,
   migrationChecksum,
   parseApplyArguments,
+  parseTenantCreateArguments,
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
@@ -279,4 +280,37 @@ test('applyPendingMigrations with a target applies an older pending migration be
 
   assert.deepEqual(applied, ['0001', '0003'])
   assert.deepEqual(calls, ['start:0001', 'run:0001', 'start:0003', 'run:0003'])
+})
+
+// tenant-create (specifica 2026-10-20, §3.3): tre opzioni obbligatorie, l'email normalizzata come
+// la normalizza l'app, lo slug controllato prima di toccare il database.
+test('parses tenant-create flags', () => {
+  assert.deepEqual(parseTenantCreateArguments(['--slug', 'acme', '--name', 'Acme Spa', '--admin', ' Capo@Acme.IT ']),
+    { slug: 'acme', name: 'Acme Spa', admin: 'capo@acme.it' })
+  // L'ordine delle opzioni non conta.
+  assert.deepEqual(parseTenantCreateArguments(['--admin', 'a@b.it', '--name', 'B', '--slug', 'b-2']),
+    { slug: 'b-2', name: 'B', admin: 'a@b.it' })
+})
+
+test('rejects a missing flag, an unknown flag, a bad slug, an admin without @', () => {
+  const valid = ['--slug', 'acme', '--name', 'Acme Spa', '--admin', 'capo@acme.it']
+  assert.throws(() => parseTenantCreateArguments([]), /--slug/)
+  assert.throws(() => parseTenantCreateArguments(['--slug', 'acme', '--name', 'Acme Spa']), /--admin/)
+  assert.throws(() => parseTenantCreateArguments(['--slug', 'acme', '--admin', 'capo@acme.it']), /--name/)
+  assert.throws(() => parseTenantCreateArguments(['--name', 'Acme Spa', '--admin', 'capo@acme.it']), /--slug/)
+  assert.throws(() => parseTenantCreateArguments([...valid, '--color', 'red']), /--color/)
+  assert.throws(() => parseTenantCreateArguments([...valid, 'extra']), /extra/)
+  assert.throws(() => parseTenantCreateArguments(['--slug=acme', '--name', 'Acme Spa', '--admin', 'capo@acme.it']), /--slug acme/)
+  assert.throws(() => parseTenantCreateArguments([...valid, '--slug', 'altro']), /--slug/)
+  assert.throws(() => parseTenantCreateArguments(['--slug', 'acme', '--name', 'Acme Spa', '--admin']), /--admin/)
+  assert.throws(() => parseTenantCreateArguments(['--slug', 'acme', '--name', '  ', '--admin', 'capo@acme.it']), /--name/)
+  for (const slug of ['Ab', 'a_b', 'a'.repeat(41), 'ab']) {
+    assert.throws(() => parseTenantCreateArguments(['--slug', slug, '--name', 'X', '--admin', 'capo@acme.it']),
+      /slug/, slug)
+  }
+  assert.doesNotThrow(() => parseTenantCreateArguments(['--slug', 'a'.repeat(40), '--name', 'X', '--admin', 'capo@acme.it']))
+  for (const admin of ['capo.acme.it', ' ', '@', 'capo@', '@acme.it']) {
+    assert.throws(() => parseTenantCreateArguments(['--slug', 'acme', '--name', 'X', '--admin', admin]),
+      /--admin/, admin)
+  }
 })
