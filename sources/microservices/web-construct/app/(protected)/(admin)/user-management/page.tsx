@@ -11,7 +11,7 @@ export default async function UserManagementPage({ searchParams }: { searchParam
   const sp = await searchParams
   // Il dialogo dei ruoli offre solo ciò che updateUserRoles accetterebbe (DEC-29, DEC-32).
   // Il ruolo base è del tenant e il client non conosce gli id: lo calcola il server (MTF-DEC-5).
-  const { allRoles, assignable, registeredRoleId } = await loadUserManagementPage(actor)
+  const { allRoles, assignable, registeredRoleId, canInvite } = await loadUserManagementPage(actor)
   const canAssignRoles = hasPermission(actor, 'assign-user-roles')
   const { t } = await getI18n()
   const params = parseUsersGridUrlParams(sp)
@@ -38,6 +38,7 @@ export default async function UserManagementPage({ searchParams }: { searchParam
         assignableRoleIds={assignable}
         registeredRoleId={registeredRoleId}
         canSetStatus={hasPermission(actor, 'set-user-status')}
+        canInvite={canInvite}
       />
     </PageContainer>
   )

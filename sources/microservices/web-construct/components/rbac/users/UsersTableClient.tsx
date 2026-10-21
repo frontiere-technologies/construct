@@ -6,6 +6,7 @@ import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEv
 import { DataGrid } from '@/components/grid/DataGrid'
 import { GridToolbar } from '@/components/grid/GridToolbar'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
+import { Button } from '@/components/ui/button'
 import { DATE_FILTER, TEXT_FILTER } from '@/components/grid/grid-column-filters'
 import { resetGridFilters } from '@/components/grid/grid-reset'
 import { useGridUrlSync } from '@/components/grid/grid-url-sync'
@@ -20,6 +21,7 @@ import {
 import type { UserDto } from '@/lib/rbac/types'
 import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from '@/lib/rbac/types'
 import { createUsersDatasource } from './users-datasource'
+import { AddUserDialog } from './AddUserDialog'
 import ManageRolesModal from './ManageRolesModal'
 import StatusBadge from './StatusBadge'
 
@@ -45,6 +47,8 @@ interface Props {
   /** Il ruolo base del tenant, calcolato dalla pagina: il client non conosce gli id (MTF-DEC-5). */
   registeredRoleId: number
   canSetStatus: boolean
+  /** Chi ha `invite-users` vede «Aggiungi persona»: la pagina lo calcola dall'Actor. */
+  canInvite: boolean
 }
 
 export default function UsersTableClient(props: Props) {
@@ -54,6 +58,7 @@ export default function UsersTableClient(props: Props) {
   const sp = useSearchParams()
   const [managing, setManaging] = useState<UserDto | null>(null)
   const [confirmingStatus, setConfirmingStatus] = useState<UserDto | null>(null)
+  const [adding, setAdding] = useState(false)
   // Errore in linea invece di alert() nativo, come in LanguagesTableClient e
   // TranslationsTableClient: un dialogo del browser sull'esito contraddiceva il passaggio
   // a ConfirmModal sulla conferma.
@@ -160,7 +165,9 @@ export default function UsersTableClient(props: Props) {
         gridApi={gridApi}
         columns={columnLabels}
         onClearFilters={() => resetGridFilters(gridApiRef.current, () => setParam(usersFilterModelToSearchParams({})))}
-      />
+      >
+        {props.canInvite && <Button size="sm" onClick={() => setAdding(true)}>{t('users.add.open')}</Button>}
+      </GridToolbar>
       <DataGrid<UserDto>
         columnDefs={columnDefs}
         datasource={datasource}
@@ -171,6 +178,13 @@ export default function UsersTableClient(props: Props) {
         onSortChanged={handleSortChanged}
         onGridReady={handleGridReady}
       />
+      {props.canInvite && (
+        <AddUserDialog
+          open={adding}
+          onClose={() => setAdding(false)}
+          onAdded={() => gridApiRef.current?.refreshInfiniteCache()}
+        />
+      )}
       {managing && (
         <ManageRolesModal
           user={managing}

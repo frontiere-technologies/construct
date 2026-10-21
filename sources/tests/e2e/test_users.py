@@ -1,4 +1,7 @@
+import os
 import re
+import subprocess
+from pathlib import Path
 from playwright.sync_api import expect
 from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows, confirm_modal
 
@@ -205,3 +208,51 @@ def test_column_visibility_toggle(logged_in_page, base_url):
     # ambiguous (strict-mode violation).
     page.get_by_label("Email", exact=True).click()
     expect(page.locator('.ag-header-cell[col-id="email"]')).to_have_count(0)
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DONE = "Persona aggiunta o invitata."
+
+
+def _delete_user(email: str) -> None:
+    """Cancella l'account con quell'email dal database di prova (lo stesso comando di conftest)."""
+    subprocess.run(
+        ["node", "sources/devops/db/db.mjs", "test-delete-user"],
+        cwd=REPO_ROOT, check=True, capture_output=True, env={**os.environ, "E2E_REGISTER_EMAIL": email},
+    )
+
+
+def _add_person(page, email: str) -> None:
+    page.get_by_role("button", name="Aggiungi persona", exact=True).click()
+    dialog = page.get_by_role("dialog")
+    expect(dialog).to_be_visible()
+    dialog.get_by_label("Email", exact=True).fill(email)
+    dialog.get_by_role("button", name="Aggiungi", exact=True).click()
+    # Per un account nuovo l'azione aspetta il provider dell'email (secondi, non millisecondi).
+    expect(dialog.get_by_role("status")).to_have_text(DONE, timeout=30_000)
+    dialog.get_by_role("button", name="Chiudi", exact=True).click()
+    expect(dialog).to_have_count(0)
+
+
+def test_add_person_by_email(logged_in_page, base_url, registration_email):
+    """MT2-OK-1: l'amministratore aggiunge una persona per email; compare tra gli utenti con stato
+    Attivo, e ripetere l'aggiunta dà lo stesso esito neutro (nessun secondo account)."""
+    page = logged_in_page
+    _delete_user(registration_email)
+    try:
+        nav(page, f"{base_url}/user-management")
+        _add_person(page, registration_email)
+
+        # La griglia si è aggiornata da sola: filtrando per l'email la riga c'è, ed è attiva.
+        _open_column_filter(page, "email")
+        page.locator('.ag-filter input[type="text"]').first.fill(registration_email)
+        page.get_by_role("button", name="Applica").click()
+        row = _rows(page).filter(has_text=registration_email)
+        expect(row).to_have_count(1)
+        expect(row.locator('[data-testid="status-badge"]')).to_have_text("Attivo")
+
+        # Ripetuta (anche con maiuscole e spazi attorno): stesso messaggio, ancora una sola riga.
+        _add_person(page, f"  {registration_email.upper()} ")
+        expect(_rows(page).filter(has_text=registration_email)).to_have_count(1)
+    finally:
+        _delete_user(registration_email)
