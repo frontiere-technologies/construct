@@ -505,7 +505,7 @@ git commit -m "feat(users): add a person by email from the users page"
   - `app_private.create_tenant_from_template(p_slug text, p_name text) returns bigint` — errore `template_missing` se non c'è un modello;
 - Produces (TS): `tenant.isTemplate` e l'indice in `lib/db/schema.ts`; `deleteTenantForTest(tenantId: TenantId): Promise<void>` in `lib/db/testing.ts` (con `withOwner`: cancella le righe del tenant da ogni tabella di tenant, poi la riga di `tenant`).
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 `lib/tenancy/tenant-template.integration.test.ts` (crea i tenant con `withOwner` e
 `create_tenant_from_template`, li cancella con `deleteTenantForTest`):
@@ -528,12 +528,12 @@ it('copy_tenant refuses to run when a tenant table is unknown to it', …)
 // tabella di tenant fittizia; la copia fallisce con 'tenant_table_not_copied:<nome>'
 ```
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `cd sources/microservices/web-construct && npm run test:integration -- lib/tenancy/tenant-template.integration.test.ts`
 Expected: FAIL, colonna `is_template` o funzione mancante.
 
-- [ ] **Step 3: Scrivi la migrazione 0050**
+- [✅] **Step 3: Scrivi la migrazione 0050**
 
 1. Colonna e indice.
 2. `copy_tenant`, in una funzione sola:
@@ -547,14 +547,14 @@ Expected: FAIL, colonna `is_template` o funzione mancante.
 4. `revoke all on function … from public` per le due funzioni.
 5. **Ultima sezione**, perché lascia controlli differiti sulle voci di menu fino alla fine della transazione: `select app_private.copy_tenant((select id from public.tenant where slug = 'default'), 'template', 'Modello', true);`.
 
-- [ ] **Step 4: Applica, rigenera, verifica**
+- [✅] **Step 4: Applica, rigenera, verifica**
 
 `test-apply`, `schema-write`, `schema-check` come nel Task 1, poi:
 
 Run: `npm run test:integration -- lib/tenancy lib/schema-contract.integration.test.ts`
 Expected: PASS; `lib/tenancy/tenant-schema.integration.test.ts` trova ancora un solo tenant `default`.
 
-- [ ] **Step 5: Spunta MT2-RISK-1 nella specifica e commit**
+- [✅] **Step 5: Spunta MT2-RISK-1 nella specifica e commit**
 
 ```bash
 git add sources/devops/db sources/microservices/web-construct/lib docs/superpowers/specs/2026-10-20-multi-tenancy-piece-2-memberships-design.md
