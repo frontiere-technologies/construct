@@ -268,7 +268,7 @@ describeIntegration('users page from tenant memberships', () => {
     expect(mailer.sendEmail.mock.calls[0][0]).toMatchObject({ to: emailOf('senza_password') })
   })
 
-  it('addUserByEmail does not surface a mail failure', async () => {
+  it('addUserByEmail does not surface a failed delivery (sendEmail rejects)', async () => {
     mailer.sendEmail.mockRejectedValue(new Error('smtp giù'))
     await expect(addUserByEmail(emailOf('mail_guasta'))).resolves.toEqual({ ok: true })
     const [account] = await accountsWithEmail(emailOf('mail_guasta'))

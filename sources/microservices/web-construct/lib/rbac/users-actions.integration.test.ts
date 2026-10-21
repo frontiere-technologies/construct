@@ -73,10 +73,9 @@ describeIntegration('atomic last-active-administrator invariant', () => {
     ])
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)
+    // La definizione di "attivo" è quella del database: appartenenza attiva, account attivo, ruolo TENANT_ADMIN.
     const [{ count }] = await withTenant(defaultTestTenant(), tx => tx.execute<{ count: string }>(sql`
-      select count(distinct u.id)::text as count
-      from users u join user_role ur on ur.user_id = u.id
-      where u.id_user_status = 2 and ur.id_role = 1
+      select app_private.count_active_admins()::text as count
     `))
     expect(count).toBe('1')
   })
