@@ -144,6 +144,18 @@ export const role = pgTable('role', {
   uniqueIndex('role_tenant_system_key_idx').on(t.idTenant, t.systemKey).where(sql`${t.systemKey} is not null`),
 ])
 
+/** Chi appartiene a quale tenant, con uno stato per tenant (specifica 2026-10-20, §2.1, 0048). */
+export const tenantMembership = pgTable('tenant_membership', {
+  idTenant: tenantIdColumn(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status: text('status', { enum: ['active', 'deactivated'] }).notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ name: 'tenant_membership_pkey', columns: [t.idTenant, t.userId] }),
+  index('tenant_membership_user_id_idx').on(t.userId),
+])
+
 export const userRole = pgTable('user_role', {
   idTenant: tenantIdColumn(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -152,6 +164,8 @@ export const userRole = pgTable('user_role', {
 }, (t) => [
   primaryKey({ columns: [t.idTenant, t.userId, t.idRole] }),
   foreignKey({ name: 'user_role_role_fkey', columns: [t.idTenant, t.idRole], foreignColumns: [role.idTenant, role.idRole] }).onDelete('cascade'),
+  // Nessun ruolo senza appartenenza al tenant (0048).
+  foreignKey({ name: 'user_role_membership_fkey', columns: [t.idTenant, t.userId], foreignColumns: [tenantMembership.idTenant, tenantMembership.userId] }).onDelete('cascade'),
   index('user_role_id_role_user_id_idx').on(t.idTenant, t.idRole, t.userId),
 ])
 

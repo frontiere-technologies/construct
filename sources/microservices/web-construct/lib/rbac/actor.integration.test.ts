@@ -3,7 +3,7 @@ import { eq, like } from 'drizzle-orm'
 import { withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
-import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
+import { permission, role, rolePermission, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from './types'
 import { resolveActor } from './actor'
@@ -20,6 +20,8 @@ async function readerOf(code: string, status = USER_STATUS_ACTIVE): Promise<{ us
       .values({ description: `${PREFIX}${unique()}`, idRoleType: ROLE_TYPE_SERVICE })
       .returning({ idRole: role.idRole })
     const [perm] = await tx.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, code))
+    // I ruoli esistono solo con l'appartenenza al tenant (0048).
+    await tx.insert(tenantMembership).values({ userId: user.id })
     await tx.insert(userRole).values({ userId: user.id, idRole: created.idRole })
     await tx.insert(rolePermission).values({ idRole: created.idRole, idPermission: perm.idPermission })
     return { userId: user.id, idRole: created.idRole }

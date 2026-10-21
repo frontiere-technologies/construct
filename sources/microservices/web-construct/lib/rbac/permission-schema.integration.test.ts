@@ -3,7 +3,7 @@ import { and, eq, inArray, isNotNull, like, sql } from 'drizzle-orm'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
-import { appLanguage, menuEntry, permission, role, roleFunctionality, roleListView, rolePermission, translationKey, translationValue, users } from '@/lib/db/schema'
+import { appLanguage, menuEntry, permission, role, roleFunctionality, roleListView, rolePermission, tenantMembership, translationKey, translationValue, users } from '@/lib/db/schema'
 import { unique } from '@/lib/i18n/test-support/db-fixtures'
 import { PERMISSION_CODES } from './permission-catalog'
 
@@ -466,6 +466,22 @@ describe('trigger set_updated_at, su ogni tabella che lo esegue (Task 9, giro 2)
         // anche questa riga per ON DELETE CASCADE (translation_value → translation_key).
       } finally {
         await withGlobal(tx => tx.delete(translationKey).where(eq(translationKey.idTranslationKey, key.idTranslationKey)))
+      }
+    },
+    async tenant_membership() {
+      // Tabella di tenant (0048): la riga si scrive nel tenant predefinito, per un utente di prova
+      // proprio; l'appartenenza sparisce con l'utente per ON DELETE CASCADE.
+      const [created] = await withGlobal(tx => tx.insert(users)
+        .values({ email: `zzz_rbac_trigger_test_${unique()}@example.com` })
+        .returning({ id: users.id }))
+      try {
+        await withTenant(defaultTestTenant(), tx => tx.insert(tenantMembership).values({ userId: created.id }))
+        await expect(
+          withTenant(defaultTestTenant(), tx => tx.update(tenantMembership).set({ status: 'deactivated' })
+            .where(eq(tenantMembership.userId, created.id))),
+        ).resolves.not.toThrow()
+      } finally {
+        await withGlobal(tx => tx.delete(users).where(eq(users.id, created.id)))
       }
     },
   }

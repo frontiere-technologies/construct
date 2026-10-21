@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest'
 import { and, eq, inArray } from 'drizzle-orm'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
-import { permission, role, rolePermission, tenant, userRole, users } from '@/lib/db/schema'
+import { permission, role, rolePermission, tenant, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { defaultTestTenant, tenantIdForTest } from '@/lib/tenancy/testing'
 import { getSystemRoleIds, type SystemRoleIds } from '@/lib/tenancy/system-roles'
@@ -48,8 +48,15 @@ async function createUser(status: number): Promise<string> {
   return row.id
 }
 
+/** L'appartenenza attiva al tenant predefinito, come la 0048 la dà a ogni utente esistente. */
+async function joinTenant(userId: string): Promise<void> {
+  await withTenant(TENANT, tx => tx.insert(tenantMembership).values({ userId }))
+}
+
 async function grantRoles(userId: string, roleIds: number[]): Promise<void> {
   if (roleIds.length === 0) return
+  // I ruoli esistono solo con l'appartenenza al tenant (0048).
+  await joinTenant(userId)
   await withTenant(TENANT, tx => tx.insert(userRole).values(roleIds.map(idRole => ({ userId, idRole }))))
 }
 
@@ -86,6 +93,8 @@ describeIntegration('authorization reads', () => {
     await grantRoles(readerUserId, [readerRoleId])
     await grantRoles(deactivatedAdminUserId, [system.registered, system.tenantAdmin])
     await grantRoles(revokedAdminUserId, [system.registered, system.tenantAdmin])
+    // Membro senza ruoli: ensureRegisteredRole gli aggiunge il ruolo base.
+    await joinTenant(registeredOnlyUserId)
     // Un tenant senza i due ruoli di sistema: la sola cosa che ci vive è il tenant stesso.
     const [created] = await withOwner(tx => tx.insert(tenant)
       .values({ slug: `zzz-authroles-${unique()}`.slice(0, 40), name: 'Authorization without system roles' })
@@ -107,6 +116,7 @@ describeIntegration('authorization reads', () => {
       const [service] = await tx.insert(role).values({ description: `zzz_authroles_b_${unique()}`, idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole })
       const [perm] = await tx.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'read-users'))
       await tx.insert(rolePermission).values({ idRole: service.idRole, idPermission: perm.idPermission })
+      await tx.insert(tenantMembership).values([{ userId: bothTenantsUserId }, { userId: adminInAOnlyUserId }])
       await tx.insert(userRole).values([
         { userId: bothTenantsUserId, idRole: service.idRole },
         { userId: adminInAOnlyUserId, idRole: registered.idRole },
@@ -125,6 +135,7 @@ describeIntegration('authorization reads', () => {
     if (otherTenant !== undefined) {
       // Ogni delete nomina il tenant B: senza la sua policy un delete senza where toccherebbe anche A.
       await step(() => withOwner(async tx => {
+        await tx.delete(tenantMembership).where(eq(tenantMembership.idTenant, otherTenant!))
         await tx.delete(userRole).where(eq(userRole.idTenant, otherTenant!))
         await tx.delete(role).where(eq(role.idTenant, otherTenant!))
       }, otherTenant))

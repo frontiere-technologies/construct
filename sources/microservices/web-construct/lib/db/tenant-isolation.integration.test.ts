@@ -2,7 +2,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { eq, inArray, sql } from 'drizzle-orm'
 import {
-  appTheme, menuEntry, menuEntryTag, permission, role, roleFunctionality, rolePermission, tenant, userRole, users,
+  appTheme, menuEntry, menuEntryTag, permission, role, roleFunctionality, rolePermission, tenant, tenantMembership, userRole, users,
 } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
@@ -62,11 +62,15 @@ describeIntegration('tenant isolation in the database', () => {
     bAdminUserId = bAdmin.id
     const [aUser] = await withGlobal(tx => tx.insert(users).values({ email: `zzz_iso_a_${unique()}@example.test`, idUserStatus: 2 }).returning({ id: users.id }))
     aUserId = aUser.id
+    // Membro di A: il rifiuto del ruolo di B viene dalla chiave verso il ruolo, non dall'appartenenza mancante.
+    await withTenant(A, tx => tx.insert(tenantMembership).values({ userId: aUserId }))
 
     await withOwner(async tx => {
       const [registered] = await tx.insert(role).values({ description: 'B registered', idRoleType: ROLE_TYPE_SYSTEM, systemKey: 'REGISTERED' }).returning({ idRole: role.idRole })
       const [admin] = await tx.insert(role).values({ description: 'B admin', idRoleType: ROLE_TYPE_SYSTEM, systemKey: 'TENANT_ADMIN' }).returning({ idRole: role.idRole })
       const [service] = await tx.insert(role).values({ description: 'B service', idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole })
+      // I ruoli esistono solo con l'appartenenza al tenant (0048).
+      await tx.insert(tenantMembership).values({ userId: bAdminUserId })
       await tx.insert(userRole).values([
         { userId: bAdminUserId, idRole: registered.idRole },
         { userId: bAdminUserId, idRole: admin.idRole },
@@ -97,6 +101,7 @@ describeIntegration('tenant isolation in the database', () => {
       await step(() => withOwner(async tx => {
         await tx.delete(appTheme).where(eq(appTheme.idTenant, B))
         await tx.delete(menuEntry).where(eq(menuEntry.idTenant, B))
+        await tx.delete(tenantMembership).where(eq(tenantMembership.idTenant, B))
         await tx.delete(userRole).where(eq(userRole.idTenant, B))
         await tx.delete(role).where(eq(role.idTenant, B))
       }, B))
@@ -113,6 +118,7 @@ describeIntegration('tenant isolation in the database', () => {
     const tenants = await withTenant(A, async tx => [
       ...(await tx.select({ t: role.idTenant }).from(role)),
       ...(await tx.select({ t: userRole.idTenant }).from(userRole)),
+      ...(await tx.select({ t: tenantMembership.idTenant }).from(tenantMembership)),
       ...(await tx.select({ t: rolePermission.idTenant }).from(rolePermission)),
       ...(await tx.select({ t: menuEntry.idTenant }).from(menuEntry)),
       ...(await tx.select({ t: menuEntryTag.idTenant }).from(menuEntryTag)),
@@ -146,7 +152,7 @@ describeIntegration('tenant isolation in the database', () => {
   })
 
   it('refuses every tenant table without a tenant', async () => {
-    for (const table of [role, userRole, rolePermission, menuEntry, menuEntryTag, roleFunctionality, appTheme]) {
+    for (const table of [role, userRole, tenantMembership, rolePermission, menuEntry, menuEntryTag, roleFunctionality, appTheme]) {
       await expect(withGlobal(tx => tx.select().from(table).limit(1)))
         .rejects.toSatisfy(isMissingTenantContext)
     }
@@ -209,6 +215,7 @@ describeIntegration('tenant isolation in the database', () => {
       await withOwner(async tx => {
         const [registered] = await tx.insert(role).values({ description: 'C registered', idRoleType: ROLE_TYPE_SYSTEM, systemKey: 'REGISTERED' }).returning({ idRole: role.idRole })
         const [admin] = await tx.insert(role).values({ description: 'C admin', idRoleType: ROLE_TYPE_SYSTEM, systemKey: 'TENANT_ADMIN' }).returning({ idRole: role.idRole })
+        await tx.insert(tenantMembership).values({ userId: cAdmin.id })
         await tx.insert(userRole).values([
           { userId: cAdmin.id, idRole: registered.idRole },
           { userId: cAdmin.id, idRole: admin.idRole },
@@ -219,6 +226,7 @@ describeIntegration('tenant isolation in the database', () => {
     } finally {
       if (cAdminId !== undefined) await withGlobal(tx => tx.delete(users).where(eq(users.id, cAdminId!))).catch(() => undefined)
       await withOwner(async tx => {
+        await tx.delete(tenantMembership).where(eq(tenantMembership.idTenant, C))
         await tx.delete(userRole).where(eq(userRole.idTenant, C))
         await tx.delete(role).where(eq(role.idTenant, C))
       }, C).catch(() => undefined)
@@ -274,14 +282,24 @@ describeIntegration('tenant isolation in the database', () => {
     const [temp] = await withGlobal(tx => tx.insert(users).values({ email: `zzz_iso_tmp_${unique()}@example.test`, idUserStatus: 2 }).returning({ id: users.id }))
     try {
       const [aRegistered] = await withTenant(A, tx => tx.select({ idRole: role.idRole }).from(role).where(eq(role.systemKey, 'REGISTERED')))
-      await withTenant(A, tx => tx.insert(userRole).values({ userId: temp.id, idRole: aRegistered.idRole }))
-      await withOwner(tx => tx.insert(userRole).values({ userId: temp.id, idRole: bRoleId }), B)
-      // Le due appartenenze esistono, una per tenant, prima della cancellazione.
+      await withTenant(A, async tx => {
+        await tx.insert(tenantMembership).values({ userId: temp.id })
+        await tx.insert(userRole).values({ userId: temp.id, idRole: aRegistered.idRole })
+      })
+      await withOwner(async tx => {
+        await tx.insert(tenantMembership).values({ userId: temp.id })
+        await tx.insert(userRole).values({ userId: temp.id, idRole: bRoleId })
+      }, B)
+      // Le due appartenenze esistono, una per tenant, con i loro ruoli, prima della cancellazione.
+      expect(await withTenant(A, tx => tx.select().from(tenantMembership).where(eq(tenantMembership.userId, temp.id)))).toHaveLength(1)
+      expect(await withTenant(B, tx => tx.select().from(tenantMembership).where(eq(tenantMembership.userId, temp.id)))).toHaveLength(1)
       expect(await withTenant(A, tx => tx.select().from(userRole).where(eq(userRole.userId, temp.id)))).toHaveLength(1)
       expect(await withTenant(B, tx => tx.select().from(userRole).where(eq(userRole.userId, temp.id)))).toHaveLength(1)
     } finally {
       await withGlobal(tx => tx.delete(users).where(eq(users.id, temp.id)))
     }
+    expect(await withTenant(A, tx => tx.select().from(tenantMembership).where(eq(tenantMembership.userId, temp.id)))).toHaveLength(0)
+    expect(await withTenant(B, tx => tx.select().from(tenantMembership).where(eq(tenantMembership.userId, temp.id)))).toHaveLength(0)
     expect(await withTenant(A, tx => tx.select().from(userRole).where(eq(userRole.userId, temp.id)))).toHaveLength(0)
     expect(await withTenant(B, tx => tx.select().from(userRole).where(eq(userRole.userId, temp.id)))).toHaveLength(0)
   })

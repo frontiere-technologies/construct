@@ -3,7 +3,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
-import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
+import { permission, role, rolePermission, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import type { Actor } from './actor'
 
@@ -63,7 +63,11 @@ async function makeUser(roleIds: number[]): Promise<string> {
     idUserStatus: ACTIVE,
   }).returning({ id: users.id }))
   created.push(user.id)
-  await withTenant(defaultTestTenant(), tx => tx.insert(userRole).values(roleIds.map(idRole => ({ userId: user.id, idRole }))))
+  await withTenant(defaultTestTenant(), async tx => {
+    // I ruoli esistono solo con l'appartenenza al tenant (0048).
+    await tx.insert(tenantMembership).values({ userId: user.id })
+    await tx.insert(userRole).values(roleIds.map(idRole => ({ userId: user.id, idRole })))
+  })
   return user.id
 }
 

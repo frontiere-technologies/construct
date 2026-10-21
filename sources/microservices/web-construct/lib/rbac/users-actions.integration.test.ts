@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
-import { userRole, users } from '@/lib/db/schema'
+import { tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 
 const created: string[] = []
@@ -50,7 +50,11 @@ describeIntegration('atomic last-active-administrator invariant', () => {
       idUserStatus: 2,
     }).returning({ id: users.id }))
     created.push(user.id)
-    await withTenant(defaultTestTenant(), tx => tx.insert(userRole).values([{ userId: user.id, idRole: 0 }, { userId: user.id, idRole: 1 }]))
+    await withTenant(defaultTestTenant(), async tx => {
+      // I ruoli esistono solo con l'appartenenza al tenant (0048).
+      await tx.insert(tenantMembership).values({ userId: user.id })
+      await tx.insert(userRole).values([{ userId: user.id, idRole: 0 }, { userId: user.id, idRole: 1 }])
+    })
     return user.id
   }
 
