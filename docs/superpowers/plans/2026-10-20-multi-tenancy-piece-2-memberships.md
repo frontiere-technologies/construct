@@ -588,7 +588,7 @@ Link per impostare la password (valido 48 ore): <AUTH_URL>/set-password?token=<t
 L'ultima riga c'è solo per un account nuovo. Senza `AUTH_URL` stampa il percorso
 `/set-password?token=<token>` e, sotto, `AUTH_URL non impostata: anteponi l'indirizzo del sito.`
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 `migration-lib.test.mjs`:
 
@@ -617,18 +617,18 @@ it('links an existing account without printing a link', …)
 it('a duplicate slug fails with exit code 1 and leaves no account, membership or tenant behind', …)
 ```
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `cd sources/microservices/web-construct && npm run test:migrations`
 Expected: FAIL, `parseTenantCreateArguments` non esportata.
 
-- [ ] **Step 3: Implementa**
+- [✅] **Step 3: Implementa**
 
 - Migrazione 0051 con `register_tenant_admin` e il suo `revoke`; `test-apply`, `schema-write`, `schema-check`.
 - `db.mjs`: `runTenantCreate(url, options)` con `postgres(url, { prepare: false, max: 1 })` e una transazione: `set local role construct_owner`; `create_tenant_from_template`; `set_config('app.tenant_id', <nuovo id>, true)`; `register_tenant_admin`; stampa. Un errore annulla tutto e segue la gestione di oggi (`ERROR: …`, codice d'uscita 1). Aggiungi i due comandi a `supported` e alla riga d'uso.
 - `README.md`: nella parte sui comandi di `db.mjs`, `tenant-create` con l'esempio di §3.3 e i due limiti noti di §5.3 della specifica (tenant usabili dal pezzo 4, modello modificabile solo via SQL).
 
-- [ ] **Step 4: Verifica che passino**
+- [✅] **Step 4: Verifica che passino**
 
 Run: `npm run test:migrations && npm run test:integration -- lib/tenancy/tenant-create-command.integration.test.ts`
 Expected: PASS.
@@ -636,7 +636,7 @@ Expected: PASS.
 Run: `npm run test:env-contract && npm run test:docs-contract`
 Expected: PASS, nessuna variabile d'ambiente nuova.
 
-- [ ] **Step 5: Spunta MT2-OK-4 nella specifica e commit**
+- [✅] **Step 5: Spunta MT2-OK-4 nella specifica e commit**
 
 ```bash
 git add sources/devops/db sources/microservices/web-construct/lib README.md docs/superpowers/specs/2026-10-20-multi-tenancy-piece-2-memberships-design.md
