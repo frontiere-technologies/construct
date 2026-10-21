@@ -28,6 +28,30 @@ export async function withOwner<T>(fn: (tx: OwnerTx) => Promise<T>, tenantId?: T
   })
 }
 
+/**
+ * Solo per i test di integrazione: cancella un tenant creato da un fixture. Toglie le sue righe da
+ * ogni tabella di tenant del registro `app_private.table_class` (così una tabella nuova non resta
+ * indietro), poi la riga di `tenant`. Rifiuta il predefinito e il modello, che vivono in ogni
+ * database di test.
+ */
+export async function deleteTenantForTest(tenantId: TenantId): Promise<void> {
+  await withOwner(async tx => {
+    const [target] = await tx.execute<{ slug: string; is_template: boolean }>(
+      sql`select slug, is_template from public.tenant where id = ${tenantId}`)
+    if (!target) return
+    if (target.slug === 'default' || target.is_template) {
+      throw new Error(`deleteTenantForTest refuses to delete tenant ${target.slug}`)
+    }
+    const tables = await tx.execute<{ name: string }>(
+      sql`select table_name as name from app_private.table_class where class = 'tenant' order by table_name`)
+    // Le chiavi esterne fra tabelle di tenant sono tutte in cascata: l'ordine non conta.
+    for (const { name } of tables) {
+      await tx.execute(sql`delete from ${sql.identifier('public')}.${sql.identifier(name)} where id_tenant = ${tenantId}`)
+    }
+    await tx.execute(sql`delete from public.tenant where id = ${tenantId}`)
+  }, tenantId)
+}
+
 export async function closeOwner(): Promise<void> {
   await owner?.close()
   owner = null

@@ -236,7 +236,7 @@ merge, come per il pezzo 1.
 
 ### 5.2 Rischi
 
-- [ ] ID=MT2-RISK-1, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Copia dal modello sotto RLS forzata, Fix description=La funzione di copia deve leggere un tenant e scriverne un altro con la RLS forzata anche per il proprietario. Va coperta da un test che confronta modello e copia riga per riga, e da uno che verifica che nessuna riga del modello sia cambiata.
+- [✅] ID=MT2-RISK-1, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Copia dal modello sotto RLS forzata, Fix description=La funzione di copia deve leggere un tenant e scriverne un altro con la RLS forzata anche per il proprietario. Va coperta da un test che confronta modello e copia riga per riga, e da uno che verifica che nessuna riga del modello sia cambiata.
 - [ ] ID=MT2-RISK-2, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Utenti oggi senza ruoli, Fix description=Anche chi esiste senza ruoli riceve l'appartenenza dalla migrazione (§2.2), così la pagina Utenti resta uguale. Verificare sul database di sviluppo, prima e dopo la migrazione, che il numero di utenti e quello delle appartenenze al predefinito coincidano.
 - [✅] ID=MT2-RISK-3, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Viaggi in più per l'appartenenza, Fix description=Lo stato dell'appartenenza entra nell'istruzione unica dell'autorizzazione; i tetti del test dei viaggi non devono salire.
 

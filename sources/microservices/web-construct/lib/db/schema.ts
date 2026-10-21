@@ -76,7 +76,11 @@ export const tenant = pgTable('tenant', {
   status: text('status').notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
-})
+  // Il tenant modello da cui si copia ogni tenant nuovo (specifica 2026-10-20, §2.3, 0050): al massimo uno.
+  isTemplate: boolean('is_template').notNull().default(false),
+}, (t) => [
+  uniqueIndex('tenant_single_template').on(t.isTemplate).where(sql`${t.isTemplate}`),
+])
 
 /** Il colore principale dell'app: una riga per tenant (0046; era una riga sola, 0031). */
 export const appTheme = pgTable('app_theme', {
