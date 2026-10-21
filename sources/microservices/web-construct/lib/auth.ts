@@ -1,3 +1,4 @@
+import type { NextRequest } from 'next/server'
 import NextAuth from 'next-auth'
 import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id'
 import Google from 'next-auth/providers/google'
@@ -9,6 +10,7 @@ import { withGlobal } from '@/lib/db/tenant-db'
 import { users, allowedDomains } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { authConfig, mergeAuthCallbacks } from '@/lib/auth.config'
+import { keepOnRequestHost } from '@/lib/auth-host-redirect'
 import { resolveUserAuthorization } from '@/lib/rbac/auth-roles'
 import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
 import { isMembershipDeactivated } from '@/lib/tenancy/membership'
@@ -169,8 +171,11 @@ function buildProviders() {
   return providers
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const nextAuth = NextAuth({
   ...authConfig,
+  // Lo stesso processo risponde su più indirizzi (a.localhost, b.localhost, …): Auth.js si fida
+  // dell'indirizzo della richiesta invece di pretendere AUTH_URL (pezzo 4, MT4-RISK-1).
+  trustHost: true,
   providers: buildProviders(),
   session: { strategy: 'jwt' as const },
   callbacks: mergeAuthCallbacks({
@@ -247,3 +252,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   }),
 })
+
+export const { auth, signIn, signOut } = nextAuth
+
+// Con AUTH_URL impostata next-auth costruisce ogni indirizzo di ritorno su AUTH_URL anche con
+// trustHost: questi handler li riportano sull'indirizzo della richiesta (lib/auth-host-redirect.ts).
+export const handlers = {
+  GET: async (request: NextRequest) => keepOnRequestHost(request, await nextAuth.handlers.GET(request)),
+  POST: async (request: NextRequest) => keepOnRequestHost(request, await nextAuth.handlers.POST(request)),
+}

@@ -108,7 +108,7 @@ sull'indirizzo della richiesta: tutto il resto del piano si appoggia su questo.
 **Interfaces:**
 - Produces: `normalizeHost(raw: string | null | undefined): string | null` (minuscolo, senza porta, senza punto finale; `null` se vuoto o non valido); `readRequestHost(): Promise<string | null>` (da `headers()` di Next, intestazione `host`; `x-forwarded-host` solo se `TRUST_FORWARDED_HOST === 'true'`, documentata in `.env.template` e nel contratto delle variabili).
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 ```ts
 it('normalizes case, port and trailing dot', () => {
@@ -126,12 +126,12 @@ E2E `test_login_stays_on_subdomain`: con il server `web-construct-e2e`, l'access
 l'uscita riporta a `http://a.localhost:3000/login`. In questo task il tenant è ancora quello
 predefinito: il test verifica solo l'indirizzo.
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `cd sources/microservices/web-construct && npx vitest run lib/tenancy/request-host.test.ts`
 Expected: FAIL, modulo mancante. L'E2E fallisce con il ritorno su `localhost:3000`.
 
-- [ ] **Step 3: Implementa**
+- [✅] **Step 3: Implementa**
 
 `request-host.ts`; `trustHost: true` in `NextAuth({...})`; `allowedDevOrigins`. Poi una sonda
 temporanea (non committata): registra `readRequestHost()` dentro il callback `jwt` chiamato sia dal
@@ -140,7 +140,7 @@ proxy sia da una pagina e da una rotta `app/api`, su `a.localhost`; annota nel r
 esempio leggere l'intestazione nel proxy e non chiamare `headers()` nel callback) va scritta nel
 rapporto e usata dal Task 4.
 
-- [ ] **Step 4: Verifica che passino**
+- [✅] **Step 4: Verifica che passino**
 
 Run: `npx vitest run lib/tenancy/request-host.test.ts && npm run test:env-contract`
 Expected: PASS.
@@ -148,7 +148,7 @@ Expected: PASS.
 Il controllore avvia `web-construct-e2e`; poi, dalla radice: `uv run pytest sources/tests/e2e/test_tenants.py -k stays_on_subdomain` e `uv run pytest sources/tests/e2e/test_auth.py`
 Expected: PASS.
 
-- [ ] **Step 5: Spunta MT4-RISK-1 e MT4-RISK-2 nella specifica e commit**
+- [✅] **Step 5: Spunta MT4-RISK-1 e MT4-RISK-2 nella specifica e commit**
 
 ```bash
 git commit -m "feat(tenancy): read the request host and serve auth on several hosts"

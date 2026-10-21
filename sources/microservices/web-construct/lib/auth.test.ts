@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -7,9 +8,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 const mocks = vi.hoisted(() => ({
   config: undefined as undefined | {
+    trustHost?: boolean
     providers: Array<{ id: string; authorize: (credentials: unknown, request?: unknown) => Promise<unknown> }>
     callbacks: { signIn: (params: unknown) => Promise<boolean> }
   },
+  // La risposta che i finti handler di NextAuth restituiscono.
+  handlerResponse: () => new Response(null) as Response,
   isMembershipDeactivated: vi.fn(),
   verifyCredentialCandidate: vi.fn(),
   resolveRequestTenant: vi.fn(),
@@ -24,7 +28,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('next-auth', () => ({
   default: (config: typeof mocks.config) => {
     mocks.config = config
-    return { handlers: {}, auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn() }
+    const handler = async () => mocks.handlerResponse()
+    return { handlers: { GET: handler, POST: handler }, auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn() }
   },
 }))
 vi.mock('next-auth/providers/credentials', () => ({ default: (options: unknown) => options }))
@@ -73,11 +78,12 @@ vi.mock('@/lib/db/tenant-db', () => {
 
 vi.stubEnv('AUTH_TEST_CREDENTIALS', 'true')
 vi.stubEnv('NEXT_PUBLIC_AUTH_TEST_MODE', 'true')
+vi.stubEnv('AUTH_URL', 'http://localhost:3000')
 
 const schema = await import('@/lib/db/schema')
 mocks.tables.users = schema.users
 mocks.tables.allowedDomains = schema.allowedDomains
-await import('./auth')
+const { handlers } = await import('./auth')
 
 const TENANT = 1
 const USER = { id: 'user-1', email: 'persona@example.test', name: 'Persona', passwordHash: 'hash', idUserStatus: 2 }
@@ -192,5 +198,28 @@ describe('signIn callback for OIDC', () => {
 
     expect(await mocks.config!.callbacks.signIn(params)).toBe(false)
     expect(mocks.isMembershipDeactivated).not.toHaveBeenCalled()
+  })
+})
+
+describe('several hosts (MT4-RISK-1)', () => {
+  it('trusts the request host', () => {
+    expect(mocks.config?.trustHost).toBe(true)
+  })
+
+  it('keeps the sign-in return on the request host instead of AUTH_URL', async () => {
+    mocks.handlerResponse = () => Response.json({ url: 'http://localhost:3000/' })
+    const request = new NextRequest('http://a.localhost:3000/api/auth/callback/test', {
+      method: 'POST',
+      headers: { 'X-Auth-Return-Redirect': '1' },
+    })
+
+    expect(await (await handlers.POST(request)).json()).toEqual({ url: '/' })
+  })
+
+  it('keeps the redirects of the GET handler on the request host', async () => {
+    mocks.handlerResponse = () => Response.redirect('http://localhost:3000/login?error=Configuration', 302)
+    const response = await handlers.GET(new NextRequest('http://a.localhost:3000/api/auth/error'))
+
+    expect(response.headers.get('location')).toBe('/login?error=Configuration')
   })
 })
