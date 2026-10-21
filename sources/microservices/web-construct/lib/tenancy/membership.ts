@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm'
-import { tenantMembership, userRole } from '@/lib/db/schema'
+import { tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
@@ -38,6 +38,21 @@ export async function isMembershipDeactivated(tenantId: TenantId, userId: string
     .where(eq(tenantMembership.userId, userId))
     .limit(1))
   return row?.status === MEMBERSHIP_DEACTIVATED
+}
+
+/**
+ * L'email di una persona che è membro del tenant indicato, in qualunque stato (anche disattivato),
+ * oppure `null`. Chi è membro solo di altri tenant risponde come un id che non esiste: la RLS mostra
+ * soltanto le appartenenze del tenant della transazione, e chi chiama non può distinguere i due casi.
+ */
+export async function tenantMemberEmail(tenantId: TenantId, userId: string): Promise<string | null> {
+  const [row] = await withTenant(tenantId, tx => tx
+    .select({ email: users.email })
+    .from(tenantMembership)
+    .innerJoin(users, eq(users.id, tenantMembership.userId))
+    .where(eq(tenantMembership.userId, userId))
+    .limit(1))
+  return row?.email ?? null
 }
 
 /**

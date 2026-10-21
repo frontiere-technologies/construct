@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { eq } from 'drizzle-orm'
-import { withGlobal } from '@/lib/db/tenant-db'
-import { users } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { deniedActor } from '@/lib/rbac/route-denial'
 import { prepareInvitation } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
+import { tenantMemberEmail } from '@/lib/tenancy/membership'
 
 const log = createLogger('admin:send-invite')
 
@@ -21,14 +19,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'userId mancante.' }, { status: 400 })
   }
 
-  const [user] = await withGlobal(tx => tx.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1))
-  if (!user?.email) {
+  // Solo i membri del tenant di chi invita, in qualunque stato: una persona di un altro tenant
+  // risponde come un id che non esiste, così la risposta non rivela chi c'è altrove.
+  const email = await tenantMemberEmail(actor.tenantId, userId)
+  if (!email) {
     return NextResponse.json({ error: 'Utente non trovato.' }, { status: 404 })
   }
 
   let invitation
   try {
-    invitation = await prepareInvitation(user.email, actor.userId)
+    invitation = await prepareInvitation(email, actor.userId)
   } catch (err) {
     log.error({ err }, 'failed to prepare invite token')
     return NextResponse.json({ error: 'Errore interno.' }, { status: 500 })

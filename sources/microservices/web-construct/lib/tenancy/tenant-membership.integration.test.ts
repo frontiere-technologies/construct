@@ -4,7 +4,7 @@ import { role, tenant, tenantMembership, userRole, users } from '@/lib/db/schema
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
-import { isMembershipDeactivated } from './membership'
+import { isMembershipDeactivated, tenantMemberEmail } from './membership'
 import { getSystemRoleIds, type SystemRoleIds } from './system-roles'
 import { defaultTestTenant, tenantIdForTest } from './testing'
 import type { TenantId } from './tenant-id'
@@ -307,5 +307,24 @@ describeIntegration('tenant memberships', () => {
     expect(await isMembershipDeactivated(DEFAULT, stranger)).toBe(false)
     // La riga di un altro tenant non conta: da B la persona non ha riga.
     expect(await isMembershipDeactivated(B, deactivated)).toBe(false)
+  })
+
+  it('tenantMemberEmail finds members of the tenant in any status, and nobody else', async () => {
+    const deactivated = await createUser()
+    await withTenant(DEFAULT, tx => tx.insert(tenantMembership).values({ userId: deactivated, status: 'deactivated' }))
+    const emailOf = async (userId: string) => {
+      const [row] = await withGlobal(tx => tx.select({ email: users.email }).from(users).where(eq(users.id, userId)))
+      return row.email
+    }
+
+    expect(await tenantMemberEmail(DEFAULT, memberOfBoth)).toBe(await emailOf(memberOfBoth))
+    // Anche un membro disattivato è un membro: l'invito si può ancora rimandare.
+    expect(await tenantMemberEmail(DEFAULT, deactivated)).toBe(await emailOf(deactivated))
+    // Chi è membro soltanto di B non esiste per il predefinito, e viceversa.
+    expect(await tenantMemberEmail(DEFAULT, onlyB)).toBeNull()
+    expect(await tenantMemberEmail(B, defaultAdminUserId)).toBeNull()
+    expect(await tenantMemberEmail(B, onlyB)).toBe(await emailOf(onlyB))
+    // Un id che non esiste risponde come una persona di un altro tenant.
+    expect(await tenantMemberEmail(DEFAULT, '00000000-0000-4000-8000-000000000000')).toBeNull()
   })
 })
