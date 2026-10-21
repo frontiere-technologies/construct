@@ -590,6 +590,13 @@ async function runTenantCreate(connectionUrl, { slug, name, admin }) {
       const [registered] = await tx`
         select invitation_token as "invitationToken" from app_private.register_tenant_admin(${admin})
       `
+      // Un tenant non nasce senza un amministratore attivo: register_tenant_admin accetta anche un
+      // account disattivato a livello globale, che non conta. L'errore annulla tutta la
+      // transazione (tenant, account, appartenenza, link) e il comando esce con 1.
+      const [{ activeAdmins }] = await tx`select app_private.count_active_admins() as "activeAdmins"`
+      if (Number(activeAdmins) === 0) {
+        throw new Error('Il primo amministratore non è attivo: account disattivato a livello globale. Nessun tenant creato.')
+      }
       return { tenantId, existed, invitationToken: registered.invitationToken }
     })
 

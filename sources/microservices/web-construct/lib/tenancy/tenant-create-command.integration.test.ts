@@ -199,6 +199,34 @@ describeIntegration('db.mjs test-tenant-create', () => {
     expect(lines[3]).toBe("AUTH_URL non impostata: anteponi l'indirizzo del sito.")
   }, 60_000)
 
+  it('refuses a globally deactivated first admin with exit code 1 and leaves no tenant, membership or token', async () => {
+    // Senza password: se il comando andasse a buon fine stamperebbe anche un link.
+    const address = email()
+    const [deactivated] = await withGlobal(tx => tx.insert(users)
+      .values({ email: address, authProvider: 'credentials', idUserStatus: 1 })
+      .returning({ id: users.id }))
+    createdUserIds.push(deactivated.id)
+    const tenantsBefore = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).orderBy(tenant.id))
+
+    const newSlug = slug()
+    const result = await tenantCreate(['--slug', newSlug, '--name', 'Senza amministratore', '--admin', address])
+    if (result.code === 0) trackTenant(result.stdout)
+
+    expect(result.code).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain('Il primo amministratore non è attivo: account disattivato a livello globale. Nessun tenant creato.')
+    expect(await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).where(eq(tenant.slug, newSlug)))).toEqual([])
+    expect(await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).orderBy(tenant.id))).toEqual(tenantsBefore)
+    // Nessuna appartenenza, in nessun tenant: la riga si vedrebbe almeno dal tenant del proprio id.
+    for (const { id } of tenantsBefore) {
+      expect(await membershipIn(tenantIdForTest(id), deactivated.id)).toEqual([])
+    }
+    expect(await withGlobal(tx => tx.select({ id: passwordSetTokens.id }).from(passwordSetTokens)
+      .where(eq(passwordSetTokens.userId, deactivated.id)))).toEqual([])
+    const [account] = await withGlobal(tx => tx.select({ status: users.idUserStatus }).from(users).where(eq(users.id, deactivated.id)))
+    expect(account.status).toBe(1)
+  }, 60_000)
+
   it('a duplicate slug fails with exit code 1 and leaves no account, membership or tenant behind', async () => {
     const address = email()
     const tenantsBefore = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant))
