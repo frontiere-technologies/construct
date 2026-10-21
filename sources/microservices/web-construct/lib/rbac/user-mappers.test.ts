@@ -37,11 +37,11 @@ describe('buildUserDtos', () => {
     expect(dtos[0].roles).toEqual([{ id: 0, name: 'Registered user' }, { id: 1, name: 'Administrator' }])
     expect(dtos[1].roles).toEqual([{ id: 0, name: 'Registered user' }])
   })
-  it('maps status and constant tenancy flags', () => {
+  it('maps status and carries no tenancy flags', () => {
     expect(dtos[0].status).toEqual({ idUserStatus: 2, description: 'Active' })
     expect(dtos[1].status).toEqual({ idUserStatus: 1, description: 'Deactivated' })
-    expect(dtos[0].tenantValidationPending).toBe(false)
-    expect(dtos[0].multiTenancyEnabled).toBe(false)
+    expect(dtos[0]).not.toHaveProperty('tenantValidationPending')
+    expect(dtos[0]).not.toHaveProperty('multiTenancyEnabled')
   })
   it('falls back to the role id as name when unknown', () => {
     const d = buildUserDtos([userRows[0]], [{ user_id: 'u1', id_role: 99 }], new Map())

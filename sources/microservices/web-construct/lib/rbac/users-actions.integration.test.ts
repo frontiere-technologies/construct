@@ -61,7 +61,7 @@ describeIntegration('atomic last-active-administrator invariant', () => {
   it('rejects removal or deactivation of the only active administrator', async () => {
     const id = await admin()
     await expectLastAdminConflict(withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.replace_user_roles_guarded(${id}, array[0]::bigint[])`)))
-    await expectLastAdminConflict(withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.set_user_status_guarded(${id}, 1)`)))
+    await expectLastAdminConflict(withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.set_membership_status_guarded(${id}, 'deactivated')`)))
   })
 
   it('serializes competing mutations so one active administrator remains', async () => {
@@ -69,7 +69,7 @@ describeIntegration('atomic last-active-administrator invariant', () => {
     const second = await admin()
     const results = await Promise.allSettled([
       withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.replace_user_roles_guarded(${first}, array[0]::bigint[])`)),
-      withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.set_user_status_guarded(${second}, 1)`)),
+      withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.set_membership_status_guarded(${second}, 'deactivated')`)),
     ])
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)

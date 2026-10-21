@@ -2,13 +2,27 @@ import { cache } from 'react'
 import { and, asc, desc, count, eq, exists, gte, ilike, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
 import { QueryBuilder } from 'drizzle-orm/pg-core'
 import { withTenant } from '@/lib/db/tenant-db'
-import { users, userRole } from '@/lib/db/schema'
+import { users, userRole, tenantMembership } from '@/lib/db/schema'
+import { MEMBERSHIP_ACTIVE, MEMBERSHIP_DEACTIVATED, type MembershipStatus } from '@/lib/tenancy/membership'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { escapeLikePattern, normalizeTextSearch } from '@/lib/grid-text-search'
 import { getAllRoles } from './roles-service'
 import { isSupportedRbacInclusiveDateTo, nextDay } from './date-utils'
 import { USER_SORT_COLUMN, buildUserDtos, type UserRow, type UserRoleRow } from './user-mappers'
-import type { UserDto, UsersQuery } from './types'
+import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED, type UserDto, type UsersQuery, type UserStatusId } from './types'
+
+/**
+ * Lo stato visibile di una persona è quello della sua appartenenza al tenant (MT2-DEC-3), tradotto
+ * negli id di sempre: 2 attivo, 1 disattivato. Serve alla colonna, all'ordinamento e al filtro,
+ * così l'aspetto della pagina non cambia (MT2-OK-1). I letterali costanti sono scritti nel testo SQL
+ * (`sql.raw`): come parametri Postgres non saprebbe che tipo hanno.
+ */
+export const userStatusIdSql = sql<UserStatusId>`case ${tenantMembership.status} when ${sql.raw(`'${MEMBERSHIP_ACTIVE}'`)} then ${sql.raw(String(USER_STATUS_ACTIVE))} else ${sql.raw(String(USER_STATUS_DEACTIVATED))} end`
+
+const MEMBERSHIP_STATUS_BY_ID: Record<UserStatusId, MembershipStatus> = {
+  [USER_STATUS_ACTIVE]: MEMBERSHIP_ACTIVE,
+  [USER_STATUS_DEACTIVATED]: MEMBERSHIP_DEACTIVATED,
+}
 
 const SORT_COLUMNS = {
   first_name: users.firstName,
@@ -16,7 +30,7 @@ const SORT_COLUMNS = {
   email: users.email,
   created_at: users.createdAt,
   updated_at: users.updatedAt,
-  id_user_status: users.idUserStatus,
+  id_user_status: userStatusIdSql,
 } as const
 
 function textSearchCondition(
@@ -38,7 +52,7 @@ export function applyUserFilters(query: UsersQuery, roleIds: number[] | undefine
   const emailCondition = textSearchCondition(query.emailSearch, [users.email])
   if (nameCondition) conditions.push(nameCondition)
   if (emailCondition) conditions.push(emailCondition)
-  if (query.statuses?.length) conditions.push(inArray(users.idUserStatus, query.statuses))
+  if (query.statuses?.length) conditions.push(inArray(tenantMembership.status, query.statuses.map(id => MEMBERSHIP_STATUS_BY_ID[id])))
   if (query.createdFrom) conditions.push(gte(users.createdAt, query.createdFrom))
   if (query.createdTo) {
     if (!isSupportedRbacInclusiveDateTo(query.createdTo)) throw new Error('createdTo exceeds the supported inclusive upper bound')
@@ -78,14 +92,15 @@ export const listUsers = cache(async (tenantId: TenantId, query: UsersQuery): Pr
       const rows = await tx
         .select({
           id: users.id, first_name: users.firstName, last_name: users.lastName, email: users.email,
-          created_at: users.createdAt, updated_at: users.updatedAt, id_user_status: users.idUserStatus,
+          created_at: users.createdAt, updated_at: users.updatedAt, id_user_status: userStatusIdSql,
         })
-        .from(users)
+        .from(tenantMembership)
+        .innerJoin(users, eq(users.id, tenantMembership.userId))
         .where(where)
         .orderBy(...orderBy)
         .limit(query.size)
         .offset(from)
-      const [{ value }] = await tx.select({ value: count() }).from(users).where(where)
+      const [{ value }] = await tx.select({ value: count() }).from(tenantMembership).innerJoin(users, eq(users.id, tenantMembership.userId)).where(where)
       userRows = rows as unknown as UserRow[]
       total = value
     } catch (err) {
@@ -113,7 +128,8 @@ export const countUsers = cache(async (tenantId: TenantId, query: UsersQuery): P
   const conditions = applyUserFilters(query, query.roleIds)
   const where = conditions.length ? and(...conditions) : undefined
   try {
-    const [{ value }] = await withTenant(tenantId, tx => tx.select({ value: count() }).from(users).where(where))
+    const [{ value }] = await withTenant(tenantId, tx => tx.select({ value: count() }).from(tenantMembership)
+      .innerJoin(users, eq(users.id, tenantMembership.userId)).where(where))
     return value
   } catch (err) {
     throw new Error(`Failed to count users: ${err instanceof Error ? err.message : String(err)}`)

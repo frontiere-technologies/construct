@@ -1,7 +1,8 @@
 import { eq, sql } from 'drizzle-orm'
-import { tenantMembership } from '@/lib/db/schema'
+import { tenantMembership, userRole } from '@/lib/db/schema'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
+import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 
 /** Lo stato di un'appartenenza a un tenant (specifica 2026-10-20, §2.1). */
@@ -45,4 +46,22 @@ export async function isMembershipDeactivated(tenantId: TenantId, userId: string
  */
 export async function joinDefaultTenant(userId: string): Promise<MembershipStatus | null> {
   return withTenant(await resolveRequestTenant(), tx => ensureDefaultMembership(tx, userId))
+}
+
+/**
+ * Aggiunta per email (MT2-DEC-5): dà alla persona l'appartenenza attiva al tenant della
+ * transazione. Se la riga esiste già, qualunque ne sia lo stato, non cambia niente e ritorna
+ * `false`: un'appartenenza disattivata non si riattiva da qui (solo "Attiva" della pagina Utenti
+ * lo fa) e i ruoli già assegnati non si toccano. Solo se crea la riga aggiunge il ruolo base
+ * `REGISTERED` del tenant e ritorna `true`.
+ */
+export async function addTenantMember(tx: TenantTx, userId: string): Promise<boolean> {
+  const created = await tx.insert(tenantMembership)
+    .values({ userId, status: MEMBERSHIP_ACTIVE })
+    .onConflictDoNothing()
+    .returning({ userId: tenantMembership.userId })
+  if (created.length === 0) return false
+  const system = await getSystemRoleIds(tx)
+  await tx.insert(userRole).values({ userId, idRole: system.registered }).onConflictDoNothing()
+  return true
 }

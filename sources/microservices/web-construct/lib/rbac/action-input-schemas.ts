@@ -19,3 +19,6 @@ export const rolePermissionDeltasSchema = z.object({
   functionalities: z.array(delta),
   operations: z.array(delta),
 })
+
+// Maiuscole e spazi non devono creare un secondo account: l'email si normalizza prima di cercarla.
+export const emailSchema = z.string().trim().toLowerCase().email().max(254)

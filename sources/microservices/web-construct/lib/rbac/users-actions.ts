@@ -2,14 +2,22 @@
 
 import { and, eq, sql } from 'drizzle-orm'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
-import { userRole } from '@/lib/db/schema'
+import { withGlobal, withTenant, type TenantTx } from '@/lib/db/tenant-db'
+import { userRole, users } from '@/lib/db/schema'
+import { prepareInvitation } from '@/lib/auth-invitations'
+import { sendInvitationEmail } from '@/lib/invitation-email'
+import { createLogger } from '@/lib/logger'
+import { addTenantMember, MEMBERSHIP_ACTIVE, MEMBERSHIP_DEACTIVATED } from '@/lib/tenancy/membership'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
-import { roleIdsSchema, userIdSchema, userStatusSchema } from './action-input-schemas'
+import { emailSchema, roleIdsSchema, userIdSchema, userStatusSchema } from './action-input-schemas'
 import { assertCanChangeRoles, assertCanChangeStatus, symmetricDifference } from './grant-guards'
 import { currentRoleIds, functionalityIdsForRoles, grantsForRoles } from './grant-service'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
-import type { UserStatusId } from './types'
+import { USER_STATUS_ACTIVE, type UserStatusId } from './types'
+
+const log = createLogger('users-actions')
+
+const NOT_A_MEMBER_MESSAGE = 'La persona non fa parte di questo tenant'
 
 async function userIsAdmin(tx: TenantTx, userId: string, tenantAdminId: number): Promise<boolean> {
   try {
@@ -24,14 +32,18 @@ async function userIsAdmin(tx: TenantTx, userId: string, tenantAdminId: number):
   }
 }
 
-function isLastAdministratorConflict(error: unknown): boolean {
+/** Vero se l'errore, o una delle sue cause (Drizzle avvolge l'eccezione di Postgres), porta il codice. */
+function hasErrorCode(error: unknown, code: string): boolean {
   let current: unknown = error
   while (current && typeof current === 'object') {
-    if ('message' in current && String(current.message).includes('last_active_administrator')) return true
+    if ('message' in current && String(current.message).includes(code)) return true
     current = 'cause' in current ? current.cause : undefined
   }
   return false
 }
+
+const isLastAdministratorConflict = (error: unknown) => hasErrorCode(error, 'last_active_administrator')
+const isNotAMember = (error: unknown) => hasErrorCode(error, 'not_a_member')
 
 export async function updateUserRoles(userId: string, roleIds: number[]): Promise<void> {
   const actor = await requirePermission('assign-user-roles')
@@ -66,6 +78,7 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
       await tx.execute(sql`select public.replace_user_roles_guarded(${userId}, ${roleIdsArray}::bigint[])`)
     } catch (err) {
       if (isLastAdministratorConflict(err)) throw new Error("Non puoi rimuovere l'ultimo amministratore attivo")
+      if (isNotAMember(err)) throw new Error(NOT_A_MEMBER_MESSAGE)
       throw new Error(`Failed to assign roles: ${err instanceof Error ? err.message : String(err)}`)
     }
   })
@@ -93,10 +106,52 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
     }
 
     try {
-      await tx.execute(sql`select public.set_user_status_guarded(${userId}, ${status})`)
+      // La disattivazione è per tenant (MT2-DEC-3): agisce sull'appartenenza, non sull'account.
+      const membershipStatus = status === USER_STATUS_ACTIVE ? MEMBERSHIP_ACTIVE : MEMBERSHIP_DEACTIVATED
+      await tx.execute(sql`select public.set_membership_status_guarded(${userId}, ${membershipStatus})`)
     } catch (err) {
       if (isLastAdministratorConflict(err)) throw new Error("Non puoi disattivare l'ultimo amministratore attivo")
+      if (isNotAMember(err)) throw new Error(NOT_A_MEMBER_MESSAGE)
       throw new Error(`Failed to update status: ${err instanceof Error ? err.message : String(err)}`)
     }
   })
+}
+
+/**
+ * Aggiunge una persona al tenant dell'attore, cercandola per email esatta (MT2-DEC-5, MT2-DEC-6).
+ * La risposta è `{ ok: true }` per un account esistente come per uno sconosciuto e non dice niente
+ * degli altri tenant: chi scrive un'email non scopre se quella persona esiste altrove. Un account
+ * nuovo nasce senza password e riceve l'email d'invito; un errore d'invio si registra nel log e non
+ * cambia la risposta. Un'appartenenza disattivata resta disattivata (`addTenantMember`).
+ *
+ * Limite noto: l'email parte solo per un account nuovo, quindi il tempo di risposta può differire;
+ * il contenuto della risposta no. È lo stesso limite di oggi della registrazione.
+ */
+export async function addUserByEmail(email: string): Promise<{ ok: true }> {
+  const actor = await requirePermission('invite-users')
+  const parsed = emailSchema.safeParse(email)
+  if (!parsed.success) throw new Error('Email non valida')
+  const normalizedEmail = parsed.data
+
+  // `prepareInvitation` crea l'account se manca e ritorna `null` quando ha già una password.
+  const invitation = await prepareInvitation(normalizedEmail, actor.userId)
+  const userId = invitation?.userId ?? await findUserIdByEmail(normalizedEmail)
+  await withTenant(actor.tenantId, tx => addTenantMember(tx, userId))
+
+  if (invitation) {
+    // L'appartenenza c'è già: l'invito porta la persona a un tenant a cui può accedere.
+    try {
+      const sent = await sendInvitationEmail(invitation)
+      if (!sent.ok) log.error({ code: sent.code }, 'invitation email not sent')
+    } catch (err) {
+      log.error({ err }, 'invitation email failed')
+    }
+  }
+  return { ok: true }
+}
+
+async function findUserIdByEmail(email: string): Promise<string> {
+  const [row] = await withGlobal(tx => tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1))
+  if (!row) throw new Error('Failed to add user: account not found')
+  return row.id
 }
