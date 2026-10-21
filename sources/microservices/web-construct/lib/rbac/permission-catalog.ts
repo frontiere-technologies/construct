@@ -32,6 +32,8 @@ export const PERMISSION_CODES = [
   'read-translations',
   'edit-translations',
   'manage-translation-keys',
+  // Amministrazione: le impostazioni del tenant (specifica 2026-10-21, MT4-DEC-10, 0053)
+  'manage-tenant-settings',
 ] as const
 
 export type PermissionCode = (typeof PERMISSION_CODES)[number]

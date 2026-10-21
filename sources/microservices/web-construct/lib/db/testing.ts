@@ -48,6 +48,8 @@ export async function deleteTenantForTest(tenantId: TenantId): Promise<void> {
     for (const { name } of tables) {
       await tx.execute(sql`delete from ${sql.identifier('public')}.${sql.identifier(name)} where id_tenant = ${tenantId}`)
     }
+    // Gli indirizzi del tenant (0053): tabella globale, fuori dal registro delle tabelle di tenant.
+    await tx.execute(sql`delete from public.tenant_host where id_tenant = ${tenantId}`)
     await tx.execute(sql`delete from public.tenant where id = ${tenantId}`)
   }, tenantId)
 }

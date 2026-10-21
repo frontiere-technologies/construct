@@ -172,7 +172,7 @@ git commit -m "feat(tenancy): read the request host and serve auth on several ho
   - `app_private.copy_tenant` (`create or replace`, corpo di partenza in `0051`): copia anche `tenant_settings`; l'elenco delle tabelle note la include.
 - Produces (Drizzle): `tenantHost`, `tenantSettings`, `users.lastTenantId`; `'manage-tenant-settings'` in `PERMISSION_CODES`.
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 ```ts
 it('stores hosts lowercase and without port', …)                 // insert 'A.localhost' o 'a.localhost:3000' → errore di check
@@ -187,21 +187,21 @@ it('the TENANT_ADMIN role has manage-tenant-settings in default and template', �
 Nel test del modello (`tenant-template.integration.test.ts`), l'elenco delle tabelle note include
 `tenant_settings`.
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `npm run test:integration -- lib/tenancy/tenant-hosts-schema.integration.test.ts`
 Expected: FAIL, relazione mancante.
 
-- [ ] **Step 3: Scrivi la migrazione 0053, lo schema Drizzle e il catalogo dei permessi**
+- [✅] **Step 3: Scrivi la migrazione 0053, lo schema Drizzle e il catalogo dei permessi**
 
-- [ ] **Step 4: Applica, rigenera, verifica**
+- [✅] **Step 4: Applica, rigenera, verifica**
 
 `test-apply`, `schema-write`, `schema-check`, poi:
 Run: `npm run test:integration -- lib/tenancy lib/schema-contract.integration.test.ts && npx vitest run guards`
 Expected: PASS; `boundary-check` sul database di prova in regola
 (`set -a && . ./sources/microservices/web-construct/.env.test.local && set +a && DATABASE_URL="$TEST_DATABASE_URL" node sources/devops/db/db.mjs boundary-check`).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(tenancy): tenant hosts, tenant settings and last used tenant"
