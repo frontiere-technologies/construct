@@ -650,7 +650,7 @@ git commit -m "feat(db): tenant-create command registers the first tenant admin"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-10-20-multi-tenancy-piece-2-memberships-design.md`, `docs/input-specs/multi-tenancy/2026-10-13-multi-tenancy-deferred.md`, `docs/runbooks/legacy-rbac-recovery.md` (solo se cita `user_role` in un modo che l'appartenenza rende sbagliato)
 
-- [ ] **Step 1: Controlli completi sul database di prova**
+- [✅] **Step 1: Controlli completi sul database di prova**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint && npm run test && npm run test:migrations && npm run test:i18n-keys && npm run test:env-contract && npm run test:docs-contract && npm run build`
 Expected: nessun errore; solo gli 8 fallimenti noti di `Sidebar*`.
@@ -664,12 +664,12 @@ Expected: PASS, E2E completo (MT2-OK-1).
 Run (dalla radice): `node sources/devops/db/db.mjs schema-check` e `boundary-check` sul database di prova come nel Task 1.
 Expected: tutto in regola.
 
-- [ ] **Step 2: Spunte**
+- [✅] **Step 2: Spunte**
 
 - Specifica: MT2-OK-1, MT2-OK-2, MT2-OK-3 a `- [✅]`.
 - Documento delle cose rimandate: DEF-2.2, DEF-2.3, DEF-2.6 a `- [✅]` con "fatto nel pezzo 2"; DEF-2.1 resta aperta con la nota "tabella e stati active/deactivated nel pezzo 2; invited e pending nel pezzo 3".
 
-- [ ] **Step 3: Commit**
+- [✅] **Step 3: Commit**
 
 ```bash
 git add docs
