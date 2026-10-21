@@ -49,6 +49,7 @@ export const resolveActor = cache(async (tenantId: TenantId, userId: string): Pr
     const snapshot = await selectAuthorizationSnapshot(tx, userId, { permissionCodes: true })
     const authorization = evaluateAuthorization(
       snapshot.userExists ? snapshot.status : null,
+      snapshot.userExists ? snapshot.membershipStatus : null,
       snapshot.userExists ? snapshot.roleIds : [],
       snapshot.system.tenantAdmin,
     )

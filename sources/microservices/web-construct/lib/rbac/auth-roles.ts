@@ -1,7 +1,8 @@
 import { sql } from 'drizzle-orm'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole } from '@/lib/db/schema'
-import { ACTIVE_USER_STATUS, evaluateAuthorization } from '@/lib/auth-policy'
+import { evaluateAuthorization } from '@/lib/auth-policy'
+import { ensureDefaultMembership, isMembershipStatus, type MembershipStatus } from '@/lib/tenancy/membership'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 import type { SystemRoleIds } from '@/lib/tenancy/system-roles'
 
@@ -10,6 +11,7 @@ type UserAuthorization = { accountActive: boolean; roleIds: number[]; isAdmin: b
 export interface AuthorizationSnapshot {
   userExists: boolean
   status: number | null
+  membershipStatus: MembershipStatus | null
   roleIds: number[]
   system: SystemRoleIds
   permissionCodes: string[]
@@ -20,15 +22,16 @@ type SnapshotRow = {
   tenant_admin: string | null
   user_exists: boolean
   status: string | null
+  membership_status: string | null
   role_ids: string[] | null
   permission_codes: string[] | null
 }
 
 /**
  * Tutto ciò che serve per decidere chi è l'utente nel tenant della transazione, in una sola
- * istruzione (specifica 2026-10-15, §2.2): i due ruoli di sistema, lo stato (globale) e i ruoli nel
- * tenant, più, se richiesti, i codici dei permessi di quei ruoli. La RLS limita ruoli e
- * concessioni al tenant corrente. Le colonne bigint arrivano da postgres.js come stringhe.
+ * istruzione (specifica 2026-10-15, §2.2): i due ruoli di sistema, lo stato (globale),
+ * l'appartenenza al tenant e i ruoli nel tenant, più, se richiesti, i codici dei permessi di quei
+ * ruoli. La RLS limita appartenenza, ruoli e concessioni al tenant corrente. Le colonne bigint arrivano da postgres.js come stringhe.
  */
 export async function selectAuthorizationSnapshot(
   tx: TenantTx,
@@ -52,6 +55,7 @@ export async function selectAuthorizationSnapshot(
       (select max(r.id_role) from public.role r where r.system_key = 'TENANT_ADMIN')::text as tenant_admin,
       exists (select 1 from public.users u where u.id = ${userId}) as user_exists,
       (select u.id_user_status from public.users u where u.id = ${userId})::text as status,
+      (select m.status from public.tenant_membership m where m.user_id = ${userId}) as membership_status,
       coalesce((select array_agg(ur.id_role order by ur.id_role)::text[] from public.user_role ur where ur.user_id = ${userId}), '{}') as role_ids,
       ${codes} as permission_codes
   `)
@@ -59,6 +63,8 @@ export async function selectAuthorizationSnapshot(
   return {
     userExists: row.user_exists,
     status: row.status === null ? null : Number(row.status),
+    // La RLS lascia vedere solo l'appartenenza al tenant corrente.
+    membershipStatus: isMembershipStatus(row.membership_status) ? row.membership_status : null,
     roleIds: (row.role_ids ?? []).map(Number),
     system: { registered: Number(row.registered), tenantAdmin: Number(row.tenant_admin) },
     permissionCodes: row.permission_codes ?? [],
@@ -70,15 +76,19 @@ export async function selectUserAuthorization(
   userId: string,
   ensureRegisteredRole = false,
 ): Promise<UserAuthorization> {
+  // Solo all'accesso (callback jwt con ensureRegisteredRole): prima l'appartenenza al tenant
+  // predefinito (MT2-DEC-12), perché il ruolo base esiste solo per chi è membro.
+  if (ensureRegisteredRole) await ensureDefaultMembership(tx, userId)
   const snapshot = await selectAuthorizationSnapshot(tx, userId)
-  if (!snapshot.userExists) return evaluateAuthorization(null, [], snapshot.system.tenantAdmin)
+  if (!snapshot.userExists) return evaluateAuthorization(null, null, [], snapshot.system.tenantAdmin)
   let roleIds = snapshot.roleIds
-  // Solo all'accesso (callback jwt con ensureRegisteredRole): il ruolo base si aggiunge qui.
-  if (ensureRegisteredRole && snapshot.status === ACTIVE_USER_STATUS && !roleIds.includes(snapshot.system.registered)) {
+  // Il ruolo base si aggiunge solo a chi può agire: account e appartenenza attivi.
+  const canAct = evaluateAuthorization(snapshot.status, snapshot.membershipStatus, roleIds, snapshot.system.tenantAdmin).accountActive
+  if (ensureRegisteredRole && canAct && !roleIds.includes(snapshot.system.registered)) {
     await tx.insert(userRole).values({ userId, idRole: snapshot.system.registered }).onConflictDoNothing()
     roleIds = [...roleIds, snapshot.system.registered].sort((a, b) => a - b)
   }
-  return evaluateAuthorization(snapshot.status, roleIds, snapshot.system.tenantAdmin)
+  return evaluateAuthorization(snapshot.status, snapshot.membershipStatus, roleIds, snapshot.system.tenantAdmin)
 }
 
 export async function resolveUserAuthorization(
