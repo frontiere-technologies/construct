@@ -1,5 +1,8 @@
-import { sql } from 'drizzle-orm'
-import type { TenantTx } from '@/lib/db/tenant-db'
+import { eq, sql } from 'drizzle-orm'
+import { tenantMembership } from '@/lib/db/schema'
+import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
+import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
 
 /** Lo stato di un'appartenenza a un tenant (specifica 2026-10-20, §2.1). */
 export type MembershipStatus = 'active' | 'deactivated'
@@ -21,4 +24,25 @@ export async function ensureDefaultMembership(tx: TenantTx, userId: string): Pro
   const [row] = await tx.execute<{ status: string | null }>(
     sql`select public.ensure_default_membership(${userId}::uuid) as status`)
   return isMembershipStatus(row?.status) ? row.status : null
+}
+
+/**
+ * Vero solo se nel tenant indicato la persona ha una riga di appartenenza ed è disattivata
+ * (§3.1). Senza riga è falso: la riga la crea il primo accesso (`ensureDefaultMembership`).
+ */
+export async function isMembershipDeactivated(tenantId: TenantId, userId: string): Promise<boolean> {
+  const [row] = await withTenant(tenantId, tx => tx
+    .select({ status: tenantMembership.status })
+    .from(tenantMembership)
+    .where(eq(tenantMembership.userId, userId))
+    .limit(1))
+  return row?.status === MEMBERSHIP_DEACTIVATED
+}
+
+/**
+ * Registrazione: dà alla persona l'appartenenza al tenant predefinito, con le stesse regole del
+ * primo accesso (mai un'appartenenza disattivata riattivata, mai chi appartiene a un altro tenant).
+ */
+export async function joinDefaultTenant(userId: string): Promise<MembershipStatus | null> {
+  return withTenant(await resolveRequestTenant(), tx => ensureDefaultMembership(tx, userId))
 }

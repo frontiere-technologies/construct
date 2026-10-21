@@ -4,6 +4,7 @@ import { role, tenant, tenantMembership, userRole, users } from '@/lib/db/schema
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
+import { isMembershipDeactivated } from './membership'
 import { getSystemRoleIds, type SystemRoleIds } from './system-roles'
 import { defaultTestTenant, tenantIdForTest } from './testing'
 import type { TenantId } from './tenant-id'
@@ -175,6 +176,17 @@ describeIntegration('tenant memberships', () => {
     expect(user.status).toBe(2)
   })
 
+  it('set_membership_status_guarded reactivates a deactivated membership and leaves B untouched', async () => {
+    const userId = await createUser()
+    await withTenant(DEFAULT, tx => tx.insert(tenantMembership).values({ userId, status: 'deactivated' }))
+    await withOwner(tx => tx.insert(tenantMembership).values({ userId }), B)
+
+    await withTenant(DEFAULT, tx => tx.execute(sql`select public.set_membership_status_guarded(${userId}, 'active')`))
+
+    expect((await membershipIn(DEFAULT, userId)).map(row => row.status)).toEqual(['active'])
+    expect((await membershipIn(B, userId)).map(row => row.status)).toEqual(['active'])
+  })
+
   it('set_membership_status_guarded rejects an unknown status with invalid_user_status', async () => {
     await expectDatabaseError(
       withTenant(DEFAULT, tx => tx.execute(sql`select public.set_membership_status_guarded(${defaultAdminUserId}, 'suspended')`)),
@@ -252,8 +264,9 @@ describeIntegration('tenant memberships', () => {
     })
     expect(after[0].t).toBe(String(DEFAULT))
 
-    // Giro completo: nessun altro tenant, l'appartenenza nasce nel predefinito; la scrittura
-    // successiva della stessa transazione resta nel predefinito.
+    // Giro completo: la persona non è membro di nessun altro tenant, quindi il giro li visita
+    // tutti; l'appartenenza nasce nel predefinito e la scrittura successiva della stessa
+    // transazione resta nel predefinito.
     const userId = await createUser()
     const [{ t }] = await withTenant(DEFAULT, async tx => {
       await tx.execute(sql`select public.ensure_default_membership(${userId}::uuid)`)
@@ -277,5 +290,22 @@ describeIntegration('tenant memberships', () => {
       return tx.execute<{ t: string }>(sql`select current_setting('app.tenant_id') as t`)
     })
     expect(t).toBe(String(B))
+  })
+
+  it('isMembershipDeactivated is true only for a deactivated row', async () => {
+    const deactivated = await createUser()
+    const active = await createUser()
+    const stranger = await createUser()
+    await withTenant(DEFAULT, tx => tx.insert(tenantMembership).values([
+      { userId: deactivated, status: 'deactivated' },
+      { userId: active },
+    ]))
+
+    expect(await isMembershipDeactivated(DEFAULT, deactivated)).toBe(true)
+    expect(await isMembershipDeactivated(DEFAULT, active)).toBe(false)
+    // Senza riga non è disattivata: ci pensa il primo accesso a darle l'appartenenza.
+    expect(await isMembershipDeactivated(DEFAULT, stranger)).toBe(false)
+    // La riga di un altro tenant non conta: da B la persona non ha riga.
+    expect(await isMembershipDeactivated(B, deactivated)).toBe(false)
   })
 })
