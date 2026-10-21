@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
-import { userRole, users } from '@/lib/db/schema'
+import { tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 
 const created: string[] = []
@@ -50,14 +50,18 @@ describeIntegration('atomic last-active-administrator invariant', () => {
       idUserStatus: 2,
     }).returning({ id: users.id }))
     created.push(user.id)
-    await withTenant(defaultTestTenant(), tx => tx.insert(userRole).values([{ userId: user.id, idRole: 0 }, { userId: user.id, idRole: 1 }]))
+    await withTenant(defaultTestTenant(), async tx => {
+      // I ruoli esistono solo con l'appartenenza al tenant (0048).
+      await tx.insert(tenantMembership).values({ userId: user.id })
+      await tx.insert(userRole).values([{ userId: user.id, idRole: 0 }, { userId: user.id, idRole: 1 }])
+    })
     return user.id
   }
 
   it('rejects removal or deactivation of the only active administrator', async () => {
     const id = await admin()
     await expectLastAdminConflict(withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.replace_user_roles_guarded(${id}, array[0]::bigint[])`)))
-    await expectLastAdminConflict(withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.set_user_status_guarded(${id}, 1)`)))
+    await expectLastAdminConflict(withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.set_membership_status_guarded(${id}, 'deactivated')`)))
   })
 
   it('serializes competing mutations so one active administrator remains', async () => {
@@ -65,14 +69,13 @@ describeIntegration('atomic last-active-administrator invariant', () => {
     const second = await admin()
     const results = await Promise.allSettled([
       withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.replace_user_roles_guarded(${first}, array[0]::bigint[])`)),
-      withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.set_user_status_guarded(${second}, 1)`)),
+      withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.set_membership_status_guarded(${second}, 'deactivated')`)),
     ])
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)
+    // La definizione di "attivo" è quella del database: appartenenza attiva, account attivo, ruolo TENANT_ADMIN.
     const [{ count }] = await withTenant(defaultTestTenant(), tx => tx.execute<{ count: string }>(sql`
-      select count(distinct u.id)::text as count
-      from users u join user_role ur on ur.user_id = u.id
-      where u.id_user_status = 2 and ur.id_role = 1
+      select app_private.count_active_admins()::text as count
     `))
     expect(count).toBe('1')
   })

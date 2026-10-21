@@ -2,11 +2,27 @@
 
 Use this procedure only when upgrading a database that still has `users.role`, or when verification shows that legacy administrator assignments were not copied into `user_role`. Stop application writers before recovery. Never edit a completed migration or its recorded checksum.
 
+## Which variant applies
+
+The schema changed under `public.user_role` with the multi-tenancy migrations, so the repair SQL depends on the migration version of the database (`node sources/devops/db/db.mjs query "select max(version) from public.construct_schema_migration where completed_at is not null"`).
+
+- **Before migration 0046** (no `public.tenant`): use the legacy variant, `users.role` may still exist.
+- **0046 or 0047**: apply the pending migrations through 0048 first with the normal checksummed command, then use the tenant variant. Do not hand-write rows into `user_role` at these versions.
+- **0048 or later**: use the tenant variant. `users.role` is dropped by migration 0001, so the source of truth is an approved list of administrator emails (from the pre-migration backup or the incident record), never a guess.
+
+## Who runs the SQL
+
+- The runtime role (`construct_runtime`) cannot run the repair: it is neither allowed to bypass the tenant boundary nor to write memberships freely.
+- `construct_owner` is `NOLOGIN`. Connect with the migration identity (`MIGRATION_DATABASE_URL`, a member of `construct_owner`) and start every transaction with `set local role construct_owner;`, exactly as `sources/devops/db/db.mjs` does.
+- From 0046 the tenant tables are protected by row level security that is forced for the owner too. Every session that reads or writes `user_role`, `role` or `tenant_membership` must set the tenant first. This runbook repairs the default tenant (`slug = 'default'`).
+
 ## Preflight and backup
 
 - [ ] ID=RBAC-REC-1, Title=Stop writers, Action=Scale the web deployment to zero or otherwise prevent role/status mutations.
 - [ ] ID=RBAC-REC-2, Title=Record counts, Action=Run the preflight queries below and retain their output with the incident.
 - [ ] ID=RBAC-REC-3, Title=Create backup, Action=Create and verify a custom-format backup using the operator-only migration identity.
+
+Before migration 0046:
 
 ```sql
 select exists (
@@ -21,6 +37,19 @@ join public.user_role ur on ur.user_id = u.id and ur.id_role = 1
 where u.id_user_status = 2;
 ```
 
+Migration 0048 or later (the tenant is set first, and an active administrator needs an active membership, an active account and the `TENANT_ADMIN` role of the tenant):
+
+```sql
+begin;
+set local role construct_owner;
+select set_config('app.tenant_id', (select id::text from public.tenant where slug = 'default'), true);
+
+select app_private.count_active_admins() as active_admins;
+select count(*) as memberships, count(*) filter (where status = 'active') as active_memberships
+from public.tenant_membership;
+rollback;
+```
+
 ```bash
 pg_dump --format=custom --file=construct-before-rbac-recovery.dump "$MIGRATION_DATABASE_URL"
 pg_restore --list construct-before-rbac-recovery.dump
@@ -30,8 +59,10 @@ Stop immediately if the backup cannot be listed, the authoritative legacy value 
 
 ## Repair
 
-- [ ] ID=RBAC-REC-4, Title=Restore assignments, Action=Inside one transaction, restore Administrator role `1` from `users.role` or another approved authoritative source.
+- [ ] ID=RBAC-REC-4, Title=Restore assignments, Action=Inside one transaction, restore the tenant administrator role from `users.role` (legacy variant) or from the approved list of administrator emails (tenant variant).
 - [ ] ID=RBAC-REC-5, Title=Verify invariant, Action=Confirm at least one intended active administrator and compare the migrated count with the preflight count before commit.
+
+### Legacy variant (before migration 0046)
 
 ```sql
 begin;
@@ -48,6 +79,38 @@ begin
     join public.user_role ur on ur.user_id = u.id
     where ur.id_role = 1 and u.id_user_status = 2
   ) then
+    raise exception 'recovery would leave no active administrator';
+  end if;
+end
+$$;
+commit;
+```
+
+### Tenant variant (migration 0048 or later)
+
+Replace the email list with the approved administrators (lowercase: the comparison uses `lower(email)`). This is a break-glass procedure: the membership of each listed person is **reactivated** (`status = 'active'`) so that the administrator is usable at once; the global account status (`users.id_user_status`) is never changed here, so a globally deactivated account still fails the final check.
+
+```sql
+begin;
+set local role construct_owner;
+lock table public.users, public.tenant_membership, public.user_role in share row exclusive mode;
+
+select set_config('app.tenant_id', (select id::text from public.tenant where slug = 'default'), true);
+
+insert into public.tenant_membership (user_id, status)
+select id, 'active' from public.users
+where lower(email) = any (array['admin@example.com'])
+on conflict (id_tenant, user_id) do update set status = 'active';
+
+insert into public.user_role (user_id, id_role)
+select u.id, (select id_role from public.role where system_key = 'TENANT_ADMIN')
+from public.users u
+where lower(u.email) = any (array['admin@example.com'])
+on conflict (id_tenant, user_id, id_role) do nothing;
+
+do $$
+begin
+  if app_private.count_active_admins() = 0 then
     raise exception 'recovery would leave no active administrator';
   end if;
 end

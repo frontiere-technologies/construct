@@ -46,14 +46,21 @@ describe('authentication policy', () => {
   })
 
   it('removes all authority from a missing or deactivated account', () => {
-    expect(evaluateAuthorization(null, [1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
-    expect(evaluateAuthorization(1, [1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
-    expect(evaluateAuthorization(2, [0, 1], 1)).toEqual({ accountActive: true, roleIds: [0, 1], isAdmin: true })
+    expect(evaluateAuthorization(null, 'active', [1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(evaluateAuthorization(1, 'active', [1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(evaluateAuthorization(2, 'active', [0, 1], 1)).toEqual({ accountActive: true, roleIds: [0, 1], isAdmin: true })
+  })
+
+  it('needs an active membership as well as an active account', () => {
+    expect(evaluateAuthorization(2, 'active', [0, 1], 1)).toEqual({ accountActive: true, roleIds: [0, 1], isAdmin: true })
+    expect(evaluateAuthorization(2, 'deactivated', [0, 1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(evaluateAuthorization(2, null, [0, 1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(evaluateAuthorization(1, 'active', [0, 1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
   })
 
   it('reads administrator status from the tenant admin role id, not from a fixed id', () => {
-    expect(evaluateAuthorization(2, [0, 57], 57).isAdmin).toBe(true)
-    expect(evaluateAuthorization(2, [0, 1], 57).isAdmin).toBe(false)
+    expect(evaluateAuthorization(2, 'active', [0, 57], 57).isAdmin).toBe(true)
+    expect(evaluateAuthorization(2, 'active', [0, 1], 57).isAdmin).toBe(false)
   })
 
   it('returns the same false result for unknown, passwordless, deactivated, and wrong-password accounts', async () => {

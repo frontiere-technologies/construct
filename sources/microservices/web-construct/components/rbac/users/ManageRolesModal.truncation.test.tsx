@@ -25,8 +25,6 @@ const user: UserDto = {
   updatedAt: null,
   roles: [],
   status: { idUserStatus: 2, description: 'Active' },
-  tenantValidationPending: false,
-  multiTenancyEnabled: false,
 }
 
 let root: Root | undefined

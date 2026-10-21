@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest'
 import { and, eq, inArray } from 'drizzle-orm'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
-import { permission, role, rolePermission, tenant, userRole, users } from '@/lib/db/schema'
+import { permission, role, rolePermission, tenant, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { defaultTestTenant, tenantIdForTest } from '@/lib/tenancy/testing'
 import { getSystemRoleIds, type SystemRoleIds } from '@/lib/tenancy/system-roles'
@@ -38,6 +38,14 @@ let otherServiceRoleId: number
 let bothTenantsUserId: string
 // Amministratore in A, soltanto ruolo base in B.
 let adminInAOnlyUserId: string
+// Attivo nel predefinito, disattivato in B (con il ruolo base in B).
+let activeInAOffInBUserId: string
+// Attivo nel predefinito, senza alcuna appartenenza in B.
+let activeInAUnknownInBUserId: string
+// Membro attivo soltanto di B.
+let onlyInBUserId: string
+// Appartenenza al predefinito disattivata, senza ruoli.
+let deactivatedInAUserId: string
 const createdUserIds: string[] = []
 
 async function createUser(status: number): Promise<string> {
@@ -48,8 +56,15 @@ async function createUser(status: number): Promise<string> {
   return row.id
 }
 
+/** L'appartenenza attiva al tenant predefinito, come la 0048 la dà a ogni utente esistente. */
+async function joinTenant(userId: string): Promise<void> {
+  await withTenant(TENANT, tx => tx.insert(tenantMembership).values({ userId }))
+}
+
 async function grantRoles(userId: string, roleIds: number[]): Promise<void> {
   if (roleIds.length === 0) return
+  // I ruoli esistono solo con l'appartenenza al tenant (0048).
+  await joinTenant(userId)
   await withTenant(TENANT, tx => tx.insert(userRole).values(roleIds.map(idRole => ({ userId, idRole }))))
 }
 
@@ -57,6 +72,11 @@ async function grantRoles(userId: string, roleIds: number[]): Promise<void> {
 async function authorizationOf(userId: string, ensureRegisteredRole = false) {
   const authorization = await resolveUserAuthorization(TENANT, userId, ensureRegisteredRole)
   return { ...authorization, roleIds: [...authorization.roleIds].sort((a, b) => a - b) }
+}
+
+async function membershipStatusIn(tenantId: ReturnType<typeof tenantIdForTest>, userId: string): Promise<string | null> {
+  const rows = await withTenant(tenantId, tx => tx.select({ status: tenantMembership.status }).from(tenantMembership).where(eq(tenantMembership.userId, userId)))
+  return rows[0]?.status ?? null
 }
 
 async function rolesOf(userId: string): Promise<number[]> {
@@ -86,6 +106,10 @@ describeIntegration('authorization reads', () => {
     await grantRoles(readerUserId, [readerRoleId])
     await grantRoles(deactivatedAdminUserId, [system.registered, system.tenantAdmin])
     await grantRoles(revokedAdminUserId, [system.registered, system.tenantAdmin])
+    // Membro attivo senza ruoli: l'autorizzazione ora richiede l'appartenenza (0048, Task 2).
+    await joinTenant(plainUserId)
+    // Membro senza ruoli: ensureRegisteredRole gli aggiunge il ruolo base.
+    await joinTenant(registeredOnlyUserId)
     // Un tenant senza i due ruoli di sistema: la sola cosa che ci vive è il tenant stesso.
     const [created] = await withOwner(tx => tx.insert(tenant)
       .values({ slug: `zzz-authroles-${unique()}`.slice(0, 40), name: 'Authorization without system roles' })
@@ -101,13 +125,26 @@ describeIntegration('authorization reads', () => {
     adminInAOnlyUserId = await createUser(USER_STATUS_ACTIVE)
     await grantRoles(bothTenantsUserId, [readerRoleId])
     await grantRoles(adminInAOnlyUserId, [system.registered, system.tenantAdmin])
+    activeInAOffInBUserId = await createUser(USER_STATUS_ACTIVE)
+    activeInAUnknownInBUserId = await createUser(USER_STATUS_ACTIVE)
+    onlyInBUserId = await createUser(USER_STATUS_ACTIVE)
+    deactivatedInAUserId = await createUser(USER_STATUS_ACTIVE)
+    await grantRoles(activeInAOffInBUserId, [system.registered])
+    await grantRoles(activeInAUnknownInBUserId, [system.registered])
+    await withTenant(TENANT, tx => tx.insert(tenantMembership).values({ userId: deactivatedInAUserId, status: 'deactivated' }))
     await withOwner(async tx => {
       const [registered] = await tx.insert(role).values({ description: 'B registered', idRoleType: ROLE_TYPE_SYSTEM, systemKey: 'REGISTERED' }).returning({ idRole: role.idRole })
       await tx.insert(role).values({ description: 'B admin', idRoleType: ROLE_TYPE_SYSTEM, systemKey: 'TENANT_ADMIN' })
       const [service] = await tx.insert(role).values({ description: `zzz_authroles_b_${unique()}`, idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole })
       const [perm] = await tx.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'read-users'))
       await tx.insert(rolePermission).values({ idRole: service.idRole, idPermission: perm.idPermission })
+      await tx.insert(tenantMembership).values([
+        { userId: bothTenantsUserId }, { userId: adminInAOnlyUserId }, { userId: onlyInBUserId },
+        { userId: activeInAOffInBUserId, status: 'deactivated' },
+      ])
       await tx.insert(userRole).values([
+        { userId: onlyInBUserId, idRole: registered.idRole },
+        { userId: activeInAOffInBUserId, idRole: registered.idRole },
         { userId: bothTenantsUserId, idRole: service.idRole },
         { userId: adminInAOnlyUserId, idRole: registered.idRole },
       ])
@@ -125,6 +162,7 @@ describeIntegration('authorization reads', () => {
     if (otherTenant !== undefined) {
       // Ogni delete nomina il tenant B: senza la sua policy un delete senza where toccherebbe anche A.
       await step(() => withOwner(async tx => {
+        await tx.delete(tenantMembership).where(eq(tenantMembership.idTenant, otherTenant!))
         await tx.delete(userRole).where(eq(userRole.idTenant, otherTenant!))
         await tx.delete(role).where(eq(role.idTenant, otherTenant!))
       }, otherTenant))
@@ -239,5 +277,44 @@ describeIntegration('authorization reads', () => {
     expect([...(inB?.permissions ?? [])]).toEqual([])
     expect(await resolveUserAuthorization(otherTenant!, adminInAOnlyUserId))
       .toEqual({ accountActive: true, roleIds: [otherRegisteredId], isAdmin: false })
+  })
+
+  it('a person active in the default tenant and deactivated in B is authorized only in the default tenant', async () => {
+    expect((await resolveUserAuthorization(TENANT, activeInAOffInBUserId)).accountActive).toBe(true)
+    expect((await resolveUserAuthorization(otherTenant!, activeInAOffInBUserId)).accountActive).toBe(false)
+    expect(await resolveActor(TENANT, activeInAOffInBUserId)).not.toBeNull()
+    expect(await resolveActor(otherTenant!, activeInAOffInBUserId)).toBeNull()
+  })
+
+  it('a person with no membership in B is not authorized in B', async () => {
+    expect((await resolveUserAuthorization(TENANT, activeInAUnknownInBUserId)).accountActive).toBe(true)
+    expect(await resolveUserAuthorization(otherTenant!, activeInAUnknownInBUserId))
+      .toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+  })
+
+  it('first sign-in creates the default membership and the base role', async () => {
+    const fresh = await createUser(USER_STATUS_ACTIVE)
+    expect(await membershipStatusIn(TENANT, fresh)).toBeNull()
+    expect(await authorizationOf(fresh, true)).toEqual({ accountActive: true, roleIds: [system.registered], isAdmin: false })
+    expect(await membershipStatusIn(TENANT, fresh)).toBe('active')
+    expect(await rolesOf(fresh)).toEqual([system.registered])
+    expect(await membershipStatusIn(otherTenant!, fresh)).toBeNull()
+    expect(await withTenant(otherTenant!, tx => tx.select().from(userRole).where(eq(userRole.userId, fresh)))).toEqual([])
+  })
+
+  it('first sign-in creates nothing in the default tenant for a member of B', async () => {
+    expect(await authorizationOf(onlyInBUserId, true)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(await membershipStatusIn(TENANT, onlyInBUserId)).toBeNull()
+    expect(await rolesOf(onlyInBUserId)).toEqual([])
+    // Controllo contro un passaggio a vuoto: in B la persona è attiva e ha il suo ruolo.
+    expect(await membershipStatusIn(otherTenant!, onlyInBUserId)).toBe('active')
+    expect(await resolveUserAuthorization(otherTenant!, onlyInBUserId))
+      .toEqual({ accountActive: true, roleIds: [otherRegisteredId], isAdmin: false })
+  })
+
+  it('first sign-in leaves a deactivated default membership deactivated and adds no role', async () => {
+    expect(await authorizationOf(deactivatedInAUserId, true)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(await membershipStatusIn(TENANT, deactivatedInAUserId)).toBe('deactivated')
+    expect(await rolesOf(deactivatedInAUserId)).toEqual([])
   })
 })

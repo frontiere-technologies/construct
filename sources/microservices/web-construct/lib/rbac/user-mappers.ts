@@ -44,7 +44,5 @@ export function buildUserDtos(
     updatedAt: u.updated_at,
     roles: (rolesByUser.get(u.id) ?? []).sort((a, b) => a.id - b.id),
     status: mapUserStatus(u.id_user_status) as { idUserStatus: UserStatusId; description: 'Active' | 'Deactivated' },
-    tenantValidationPending: false as const,
-    multiTenancyEnabled: false as const,
   }))
 }

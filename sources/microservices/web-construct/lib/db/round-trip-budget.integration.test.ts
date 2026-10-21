@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { eq, inArray } from 'drizzle-orm'
 import { answersBetween, countRoundTrips, type RecordedStatement, type TripEvent } from '@/lib/db/round-trips'
-import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
+import { permission, role, rolePermission, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 
@@ -77,6 +77,8 @@ describeIntegration('round-trip budget', () => {
       readerRoleId = service.idRole
       const [perm] = await tx.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, 'read-menu'))
       await tx.insert(rolePermission).values({ idRole: readerRoleId, idPermission: perm.idPermission })
+      // I ruoli esistono solo con l'appartenenza al tenant (0048).
+      await tx.insert(tenantMembership).values([{ userId: adminUserId }, { userId: readerUserId }])
       await tx.insert(userRole).values([
         { userId: adminUserId, idRole: system.registered },
         { userId: adminUserId, idRole: adminRoleId },

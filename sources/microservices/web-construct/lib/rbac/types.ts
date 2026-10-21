@@ -190,8 +190,6 @@ export interface UserDto {
   updatedAt: string | null
   roles: { id: number; name: string }[]
   status: { idUserStatus: UserStatusId; description: 'Active' | 'Deactivated' }
-  tenantValidationPending: false
-  multiTenancyEnabled: false
 }
 
 export interface UsersQuery {

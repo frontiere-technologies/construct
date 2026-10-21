@@ -435,6 +435,7 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/rbac/roles-actions.ts#deleteRole': 'manage-roles',
   'lib/rbac/roles-actions.ts#renameRole': 'manage-roles',
   'lib/rbac/roles-actions.ts#updateRolePermissions': 'grant-role-permissions',
+  'lib/rbac/users-actions.ts#addUserByEmail': 'invite-users',
   'lib/rbac/users-actions.ts#setUserStatus': 'set-user-status',
   'lib/rbac/users-actions.ts#updateUserRoles': 'assign-user-roles',
   'lib/theme-actions.ts#saveAppTheme': 'requireAdministrator',

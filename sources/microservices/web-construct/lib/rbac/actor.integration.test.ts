@@ -2,8 +2,8 @@ import { afterAll, afterEach, expect, it } from 'vitest'
 import { eq, like } from 'drizzle-orm'
 import { withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
-import { defaultTestTenant } from '@/lib/tenancy/testing'
-import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
+import { defaultTestTenant, tenantIdForTest } from '@/lib/tenancy/testing'
+import { permission, role, rolePermission, tenant, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from './types'
 import { resolveActor } from './actor'
@@ -20,6 +20,8 @@ async function readerOf(code: string, status = USER_STATUS_ACTIVE): Promise<{ us
       .values({ description: `${PREFIX}${unique()}`, idRoleType: ROLE_TYPE_SERVICE })
       .returning({ idRole: role.idRole })
     const [perm] = await tx.select({ idPermission: permission.idPermission }).from(permission).where(eq(permission.code, code))
+    // I ruoli esistono solo con l'appartenenza al tenant (0048).
+    await tx.insert(tenantMembership).values({ userId: user.id })
     await tx.insert(userRole).values({ userId: user.id, idRole: created.idRole })
     await tx.insert(rolePermission).values({ idRole: created.idRole, idPermission: perm.idPermission })
     return { userId: user.id, idRole: created.idRole }
@@ -51,6 +53,30 @@ describeIntegration('resolveActor', () => {
     const actor = await resolveActor(defaultTestTenant(), userId)
     expect(actor && [...actor.permissions]).toEqual([])
   })
+
+  it('returns no actor for a person deactivated in the tenant, and an actor in the default tenant', async () => {
+    const { userId } = await readerOf('read-menu')
+    const [created] = await withOwner(tx => tx.insert(tenant)
+      .values({ slug: `zzz-actor-${unique()}`.slice(0, 40), name: 'Actor B' }).returning({ id: tenant.id }))
+    const B = tenantIdForTest(created.id)
+    try {
+      await withOwner(async tx => {
+        const [registered] = await tx.insert(role).values({ description: `${PREFIX}b_reg`, idRoleType: 1, systemKey: 'REGISTERED' }).returning({ idRole: role.idRole })
+        await tx.insert(role).values({ description: `${PREFIX}b_adm`, idRoleType: 1, systemKey: 'TENANT_ADMIN' })
+        await tx.insert(tenantMembership).values({ userId, status: 'deactivated' })
+        await tx.insert(userRole).values({ userId, idRole: registered.idRole })
+      }, B)
+      expect(await resolveActor(B, userId)).toBeNull()
+      expect(await resolveActor(defaultTestTenant(), userId)).not.toBeNull()
+    } finally {
+      await withOwner(async tx => {
+        await tx.delete(tenantMembership).where(eq(tenantMembership.idTenant, B))
+        await tx.delete(userRole).where(eq(userRole.idTenant, B))
+        await tx.delete(role).where(eq(role.idTenant, B))
+      }, B)
+      await withOwner(tx => tx.delete(tenant).where(eq(tenant.id, B)))
+    }
+  }, 30_000)
 
   it('returns no actor for a deactivated account', async () => {
     const { userId } = await readerOf('read-menu', USER_STATUS_DEACTIVATED)

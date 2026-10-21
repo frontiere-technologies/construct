@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest'
 import { and, eq, sql } from 'drizzle-orm'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
-import { passwordSetTokens, userRole, users } from '@/lib/db/schema'
+import { passwordSetTokens, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { resolveUserAuthorization } from '@/lib/rbac/auth-roles'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
@@ -26,7 +26,11 @@ describeIntegration('authentication security invariants against the database', (
 
   it('revokes a live authorization state immediately after deactivation or demotion', async () => {
     const userId = await createUser()
-    await withTenant(defaultTestTenant(), tx => tx.insert(userRole).values([{ userId, idRole: 0 }, { userId, idRole: 1 }]))
+    await withTenant(defaultTestTenant(), async tx => {
+      // I ruoli esistono solo con l'appartenenza al tenant (0048).
+      await tx.insert(tenantMembership).values({ userId })
+      await tx.insert(userRole).values([{ userId, idRole: 0 }, { userId, idRole: 1 }])
+    })
     expect(await resolveUserAuthorization(defaultTestTenant(), userId)).toMatchObject({ accountActive: true, isAdmin: true })
 
     await withGlobal(tx => tx.update(users).set({ idUserStatus: 1 }).where(eq(users.id, userId)))

@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest'
 import { like } from 'drizzle-orm'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
-import { role, userRole, users } from '@/lib/db/schema'
+import { role, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
@@ -31,7 +31,11 @@ describeIntegration('RBAC loaders through withTenant', () => {
     const [user] = await withGlobal(tx => tx.insert(users)
       .values({ email: `${PREFIX}${unique()}@example.test`, idUserStatus: USER_STATUS_ACTIVE })
       .returning({ id: users.id }))
-    await withTenant(tenant, tx => tx.insert(userRole).values({ userId: user.id, idRole: created.idRole }))
+    await withTenant(tenant, async tx => {
+      // I ruoli esistono solo con l'appartenenza al tenant (0048).
+      await tx.insert(tenantMembership).values({ userId: user.id })
+      await tx.insert(userRole).values({ userId: user.id, idRole: created.idRole })
+    })
     return { idRole: created.idRole, userId: user.id, description }
   }
 

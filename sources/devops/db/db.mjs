@@ -17,6 +17,7 @@ import {
   applyPendingMigrations,
   discoverMigrations,
   parseApplyArguments,
+  parseTenantCreateArguments,
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
@@ -561,6 +562,56 @@ async function runDatabaseCommand(command, argument) {
   }
 }
 
+/**
+ * Crea un tenant dal modello e ne registra il primo amministratore (specifica 2026-10-20, §3.3,
+ * MT2-DEC-9, MT2-DEC-10). Usa l'identità delle migrazioni e lavora come construct_owner, l'unico
+ * che può scrivere `tenant`, in una transazione sola: un errore qualsiasi annulla tutto, tenant,
+ * account, appartenenza e invito. Il tenant nuovo vale solo per la transazione (MTF-DEC-7).
+ *
+ * Il link stampato contiene un token valido: è il modo previsto di consegnarlo finché l'invio per
+ * email non arriva con la console (pezzo 5), e non si scrive da nessun'altra parte.
+ */
+async function runTenantCreate(connectionUrl, { slug, name, admin }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    const result = await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const [{ tenantId }] = await tx`
+        select app_private.create_tenant_from_template(${slug}, ${name})::text as "tenantId"
+      `
+      await tx`select set_config('app.tenant_id', ${tenantId}, true)`
+      const [{ existed }] = await tx`select exists (select 1 from public.users where email = ${admin}) as existed`
+      const [registered] = await tx`
+        select invitation_token as "invitationToken" from app_private.register_tenant_admin(${admin})
+      `
+      // Un tenant non nasce senza un amministratore attivo: register_tenant_admin accetta anche un
+      // account disattivato a livello globale, che non conta. L'errore annulla tutta la
+      // transazione (tenant, account, appartenenza, link) e il comando esce con 1.
+      const [{ activeAdmins }] = await tx`select app_private.count_active_admins() as "activeAdmins"`
+      if (Number(activeAdmins) === 0) {
+        throw new Error('Il primo amministratore non è attivo: account disattivato a livello globale. Nessun tenant creato.')
+      }
+      return { tenantId, existed, invitationToken: registered.invitationToken }
+    })
+
+    console.log(`Tenant creato: id=${result.tenantId} slug=${slug} nome=${name}`)
+    console.log(`Primo amministratore: ${admin} (${result.existed ? 'account esistente' : 'account nuovo'})`)
+    if (result.invitationToken) {
+      const baseUrl = (process.env.AUTH_URL ?? '').replace(/\/$/, '')
+      console.log(`Link per impostare la password (valido 48 ore): ${baseUrl}/set-password?token=${result.invitationToken}`)
+      if (!baseUrl) console.log("AUTH_URL non impostata: anteponi l'indirizzo del sito.")
+    }
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
 async function runCommandBody(sql, command, argument) {
   if (command === 'test-reset-e2e') {
     const emails = [process.env.TEST_EMAIL, process.env.TEST_EMAIL_USER].filter(Boolean)
@@ -605,26 +656,30 @@ const supported = new Set([
   'query',
   'schema-check',
   'schema-write',
+  'tenant-create',
   'test-apply',
   'test-query',
   'test-reset-e2e',
   'test-delete-user',
+  'test-tenant-create',
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email>')
   process.exit(2)
 }
 
-const applyArguments = [argument, ...extraArguments].filter(value => value !== undefined)
+const commandArguments = [argument, ...extraArguments].filter(value => value !== undefined)
 
 try {
   if (command === 'schema-write') writeSchemaSnapshot()
   else if (command === 'schema-check') checkSchemaSnapshot()
-  else if (command === 'apply') await runMigrations(migrationDatabaseUrl(), parseApplyArguments(applyArguments))
+  else if (command === 'apply') await runMigrations(migrationDatabaseUrl(), parseApplyArguments(commandArguments))
   else if (command === 'boundary-check') await boundaryCheck()
   else if (command === 'provision-runtime-role') await provisionRuntimeRole()
-  else if (command === 'test-apply') await runMigrations(testMigrationDatabaseUrl(), parseApplyArguments(applyArguments))
+  else if (command === 'test-apply') await runMigrations(testMigrationDatabaseUrl(), parseApplyArguments(commandArguments))
+  else if (command === 'tenant-create') await runTenantCreate(migrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
+  else if (command === 'test-tenant-create') await runTenantCreate(testMigrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
   else await runDatabaseCommand(command, argument)
 } catch (err) {
   console.error(`ERROR: ${err.message}`)

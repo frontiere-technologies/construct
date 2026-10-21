@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { PgDialect } from 'drizzle-orm/pg-core'
-import { applyUserFilters } from './users-service'
+import { applyUserFilters, userStatusIdSql } from './users-service'
 import type { UsersQuery } from './types'
 
 const dialect = new PgDialect()
@@ -23,10 +23,23 @@ describe('applyUserFilters', () => {
     expect(rendered.params).toEqual(['2026-07-01'])
   })
 
-  it('applies in(id_user_status) when statuses is set', () => {
+  it('filters statuses on the membership status, translating the ids to membership values', () => {
     const [rendered] = render({ ...baseQuery, statuses: [2] }, undefined)
-    expect(rendered.sql).toContain('"users"."id_user_status"')
-    expect(rendered.params).toEqual([2])
+    expect(rendered.sql).toContain('"tenant_membership"."status"')
+    expect(rendered.sql).not.toContain('"users"."id_user_status"')
+    expect(rendered.params).toEqual(['active'])
+  })
+
+  it('maps the deactivated status id to the deactivated membership value', () => {
+    const [rendered] = render({ ...baseQuery, statuses: [1, 2] }, undefined)
+    expect(rendered.params).toEqual(['deactivated', 'active'])
+  })
+
+  it('exposes the membership status as a user status id (2 active, 1 otherwise)', () => {
+    const rendered = dialect.sqlToQuery(userStatusIdSql)
+    expect(rendered.sql).toContain('case "tenant_membership"."status"')
+    expect(rendered.sql).toContain('then 2')
+    expect(rendered.sql).toContain('else 1')
   })
 
   it('filters roles with a correlated EXISTS query instead of materializing user IDs', () => {

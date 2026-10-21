@@ -3,7 +3,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { withTenant, withGlobal } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
-import { permission, role, rolePermission, userRole, users } from '@/lib/db/schema'
+import { permission, role, rolePermission, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import type { Actor } from './actor'
 
@@ -23,7 +23,9 @@ vi.mock('@/lib/rbac/auth-guard', async () => {
 const { updateUserRoles, setUserStatus } = await import('./users-actions')
 const { assignableRoleIds } = await import('./grant-service')
 
-const ACTIVE = 2
+const ACTIVE = 'active'
+const DEACTIVATED = 'deactivated'
+const ACTIVE_ID = 2
 const ROLE_TYPE_SERVICE = 2
 const created: string[] = []
 const createdRoles: number[] = []
@@ -60,10 +62,14 @@ async function makeUser(roleIds: number[]): Promise<string> {
   const [user] = await withGlobal(tx => tx.insert(users).values({
     email: `zzz_grants_${unique()}@example.com`,
     authProvider: 'credentials',
-    idUserStatus: ACTIVE,
+    idUserStatus: ACTIVE_ID,
   }).returning({ id: users.id }))
   created.push(user.id)
-  await withTenant(defaultTestTenant(), tx => tx.insert(userRole).values(roleIds.map(idRole => ({ userId: user.id, idRole }))))
+  await withTenant(defaultTestTenant(), async tx => {
+    // I ruoli esistono solo con l'appartenenza al tenant (0048).
+    await tx.insert(tenantMembership).values({ userId: user.id })
+    await tx.insert(userRole).values(roleIds.map(idRole => ({ userId: user.id, idRole })))
+  })
   return user.id
 }
 
@@ -71,8 +77,9 @@ const rolesOf = async (userId: string) =>
   (await withTenant(defaultTestTenant(), tx => tx.select({ idRole: userRole.idRole }).from(userRole).where(eq(userRole.userId, userId))))
     .map(row => row.idRole).sort((a, b) => a - b)
 
+// La disattivazione è per tenant (MT2-DEC-3): lo stato visibile sta nell'appartenenza.
 const statusOf = async (userId: string) =>
-  (await withGlobal(tx => tx.select({ s: users.idUserStatus }).from(users).where(eq(users.id, userId))))[0].s
+  (await withTenant(defaultTestTenant(), tx => tx.select({ s: tenantMembership.status }).from(tenantMembership).where(eq(tenantMembership.userId, userId))))[0].s
 
 afterAll(closeOwner)
 
@@ -168,6 +175,6 @@ describeIntegration('user role and status actions with a limited actor', () => {
   it('lets a limited actor deactivate a normal user', async () => {
     const target = await makeUser([0])
     await setUserStatus(target, 1)
-    expect(await statusOf(target)).toBe(1)
+    expect(await statusOf(target)).toBe(DEACTIVATED)
   })
 })

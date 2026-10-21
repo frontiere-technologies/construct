@@ -3591,3 +3591,616 @@ select app_private.declare_global_table('public.allowed_domains', true, 'provvis
 select app_private.declare_global_table('public.app_language', true, 'provvisoria: lingue attive per tenant nel pezzo 2');
 select app_private.declare_global_table('public.translation_key', true, 'provvisoria: chiavi di piattaforma dal pezzo 2');
 select app_private.declare_global_table('public.translation_value', true, 'provvisoria: sovrascritture per tenant nel pezzo 2');
+
+-- Migration: 0048_tenant_membership.sql
+-- Multi-tenancy, pezzo 2 (specifica 2026-10-20, §2.1, §2.2, §2.5, MT2-DEC-1, 3, 4, 12): le
+-- appartenenze per tenant, la regola dell'ultimo amministratore per tenant e l'ingresso nel tenant
+-- predefinito. Gira come construct_owner, con app.tenant_id vuoto finché la sezione 2 non lo imposta.
+
+-- 1. La tabella delle appartenenze -------------------------------------------------------------
+create table public.tenant_membership (
+  id_tenant bigint not null default app_private.current_tenant_id() references public.tenant(id),
+  user_id uuid not null references public.users(id) on delete cascade,
+  status text not null default 'active' check (status in ('active', 'deactivated')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint tenant_membership_pkey primary key (id_tenant, user_id)
+);
+-- Per la cascata dalla cancellazione di un utente e per "di quali tenant è membro" (pezzo 4).
+create index tenant_membership_user_id_idx on public.tenant_membership (user_id);
+create trigger tenant_membership_updated_at
+  before update on public.tenant_membership
+  for each row execute function public.set_updated_at();
+select app_private.protect_tenant_table('public.tenant_membership'::regclass);
+
+-- 2. Le appartenenze di oggi (§2.2) ------------------------------------------------------------
+-- Ogni utente, con o senza ruoli, diventa membro attivo del tenant predefinito: la pagina Utenti
+-- continua a mostrare le stesse persone. Oggi esiste un solo tenant.
+select set_config('app.tenant_id', (select id::text from public.tenant where slug = 'default'), true);
+insert into public.tenant_membership (user_id, status)
+select u.id, 'active' from public.users u;
+
+-- 3. Nessun ruolo senza appartenenza ------------------------------------------------------------
+alter table public.user_role add constraint user_role_membership_fkey
+  foreign key (id_tenant, user_id) references public.tenant_membership (id_tenant, user_id) on delete cascade;
+
+-- 4. Gli amministratori attivi del tenant corrente (MT2-DEC-4) ----------------------------------
+-- Appartenenza attiva, account globalmente attivo, ruolo TENANT_ADMIN del tenant.
+create function app_private.count_active_admins() returns bigint
+language sql stable security invoker set search_path = '' as $$
+  select count(distinct m.user_id)
+  from public.tenant_membership m
+  join public.users u on u.id = m.user_id
+  join public.user_role ur on ur.id_tenant = m.id_tenant and ur.user_id = m.user_id
+  join public.role r on r.id_tenant = ur.id_tenant and r.id_role = ur.id_role
+  where m.id_tenant = app_private.current_tenant_id()
+    and m.status = 'active'
+    and u.id_user_status = 2
+    and r.system_key = 'TENANT_ADMIN'
+$$;
+revoke all on function app_private.count_active_admins() from public;
+grant execute on function app_private.count_active_admins() to construct_runtime;
+
+-- 5. I ruoli si assegnano solo ai membri del tenant ---------------------------------------------
+-- Stesso lock, stessi errori nello stesso ordine della 0046; in più not_a_member, e il conteggio
+-- degli amministratori passa dalle appartenenze.
+create or replace function public.replace_user_roles_guarded(p_user_id uuid, p_role_ids bigint[])
+returns void language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_registered bigint;
+  v_admin bigint;
+  requested_roles bigint[];
+begin
+  perform pg_catalog.pg_advisory_xact_lock(49374202, v_tenant::integer);
+  select r.id_role into v_registered from public.role r where r.id_tenant = v_tenant and r.system_key = 'REGISTERED';
+  select r.id_role into v_admin from public.role r where r.id_tenant = v_tenant and r.system_key = 'TENANT_ADMIN';
+  if v_registered is null or v_admin is null then
+    raise exception using errcode = 'P0001', message = 'system_roles_missing';
+  end if;
+  requested_roles := array(
+    select distinct value from unnest(array_append(coalesce(p_role_ids, '{}'::bigint[]), v_registered)) value
+  );
+
+  if not exists (select 1 from public.users where id = p_user_id) then
+    raise exception using errcode = 'P0001', message = 'user_not_found';
+  end if;
+  -- Un'appartenenza in qualunque stato: i ruoli di un membro disattivato si possono ancora gestire.
+  if not exists (
+    select 1 from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id
+  ) then
+    raise exception using errcode = 'P0001', message = 'not_a_member';
+  end if;
+  if exists (
+    select 1 from unnest(requested_roles) requested(id_role)
+    where not exists (select 1 from public.role r where r.id_tenant = v_tenant and r.id_role = requested.id_role)
+  ) then
+    raise exception using errcode = 'P0001', message = 'invalid_role';
+  end if;
+
+  delete from public.user_role where id_tenant = v_tenant and user_id = p_user_id;
+  insert into public.user_role (user_id, id_role) select p_user_id, unnest(requested_roles);
+
+  if app_private.count_active_admins() = 0 then
+    raise exception using errcode = 'P0001', message = 'last_active_administrator';
+  end if;
+end;
+$$;
+
+-- 6. Disattivazione e riattivazione per tenant (MT2-DEC-3) --------------------------------------
+create function public.set_membership_status_guarded(p_user_id uuid, p_status text)
+returns void language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+begin
+  perform pg_catalog.pg_advisory_xact_lock(49374202, v_tenant::integer);
+  if p_status is null or p_status not in ('active', 'deactivated') then
+    raise exception using errcode = 'P0001', message = 'invalid_user_status';
+  end if;
+
+  update public.tenant_membership set status = p_status
+  where id_tenant = v_tenant and user_id = p_user_id;
+  if not found then
+    raise exception using errcode = 'P0001', message = 'not_a_member';
+  end if;
+
+  if app_private.count_active_admins() = 0 then
+    raise exception using errcode = 'P0001', message = 'last_active_administrator';
+  end if;
+end;
+$$;
+revoke all on function public.set_membership_status_guarded(uuid, text) from public;
+grant execute on function public.set_membership_status_guarded(uuid, text) to construct_runtime;
+
+-- 7. Lo stato globale dell'account ---------------------------------------------------------------
+-- Riservata alla piattaforma (MT2-DEC-3): l'app smette di chiamarla quando la pagina Utenti passa
+-- alle appartenenze. Invariata rispetto alla 0046, salvo il conteggio degli amministratori.
+create or replace function public.set_user_status_guarded(p_user_id uuid, p_status bigint)
+returns void language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_admin bigint;
+begin
+  perform pg_catalog.pg_advisory_xact_lock(49374202, v_tenant::integer);
+  if p_status not in (1, 2) then
+    raise exception using errcode = 'P0001', message = 'invalid_user_status';
+  end if;
+  select r.id_role into v_admin from public.role r where r.id_tenant = v_tenant and r.system_key = 'TENANT_ADMIN';
+  if v_admin is null then
+    raise exception using errcode = 'P0001', message = 'system_roles_missing';
+  end if;
+
+  update public.users set id_user_status = p_status, last_status_ts = clock_timestamp() where id = p_user_id;
+  if not found then
+    raise exception using errcode = 'P0001', message = 'user_not_found';
+  end if;
+
+  if app_private.count_active_admins() = 0 then
+    raise exception using errcode = 'P0001', message = 'last_active_administrator';
+  end if;
+end;
+$$;
+
+-- 8. Membro di un altro tenant? (MT2-DEC-12) ----------------------------------------------------
+-- La RLS mostra solo le appartenenze del tenant di app.tenant_id, e una funzione security definer
+-- è vietata: la funzione visita gli altri tenant uno per uno cambiando app.tenant_id, che il ruolo
+-- dell'app può impostare a qualunque valore. Rimette il valore di partenza prima di ogni return,
+-- altrimenti le istruzioni successive della transazione lavorerebbero in un altro tenant.
+create function app_private.is_member_elsewhere(p_user_id uuid) returns boolean
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_corrente bigint := app_private.current_tenant_id();
+  v_altro bigint;
+begin
+  for v_altro in select t.id from public.tenant t where t.id <> v_corrente order by t.id loop
+    perform pg_catalog.set_config('app.tenant_id', v_altro::text, true);
+    if exists (select 1 from public.tenant_membership m where m.id_tenant = v_altro and m.user_id = p_user_id) then
+      perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+      return true;
+    end if;
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+  return false;
+end;
+$$;
+revoke all on function app_private.is_member_elsewhere(uuid) from public;
+-- La chiama ensure_default_membership con i diritti di chi chiama, cioè dell'app.
+grant execute on function app_private.is_member_elsewhere(uuid) to construct_runtime;
+
+-- 9. L'ingresso nel tenant predefinito (MT2-DEC-12) ---------------------------------------------
+-- Ritorna lo stato dell'appartenenza nel tenant corrente dopo la chiamata, oppure null quando non
+-- la crea: tenant corrente diverso dal predefinito, o persona già membro di un altro tenant. Non
+-- riattiva mai un'appartenenza disattivata.
+create function public.ensure_default_membership(p_user_id uuid) returns text
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_status text;
+begin
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  if found then
+    return v_status;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = v_tenant and t.slug = 'default') then
+    return null;
+  end if;
+  if app_private.is_member_elsewhere(p_user_id) then
+    return null;
+  end if;
+
+  insert into public.tenant_membership (id_tenant, user_id, status) values (v_tenant, p_user_id, 'active')
+  on conflict (id_tenant, user_id) do nothing;
+  -- Se una transazione concorrente ha creato la riga per prima, vale il suo stato.
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  return v_status;
+end;
+$$;
+revoke all on function public.ensure_default_membership(uuid) from public;
+grant execute on function public.ensure_default_membership(uuid) to construct_runtime;
+
+-- Migration: 0049_users_add_translations.sql
+-- Multi-tenancy, pezzo 2 (specifica 2026-10-20, §3.2, MT2-OK-1): le parole del dialogo «Aggiungi persona»
+-- nella pagina Utenti. Solo additiva: apply_translation_seed non riscrive mai una chiave esistente.
+--
+-- 1. Sette chiavi nuove: il bottone, il titolo, l'etichetta del campo, il bottone di conferma e i tre
+--    esiti (fatto, email non valida, errore). L'esito «fatto» e' lo stesso per un account nuovo e per
+--    uno esistente, cosi' il dialogo non rivela se l'indirizzo era gia' registrato.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"users.add.open","namespace":"users","module":"rbac","description":"Users page toolbar: button that opens the add-person dialog","it":"Aggiungi persona","en":"Add person"},
+    {"key":"users.add.title","namespace":"users","module":"rbac","description":"Add-person dialog: title","it":"Aggiungi una persona","en":"Add a person"},
+    {"key":"users.add.email_label","namespace":"users","module":"rbac","description":"Add-person dialog: label of the email field","it":"Email","en":"Email"},
+    {"key":"users.add.submit","namespace":"users","module":"rbac","description":"Add-person dialog: button that adds the person","it":"Aggiungi","en":"Add"},
+    {"key":"users.add.done","namespace":"users","module":"rbac","description":"Add-person dialog: outcome after a successful add. Neutral on purpose: it is the same for a new account (invited) and for an existing one (added)","it":"Persona aggiunta o invitata.","en":"Person added or invited."},
+    {"key":"users.add.invalid_email","namespace":"users","module":"rbac","description":"Add-person dialog: shown when the text is not a valid email address","it":"Scrivi un indirizzo email valido.","en":"Enter a valid email address."},
+    {"key":"users.add.error","namespace":"users","module":"rbac","description":"Add-person dialog: generic failure. The server message is never shown","it":"Non è stato possibile aggiungere la persona.","en":"Could not add the person."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0050_tenant_template.sql
+-- Multi-tenancy, pezzo 2 (specifica 2026-10-20, §2.3, §2.4, MT2-DEC-7, MT2-DEC-8, MT2-RISK-1): il
+-- tenant modello e la funzione che crea un tenant copiandolo. Gira come construct_owner, con
+-- app.tenant_id vuoto: la copia imposta da sé il tenant che legge e quello che scrive.
+
+-- 1. Il segno del modello ----------------------------------------------------------------------
+-- Al massimo un modello: l'indice unico parziale rifiuta il secondo.
+alter table public.tenant add column is_template boolean not null default false;
+create unique index tenant_single_template on public.tenant (is_template) where is_template;
+
+-- 2. La copia di un tenant ---------------------------------------------------------------------
+-- Riservata alla piattaforma (solo il revoke). La RLS è forzata anche per construct_owner, che
+-- vede solo le righe del tenant di app.tenant_id: la funzione legge la sorgente con il suo tenant,
+-- mette le righe in tabelle temporanee con gli id nuovi già assegnati, poi scrive con il tenant
+-- nuovo. Le sequenze s_id_* sono globali, quindi gli id nuovi non si scontrano con nessun tenant.
+-- Le persone non si copiano: user_role e tenant_membership restano vuote (MT2-DEC-8).
+create function app_private.copy_tenant(p_source bigint, p_slug text, p_name text, p_is_template boolean)
+returns bigint
+language plpgsql security invoker set search_path = '' as $$
+declare
+  -- Le tabelle di tenant che questa funzione conosce. Una tabella di tenant nuova va aggiunta a
+  -- uno dei due elenchi, e se va copiata anche al corpo della funzione: finché non succede la
+  -- copia si rifiuta, invece di far nascere tenant senza quei dati (Review Focus #4).
+  v_copiate constant text[] := array['menu_entry', 'menu_entry_tag', 'role', 'role_permission',
+                                     'role_functionality', 'app_theme'];
+  v_saltate constant text[] := array['user_role', 'tenant_membership'];
+  v_sconosciuta text;
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_nuovo bigint;
+begin
+  select c.table_name into v_sconosciuta
+  from app_private.table_class c
+  where c.class = 'tenant' and c.table_name <> all (v_copiate || v_saltate)
+  order by c.table_name
+  limit 1;
+  if v_sconosciuta is not null then
+    raise exception using errcode = 'P0001', message = 'tenant_table_not_copied:' || v_sconosciuta;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = p_source) then
+    raise exception using errcode = 'P0001', message = 'source_tenant_missing';
+  end if;
+
+  insert into public.tenant (slug, name, is_template) values (p_slug, p_name, p_is_template)
+  returning id into v_nuovo;
+
+  -- Lettura, con il contesto del tenant di partenza. Le tabelle temporanee si ricreano a ogni
+  -- chiamata: la funzione si può chiamare più volte nella stessa transazione.
+  perform pg_catalog.set_config('app.tenant_id', p_source::text, true);
+
+  drop table if exists pg_temp.copia_voce, pg_temp.copia_ruolo, pg_temp.copia_etichetta,
+    pg_temp.copia_permesso, pg_temp.copia_funzionalita, pg_temp.copia_tema;
+
+  create temporary table copia_voce as
+  select m.id_menu_entry as id_vecchio, pg_catalog.nextval('public.s_id_menu_entry') as id_nuovo,
+         m.id_parent, m.name, m.order_position, m.navbar_position, m.icon_path, m.id_functionality_type,
+         m.functionality_link, m.open_in_new_tab, m.item_translation, m.is_immutable
+  from public.menu_entry m;
+
+  create temporary table copia_ruolo as
+  select r.id_role as id_vecchio, pg_catalog.nextval('public.s_id_role') as id_nuovo,
+         r.id_role_type, r.description, r.system_key
+  from public.role r;
+
+  create temporary table copia_etichetta as
+  select t.id_menu_entry, t.tag_lan, t.tag from public.menu_entry_tag t;
+
+  create temporary table copia_permesso as
+  select p.id_role, p.id_permission from public.role_permission p;
+
+  create temporary table copia_funzionalita as
+  select f.id_role, f.id_menu_entry from public.role_functionality f;
+
+  create temporary table copia_tema as
+  select t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark
+  from public.app_theme t;
+
+  -- Scrittura, con il contesto del tenant nuovo e gli id nuovi. Il controllo sul genitore delle
+  -- voci è differito alla fine della transazione, quindi l'ordine delle righe non conta.
+  perform pg_catalog.set_config('app.tenant_id', v_nuovo::text, true);
+
+  insert into public.menu_entry (id_menu_entry, id_tenant, id_parent, name, order_position, navbar_position,
+    icon_path, id_functionality_type, functionality_link, open_in_new_tab, item_translation, is_immutable,
+    created_at, updated_at)
+  select v.id_nuovo, v_nuovo, genitore.id_nuovo, v.name, v.order_position, v.navbar_position,
+         v.icon_path, v.id_functionality_type, v.functionality_link, v.open_in_new_tab, v.item_translation,
+         v.is_immutable, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copia_voce v
+  left join pg_temp.copia_voce genitore on genitore.id_vecchio = v.id_parent;
+
+  insert into public.menu_entry_tag (id_tenant, id_menu_entry, tag_lan, tag, date_ins)
+  select v_nuovo, v.id_nuovo, e.tag_lan, e.tag, pg_catalog.now()
+  from pg_temp.copia_etichetta e
+  join pg_temp.copia_voce v on v.id_vecchio = e.id_menu_entry;
+
+  insert into public.role (id_role, id_tenant, id_role_type, description, system_key, date_ins, date_mod)
+  select r.id_nuovo, v_nuovo, r.id_role_type, r.description, r.system_key, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copia_ruolo r;
+
+  -- Il permesso resta lo stesso id: il catalogo dei permessi è globale.
+  insert into public.role_permission (id_tenant, id_role, id_permission)
+  select v_nuovo, r.id_nuovo, p.id_permission
+  from pg_temp.copia_permesso p
+  join pg_temp.copia_ruolo r on r.id_vecchio = p.id_role;
+
+  insert into public.role_functionality (id_tenant, id_role, id_menu_entry)
+  select v_nuovo, r.id_nuovo, v.id_nuovo
+  from pg_temp.copia_funzionalita f
+  join pg_temp.copia_ruolo r on r.id_vecchio = f.id_role
+  join pg_temp.copia_voce v on v.id_vecchio = f.id_menu_entry;
+
+  insert into public.app_theme (id_tenant, primary_color, primary_dark, background_light, card_light,
+    accent_light, sidebar_light, background_dark, card_dark, accent_dark, sidebar_dark, date_mod)
+  select v_nuovo, t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark, pg_catalog.now()
+  from pg_temp.copia_tema t;
+
+  drop table pg_temp.copia_voce, pg_temp.copia_ruolo, pg_temp.copia_etichetta,
+    pg_temp.copia_permesso, pg_temp.copia_funzionalita, pg_temp.copia_tema;
+
+  -- Il tenant di chi ha chiamato torna com'era: le istruzioni successive della transazione non
+  -- devono lavorare nel tenant nuovo.
+  perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+  return v_nuovo;
+end;
+$$;
+revoke all on function app_private.copy_tenant(bigint, text, text, boolean) from public;
+
+-- 3. Un tenant nuovo dal modello (§2.4) --------------------------------------------------------
+-- La copia è un'istantanea: cambiare il modello dopo non tocca i tenant già creati (MT2-DEC-8).
+create function app_private.create_tenant_from_template(p_slug text, p_name text) returns bigint
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_modello bigint;
+begin
+  select t.id into v_modello from public.tenant t where t.is_template;
+  if v_modello is null then
+    raise exception using errcode = 'P0001', message = 'template_missing';
+  end if;
+  return app_private.copy_tenant(v_modello, p_slug, p_name, false);
+end;
+$$;
+revoke all on function app_private.create_tenant_from_template(text, text) from public;
+
+-- 4. Il modello (§2.3) -------------------------------------------------------------------------
+-- Ultima sezione apposta: la copia lascia in sospeso fino alla fine della transazione i controlli
+-- differiti sulle voci di menu, e una tabella con eventi differiti in sospeso non si può più
+-- alterare nella stessa transazione. Il modello parte dal tenant predefinito così com'è adesso:
+-- su un database di sviluppo eredita anche le voci aggiunte a mano.
+select app_private.copy_tenant((select t.id from public.tenant t where t.slug = 'default'), 'template', 'Modello', true);
+
+-- Migration: 0051_tenant_admin_registration.sql
+-- Multi-tenancy, pezzo 2 (specifica 2026-10-20, §3.3, MT2-DEC-9, MT2-DEC-10, MT2-OK-4): il primo
+-- amministratore di un tenant, registrato dalla piattaforma con `db.mjs tenant-create`, e una copia
+-- dei tenant più difesa. Nessuna tabella di tenant scritta qui: app.tenant_id resta vuoto.
+
+-- 1. La copia di un tenant, più difesa --------------------------------------------------------
+-- Stessa firma e stesso comportamento della 0050, con tre differenze:
+-- - ogni lettura della sorgente nomina il tenant (where id_tenant = p_source), oltre alla RLS;
+-- - client_min_messages = warning: gli avvisi dei "drop table if exists" non arrivano a chi chiama
+--   (per esempio all'uscita di db.mjs tenant-create);
+-- - le tabelle temporanee hanno il prefisso copy_tenant_, per non scontrarsi con quelle di altri.
+create or replace function app_private.copy_tenant(p_source bigint, p_slug text, p_name text, p_is_template boolean)
+returns bigint
+language plpgsql security invoker set search_path = '' set client_min_messages = warning as $$
+declare
+  -- Le tabelle di tenant che questa funzione conosce. Una tabella di tenant nuova va aggiunta a
+  -- uno dei due elenchi, e se va copiata anche al corpo della funzione: finché non succede la
+  -- copia si rifiuta, invece di far nascere tenant senza quei dati (Review Focus #4).
+  v_copiate constant text[] := array['menu_entry', 'menu_entry_tag', 'role', 'role_permission',
+                                     'role_functionality', 'app_theme'];
+  v_saltate constant text[] := array['user_role', 'tenant_membership'];
+  v_sconosciuta text;
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_nuovo bigint;
+begin
+  select c.table_name into v_sconosciuta
+  from app_private.table_class c
+  where c.class = 'tenant' and c.table_name <> all (v_copiate || v_saltate)
+  order by c.table_name
+  limit 1;
+  if v_sconosciuta is not null then
+    raise exception using errcode = 'P0001', message = 'tenant_table_not_copied:' || v_sconosciuta;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = p_source) then
+    raise exception using errcode = 'P0001', message = 'source_tenant_missing';
+  end if;
+
+  insert into public.tenant (slug, name, is_template) values (p_slug, p_name, p_is_template)
+  returning id into v_nuovo;
+
+  -- Lettura, con il contesto del tenant di partenza. Le tabelle temporanee si ricreano a ogni
+  -- chiamata: la funzione si può chiamare più volte nella stessa transazione.
+  perform pg_catalog.set_config('app.tenant_id', p_source::text, true);
+
+  drop table if exists pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema;
+
+  create temporary table copy_tenant_voce as
+  select m.id_menu_entry as id_vecchio, pg_catalog.nextval('public.s_id_menu_entry') as id_nuovo,
+         m.id_parent, m.name, m.order_position, m.navbar_position, m.icon_path, m.id_functionality_type,
+         m.functionality_link, m.open_in_new_tab, m.item_translation, m.is_immutable
+  from public.menu_entry m
+  where m.id_tenant = p_source;
+
+  create temporary table copy_tenant_ruolo as
+  select r.id_role as id_vecchio, pg_catalog.nextval('public.s_id_role') as id_nuovo,
+         r.id_role_type, r.description, r.system_key
+  from public.role r
+  where r.id_tenant = p_source;
+
+  create temporary table copy_tenant_etichetta as
+  select t.id_menu_entry, t.tag_lan, t.tag from public.menu_entry_tag t where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_permesso as
+  select p.id_role, p.id_permission from public.role_permission p where p.id_tenant = p_source;
+
+  create temporary table copy_tenant_funzionalita as
+  select f.id_role, f.id_menu_entry from public.role_functionality f where f.id_tenant = p_source;
+
+  create temporary table copy_tenant_tema as
+  select t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark
+  from public.app_theme t
+  where t.id_tenant = p_source;
+
+  -- Scrittura, con il contesto del tenant nuovo e gli id nuovi. Il controllo sul genitore delle
+  -- voci è differito alla fine della transazione, quindi l'ordine delle righe non conta.
+  perform pg_catalog.set_config('app.tenant_id', v_nuovo::text, true);
+
+  insert into public.menu_entry (id_menu_entry, id_tenant, id_parent, name, order_position, navbar_position,
+    icon_path, id_functionality_type, functionality_link, open_in_new_tab, item_translation, is_immutable,
+    created_at, updated_at)
+  select v.id_nuovo, v_nuovo, genitore.id_nuovo, v.name, v.order_position, v.navbar_position,
+         v.icon_path, v.id_functionality_type, v.functionality_link, v.open_in_new_tab, v.item_translation,
+         v.is_immutable, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_voce v
+  left join pg_temp.copy_tenant_voce genitore on genitore.id_vecchio = v.id_parent;
+
+  insert into public.menu_entry_tag (id_tenant, id_menu_entry, tag_lan, tag, date_ins)
+  select v_nuovo, v.id_nuovo, e.tag_lan, e.tag, pg_catalog.now()
+  from pg_temp.copy_tenant_etichetta e
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = e.id_menu_entry;
+
+  insert into public.role (id_role, id_tenant, id_role_type, description, system_key, date_ins, date_mod)
+  select r.id_nuovo, v_nuovo, r.id_role_type, r.description, r.system_key, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_ruolo r;
+
+  -- Il permesso resta lo stesso id: il catalogo dei permessi è globale.
+  insert into public.role_permission (id_tenant, id_role, id_permission)
+  select v_nuovo, r.id_nuovo, p.id_permission
+  from pg_temp.copy_tenant_permesso p
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = p.id_role;
+
+  insert into public.role_functionality (id_tenant, id_role, id_menu_entry)
+  select v_nuovo, r.id_nuovo, v.id_nuovo
+  from pg_temp.copy_tenant_funzionalita f
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = f.id_role
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = f.id_menu_entry;
+
+  insert into public.app_theme (id_tenant, primary_color, primary_dark, background_light, card_light,
+    accent_light, sidebar_light, background_dark, card_dark, accent_dark, sidebar_dark, date_mod)
+  select v_nuovo, t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark, pg_catalog.now()
+  from pg_temp.copy_tenant_tema t;
+
+  drop table pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema;
+
+  -- Il tenant di chi ha chiamato torna com'era: le istruzioni successive della transazione non
+  -- devono lavorare nel tenant nuovo.
+  perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+  return v_nuovo;
+end;
+$$;
+revoke all on function app_private.copy_tenant(bigint, text, text, boolean) from public;
+
+-- 2. Il primo amministratore di un tenant (§3.3, MT2-DEC-10) -----------------------------------
+-- Riservata alla piattaforma (solo il revoke). Lavora nel tenant corrente, che chi chiama ha già
+-- impostato, e non lo cambia. L'email si normalizza come nell'app; l'account si crea se manca, come
+-- fa prepareInvitation. L'appartenenza diventa attiva anche se c'era ed era disattivata: registrare
+-- l'amministratore è una scelta esplicita della piattaforma, non un percorso automatico.
+-- Se l'account non ha password, l'invito nasce già consegnato: è il comando a mostrarne il link,
+-- e consume_password_set_token rifiuta un invito che non risulta consegnato. Come una consegna
+-- riuscita dell'app (recordInvitationDelivery), sostituisce gli inviti precedenti non usati.
+create function app_private.register_tenant_admin(p_email text)
+returns table (user_id uuid, invitation_token text)
+language plpgsql security invoker set search_path = '' as $$
+#variable_conflict use_column
+declare
+  v_email text := pg_catalog.lower(pg_catalog.btrim(p_email));
+  v_tenant bigint := app_private.current_tenant_id();
+  v_registrato bigint;
+  v_amministratore bigint;
+  v_utente uuid;
+  v_password text;
+  v_token text;
+  v_adesso timestamptz := pg_catalog.now();
+begin
+  if v_email is null or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+$' then
+    raise exception using errcode = 'P0001', message = 'invalid_email';
+  end if;
+
+  select r.id_role into v_registrato from public.role r
+  where r.id_tenant = v_tenant and r.system_key = 'REGISTERED';
+  select r.id_role into v_amministratore from public.role r
+  where r.id_tenant = v_tenant and r.system_key = 'TENANT_ADMIN';
+  if v_registrato is null or v_amministratore is null then
+    raise exception using errcode = 'P0001', message = 'system_roles_missing';
+  end if;
+
+  insert into public.users (email, auth_provider) values (v_email, 'credentials')
+  on conflict (email) do nothing;
+  select u.id, u.password_hash into v_utente, v_password
+  from public.users u where u.email = v_email
+  for update;
+
+  insert into public.tenant_membership (id_tenant, user_id, status) values (v_tenant, v_utente, 'active')
+  on conflict on constraint tenant_membership_pkey do update set status = 'active';
+
+  insert into public.user_role (id_tenant, user_id, id_role)
+  values (v_tenant, v_utente, v_registrato), (v_tenant, v_utente, v_amministratore)
+  on conflict do nothing;
+
+  if v_password is null then
+    v_token := pg_catalog.gen_random_uuid()::text;
+    update public.password_set_tokens t set superseded_at = v_adesso
+    where t.user_id = v_utente and t.purpose = 'invitation' and t.used_at is null and t.superseded_at is null;
+    insert into public.password_set_tokens (user_id, token, expires_at, purpose, delivery_status,
+      delivery_attempted_at, delivered_at)
+    values (v_utente, v_token, v_adesso + interval '48 hours', 'invitation', 'sent', v_adesso, v_adesso);
+  end if;
+
+  user_id := v_utente;
+  invitation_token := v_token;
+  return next;
+end;
+$$;
+revoke all on function app_private.register_tenant_admin(text) from public;
+
+-- Migration: 0052_membership_status_from_global.sql
+-- Multi-tenancy, pezzo 2 (specifica 2026-10-20, §2.2, MT2-OK-1, MT2-DEC-3): gli account disattivati
+-- a livello globale prima di questo pezzo diventano disattivati nel tenant predefinito, e il loro
+-- stato globale torna attivo. Fino al pezzo 2 esisteva un solo tenant e ogni disattivazione arrivava
+-- dalla pagina Utenti: era, nei fatti, una disattivazione nel tenant. La 0048 aveva dato a tutti
+-- un'appartenenza attiva, così queste persone comparivano "Attivo" senza poter entrare, e "Riattiva"
+-- (che ora cambia l'appartenenza) non le recuperava più. Dopo questa migrazione la pagina Utenti le
+-- mostra disattivate e le riattiva come prima. Lo stato globale resta riservato alla piattaforma.
+-- Gira come construct_owner, con app.tenant_id vuoto finché la sezione 1 non lo imposta.
+
+-- 1. Il tenant predefinito ----------------------------------------------------------------------
+select set_config('app.tenant_id', (select id::text from public.tenant where slug = 'default'), true);
+
+-- 2. Dallo stato globale all'appartenenza --------------------------------------------------------
+-- Solo chi ha un'appartenenza al predefinito: chi non ce l'ha resta com'è. La regola dell'ultimo
+-- amministratore non cambia: chi era fuori per lo stato globale resta fuori per l'appartenenza, e
+-- il conteggio degli amministratori attivi deve restare quello di prima. Se scendesse a zero la
+-- migrazione si ferma. Un database senza amministratori già prima (vuoto) non è un errore.
+do $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_prima bigint := app_private.count_active_admins();
+  v_dopo bigint;
+begin
+  update public.tenant_membership m set status = 'deactivated'
+  from public.users u
+  where u.id = m.user_id
+    and u.id_user_status = 1
+    and m.id_tenant = v_tenant
+    and m.status <> 'deactivated';
+
+  update public.users u set id_user_status = 2, last_status_ts = pg_catalog.clock_timestamp()
+  where u.id_user_status = 1
+    and exists (select 1 from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = u.id);
+
+  v_dopo := app_private.count_active_admins();
+  if v_prima > 0 and v_dopo = 0 then
+    raise exception using errcode = 'P0001', message = 'last_active_administrator';
+  end if;
+end;
+$$;

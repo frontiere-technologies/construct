@@ -11,6 +11,7 @@ import { createLogger } from '@/lib/logger'
 import { authConfig, mergeAuthCallbacks } from '@/lib/auth.config'
 import { resolveUserAuthorization } from '@/lib/rbac/auth-roles'
 import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
+import { isMembershipDeactivated } from '@/lib/tenancy/membership'
 import {
   assertSafeAuthConfiguration,
   isActiveAccount,
@@ -120,6 +121,13 @@ function buildProviders() {
           return null
         }
 
+        // Dopo la verifica della password, così i tempi dei tentativi sbagliati restano uniformi.
+        // Il messaggio per chi entra è lo stesso di un account disattivato; cambia solo il motivo nel log.
+        if (await isMembershipDeactivated(await resolveRequestTenant(), user.id)) {
+          log.warn({ reason: 'membership' }, 'credentials rejected')
+          return null
+        }
+
         await withGlobal(tx => tx.update(users).set({ authProvider: 'credentials' }).where(eq(users.id, user.id)))
 
         return { id: user.id, email: user.email, name: user.name ?? user.email }
@@ -148,6 +156,10 @@ function buildProviders() {
               .limit(1)
           })
           if (!data || !isActiveAccount(data.idUserStatus)) return null
+          if (await isMembershipDeactivated(await resolveRequestTenant(), data.id)) {
+            log.warn({ reason: 'membership' }, 'test credentials rejected')
+            return null
+          }
           return { id: data.id, email: data.email, name: data.name ?? data.email }
         },
       })
@@ -171,11 +183,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const allowed = await getAllowedDomains()
         if (!allowed.includes(domain)) return false
         const [existing] = await withGlobal(tx => tx
-          .select({ idUserStatus: users.idUserStatus })
+          .select({ id: users.id, idUserStatus: users.idUserStatus })
           .from(users)
           .where(eq(users.email, email))
           .limit(1))
         if (existing && !isActiveAccount(existing.idUserStatus)) return false
+        if (existing && await isMembershipDeactivated(await resolveRequestTenant(), existing.id)) return false
       }
       return true
     },

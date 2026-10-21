@@ -18,6 +18,6 @@ export async function loadUserManagementPage(actor: Actor) {
     const allRoles = roles.map(r => ({ id: r.id, name: r.description }))
     const canAssignRoles = hasPermission(actor, 'assign-user-roles')
     const assignable = canAssignRoles ? await assignableRoleIds(tx, actor, allRoles.map(r => r.id), system) : []
-    return { allRoles, assignable, registeredRoleId: system.registered }
+    return { allRoles, assignable, registeredRoleId: system.registered, canInvite: hasPermission(actor, 'invite-users') }
   })
 }
