@@ -124,7 +124,7 @@ task la legge prima di cominciare.
   - `public.ensure_default_membership(p_user_id uuid) returns text` — stato dell'appartenenza nel tenant corrente dopo la chiamata, o `null`.
 - Produces (Drizzle): `tenantMembership` in `lib/db/schema.ts`, con `status: text('status', { enum: ['active', 'deactivated'] })`.
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 In `lib/tenancy/tenant-membership.integration.test.ts`, con due tenant: il predefinito e un tenant
 B creato in `beforeAll` con `withOwner` (come fa `lib/db/tenant-isolation.integration.test.ts`),
@@ -159,12 +159,12 @@ it('ensure_default_membership leaves app.tenant_id as it found it', async () => 
 Per le asserzioni sugli errori usa lo stesso modo dei test esistenti di
 `users-actions.integration.test.ts` (messaggio dell'eccezione Postgres).
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `cd sources/microservices/web-construct && npm run test:integration -- lib/tenancy/tenant-membership.integration.test.ts`
 Expected: FAIL, `relation "public.tenant_membership" does not exist` o import mancante di `tenantMembership`.
 
-- [ ] **Step 3: Scrivi la migrazione 0048**
+- [✅] **Step 3: Scrivi la migrazione 0048**
 
 Sezioni, in quest'ordine:
 
@@ -178,12 +178,12 @@ Sezioni, in quest'ordine:
 8. **`app_private.is_member_elsewhere(p_user_id uuid) returns boolean`**: salva `v_origine := current_setting('app.tenant_id', true)`; per ogni `id` di `public.tenant` diverso dal corrente imposta `set_config('app.tenant_id', id::text, true)` e controlla se esiste un'appartenenza (qualunque stato); rimette `v_origine` prima di **ogni** `return`. Grant a `construct_runtime` (la chiama la funzione sotto, con i diritti di chi chiama).
 9. **`public.ensure_default_membership(p_user_id uuid) returns text`**, in quest'ordine: se esiste l'appartenenza nel tenant corrente ritorna il suo stato; se il tenant corrente non ha slug `default` ritorna `null`; se `is_member_elsewhere` ritorna `null`; altrimenti inserisce `active` (`on conflict do nothing`) e ritorna `'active'`. Grant a `construct_runtime`.
 
-- [ ] **Step 4: Schema Drizzle e fixture**
+- [✅] **Step 4: Schema Drizzle e fixture**
 
 - `lib/db/schema.ts`: `tenantMembership` dichiarata prima di `userRole`, con `tenantIdColumn()`, PK `tenant_membership_pkey`, indice `tenant_membership_user_id_idx`, `references(() => users.id, { onDelete: 'cascade' })`; in `userRole` la `foreignKey` `user_role_membership_fkey` con `.onDelete('cascade')`.
 - Negli 8 file di integrazione elencati sopra, ogni fixture che inserisce `user_role` inserisce prima l'appartenenza `active` nello stesso tenant; ogni `afterAll` che cancella utenti o tenant di prova cancella anche le appartenenze (o si affida alla cascata da `users`).
 
-- [ ] **Step 5: Applica e rigenera lo schema**
+- [✅] **Step 5: Applica e rigenera lo schema**
 
 ```bash
 set -a && . ./sources/devops/db/operator.env && set +a && TEST_DATABASE_DISPOSABLE=1 node sources/devops/db/db.mjs test-apply
@@ -193,7 +193,7 @@ node sources/devops/db/db.mjs schema-write && node sources/devops/db/db.mjs sche
 ```
 Expected: `0048_tenant_membership` applicata; `schema.sql matches ordered migrations`.
 
-- [ ] **Step 6: Verifica che passino**
+- [✅] **Step 6: Verifica che passino**
 
 Run: `cd sources/microservices/web-construct && npm run test:integration`
 Expected: PASS, compresi `lib/schema-contract.integration.test.ts` (la tabella nuova è di tenant, con le due policy, indice in testa `id_tenant` e FK composte) e i tetti dei viaggi.
@@ -201,7 +201,7 @@ Expected: PASS, compresi `lib/schema-contract.integration.test.ts` (la tabella n
 Run (dalla radice; `TEST_DATABASE_URL` sta in `.env.test.local`): `set -a && . ./sources/microservices/web-construct/.env.test.local && set +a && DATABASE_URL="$TEST_DATABASE_URL" node sources/devops/db/db.mjs boundary-check`
 Expected: nessuna violazione.
 
-- [ ] **Step 7: Commit**
+- [✅] **Step 7: Commit**
 
 ```bash
 git add sources/devops/db/migrations/0048_tenant_membership.sql sources/devops/db/schema.sql sources/microservices/web-construct/lib
@@ -224,7 +224,7 @@ git commit -m "feat(tenancy): tenant memberships and per-tenant last-admin rule"
   - `evaluateAuthorization(status: number | null | undefined, membershipStatus: MembershipStatus | null, roleIds: number[], adminRoleId: number)` → stesso risultato di oggi; `accountActive` = account attivo **e** `membershipStatus === 'active'`;
   - `AuthorizationSnapshot` con il campo in più `membershipStatus: MembershipStatus | null`.
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 `lib/auth-policy.test.ts`:
 
@@ -252,7 +252,7 @@ it('first sign-in leaves a deactivated default membership deactivated and adds n
 `lib/rbac/actor.integration.test.ts`: `resolveActor(B, userId)` è `null` per chi è disattivato in B e
 non `null` nel predefinito.
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `cd sources/microservices/web-construct && npx vitest run lib/auth-policy.test.ts`
 Expected: FAIL, il secondo caso dà `accountActive: true`.
@@ -260,13 +260,13 @@ Expected: FAIL, il secondo caso dà `accountActive: true`.
 Run: `npm run test:integration -- lib/rbac/auth-roles.integration.test.ts lib/rbac/actor.integration.test.ts`
 Expected: FAIL sui casi nuovi.
 
-- [ ] **Step 3: Implementa**
+- [✅] **Step 3: Implementa**
 
 - `selectAuthorizationSnapshot` (`lib/rbac/auth-roles.ts:33`): aggiungi alla stessa istruzione la sottoquery scalare `(select m.status from public.tenant_membership m where m.user_id = ${userId}) as membership_status`, convertita con `isMembershipStatus` (altro valore → `null`).
 - `evaluateAuthorization` con il nuovo secondo parametro; aggiorna i chiamanti (`auth-roles.ts`, `actor.ts`) e i test unitari che costruiscono l'autorizzazione (`actor.test.ts`, `auth-guard.test.ts`).
 - `selectUserAuthorization(tx, userId, ensureRegisteredRole)`: con `ensureRegisteredRole`, **prima** dell'istruzione unica chiama `ensureDefaultMembership(tx, userId)`; dopo, il ruolo base si aggiunge solo se `accountActive` (non più solo `status === ACTIVE_USER_STATUS`). Senza `ensureRegisteredRole` nessuna istruzione in più.
 
-- [ ] **Step 4: Verifica che passino**
+- [✅] **Step 4: Verifica che passino**
 
 Run: `npx vitest run lib/auth-policy.test.ts lib/rbac/actor.test.ts lib/rbac/auth-guard.test.ts`
 Expected: PASS.
@@ -274,7 +274,7 @@ Expected: PASS.
 Run: `npm run test:integration -- lib/rbac lib/auth-security.integration.test.ts lib/db/round-trip-budget.integration.test.ts`
 Expected: PASS; i tetti (`resolveUserAuthorization` ≤5, `resolveActor` ≤5, pagina utenti ≤11) invariati.
 
-- [ ] **Step 5: Spunta MT2-RISK-3 nella specifica e commit**
+- [✅] **Step 5: Spunta MT2-RISK-3 nella specifica e commit**
 
 ```bash
 git add sources/microservices/web-construct/lib docs/superpowers/specs/2026-10-20-multi-tenancy-piece-2-memberships-design.md
@@ -296,7 +296,7 @@ git commit -m "feat(rbac): authorization requires an active tenant membership"
   - in `lib/tenancy/membership.ts`: `isMembershipDeactivated(tenantId: TenantId, userId: string): Promise<boolean>` (`true` solo se la riga esiste ed è `deactivated`); `joinDefaultTenant(userId: string): Promise<MembershipStatus | null>` (`withTenant(await resolveRequestTenant(), tx => ensureDefaultMembership(tx, userId))`);
   - in `lib/invitation-email.ts`: `buildSetPasswordLink(baseUrl: string, rawToken: string): string`; `sendInvitationEmail(invitation: PreparedInvitation): Promise<{ ok: true } | { ok: false; code: string }>` — legge `AUTH_URL ?? NEXTAUTH_URL`, manda l'email di oggi e registra l'esito con `recordInvitationDelivery`, come fanno ora le due rotte.
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 `lib/invitation-email.test.ts`:
 
@@ -315,12 +315,12 @@ riga `deactivated`, `false` per una `active` e per chi non ha la riga.
 un dominio consentito chiama `joinDefaultTenant(invitation.userId)` prima di `sendInvitationEmail`
 e risponde `{ ok: true }`; quando `prepareInvitation` dà `null` non chiama nessuno dei due.
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `cd sources/microservices/web-construct && npx vitest run lib/invitation-email.test.ts app/api/auth/register/route.test.ts`
 Expected: FAIL, modulo `@/lib/invitation-email` mancante.
 
-- [ ] **Step 3: Implementa**
+- [✅] **Step 3: Implementa**
 
 - Sposta link, testo e HTML dell'email da `register/route.ts` e `send-invite/route.ts` in `lib/invitation-email.ts`; le due rotte lo usano e rispondono come oggi.
 - `register/route.ts`: dopo `prepareInvitation`, `await joinDefaultTenant(invitation.userId)`, poi l'invio.
@@ -330,7 +330,7 @@ Expected: FAIL, modulo `@/lib/invitation-email` mancante.
   - callback `signIn` (`:165`): per un utente OIDC esistente, `false` anche se `isMembershipDeactivated(...)`.
   Il messaggio mostrato a chi entra resta quello di oggi.
 
-- [ ] **Step 4: Verifica che passino**
+- [✅] **Step 4: Verifica che passino**
 
 Run: `npx vitest run lib/invitation-email.test.ts app/api/auth/register/route.test.ts && npm run test:integration -- lib/tenancy/tenant-membership.integration.test.ts lib/auth-security.integration.test.ts`
 Expected: PASS.
@@ -338,7 +338,7 @@ Expected: PASS.
 Run: `npx tsc --noEmit && npm run lint && npm run test`
 Expected: nessun errore; solo gli 8 fallimenti noti di `Sidebar*`.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct/lib sources/microservices/web-construct/app
@@ -362,7 +362,7 @@ git commit -m "feat(auth): refuse sign-in for deactivated memberships; registrat
   - `loadUserManagementPage(actor)` restituisce anche `canInvite: boolean` (`hasPermission(actor, 'invite-users')`);
   - `UserDto` senza `tenantValidationPending` e `multiTenancyEnabled` (DEF-2.1: erano sempre `false`).
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 `lib/rbac/users-service.test.ts`: la query renderizzata parte da `"tenant_membership"` (join con
 `"users"`) e il filtro sugli stati usa `"tenant_membership"."status"`; togli le asserzioni su
@@ -390,12 +390,12 @@ it('addUserByEmail sends an invitation only to an account without password', …
 Nei test esistenti che verificano la disattivazione, `statusOf` legge `tenant_membership.status`
 invece di `users.id_user_status` (MT2-OK-1: stesso comportamento visibile).
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `cd sources/microservices/web-construct && npx vitest run lib/rbac/users-service.test.ts`
 Expected: FAIL sulle asserzioni nuove.
 
-- [ ] **Step 3: Implementa**
+- [✅] **Step 3: Implementa**
 
 - `users-service.ts`: `listUsers` e `countUsers` partono da `tenantMembership` con `innerJoin(users, eq(users.id, tenantMembership.userId))`. Lo stato è l'espressione `case tenant_membership.status when 'active' then 2 else 1 end` come `UserStatusId`, usata per la colonna, per l'ordinamento della chiave `id_user_status` e per il filtro `statuses` (filtrare su `tenantMembership.status` con i valori tradotti va bene). Le date restano quelle di `users`.
 - `users-actions.ts`:
@@ -409,12 +409,12 @@ Limite noto, da scrivere nel commento di `addUserByEmail`: l'email parte solo pe
 quindi il tempo di risposta può differire; il contenuto della risposta no. È lo stesso limite di
 oggi della registrazione.
 
-- [ ] **Step 4: Verifica che passino**
+- [✅] **Step 4: Verifica che passino**
 
 Run: `npx vitest run lib/rbac guards && npm run test:integration -- lib/rbac lib/db/round-trip-budget.integration.test.ts`
 Expected: PASS; tetto della pagina utenti invariato (≤11).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/microservices/web-construct
@@ -447,7 +447,7 @@ Chiavi da seminare (namespace `users`, modulo `rbac`):
 | `users.add.invalid_email` | Scrivi un indirizzo email valido. | Enter a valid email address. |
 | `users.add.error` | Non è stato possibile aggiungere la persona. | Could not add the person. |
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 `AddUserDialog.test.tsx` (mock di `addUserByEmail`):
 
@@ -462,19 +462,19 @@ it('shows the generic error in role="alert" when the action fails', …)
 vede "Persona aggiunta o invitata."; filtrando la griglia per quell'email trova una riga con stato
 "Attivo"; ripetendo l'aggiunta vede lo stesso messaggio.
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `cd sources/microservices/web-construct && npx vitest run components/rbac/users/AddUserDialog.test.tsx`
 Expected: FAIL, componente mancante.
 
-- [ ] **Step 3: Implementa**
+- [✅] **Step 3: Implementa**
 
 - Migrazione 0049 con `apply_translation_seed` (modello in `0042`/`0043`); `test-apply`, `schema-write`, `schema-check` come nel Task 1.
 - `AddUserDialog` su `AccessibleDialog` (come `ManageRolesModal.tsx`), campo `type="email"` con etichetta `users.add.email_label`; dopo il successo mostra `users.add.done` e chiama `onAdded`.
 - `UsersTableClient`: bottone `users.add.open` nei `children` di `GridToolbar`, solo se `canInvite`; `onAdded` → `gridApiRef.current?.refreshInfiniteCache()`.
 - `page.tsx`: passa `canInvite` da `loadUserManagementPage`.
 
-- [ ] **Step 4: Verifica che passino**
+- [✅] **Step 4: Verifica che passino**
 
 Run: `npx vitest run components/rbac/users guards && npm run test:i18n-keys`
 Expected: PASS.
@@ -482,7 +482,7 @@ Expected: PASS.
 Run (configurazione `web-construct-e2e`, nessun test di integrazione in corso): `caffeinate -dims uv run pytest sources/tests/e2e/test_users.py`
 Expected: PASS, compreso il test che cambia lo stato dalla riga (MT2-OK-1).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git add sources/devops/db sources/microservices/web-construct sources/tests/e2e/test_users.py
