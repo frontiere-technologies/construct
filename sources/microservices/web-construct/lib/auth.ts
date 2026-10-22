@@ -13,7 +13,13 @@ import { createLogger } from '@/lib/logger'
 import { authConfig, mergeAuthCallbacks } from '@/lib/auth.config'
 import { keepOnRequestHost } from '@/lib/auth-host-redirect'
 import { readRequestHost } from '@/lib/tenancy/request-host'
-import { enterTenant, isSignInRefusedOnHost, revalidateTokenTenant, type TokenTenant } from '@/lib/tenancy/token-tenant'
+import {
+  enterTenant,
+  isSignInRefusedOnHost,
+  revalidateTokenTenant,
+  updateTokenTenant,
+  type TokenTenant,
+} from '@/lib/tenancy/token-tenant'
 import {
   assertSafeAuthConfiguration,
   isActiveAccount,
@@ -202,7 +208,7 @@ const nextAuth = NextAuth({
       }
       return true
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger, session }) {
       if (account) token.provider = account.provider
 
       if (account && user) {
@@ -238,10 +244,17 @@ const nextAuth = NextAuth({
         // All'accesso il tenant si sceglie fra quelli disponibili sull'indirizzo (MT4-DEC-4).
         if (userId) applyTokenTenant(token, await enterTenant(userId, await readRequestHost(), { current: null, firstEntry: true }))
       } else if (token.userId) {
-        // A ogni richiesta il tenant del token si rivalida (MT4-DEC-7). Il parametro `session` di
-        // un aggiornamento (trigger 'update', anche da POST /api/auth/session del client) non entra:
-        // il tenant viene solo dal token e dall'indirizzo della richiesta.
-        applyTokenTenant(token, await revalidateTokenTenant(token.userId, token, await readRequestHost()))
+        const host = await readRequestHost()
+        if (trigger === 'update') {
+          // Un aggiornamento (unstable_update da chooseTenant, ma anche POST /api/auth/session del
+          // client): del carico vale solo un tenantId fra i tenant disponibili sull'indirizzo,
+          // ricontrollato qui; nessun altro campo entra (MT4-DEC-5, MT4-DEC-7).
+          applyTokenTenant(token, await updateTokenTenant(token.userId, token, host, session))
+        } else {
+          // A ogni richiesta il tenant del token si rivalida (MT4-DEC-7): viene solo dal token e
+          // dall'indirizzo della richiesta.
+          applyTokenTenant(token, await revalidateTokenTenant(token.userId, token, host))
+        }
       }
       return token
     },
@@ -263,6 +276,14 @@ const nextAuth = NextAuth({
 })
 
 export const { auth, signIn, signOut } = nextAuth
+
+/**
+ * Aggiorna il token della sessione dal server (trigger 'update' del callback `jwt`). Lo usa
+ * `chooseTenant` (lib/tenancy/tenant-actions.ts) dopo il suo controllo; il callback ricontrolla
+ * comunque il tenant richiesto. Non passa dagli handler qui sotto: chi lo chiama porta altrove con
+ * `redirect` di Next, mai con un rinvio di Auth.js (che punterebbe ad AUTH_URL).
+ */
+export const { unstable_update } = nextAuth
 
 function applyTokenTenant(token: JWT, tenant: TokenTenant): void {
   token.tenantId = tenant.tenantId

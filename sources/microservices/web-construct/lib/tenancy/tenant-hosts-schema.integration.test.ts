@@ -9,8 +9,9 @@ import type { TenantId } from './tenant-id'
 
 /**
  * Indirizzi, impostazioni del tenant e ultimo tenant usato (specifica 2026-10-21, §2.1–§2.3,
- * MT4-DEC-10, MT4-DEC-13, MT4-DEC-17; migrazione 0053). Un tenant nato dal modello in beforeAll
- * riceve gli indirizzi di prova; sparisce in afterAll con i suoi indirizzi.
+ * MT4-DEC-10, MT4-DEC-13, MT4-DEC-17; migrazione 0053, più la voce di menu della 0055). Un tenant
+ * nato dal modello in beforeAll riceve gli indirizzi di prova; sparisce in afterAll con i suoi
+ * indirizzi.
  */
 const DEFAULT = defaultTestTenant()
 
@@ -156,6 +157,29 @@ describeIntegration('tenant hosts and settings', () => {
         order by r.system_key
       `))
       expect(rows.map(row => row.system_key), String(target)).toEqual(['TENANT_ADMIN'])
+    }
+  })
+
+  it('the Tenant settings menu entry follows Theme & Styles and is granted to TENANT_ADMIN (0055)', async () => {
+    for (const target of [DEFAULT, template, created]) {
+      const entries = await withTenant(target, tx => tx.execute<{ link: string; order_position: number; grants: string[] | null; it_name: string | null }>(sql`
+        select m.functionality_link as link, m.order_position,
+               (select array_agg(r.system_key order by r.system_key)
+                from public.role_functionality f
+                join public.role r on r.id_role = f.id_role
+                where f.id_menu_entry = m.id_menu_entry) as grants,
+               m.item_translation->'IT'->>'name' as it_name
+        from public.menu_entry m
+        where m.id_parent = (select t.id_parent from public.menu_entry t where t.functionality_link = 'admin/theme')
+        order by m.order_position, m.id_menu_entry
+      `))
+      const links = entries.map(entry => entry.link)
+      expect(links.indexOf('admin/tenant-settings'), String(target)).toBe(links.indexOf('admin/theme') + 1)
+      const settings = entries.find(entry => entry.link === 'admin/tenant-settings')!
+      expect(settings.grants, String(target)).toEqual(['TENANT_ADMIN'])
+      expect(settings.it_name).toBe('Impostazioni del tenant')
+      // Le posizioni restano distinte: le voci dopo il tema sono scese di un posto.
+      expect(new Set(entries.map(entry => entry.order_position)).size, String(target)).toBe(entries.length)
     }
   })
 

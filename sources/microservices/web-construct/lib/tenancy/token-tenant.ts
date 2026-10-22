@@ -146,3 +146,58 @@ export async function revalidateTokenTenant(
     roleIds: [],
   }
 }
+
+/**
+ * Il tenant richiesto da un aggiornamento della sessione, nella forma di `unstable_update`
+ * (`{ user: { tenantId } }`), se è un id: un intero positivo. Nient'altro del carico conta (né
+ * `tenantState`, né `tenantHost`, né ruoli): lo scrive anche il client.
+ */
+function requestedTenantId(payload: unknown): number | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const user = (payload as { user?: unknown }).user
+  if (typeof user !== 'object' || user === null) return null
+  const value = (user as { tenantId?: unknown }).tenantId
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
+}
+
+/**
+ * L'aggiornamento della sessione (trigger 'update' del callback `jwt`; specifica 2026-10-21, §3.1,
+ * MT4-DEC-5, MT4-DEC-7). Lo chiama `chooseTenant` con `unstable_update({ user: { tenantId } })`, ma ci arriva
+ * anche un POST /api/auth/session scritto dal client: il carico non è mai fidato.
+ *
+ * - Con un `tenantId` fra i tenant disponibili sull'indirizzo della richiesta, il token entra in
+ *   quel tenant. Altrimenti la richiesta si ignora e il token si rivalida come a ogni richiesta.
+ * - Senza `tenantId`, un token in `choose` o `none` si ricalcola come all'accesso (senza la prima
+ *   appartenenza): chi è stato aggiunto a un tenant dopo l'arrivo sul messaggio non resta bloccato
+ *   fino al prossimo accesso. Un token `ready` si rivalida e basta.
+ *
+ * Non scrive mai l'ultimo tenant usato: lo fa `chooseTenant`, dopo il suo controllo (MT4-DEC-16).
+ */
+export async function updateTokenTenant(
+  userId: string,
+  token: Partial<Record<keyof TokenTenant, unknown>>,
+  host: string | null,
+  payload: unknown,
+): Promise<TokenTenant> {
+  const requested = requestedTenantId(payload)
+  if (requested === null) {
+    if (token.tenantState === 'choose' || token.tenantState === 'none') {
+      return enterTenant(userId, host, { current: null, firstEntry: false })
+    }
+    return revalidateTokenTenant(userId, token, host)
+  }
+
+  const available = await listAvailableTenants(userId, host)
+  const chosen = available.find(tenant => tenant.tenantId === requested)
+  if (!chosen) return revalidateTokenTenant(userId, token, host)
+
+  const authorization = await resolveUserAuthorization(chosen.tenantId, userId, false)
+  return {
+    tenantId: chosen.tenantId,
+    tenantState: 'ready',
+    tenantHost: host,
+    tenantName: chosen.name,
+    accountActive: authorization.accountActive,
+    roleIds: authorization.roleIds,
+  }
+}

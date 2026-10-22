@@ -48,7 +48,7 @@ vi.mock('next-auth', () => ({
   default: (config: typeof mocks.config) => {
     mocks.config = config
     const handler = async () => mocks.handlerResponse()
-    return { handlers: { GET: handler, POST: handler }, auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn() }
+    return { handlers: { GET: handler, POST: handler }, auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), unstable_update: vi.fn() }
   },
 }))
 vi.mock('next-auth/providers/credentials', () => ({ default: (options: unknown) => options }))
@@ -479,5 +479,107 @@ describe('several hosts (MT4-RISK-1)', () => {
     const response = await handlers.GET(new NextRequest('http://a.localhost:3000/api/auth/error'))
 
     expect(response.headers.get('location')).toBe('/login?error=Configuration')
+  })
+})
+
+/**
+ * L'aggiornamento della sessione (trigger 'update'): lo chiama `chooseTenant` con `unstable_update`,
+ * ma ci arriva anche un POST /api/auth/session scritto dal client. Il carico non è mai fidato: un
+ * `tenantId` vale solo se è fra i tenant disponibili sull'indirizzo della richiesta, e nessun altro
+ * campo entra (regola del controllore sul Task 4, MT4-DEC-7, MT4-DEC-16).
+ */
+describe('session update (trigger update, MT4-DEC-5, MT4-DEC-7)', () => {
+  const chooseToken = (tenantState: 'choose' | 'none' = 'choose'): Token => ({
+    userId: USER.id, provider: 'credentials', accountActive: true, roleIds: [],
+    tenantId: null, tenantState, tenantHost: 'localhost', tenantName: null,
+  })
+
+  async function updateToken(token: Token, session: unknown) {
+    return nextRequestToken(token, { trigger: 'update', session })
+  }
+
+  it('a forged update with a tenant not available on the address changes nothing', async () => {
+    mocks.listAvailableTenants.mockResolvedValue(tenants(DEFAULT_TENANT))
+
+    const updated = await updateToken(readyToken(DEFAULT_TENANT), { user: { tenantId: OTHER_TENANT } })
+
+    expect(mocks.listAvailableTenants).toHaveBeenCalledWith(USER.id, 'localhost')
+    expect(updated).toMatchObject({ tenantId: DEFAULT_TENANT, tenantState: 'ready', tenantHost: 'localhost' })
+    expect(mocks.resolveUserAuthorization).not.toHaveBeenCalledWith(OTHER_TENANT, expect.anything(), expect.anything())
+    expect(mocks.resolveTenantAuthorization).not.toHaveBeenCalledWith(OTHER_TENANT, expect.anything(), expect.anything())
+
+    // Anche da una sessione in attesa di scelta: il tenant non disponibile non si entra.
+    const waiting = await updateToken(chooseToken(), { user: { tenantId: OTHER_TENANT } })
+    expect(waiting).toMatchObject({ tenantId: null, tenantState: 'choose' })
+  })
+
+  it('an update with a tenant available on the address enters it, without writing last_tenant_id', async () => {
+    mocks.listAvailableTenants.mockResolvedValue(tenants(DEFAULT_TENANT, OTHER_TENANT))
+    mocks.resolveUserAuthorization.mockResolvedValue({ accountActive: true, roleIds: [1], isAdmin: true })
+
+    const fromChoice = await updateToken(chooseToken(), { user: { tenantId: OTHER_TENANT } })
+    expect(fromChoice).toMatchObject({
+      tenantId: OTHER_TENANT, tenantState: 'ready', tenantHost: 'localhost',
+      tenantName: `Tenant ${OTHER_TENANT}`, accountActive: true, roleIds: [1],
+    })
+    expect(mocks.resolveUserAuthorization).toHaveBeenCalledWith(OTHER_TENANT, USER.id, false)
+
+    const switched = await updateToken(readyToken(DEFAULT_TENANT), { user: { tenantId: OTHER_TENANT } })
+    expect(switched).toMatchObject({ tenantId: OTHER_TENANT, tenantState: 'ready' })
+
+    // L'ultimo tenant usato lo scrive solo chooseTenant, dopo il suo controllo (MT4-DEC-16).
+    expect(mocks.updates).toEqual([])
+    expect(mocks.sets.filter(values => 'lastTenantId' in values)).toEqual([])
+  })
+
+  it('takes nothing but a numeric tenantId from the payload', async () => {
+    mocks.listAvailableTenants.mockResolvedValue(tenants(DEFAULT_TENANT, OTHER_TENANT))
+
+    for (const payload of [
+      { user: { tenantId: String(OTHER_TENANT) } },
+      { user: { tenantId: OTHER_TENANT + 0.5 } },
+      { user: { tenantId: -OTHER_TENANT } },
+      // Il tenantId vale solo nella forma di unstable_update, dentro `user`.
+      { tenantId: OTHER_TENANT },
+      { tenantState: 'ready', tenantHost: 'b.localhost', accountActive: true, roleIds: [1], tenantName: 'Forged' },
+      null,
+      'tenant',
+    ]) {
+      const updated = await updateToken(readyToken(DEFAULT_TENANT), payload)
+      expect(updated).toMatchObject({ tenantId: DEFAULT_TENANT, tenantState: 'ready', tenantHost: 'localhost', tenantName: `Tenant ${DEFAULT_TENANT}`, roleIds: [0] })
+    }
+    expect(mocks.resolveUserAuthorization).not.toHaveBeenCalled()
+  })
+
+  it('an update without a tenant recomputes a session in state choose or none (refresh)', async () => {
+    // Aggiunta a un tenant dopo l'arrivo sul messaggio: l'aggiornamento la fa entrare.
+    mocks.listAvailableTenants.mockResolvedValue(tenants(OTHER_TENANT))
+
+    const refreshed = await updateToken(chooseToken('none'), {})
+    expect(mocks.listAvailableTenants).toHaveBeenCalledWith(USER.id, 'localhost')
+    expect(refreshed).toMatchObject({ tenantId: OTHER_TENANT, tenantState: 'ready', tenantHost: 'localhost' })
+
+    mocks.listAvailableTenants.mockResolvedValue([])
+    expect(await updateToken(chooseToken('choose'), undefined)).toMatchObject({ tenantId: null, tenantState: 'none' })
+    // Nessuna scrittura: né l'ultimo tenant usato né l'appartenenza al predefinito.
+    expect(mocks.ensureDefaultMembership).not.toHaveBeenCalled()
+    expect(mocks.sets.filter(values => 'lastTenantId' in values)).toEqual([])
+  })
+
+  it('an update without a tenant on a ready session is the usual revalidation', async () => {
+    const updated = await updateToken(readyToken(DEFAULT_TENANT), {})
+
+    expect(updated).toMatchObject({ tenantId: DEFAULT_TENANT, tenantState: 'ready' })
+    expect(mocks.resolveTenantAuthorization).toHaveBeenCalledWith(DEFAULT_TENANT, USER.id, 'localhost')
+    expect(mocks.listAvailableTenants).not.toHaveBeenCalled()
+  })
+
+  it('a request that is not an update ignores a session payload', async () => {
+    mocks.listAvailableTenants.mockResolvedValue(tenants(DEFAULT_TENANT, OTHER_TENANT))
+
+    const token = await nextRequestToken(readyToken(DEFAULT_TENANT), { session: { tenantId: OTHER_TENANT } })
+
+    expect(token).toMatchObject({ tenantId: DEFAULT_TENANT })
+    expect(mocks.listAvailableTenants).not.toHaveBeenCalled()
   })
 })

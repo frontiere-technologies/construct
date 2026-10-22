@@ -243,11 +243,19 @@ function appSourceFiles(): string[] {
   return sourceFiles('.').map(path => relative(process.cwd(), path))
 }
 
+/**
+ * Pagine per chi ha fatto l'accesso che stanno fuori da `app/(protected)/`: il layout protetto
+ * disegna il menu del tenant, e queste servono proprio chi un tenant non l'ha ancora (pezzo 4,
+ * §3.2). Le pagine pubbliche (accesso, registrazione, recupero) restano fuori.
+ */
+const SIGNED_IN_PAGES_OUTSIDE_PROTECTED = ['app/select-tenant/page.tsx', 'app/no-tenant/page.tsx']
+
 function scannedFiles(): string[] {
   return appSourceFiles()
     .filter(path =>
       /^app\/api\/.*\/route\.ts$/.test(path)
       || /^app\/\(protected\)\/.*\/?page\.tsx$/.test(path)
+      || SIGNED_IN_PAGES_OUTSIDE_PROTECTED.includes(path)
       || isServerActionsSource(readFileSync(path, 'utf8'), path))
 }
 
@@ -400,6 +408,8 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'app/(protected)/page.tsx#default': 'allowAnyAuthenticated',
   'app/(protected)/profile/page.tsx#default': 'allowAnyAuthenticated',
   'app/(protected)/settings/page.tsx#default': 'allowAnyAuthenticated',
+  'app/no-tenant/page.tsx#default': 'allowAnyAuthenticated',
+  'app/select-tenant/page.tsx#default': 'allowAnyAuthenticated',
   'app/api/admin/send-invite/route.ts#POST': 'invite-users',
   'app/api/auth/change-password/route.ts#POST': 'allowSelfService',
   'app/api/auth/forgot-password/route.ts#POST': 'allowAnonymous',
@@ -438,6 +448,8 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/rbac/users-actions.ts#addUserByEmail': 'invite-users',
   'lib/rbac/users-actions.ts#setUserStatus': 'set-user-status',
   'lib/rbac/users-actions.ts#updateUserRoles': 'assign-user-roles',
+  'lib/tenancy/tenant-actions.ts#chooseTenant': 'allowAnyAuthenticated',
+  'lib/tenancy/tenant-actions.ts#refreshTenant': 'allowAnyAuthenticated',
   'lib/theme-actions.ts#saveAppTheme': 'requireAdministrator',
 }
 
@@ -469,6 +481,7 @@ describe('permission declared', () => {
     expect(files).toContain('app/api/rbac/users-grid/route.ts')
     expect(files).toContain('app/(protected)/(admin)/functionalities/page.tsx')
     expect(files).toContain('app/(protected)/page.tsx')
+    for (const page of SIGNED_IN_PAGES_OUTSIDE_PROTECTED) expect(files).toContain(page)
   })
 
   it('declares access first in every server action, route handler and protected page', () => {

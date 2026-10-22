@@ -350,7 +350,7 @@ git commit -m "feat(auth): current tenant in the token, revalidated on every req
   - percorsi `/select-tenant` e `/no-tenant`: in `authorized`, sessione con `tenantState === 'choose'` → solo `/select-tenant` (ogni altra pagina reindirizza lì); `'none'` → solo `/no-tenant`; `'ready'` → queste due pagine reindirizzano a `/`.
   - chiavi seminate in 0055 (namespace `tenancy`, modulo `rbac`): `tenancy.choose.title` ("Ciao {name}, dove vuoi entrare?" / "Hi {name}, where do you want to go?"), `tenancy.choose.hint` ("Potrai cambiare in qualunque momento dalla barra laterale." / "You can switch at any time from the sidebar."), `tenancy.role.admin` ("Amministratore"/"Administrator"), `tenancy.role.user` ("Utente"/"User"), `tenancy.none.message` ("Non sei configurato su questo indirizzo." / "You are not set up on this address."), `tenancy.none.logout` ("Esci"/"Sign out"), `tenancy.switch.label` ("Cambia tenant"/"Switch tenant"), `tenancy.switch.current` ("Tenant corrente"/"Current tenant"), `tenancy.settings.title` ("Impostazioni del tenant"/"Tenant settings"), `tenancy.settings.self_registration` ("Accetta registrazioni autonome"/"Accept self-registration"), `tenancy.settings.self_registration_hint` ("Chi si registra da questo indirizzo entra nel tenant, se non è già membro di un altro." / "People who sign up from this address join the tenant, unless they already belong to another one."), `tenancy.settings.saved` ("Impostazioni salvate."/"Settings saved."). La stessa migrazione aggiunge la voce di menu "Impostazioni del tenant" (`admin/tenant-settings`) nel predefinito e nel modello, accanto a "Theme & Styles", concessa al ruolo `TENANT_ADMIN`.
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 ```ts
 // tenant-actions.integration.test.ts
@@ -365,16 +365,16 @@ it('a session in state none can open only /no-tenant', …)
 it('a ready session is redirected away from /select-tenant and /no-tenant', …)
 ```
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
-- [ ] **Step 3: Implementa** pagine, componente a schede (griglia che va a capo, pagina che scorre), azione, migrazione 0055 (`test-apply`, `schema-write`, `schema-check`).
+- [✅] **Step 3: Implementa** pagine, componente a schede (griglia che va a capo, pagina che scorre), azione, migrazione 0055 (`test-apply`, `schema-write`, `schema-check`).
 
-- [ ] **Step 4: Verifica che passino**
+- [✅] **Step 4: Verifica che passino**
 
 Run: `npx vitest run components/tenancy lib/auth.config.test.ts guards && npm run test:i18n-keys && npm run test:integration -- lib/tenancy`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(tenancy): tenant chooser, not-configured page and tenant switch action"
