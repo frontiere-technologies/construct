@@ -5,12 +5,20 @@ import { useI18n } from '@/context/I18nContext'
 import { useAuth } from '@/context/use-auth'
 import { refreshTenant } from '@/lib/tenancy/tenant-actions'
 import { Button } from '@/components/ui/button'
+import { loadPage } from './load-page'
 
 /**
  * Il messaggio per chi non ha nessun tenant sull'indirizzo (specifica 2026-10-21, §3.2, MT4-DEC-3),
  * con il comando per uscire. «Riprova» ricalcola il tenant della sessione sul server: chi è stato
  * aggiunto a un tenant nel frattempo entra senza rifare l'accesso. Nessun rinvio automatico verso
  * un altro indirizzo.
+ *
+ * Se la sessione ha ora un tenant (o una scelta da fare), la home la carica il browser da capo
+ * (`loadPage`), non un `redirect` dell'azione: dopo un rinvio Next disegna la pagina nuova con una
+ * richiesta interna all'indirizzo del server (`localhost`), non a quello della richiesta. Su un
+ * indirizzo dedicato come `a.localhost` il proxy vedrebbe l'indirizzo principale, ricalcolerebbe il
+ * tenant lì e mostrerebbe di nuovo questo messaggio, con il cookie già giusto. Senza tenant non si
+ * carica niente: il messaggio resta.
  */
 export function TenantNotConfigured() {
   const { t } = useI18n()
@@ -19,7 +27,8 @@ export function TenantNotConfigured() {
 
   const handleRetry = () => {
     startTransition(async () => {
-      await refreshTenant()
+      const state = await refreshTenant()
+      if (state !== 'none') loadPage('/')
     })
   }
 

@@ -178,9 +178,16 @@ describeIntegration('tenant choice and switch', () => {
   })
 
   describe('refreshTenant', () => {
-    it('asks the token to recompute the tenant and goes home, without writing last_tenant_id', async () => {
+    it('asks the token to recompute the tenant and returns its state, without redirecting or writing last_tenant_id', async () => {
       mocks.session = signedIn(person, 'none')
-      await expect(refreshTenant()).rejects.toThrow('NEXT_REDIRECT:/')
+      // Nessun redirect: dopo un rinvio dell'azione Next disegnerebbe la home con l'indirizzo del
+      // server, non con quello della richiesta. La pagina dopo la carica il browser.
+      mocks.unstableUpdate.mockResolvedValue(signedIn(person, 'ready'))
+      await expect(refreshTenant()).resolves.toBe('ready')
+      mocks.unstableUpdate.mockResolvedValue(signedIn(person, 'none'))
+      await expect(refreshTenant()).resolves.toBe('none')
+      mocks.unstableUpdate.mockResolvedValue(null)
+      await expect(refreshTenant()).resolves.toBe('none')
 
       expect(mocks.unstableUpdate).toHaveBeenCalledWith({})
       expect(await lastTenantOf(person)).toBe(DEFAULT)

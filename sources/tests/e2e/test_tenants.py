@@ -332,12 +332,6 @@ def test_subdomains_are_separate(browser, base_url, test_email, tenants):
         _expect_current_tenant(page, NAME_B)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Difetto del prodotto trovato dal Task 11: dopo «Riprova» la sessione è già nel tenant A "
-    "(/api/auth/session dice ready), ma la pagina resta sul messaggio con l'indirizzo '/' finché non "
-    "si ricarica. La risposta dell'azione porta x-action-redirect '/;push' e nessuna richiesta segue. "
-    "Strict: quando il difetto è corretto il test passa e va tolto questo segno."
-))
 def test_not_configured_retry(browser, base_url, tenants):
     """«Riprova» sul messaggio: senza tenant resta il messaggio; aggiunta ad A nel frattempo, si entra in A
     senza rifare l'accesso."""
@@ -345,15 +339,17 @@ def test_not_configured_retry(browser, base_url, tenants):
     late = tenants.people.late
     with _signed_in(browser, a_url, late, landing="/no-tenant") as page:
         retry = page.get_by_role("button", name="Riprova", exact=True)
-        # L'azione del server è la richiesta POST che parte dal clic: la sua risposta porta già la
-        # pagina dopo il rinvio. Senza un tenant resta il messaggio, anche se l'indirizzo mostrato
-        # diventa "/" (il rinvio dell'azione) e non torna "/no-tenant".
+        # L'azione del server è la richiesta POST che parte dal clic e restituisce lo stato della
+        # sessione. Senza un tenant non si carica niente: il messaggio e l'indirizzo restano.
         with page.expect_response(lambda r: r.request.method == "POST" and r.url.startswith(a_url)):
             retry.click()
         expect(retry).to_be_enabled()
         expect(page.get_by_test_id("no-tenant-message")).to_have_text(NO_TENANT_MESSAGE)
         expect(page.locator('[data-testid^="tenant-switcher-"]')).to_have_count(0)
+        expect(page).to_have_url(f"{a_url}/no-tenant")
 
+        # Aggiunta ad A nel frattempo: la home la carica il browser, sull'indirizzo di A (un rinvio
+        # dell'azione la farebbe disegnare a Next con l'indirizzo del server, cioè senza tenant).
         _db("test-tenant-member-add", "--slug", SLUG_A, "--email", late)
         with page.expect_response(lambda r: r.request.method == "POST" and r.url.startswith(a_url)):
             retry.click()

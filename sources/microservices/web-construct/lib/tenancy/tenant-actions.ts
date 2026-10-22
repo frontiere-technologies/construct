@@ -9,6 +9,7 @@ import { withGlobal } from '@/lib/db/tenant-db'
 import { allowAnyAuthenticated } from '@/lib/rbac/access-declarations'
 import { listAvailableTenants } from './host-tenants'
 import { readRequestHost } from './request-host'
+import type { TenantState } from './tenant-selection'
 
 /**
  * La scelta e il cambio del tenant (specifica 2026-10-21, §3.1, MT4-DEC-4, MT4-DEC-5, MT4-DEC-6,
@@ -55,10 +56,15 @@ export async function chooseTenant(tenantId: number): Promise<void> {
  * configurato su questo indirizzo": chi è stato aggiunto a un tenant nel frattempo entra senza
  * rifare l'accesso. Non sceglie niente e non scrive l'ultimo tenant usato; il callback `jwt`
  * ricalcola solo un token in `choose` o `none`.
+ *
+ * Restituisce lo stato a cui è arrivata la sessione e non porta altrove: un `redirect` qui farebbe
+ * disegnare la home a Next con una richiesta interna all'indirizzo del server (`localhost`), e su un
+ * indirizzo dedicato il proxy ricalcolerebbe il tenant sull'indirizzo principale. La pagina dopo la
+ * carica il browser (components/tenancy/TenantNotConfigured.tsx).
  */
-export async function refreshTenant(): Promise<void> {
+export async function refreshTenant(): Promise<TenantState> {
   allowAnyAuthenticated()
   await signedInPerson()
-  await unstable_update({})
-  redirect('/')
+  const session = await unstable_update({})
+  return session?.user?.tenantState ?? 'none'
 }
