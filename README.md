@@ -539,6 +539,16 @@ it. A separate project makes that mistake impossible instead of merely unlikely.
 
 The E2E fixture resets only its named users and removes the exact registration account created by that run, including after failures.
 
+`test_tenants.py` (multi-tenancy piece 4) creates its own tenants for the duration of that file only — "E2E A" on `a.localhost`, "E2E B" on `b.localhost`, "E2E C" on the main address — together with the people it needs, and removes all of them before its first test and after its last one, including after failures. Outside that file `TEST_EMAIL` keeps a single tenant on the main address, which is what every other test file expects. The fixture runs three test-only commands that connect as the owner through `TEST_MIGRATION_DATABASE_URL`; it reads that variable (with `TEST_DATABASE_DISPOSABLE`, and nothing else) from `sources/devops/db/operator.env` and passes it to those `db.mjs` subprocesses alone:
+
+```bash
+node sources/devops/db/db.mjs test-tenant-create --slug e2e-a --name "E2E A" --admin <TEST_EMAIL> --host a.localhost
+node sources/devops/db/db.mjs test-tenant-member-add --slug e2e-b --email <email> [--admin]
+node sources/devops/db/db.mjs test-tenant-delete --slug e2e-a
+```
+
+`test-tenant-member-add` gives the person an active membership (creating the account if missing): the base role only, or also the tenant administrator role with `--admin`. `test-tenant-delete` removes every row of the tenant from the tenant tables, its addresses and the tenant itself; a tenant that does not exist is not an error, and the default tenant and the template are refused. `test-reset-e2e` also clears the last used tenant of the two E2E accounts.
+
 ## Adding application pages
 
 1. Add `app/(protected)/your-page/page.tsx`; the route is automatically protected by `proxy.ts`.

@@ -18,7 +18,9 @@ import {
   discoverMigrations,
   parseApplyArguments,
   parseTenantCreateArguments,
+  parseTenantDeleteArguments,
   parseTenantHostArguments,
+  parseTenantMemberArguments,
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
@@ -683,15 +685,104 @@ async function runTenantHostAdd(connectionUrl, { slug, host, primary }) {
   }
 }
 
+/**
+ * Solo per il database di prova (E2E dei tenant, specifica 2026-10-21, Task 11): dà a una persona
+ * l'appartenenza attiva a un tenant, creando l'account se manca. Con `admin` passa da
+ * `register_tenant_admin`, come il primo amministratore di tenant-create (l'invito che ne nasce per
+ * un account senza password non si stampa: qui non serve); senza, la persona riceve il solo ruolo
+ * base REGISTERED, come "Aggiungi persona". Una transazione sola come construct_owner. Il modello
+ * non ha persone.
+ */
+async function runTestTenantMemberAdd(connectionUrl, { slug, email, admin }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    const existed = await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const [found] = await tx`select id::text as id, is_template as "isTemplate" from public.tenant where slug = ${slug}`
+      if (!found) throw new Error(`Il tenant ${slug} non esiste`)
+      if (found.isTemplate) throw new Error(`Il tenant ${slug} è il modello: non ha persone`)
+      await tx`select set_config('app.tenant_id', ${found.id}, true)`
+      const [{ existed }] = await tx`select exists (select 1 from public.users where email = ${email}) as existed`
+      if (admin) {
+        await tx`select 1 from app_private.register_tenant_admin(${email})`
+        return existed
+      }
+      await tx`insert into public.users (email, auth_provider) values (${email}, 'credentials') on conflict (email) do nothing`
+      const [{ userId }] = await tx`select id::text as "userId" from public.users where email = ${email}`
+      await tx`
+        insert into public.tenant_membership (id_tenant, user_id, status) values (${found.id}, ${userId}, 'active')
+        on conflict on constraint tenant_membership_pkey do update set status = 'active'
+      `
+      await tx`
+        insert into public.user_role (id_tenant, user_id, id_role)
+        select ${found.id}, ${userId}, r.id_role from public.role r
+        where r.id_tenant = ${found.id} and r.system_key = 'REGISTERED'
+        on conflict do nothing
+      `
+      return existed
+    })
+    console.log(`Persona aggiunta al tenant ${slug}: ${email} (${existed ? 'account esistente' : 'account nuovo'}, ${admin ? 'amministratore' : 'utente'})`)
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
+/**
+ * Solo per il database di prova (E2E dei tenant, Task 11): cancella un tenant di prova con tutte le
+ * sue righe, come `deleteTenantForTest` di lib/db/testing.ts: ogni tabella di tenant del registro
+ * `app_private.table_class` (così una tabella nuova non resta indietro), poi gli indirizzi e la riga
+ * di `tenant`. Rifiuta il predefinito e il modello. Un tenant che non c'è non è un errore: la pulizia
+ * dell'E2E gira anche quando la creazione si è fermata a metà, e di nuovo all'esecuzione dopo.
+ */
+async function runTestTenantDelete(connectionUrl, { slug }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    const deleted = await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const [found] = await tx`select id::text as id, slug, is_template as "isTemplate" from public.tenant where slug = ${slug}`
+      if (!found) return false
+      if (found.slug === 'default' || found.isTemplate) {
+        throw new Error(`Il tenant ${slug} non si cancella: il predefinito e il modello vivono in ogni database`)
+      }
+      // La RLS forzata vale anche per il proprietario (MTF-DEC-4): il tenant va impostato.
+      await tx`select set_config('app.tenant_id', ${found.id}, true)`
+      const tables = await tx`select table_name as name from app_private.table_class where class = 'tenant' order by table_name`
+      // Le chiavi esterne fra tabelle di tenant sono tutte in cascata: l'ordine non conta.
+      for (const { name } of tables) {
+        await tx`delete from ${tx('public.' + name)} where id_tenant = ${found.id}`
+      }
+      await tx`delete from public.tenant_host where id_tenant = ${found.id}`
+      await tx`delete from public.tenant where id = ${found.id}`
+      return true
+    })
+    console.log(deleted ? `Tenant cancellato: ${slug}` : `Nessun tenant ${slug}: niente da cancellare`)
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
 async function runCommandBody(sql, command, argument) {
   if (command === 'test-reset-e2e') {
     const emails = [process.env.TEST_EMAIL, process.env.TEST_EMAIL_USER].filter(Boolean)
     if (!emails.length) throw new Error('TEST_EMAIL or TEST_EMAIL_USER is required')
     // Lingua, tema e dimensione del testo stanno sul profilo, e il colore dell'app e' globale:
     // un test che li cambia e non li rimette a posto altera tutti quelli dopo, senza che
-    // l'errore nomini mai la causa (vedi conftest.py, clean_language_preferences).
+    // l'errore nomini mai la causa (vedi conftest.py, clean_language_preferences). Lo stesso vale
+    // per l'ultimo tenant usato (pezzo 4, MT4-DEC-6): deciderebbe da solo dove entra l'accesso dopo.
     const result = await sql`
-      update users set id_language = null, theme_mode = 'system', text_scale = 100
+      update users set id_language = null, theme_mode = 'system', text_scale = 100, last_tenant_id = null
       where email = any(${emails})
     `
     // Anche il colore del modo scuro (0038) e le quattro superfici per modo (0033): null vuol dire
@@ -735,10 +826,12 @@ const supported = new Set([
   'test-delete-user',
   'test-tenant-create',
   'test-tenant-host-add',
+  'test-tenant-member-add',
+  'test-tenant-delete',
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary]')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug>')
   process.exit(2)
 }
 
@@ -755,6 +848,8 @@ try {
   else if (command === 'test-tenant-create') await runTenantCreate(testMigrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
   else if (command === 'tenant-host-add') await runTenantHostAdd(migrationDatabaseUrl(), parseTenantHostArguments(commandArguments))
   else if (command === 'test-tenant-host-add') await runTenantHostAdd(testMigrationDatabaseUrl(), parseTenantHostArguments(commandArguments))
+  else if (command === 'test-tenant-member-add') await runTestTenantMemberAdd(testMigrationDatabaseUrl(), parseTenantMemberArguments(commandArguments))
+  else if (command === 'test-tenant-delete') await runTestTenantDelete(testMigrationDatabaseUrl(), parseTenantDeleteArguments(commandArguments))
   else await runDatabaseCommand(command, argument)
 } catch (err) {
   console.error(`ERROR: ${err.message}`)

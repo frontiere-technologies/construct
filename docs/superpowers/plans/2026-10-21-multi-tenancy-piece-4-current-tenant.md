@@ -559,7 +559,7 @@ git commit -m "test(tenancy): every entry point refuses another tenant's data"
 **Interfaces:**
 - Consumes: `test-tenant-create --host`, `test-tenant-host-add` (Task 9).
 
-- [ ] **Step 1: Scrivi i test**
+- [✅] **Step 1: Scrivi i test**
 
 Fixture di sessione: tenant "E2E A" su `a.localhost` e "E2E B" su `b.localhost`, tenant "E2E C"
 senza indirizzo; `TEST_EMAIL` membro attivo di predefinito e C (amministratore) e di A e B;
@@ -580,13 +580,13 @@ indirizzo).
   (MT4-OK-5).
 - `test_login_stays_on_subdomain` (Task 1) resta.
 
-- [ ] **Step 2: Verifica**
+- [✅] **Step 2: Verifica**
 
 Run (controllore: `web-construct-e2e` avviato; nessun test di integrazione in corso): `caffeinate -dims uv run pytest`
 Expected: PASS, E2E completo (MT4-OK-1: i test di oggi passano invariati salvo la riga del tenant
 nella barra).
 
-- [ ] **Step 3: Spunta MT4-OK-1, 2, 3, 5 e commit**
+- [✅] **Step 3: Spunta MT4-OK-1, 2, 3, 5 e commit**
 
 ```bash
 git commit -m "test(e2e): tenants on the main address and on subdomains"

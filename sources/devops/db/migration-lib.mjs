@@ -139,6 +139,13 @@ function parseSlugOption(slug) {
   return slug
 }
 
+// L'email si normalizza come la normalizza l'app (minuscole, senza spazi).
+function parseEmailOption(flag, raw) {
+  const email = raw.trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+$/.test(email)) throw new Error(`${flag} non è un indirizzo email: "${email}"`)
+  return email
+}
+
 // tenant-create (specifica 2026-10-20, §3.3): le tre opzioni sono obbligatorie e ognuna compare una
 // volta sola; `--host` è facoltativa (MT4-DEC-13). Lo slug segue il controllo di tenant.slug, così un
 // valore sbagliato fallisce prima di aprire la connessione; l'email si normalizza come la normalizza
@@ -155,8 +162,7 @@ export function parseTenantCreateArguments(args) {
   const slug = parseSlugOption(values.get('--slug'))
   const name = values.get('--name').trim()
   if (!name) throw new Error('--name non può essere vuoto')
-  const admin = values.get('--admin').trim().toLowerCase()
-  if (!/^[^@\s]+@[^@\s]+$/.test(admin)) throw new Error(`--admin non è un indirizzo email: "${admin}"`)
+  const admin = parseEmailOption('--admin', values.get('--admin'))
   const result = { slug, name, admin }
   if (values.has('--host')) result.host = parseHostOption(values.get('--host'))
   return result
@@ -174,6 +180,32 @@ export function parseTenantHostArguments(args) {
     host: parseHostOption(values.get('--host')),
     primary: values.has('--primary'),
   }
+}
+
+// test-tenant-member-add (solo database di prova, E2E dei tenant): dà a una persona l'appartenenza
+// attiva a un tenant; `--admin` la rende anche amministratrice, come il primo amministratore di
+// tenant-create.
+export function parseTenantMemberArguments(args) {
+  const values = collectFlags(args, ['--slug', '--email'], ['--admin'])
+  for (const flag of ['--slug', '--email']) {
+    if (!values.has(flag)) throw new Error(`Manca ${flag}: test-tenant-member-add --slug <slug> --email <email> [--admin]`)
+  }
+  return {
+    slug: parseSlugOption(values.get('--slug')),
+    email: parseEmailOption('--email', values.get('--email')),
+    admin: values.has('--admin'),
+  }
+}
+
+// test-tenant-delete (solo database di prova, E2E dei tenant): cancella un tenant di prova con
+// tutte le sue righe. Il predefinito si rifiuta già qui; il modello, che si riconosce solo dal
+// database, lo rifiuta il comando.
+export function parseTenantDeleteArguments(args) {
+  const values = collectFlags(args, ['--slug'])
+  if (!values.has('--slug')) throw new Error('Manca --slug: test-tenant-delete --slug <slug>')
+  const slug = parseSlugOption(values.get('--slug'))
+  if (slug === 'default') throw new Error('Il tenant predefinito non si cancella')
+  return { slug }
 }
 
 export async function applyPendingMigrations(adapter, migrations, { to } = {}) {

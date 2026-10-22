@@ -12,7 +12,9 @@ import {
   normalizeHostArgument,
   parseApplyArguments,
   parseTenantCreateArguments,
+  parseTenantDeleteArguments,
   parseTenantHostArguments,
+  parseTenantMemberArguments,
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
@@ -363,4 +365,37 @@ test('tenant-host-add requires --slug and --host and accepts --primary', () => {
   assert.throws(() => parseTenantHostArguments(['--slug', 'acme', '--host', 'a b']), /--host/)
   assert.throws(() => parseTenantHostArguments(['--slug', 'Ab', '--host', 'a.localhost']), /slug/)
   assert.throws(() => parseTenantHostArguments(['--slug=acme', '--host', 'a.localhost']), /--slug acme/)
+})
+
+// I comandi di prova per l'E2E dei tenant (specifica 2026-10-21, Task 11): aggiungono una persona a
+// un tenant di prova e cancellano il tenant alla fine. Stesse regole di tenant-create per slug ed
+// email; il predefinito non si cancella mai.
+test('test-tenant-member-add requires --slug and --email and accepts --admin', () => {
+  assert.deepEqual(parseTenantMemberArguments(['--slug', 'e2e-b', '--email', ' Solo-B@Construct.DEV ']),
+    { slug: 'e2e-b', email: 'solo-b@construct.dev', admin: false })
+  assert.deepEqual(parseTenantMemberArguments(['--admin', '--email', 'b@construct.dev', '--slug', 'e2e-b']),
+    { slug: 'e2e-b', email: 'b@construct.dev', admin: true })
+  assert.throws(() => parseTenantMemberArguments([]), /--slug/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b']), /--email/)
+  assert.throws(() => parseTenantMemberArguments(['--email', 'b@construct.dev']), /--slug/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b', '--email', 'b@construct.dev', '--host', 'x']), /--host/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b', '--email', 'b@construct.dev', 'extra']), /extra/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b', '--email', 'b@construct.dev', '--admin', '--admin']), /--admin/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b', '--email']), /--email/)
+  assert.throws(() => parseTenantMemberArguments(['--slug=e2e-b', '--email', 'b@construct.dev']), /--slug e2e-b/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'Ab', '--email', 'b@construct.dev']), /slug/)
+  for (const email of ['b.construct.dev', ' ', '@', 'b@', '@construct.dev']) {
+    assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b', '--email', email]), /--email/, email)
+  }
+})
+
+test('test-tenant-delete requires --slug and refuses the default tenant', () => {
+  assert.deepEqual(parseTenantDeleteArguments(['--slug', 'e2e-a']), { slug: 'e2e-a' })
+  assert.throws(() => parseTenantDeleteArguments([]), /--slug/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug']), /--slug/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', '--slug', 'e2e-b']), /--slug/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', '--admin']), /--admin/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', 'extra']), /extra/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'Ab']), /slug/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'default']), /predefinito/)
 })

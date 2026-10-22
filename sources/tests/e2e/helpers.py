@@ -65,8 +65,14 @@ def grid_rows(page):
     return page.locator('.ag-row')
 
 
-def do_test_login(page, base_url: str, email: str) -> None:
+def do_test_login(page, base_url: str, email: str, landing="/") -> None:
     """Authenticate via the test-credentials form (requires AUTH_TEST_CREDENTIALS=true on server).
+
+    `landing` is where the login is expected to end: a path on `base_url` (the
+    home by default) or a compiled regex matched against the full URL. Since
+    multi-tenancy piece 4 a person with several tenants on the address lands on
+    /select-tenant and one with none on /no-tenant, and the redirect happens on
+    the server, so the browser never commits `/` on the way there.
 
     Locale-tolerant: the /login page normally renders in Italian (the app's
     default), but a language-switch cookie from earlier in the same browser
@@ -87,7 +93,7 @@ def do_test_login(page, base_url: str, email: str) -> None:
     page.get_by_role("button", name="Entra (test)").or_(
         page.get_by_role("button", name="Sign in (test)")
     ).click()
-    page.wait_for_url(f"{base_url}/", timeout=15_000)
+    page.wait_for_url(f"{base_url}{landing}" if isinstance(landing, str) else landing, timeout=15_000)
     page.wait_for_load_state("networkidle")
 
 
