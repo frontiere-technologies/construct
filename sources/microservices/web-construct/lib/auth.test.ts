@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   listAvailableTenants: vi.fn(),
   resolveHostTenant: vi.fn(),
   hasDeactivatedMembershipOnHost: vi.fn(),
+  isDedicatedHost: vi.fn(),
   ensureDefaultMembership: vi.fn(),
   resolveUserAuthorization: vi.fn(),
   resolveTenantAuthorization: vi.fn(),
@@ -75,6 +76,7 @@ vi.mock('@/lib/tenancy/host-tenants', () => ({
   listAvailableTenants: mocks.listAvailableTenants,
   resolveHostTenant: mocks.resolveHostTenant,
   hasDeactivatedMembershipOnHost: mocks.hasDeactivatedMembershipOnHost,
+  isDedicatedHost: mocks.isDedicatedHost,
 }))
 vi.mock('@/lib/tenancy/membership', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/tenancy/membership')>()),
@@ -171,6 +173,7 @@ beforeEach(() => {
   mocks.listAvailableTenants.mockReset().mockResolvedValue(tenants(DEFAULT_TENANT))
   mocks.resolveHostTenant.mockReset().mockResolvedValue(DEFAULT_TENANT)
   mocks.hasDeactivatedMembershipOnHost.mockReset().mockResolvedValue(false)
+  mocks.isDedicatedHost.mockReset().mockResolvedValue(false)
   mocks.ensureDefaultMembership.mockReset().mockResolvedValue('active')
   mocks.resolveUserAuthorization.mockReset().mockResolvedValue(ROLES)
   mocks.resolveTenantAuthorization.mockReset()
@@ -279,6 +282,32 @@ describe('signIn callback for OIDC', () => {
 
     expect(await mocks.config!.callbacks.signIn(params)).toBe(true)
     expect(mocks.hasDeactivatedMembershipOnHost).not.toHaveBeenCalled()
+  })
+
+  // MT4-DEC-14: su un indirizzo dedicato si entra con email e password; Google resta sull'indirizzo
+  // principale. La pagina di accesso nasconde il bottone (app/login/page.test.tsx), il callback rifiuta.
+  describe('on a dedicated host the login page hides "Continua con Google" and signIn refuses OIDC', () => {
+    it.each(['google', 'microsoft-entra-id', 'keycloak'])('signIn refuses %s on a dedicated host, before any other read', async oidc => {
+      onHost('A.Localhost:3000')
+      mocks.isDedicatedHost.mockResolvedValue(true)
+
+      expect(await mocks.config!.callbacks.signIn({ ...params, account: { provider: oidc } })).toBe(false)
+      expect(mocks.isDedicatedHost).toHaveBeenCalledWith('a.localhost')
+      expect(mocks.hasDeactivatedMembershipOnHost).not.toHaveBeenCalled()
+    })
+
+    it('signIn still lets in OIDC on the main address', async () => {
+      expect(await mocks.config!.callbacks.signIn(params)).toBe(true)
+      expect(mocks.isDedicatedHost).toHaveBeenCalledWith('localhost')
+    })
+
+    it('signIn does not look at the host for credentials', async () => {
+      onHost('a.localhost:3000')
+      mocks.isDedicatedHost.mockResolvedValue(true)
+
+      expect(await mocks.config!.callbacks.signIn({ account: { provider: 'credentials' }, user: { id: USER.id } })).toBe(true)
+      expect(mocks.isDedicatedHost).not.toHaveBeenCalled()
+    })
   })
 
   it('refuses an inactive account before reading the memberships', async () => {

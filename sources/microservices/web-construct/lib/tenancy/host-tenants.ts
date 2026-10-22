@@ -48,3 +48,17 @@ export async function hasDeactivatedMembershipOnHost(userId: string, host: strin
     select public.has_deactivated_membership_on_host(${userId}::uuid, ${normalizeHost(host)}::text) as deactivated`))
   return row?.deactivated === true
 }
+
+/**
+ * Vero se l'indirizzo è nel registro, cioè dedicato a un tenant (MT4-DEC-14): lì si entra con email
+ * e password, e l'accesso con Google e gli altri OIDC resta sull'indirizzo principale finché il
+ * pezzo 6 non porta un accesso unico per tutti i domini. Nullo, sconosciuto o non valido è
+ * l'indirizzo principale.
+ */
+export async function isDedicatedHost(host: string | null): Promise<boolean> {
+  const normalized = normalizeHost(host)
+  if (normalized === null) return false
+  const [row] = await withGlobal(tx => tx.execute<{ dedicated: boolean }>(sql`
+    select exists (select 1 from public.tenant_host h where h.host = ${normalized}::text) as dedicated`))
+  return row?.dedicated === true
+}

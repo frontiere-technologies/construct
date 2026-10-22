@@ -1,6 +1,8 @@
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
 import { recordInvitationDelivery, type PreparedInvitation } from '@/lib/auth-invitations'
+import { tenantBaseUrl } from '@/lib/tenancy/tenant-base-url'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
 
 const log = createLogger('invitation-email')
 
@@ -37,15 +39,20 @@ function buildText(setPasswordUrl: string): string {
 }
 
 /**
- * Manda l'email di invito e registra l'esito sul token (`recordInvitationDelivery`). Non lancia:
- * chi chiama decide cosa rispondere in base al risultato.
+ * Manda l'email di invito e registra l'esito sul token (`recordInvitationDelivery`). Il link parte
+ * dall'indirizzo del tenant da cui arriva l'invito (`tenantBaseUrl`, MT4-DEC-12), mai dalla
+ * richiesta. Non lancia: chi chiama decide cosa rispondere in base al risultato.
  */
-export async function sendInvitationEmail(invitation: PreparedInvitation): Promise<InvitationEmailResult> {
-  const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL
-  if (!baseUrl) {
-    log.error('AUTH_URL / NEXTAUTH_URL not set')
-    await recordInvitationDelivery(invitation.tokenId, { ok: false, code: 'server_configuration' })
-    return { ok: false, code: 'server_configuration' }
+export async function sendInvitationEmail(invitation: PreparedInvitation, tenantId: TenantId): Promise<InvitationEmailResult> {
+  let baseUrl: string
+  try {
+    baseUrl = await tenantBaseUrl(tenantId)
+  } catch (err) {
+    // Senza AUTH_URL il codice resta quello di oggi; un registro che non si legge è un'altra cosa.
+    const code = err instanceof Error && err.message === 'server_configuration' ? 'server_configuration' : 'base_url_unavailable'
+    log.error({ err, code }, 'base URL for the invitation link not available')
+    await recordInvitationDelivery(invitation.tokenId, { ok: false, code })
+    return { ok: false, code }
   }
 
   const setPasswordUrl = buildSetPasswordLink(baseUrl, invitation.rawToken)

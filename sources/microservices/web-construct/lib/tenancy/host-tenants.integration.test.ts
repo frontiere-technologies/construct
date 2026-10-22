@@ -4,7 +4,7 @@ import { role, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
-import { listAvailableTenants, resolveHostTenant } from './host-tenants'
+import { isDedicatedHost, listAvailableTenants, resolveHostTenant } from './host-tenants'
 import { getSystemRoleIds } from './system-roles'
 import { defaultTestTenant, tenantIdForTest } from './testing'
 import type { TenantId } from './tenant-id'
@@ -369,5 +369,14 @@ describeIntegration('host tenants and available tenants', () => {
     expect(await resolveHostTenant('localhost')).toBe(DEFAULT)
     expect(await resolveHostTenant(null)).toBe(DEFAULT)
     expect(await resolveHostTenant('not a host')).toBe(DEFAULT)
+  })
+
+  it('isDedicatedHost is true only for an address in the registry (MT4-DEC-14)', async () => {
+    expect(await isDedicatedHost(aHost)).toBe(true)
+    expect(await isDedicatedHost(`${aHost.toUpperCase()}:3000`)).toBe(true)
+    expect(await isDedicatedHost('localhost')).toBe(false)
+    expect(await isDedicatedHost('unknown.example')).toBe(false)
+    expect(await isDedicatedHost('not a host')).toBe(false)
+    expect(await isDedicatedHost(null)).toBe(false)
   })
 })

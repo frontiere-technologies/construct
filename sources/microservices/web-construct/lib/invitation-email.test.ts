@@ -1,14 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PreparedInvitation } from '@/lib/auth-invitations'
 
-const { sendEmail, recordInvitationDelivery } = vi.hoisted(() => ({
+const { sendEmail, recordInvitationDelivery, tenantBaseUrl } = vi.hoisted(() => ({
   sendEmail: vi.fn(),
   recordInvitationDelivery: vi.fn(),
+  tenantBaseUrl: vi.fn(),
 }))
 vi.mock('@/lib/mailer', () => ({ sendEmail }))
 vi.mock('@/lib/auth-invitations', () => ({ recordInvitationDelivery }))
+vi.mock('@/lib/tenancy/tenant-base-url', () => ({ tenantBaseUrl }))
 
 const { buildSetPasswordLink, sendInvitationEmail } = await import('./invitation-email')
+const { tenantIdForTest } = await import('@/lib/tenancy/testing')
+
+// Il tenant da cui parte l'invito: il suo indirizzo principale (o AUTH_URL) è la base del link.
+const TENANT = tenantIdForTest(7)
 
 const invitation: PreparedInvitation = {
   tokenId: 'token-1',
@@ -29,47 +35,45 @@ describe('sendInvitationEmail', () => {
   beforeEach(() => {
     sendEmail.mockReset()
     recordInvitationDelivery.mockReset()
-    // Nessun indirizzo base di partenza; ogni test imposta quello che gli serve.
-    vi.stubEnv('AUTH_URL', 'x')
-    vi.stubEnv('NEXTAUTH_URL', 'x')
-    delete process.env.AUTH_URL
-    delete process.env.NEXTAUTH_URL
+    tenantBaseUrl.mockReset()
   })
-  afterEach(() => vi.unstubAllEnvs())
 
   it('records server_configuration when no base URL is set', async () => {
-    expect(await sendInvitationEmail(invitation)).toEqual({ ok: false, code: 'server_configuration' })
+    tenantBaseUrl.mockRejectedValue(new Error('server_configuration'))
+
+    expect(await sendInvitationEmail(invitation, TENANT)).toEqual({ ok: false, code: 'server_configuration' })
     expect(sendEmail).not.toHaveBeenCalled()
     expect(recordInvitationDelivery).toHaveBeenCalledWith('token-1', { ok: false, code: 'server_configuration' })
   })
 
-  it('sends the email with the set-password link and records the delivery', async () => {
-    vi.stubEnv('AUTH_URL', 'https://app.example.it/')
+  it('records base_url_unavailable, without sending, when the address of the tenant cannot be read', async () => {
+    tenantBaseUrl.mockRejectedValue(new Error('connection refused'))
+
+    expect(await sendInvitationEmail(invitation, TENANT)).toEqual({ ok: false, code: 'base_url_unavailable' })
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(recordInvitationDelivery).toHaveBeenCalledWith('token-1', { ok: false, code: 'base_url_unavailable' })
+  })
+
+  it('sends the email with the set-password link on the address of the tenant and records the delivery', async () => {
+    tenantBaseUrl.mockResolvedValue('https://a.example.it:8443/')
     sendEmail.mockResolvedValue(undefined)
 
-    expect(await sendInvitationEmail(invitation)).toEqual({ ok: true })
+    expect(await sendInvitationEmail(invitation, TENANT)).toEqual({ ok: true })
+    expect(tenantBaseUrl).toHaveBeenCalledWith(TENANT)
     expect(sendEmail).toHaveBeenCalledTimes(1)
     const message = sendEmail.mock.calls[0][0]
     expect(message.to).toBe('persona@example.test')
     expect(message.subject).toBe('Benvenuto in Construct — Imposta la tua password')
-    expect(message.html).toContain('https://app.example.it/set-password?token=abc')
-    expect(message.text).toContain('https://app.example.it/set-password?token=abc')
+    expect(message.html).toContain('https://a.example.it:8443/set-password?token=abc')
+    expect(message.text).toContain('https://a.example.it:8443/set-password?token=abc')
     expect(recordInvitationDelivery).toHaveBeenCalledWith('token-1', { ok: true })
   })
 
-  it('falls back to NEXTAUTH_URL when AUTH_URL is not set', async () => {
-    vi.stubEnv('NEXTAUTH_URL', 'https://legacy.example.it')
-    sendEmail.mockResolvedValue(undefined)
-
-    expect(await sendInvitationEmail(invitation)).toEqual({ ok: true })
-    expect(sendEmail.mock.calls[0][0].html).toContain('https://legacy.example.it/set-password?token=abc')
-  })
-
   it('records email_delivery_failed when the mailer throws', async () => {
-    vi.stubEnv('AUTH_URL', 'https://app.example.it')
+    tenantBaseUrl.mockResolvedValue('https://app.example.it')
     sendEmail.mockRejectedValue(new Error('smtp down'))
 
-    expect(await sendInvitationEmail(invitation)).toEqual({ ok: false, code: 'email_delivery_failed' })
+    expect(await sendInvitationEmail(invitation, TENANT)).toEqual({ ok: false, code: 'email_delivery_failed' })
     expect(recordInvitationDelivery).toHaveBeenCalledWith('token-1', { ok: false, code: 'email_delivery_failed' })
   })
 })

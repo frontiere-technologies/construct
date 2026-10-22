@@ -458,7 +458,7 @@ git commit -m "feat(tenancy): tenant settings page with the self-registration sw
   - `tenantBaseUrl(tenantId: TenantId): Promise<string>` — `AUTH_URL` (o `NEXTAUTH_URL`) con il nome dell'host sostituito dall'indirizzo principale del tenant, se esiste; altrimenti `AUTH_URL` così com'è; errore `server_configuration` come oggi se manca;
   - `sendInvitationEmail(invitation, tenantId: TenantId)`; `joinTenantByRegistration(userId: string): Promise<MembershipStatus | null>` in `membership.ts` (tenant dell'indirizzo, chiama `join_by_registration`), che sostituisce `joinDefaultTenant` nella registrazione.
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 ```ts
 it('tenantBaseUrl uses the primary host of the tenant and the scheme and port of AUTH_URL', …)  // http://a.localhost:3000
@@ -475,9 +475,9 @@ Per il bottone di Google: la pagina `app/login/page.tsx` sa se l'indirizzo è de
 (`resolveHostTenant` + registro) e lo passa a `Login`; il callback `signIn` rifiuta i provider OIDC su
 un indirizzo dedicato.
 
-- [ ] **Step 2–4:** `npx vitest run app lib && npm run test:integration -- lib/tenancy`; Expected: PASS.
+- [✅] **Step 2–4:** `npx vitest run app lib && npm run test:integration -- lib/tenancy`; Expected: PASS.
 
-- [ ] **Step 5: Spunta MT4-OK-5 (la parte senza browser) e commit**
+- [✅] **Step 5: Spunta MT4-OK-5 (la parte senza browser) e commit**
 
 ```bash
 git commit -m "feat(tenancy): pre-login pages and email links follow the tenant of the host"

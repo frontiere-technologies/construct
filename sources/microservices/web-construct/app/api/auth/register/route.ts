@@ -6,7 +6,10 @@ import { createLogger } from '@/lib/logger'
 import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
 import { prepareInvitation } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
-import { joinDefaultTenant } from '@/lib/tenancy/membership'
+import { resolveHostTenant } from '@/lib/tenancy/host-tenants'
+import { joinTenantByRegistration } from '@/lib/tenancy/membership'
+import { readRequestHost } from '@/lib/tenancy/request-host'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { allowAnonymous } from '@/lib/rbac/access-declarations'
 
 const log = createLogger('auth:register')
@@ -57,16 +60,21 @@ export async function POST(req: NextRequest) {
   }
   log.info({ userId: invitation.userId }, 'invitation prepared')
 
-  // La persona entra nel tenant predefinito prima dell'invio (MT2-DEC-12); se non ci riesce, niente email.
+  // La persona entra nel tenant dell'indirizzo prima dell'invio, se quel tenant la accetta
+  // (MT4-DEC-9, MT4-DEC-10); se la chiamata fallisce, niente email. La risposta resta neutra in
+  // ogni caso. Il link dell'email parte dall'indirizzo principale dello stesso tenant, mai
+  // dall'intestazione Host così com'è (MT4-DEC-12): un Host sconosciuto vale il predefinito.
+  let tenantId: TenantId
   try {
-    await joinDefaultTenant(invitation.userId)
+    tenantId = await resolveHostTenant(await readRequestHost())
+    await joinTenantByRegistration(invitation.userId)
   } catch (err) {
-    log.error({ err }, 'failed to join the default tenant')
+    log.error({ err }, 'failed to join the tenant of the address')
     return NextResponse.json({ ok: true })
   }
 
   log.info('sending welcome email')
-  const result = await sendInvitationEmail(invitation)
+  const result = await sendInvitationEmail(invitation, tenantId)
   if (result.ok) log.info('welcome email sent')
 
   return NextResponse.json({ ok: true })

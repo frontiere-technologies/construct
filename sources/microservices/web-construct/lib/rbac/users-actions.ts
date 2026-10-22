@@ -141,7 +141,7 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
   if (invitation) {
     // L'appartenenza c'è già: l'invito porta la persona a un tenant a cui può accedere.
     try {
-      const sent = await sendInvitationEmail(invitation)
+      const sent = await sendInvitationEmail(invitation, actor.tenantId)
       if (!sent.ok) log.error({ code: sent.code }, 'invitation email not sent')
     } catch (err) {
       log.error({ err }, 'invitation email failed')

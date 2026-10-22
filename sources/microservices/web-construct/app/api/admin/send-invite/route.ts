@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   }
   if (!invitation) return NextResponse.json({ ok: true })
 
-  const result = await sendInvitationEmail(invitation)
+  const result = await sendInvitationEmail(invitation, actor.tenantId)
   if (!result.ok) {
     return NextResponse.json(
       { error: result.code === 'server_configuration' ? 'Errore di configurazione del server.' : 'Errore invio email.' },

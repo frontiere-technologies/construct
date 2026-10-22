@@ -12,6 +12,7 @@ import { users, allowedDomains } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { authConfig, mergeAuthCallbacks } from '@/lib/auth.config'
 import { keepOnRequestHost } from '@/lib/auth-host-redirect'
+import { isDedicatedHost } from '@/lib/tenancy/host-tenants'
 import { readRequestHost } from '@/lib/tenancy/request-host'
 import {
   enterTenant,
@@ -194,6 +195,10 @@ const nextAuth = NextAuth({
       // Domain restriction for all OIDC providers
       const oidcProviders = ['google', 'microsoft-entra-id', 'keycloak']
       if (account?.provider && oidcProviders.includes(account.provider)) {
+        const host = await readRequestHost()
+        // Su un indirizzo dedicato a un tenant si entra con email e password (MT4-DEC-14): l'accesso
+        // OIDC resta sull'indirizzo principale. La pagina di accesso lì non mostra il bottone.
+        if (await isDedicatedHost(host)) return false
         const email = (profile?.email ?? '').toLowerCase().trim()
         const domain = email.split('@')[1] ?? ''
         const allowed = await getAllowedDomains()
@@ -204,7 +209,7 @@ const nextAuth = NextAuth({
           .where(eq(users.email, email))
           .limit(1))
         if (existing && !isActiveAccount(existing.idUserStatus)) return false
-        if (existing && await isSignInRefusedOnHost(existing.id, await readRequestHost())) return false
+        if (existing && await isSignInRefusedOnHost(existing.id, host)) return false
       }
       return true
     },
