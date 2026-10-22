@@ -17,9 +17,10 @@ export function isMembershipStatus(value: unknown): value is MembershipStatus {
 
 /**
  * Primo accesso (MT2-DEC-12): dà alla persona l'appartenenza al tenant predefinito, se il tenant
- * della transazione è quello e la persona non appartiene a un altro tenant. Ritorna lo stato
- * dell'appartenenza dopo la chiamata, oppure `null` quando non ne esiste una. Non riattiva mai
- * un'appartenenza disattivata. La logica vive nella funzione SQL, in un solo viaggio.
+ * della transazione è quello, se accetta registrazioni autonome (MT4-DEC-10, 0054) e la persona
+ * non appartiene a un altro tenant. Ritorna lo stato dell'appartenenza dopo la chiamata, oppure
+ * `null` quando non ne esiste una. Non riattiva mai un'appartenenza disattivata. La logica vive
+ * nella funzione SQL, in un solo viaggio.
  */
 export async function ensureDefaultMembership(tx: TenantTx, userId: string): Promise<MembershipStatus | null> {
   const [row] = await tx.execute<{ status: string | null }>(

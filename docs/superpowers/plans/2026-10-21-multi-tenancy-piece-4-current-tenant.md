@@ -228,7 +228,7 @@ git commit -m "feat(tenancy): tenant hosts, tenant settings and last used tenant
   - `listAvailableTenants(userId: string, host: string | null): Promise<AvailableTenant[]>` (con `withGlobal`; `host` nullo = principale);
   - `resolveHostTenant(host: string | null): Promise<TenantId>` — il tenant dell'indirizzo prima dell'accesso: quello dedicato, altrimenti il predefinito.
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 Fixture: tenant A con `a.localhost` (primario), tenant C senza indirizzo, persona membro attivo di
 predefinito, A e C, persona solo di A, persona disattivata nel predefinito.
@@ -246,19 +246,19 @@ it('ensure_default_membership returns null when the default tenant refuses self 
 it('resolveHostTenant returns A for a.localhost and default for unknown hosts', …)
 ```
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `npm run test:integration -- lib/tenancy/host-tenants.integration.test.ts`
 Expected: FAIL, funzioni mancanti.
 
-- [ ] **Step 3: Migrazione 0054 e `host-tenants.ts`**
+- [✅] **Step 3: Migrazione 0054 e `host-tenants.ts`**
 
-- [ ] **Step 4: Applica e verifica**
+- [✅] **Step 4: Applica e verifica**
 
 `test-apply`, `schema-write`, `schema-check`; `npm run test:integration -- lib/tenancy`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(tenancy): host tenants, available tenants and registration join"
