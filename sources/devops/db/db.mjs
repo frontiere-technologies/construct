@@ -18,6 +18,7 @@ import {
   discoverMigrations,
   parseApplyArguments,
   parseTenantCreateArguments,
+  parseTenantHostArguments,
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
@@ -568,10 +569,15 @@ async function runDatabaseCommand(command, argument) {
  * che può scrivere `tenant`, in una transazione sola: un errore qualsiasi annulla tutto, tenant,
  * account, appartenenza e invito. Il tenant nuovo vale solo per la transazione (MTF-DEC-7).
  *
+ * Con `host` (specifica 2026-10-21, MT4-DEC-13) registra nella stessa transazione l'indirizzo
+ * dedicato del tenant, come principale: un indirizzo già preso annulla anche il tenant.
+ *
  * Il link stampato contiene un token valido: è il modo previsto di consegnarlo finché l'invio per
- * email non arriva con la console (pezzo 5), e non si scrive da nessun'altra parte.
+ * email non arriva con la console (pezzo 5), e non si scrive da nessun'altra parte. Con `host` il
+ * link usa l'indirizzo del tenant, come i link dell'app (`tenantBaseUrl`): `AUTH_URL` con il solo
+ * nome dell'host sostituito, schema e porta restano quelli di `AUTH_URL`.
  */
-async function runTenantCreate(connectionUrl, { slug, name, admin }) {
+async function runTenantCreate(connectionUrl, { slug, name, admin, host }) {
   const sql = postgres(connectionUrl, {
     prepare: false,
     max: 1,
@@ -582,9 +588,13 @@ async function runTenantCreate(connectionUrl, { slug, name, admin }) {
   try {
     const result = await sql.begin(async tx => {
       await tx`set local role construct_owner`
+      if (host) await assertHostFree(tx, host)
       const [{ tenantId }] = await tx`
         select app_private.create_tenant_from_template(${slug}, ${name})::text as "tenantId"
       `
+      if (host) {
+        await tx`insert into public.tenant_host (host, id_tenant, is_primary) values (${host}, ${tenantId}, true)`
+      }
       await tx`select set_config('app.tenant_id', ${tenantId}, true)`
       const [{ existed }] = await tx`select exists (select 1 from public.users where email = ${admin}) as existed`
       const [registered] = await tx`
@@ -601,12 +611,73 @@ async function runTenantCreate(connectionUrl, { slug, name, admin }) {
     })
 
     console.log(`Tenant creato: id=${result.tenantId} slug=${slug} nome=${name}`)
+    if (host) console.log(`Indirizzo principale: ${host}`)
     console.log(`Primo amministratore: ${admin} (${result.existed ? 'account esistente' : 'account nuovo'})`)
     if (result.invitationToken) {
-      const baseUrl = (process.env.AUTH_URL ?? '').replace(/\/$/, '')
+      const baseUrl = tenantLinkBase(process.env.AUTH_URL ?? '', host)
       console.log(`Link per impostare la password (valido 48 ore): ${baseUrl}/set-password?token=${result.invitationToken}`)
       if (!baseUrl) console.log("AUTH_URL non impostata: anteponi l'indirizzo del sito.")
     }
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
+/**
+ * L'indirizzo base dei link per un tenant: `AUTH_URL` senza barra finale, e con `host` il solo nome
+ * dell'host sostituito (schema, porta e percorso restano quelli di `AUTH_URL`), come `tenantBaseUrl`
+ * in lib/tenancy/tenant-base-url.ts. Senza `AUTH_URL` resta vuoto: il chiamante stampa il percorso.
+ */
+function tenantLinkBase(configured, host) {
+  if (!configured) return ''
+  if (!host) return configured.replace(/\/$/, '')
+  const url = new URL(configured)
+  url.hostname = host
+  return url.href.replace(/\/$/, '')
+}
+
+/** Un indirizzo è uno solo in tutto il registro: se è già di qualcuno il comando si ferma. */
+async function assertHostFree(tx, host) {
+  const [taken] = await tx`
+    select t.slug from public.tenant_host h join public.tenant t on t.id = h.id_tenant where h.host = ${host}
+  `
+  if (taken) throw new Error(`L'indirizzo ${host} è già assegnato al tenant ${taken.slug}`)
+}
+
+/**
+ * Assegna un indirizzo dedicato a un tenant che esiste già (specifica 2026-10-21, MT4-DEC-13,
+ * MT4-DEC-17). Una transazione sola come construct_owner, l'unico che scrive `tenant_host`. Si
+ * rifiutano, prima ancora del controllo della tabella (trigger `tenant_host_guard`), il tenant
+ * predefinito e il modello; un indirizzo già preso; e `--primary` su un tenant che ha già un
+ * indirizzo principale: l'indirizzo principale finisce nei link delle email, e cambiarlo in
+ * silenzio cambierebbe i link di tutti, quindi non si sposta da qui.
+ */
+async function runTenantHostAdd(connectionUrl, { slug, host, primary }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const [found] = await tx`select id::text as id, slug, is_template as "isTemplate" from public.tenant where slug = ${slug}`
+      if (!found) throw new Error(`Il tenant ${slug} non esiste`)
+      if (found.slug === 'default' || found.isTemplate) {
+        throw new Error(`Il tenant ${slug} non può avere un indirizzo dedicato: il predefinito risponde sull'indirizzo principale e il modello non risponde su nessun indirizzo`)
+      }
+      await assertHostFree(tx, host)
+      if (primary) {
+        const [current] = await tx`select host from public.tenant_host where id_tenant = ${found.id} and is_primary`
+        if (current) {
+          throw new Error(`Il tenant ${slug} ha già un indirizzo principale (${current.host}): aggiungi l'indirizzo senza --primary, oppure cambia il principale a mano`)
+        }
+      }
+      await tx`insert into public.tenant_host (host, id_tenant, is_primary) values (${host}, ${found.id}, ${primary})`
+    })
+    console.log(`Indirizzo assegnato: ${host} al tenant ${slug} (${primary ? 'principale' : 'non principale'})`)
   } finally {
     await sql.end({ timeout: 5 })
   }
@@ -657,15 +728,17 @@ const supported = new Set([
   'schema-check',
   'schema-write',
   'tenant-create',
+  'tenant-host-add',
   'test-apply',
   'test-query',
   'test-reset-e2e',
   'test-delete-user',
   'test-tenant-create',
+  'test-tenant-host-add',
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email>')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary]')
   process.exit(2)
 }
 
@@ -680,6 +753,8 @@ try {
   else if (command === 'test-apply') await runMigrations(testMigrationDatabaseUrl(), parseApplyArguments(commandArguments))
   else if (command === 'tenant-create') await runTenantCreate(migrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
   else if (command === 'test-tenant-create') await runTenantCreate(testMigrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
+  else if (command === 'tenant-host-add') await runTenantHostAdd(migrationDatabaseUrl(), parseTenantHostArguments(commandArguments))
+  else if (command === 'test-tenant-host-add') await runTenantHostAdd(testMigrationDatabaseUrl(), parseTenantHostArguments(commandArguments))
   else await runDatabaseCommand(command, argument)
 } catch (err) {
   console.error(`ERROR: ${err.message}`)

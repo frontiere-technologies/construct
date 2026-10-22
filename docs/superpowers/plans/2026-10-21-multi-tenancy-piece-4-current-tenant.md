@@ -494,7 +494,7 @@ git commit -m "feat(tenancy): pre-login pages and email links follow the tenant 
 **Interfaces:**
 - Produces: `parseTenantCreateArguments` accetta `--host <host>` (facoltativo, normalizzato come `normalizeHost`); `parseTenantHostArguments(args): { slug: string; host: string; primary: boolean }` per `tenant-host-add --slug <slug> --host <host> [--primary]` e `test-tenant-host-add`; `tenant-create --host` registra l'indirizzo come principale nella stessa transazione.
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 ```js
 test('tenant-create accepts --host and normalizes it', …)
@@ -506,9 +506,9 @@ it('tenant-host-add refuses the default tenant and the template', …)   // host
 it('tenant-host-add refuses a host already taken, and changes nothing', …)
 ```
 
-- [ ] **Step 2–4:** `npm run test:migrations && npm run test:integration -- lib/tenancy/tenant-create-command.integration.test.ts`; Expected: PASS.
+- [✅] **Step 2–4:** `npm run test:migrations && npm run test:integration -- lib/tenancy/tenant-create-command.integration.test.ts`; Expected: PASS.
 
-- [ ] **Step 5: Commit** (README: comandi ed esempio con `a.localhost`)
+- [✅] **Step 5: Commit** (README: comandi ed esempio con `a.localhost`)
 
 ```bash
 git commit -m "feat(db): tenant-create --host and tenant-host-add"

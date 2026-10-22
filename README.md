@@ -296,6 +296,46 @@ Il link contiene un token valido: va consegnato alla persona e non incollato alt
 email dal comando arriverà con la console di piattaforma. `test-tenant-create` fa lo stesso sul
 database di prova usa e getta (`TEST_MIGRATION_DATABASE_URL`, con `TEST_DATABASE_DISPOSABLE=1`).
 
+### Assegnare un indirizzo a un tenant (`--host`, `db.mjs tenant-host-add`)
+
+Un tenant risponde su un indirizzo dedicato (per esempio `a.localhost` in locale) se la piattaforma
+lo registra in `tenant_host`; un indirizzo non registrato è l'indirizzo principale, quello del
+tenant predefinito. Si assegna in due modi, sempre dalla piattaforma e mai dall'app (specifica
+2026-10-21, MT4-DEC-13):
+
+```bash
+set -a && . ./sources/devops/db/operator.env && set +a
+# alla creazione: l'indirizzo diventa il principale del tenant nuovo, nella stessa transazione
+node sources/devops/db/db.mjs tenant-create --slug acme --name "Acme Spa" --admin capo@acme.it --host a.localhost
+# a un tenant che esiste già
+node sources/devops/db/db.mjs tenant-host-add --slug acme --host a.localhost
+node sources/devops/db/db.mjs tenant-host-add --slug acme --host acme.example.it --primary
+```
+
+```
+Indirizzo assegnato: a.localhost al tenant acme (non principale)
+```
+
+- L'indirizzo si salva in minuscolo, senza porta e senza punto finale (`A.Localhost:3000` diventa
+  `a.localhost`), la forma con cui l'app lo confronta. Un indirizzo IPv6 non si può registrare.
+- L'indirizzo **principale** è quello dei link nelle email del tenant (invito, impostazione e
+  recupero della password): `AUTH_URL` con il solo nome dell'host sostituito, schema e porta
+  restano quelli di `AUTH_URL`. Con `--host` anche il link stampato da `tenant-create` lo usa
+  (`AUTH_URL=http://localhost:3000` e `--host a.localhost` danno
+  `http://a.localhost:3000/set-password?token=…`); senza `--host` resta `AUTH_URL`. Un tenant senza
+  indirizzo principale usa `AUTH_URL`.
+- `tenant-host-add` senza `--primary` aggiunge un indirizzo in più. Con `--primary` il comando
+  **rifiuta** un tenant che ha già un indirizzo principale: i link di tutte le email cambierebbero in
+  silenzio, quindi il principale non si sposta da qui. Per cambiarlo si aggiunge il nuovo
+  indirizzo senza `--primary` e si scambia il principale a mano con SQL.
+- Si rifiutano (uscita 1, `ERROR: …`, nulla cambia nel database) un indirizzo già assegnato a
+  qualunque tenant, uno slug che non esiste e il tenant predefinito (slug `default`) e il modello
+  (slug `template`), che non hanno indirizzi dedicati (MT4-DEC-17: il predefinito resta il tenant
+  dell'indirizzo principale, il modello non risponde su nessun indirizzo). Con `tenant-create
+  --host` un indirizzo già preso annulla anche la creazione del tenant.
+- `test-tenant-create --host …` e `test-tenant-host-add` fanno lo stesso sul database di prova usa
+  e getta.
+
 Limiti noti (specifica 2026-10-20, §5.3):
 
 - **I tenant creati così si usano dal pezzo 4 della multi-tenancy.** Fino ad allora ogni richiesta
