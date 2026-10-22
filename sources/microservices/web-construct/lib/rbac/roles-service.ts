@@ -117,7 +117,11 @@ export const getAllRoles = cache(async (tenantId: TenantId, roleTypes?: RoleType
   }
 })
 
-export const getRole = cache(async (tenantId: TenantId, roleId: number): Promise<RoleInformationDto> => {
+/**
+ * Un ruolo del tenant, o `null` se il tenant non ce l'ha: un id che non esiste e un id di un altro
+ * tenant rispondono allo stesso modo, e la pagina li mostra come 404 (MT4-OK-4).
+ */
+export const getRole = cache(async (tenantId: TenantId, roleId: number): Promise<RoleInformationDto | null> => {
   let row
   try {
     ;[row] = await withTenant(tenantId, tx => tx
@@ -128,7 +132,7 @@ export const getRole = cache(async (tenantId: TenantId, roleId: number): Promise
   } catch (err) {
     throw new Error(`Failed to load role: ${err instanceof Error ? err.message : String(err)}`)
   }
-  if (!row) throw new Error('Failed to load role: not found')
+  if (!row) return null
   return {
     id: Number(row.id),
     roleName: String(row.description ?? ''),

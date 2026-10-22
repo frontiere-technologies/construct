@@ -482,9 +482,9 @@ const CASES: Record<string, CrossTenantCase> = {
   'app/(protected)/(admin)/functionalities/[funcId]/edit/page.tsx#default': {
     entry: EditFunctionalityPage,
     run: async () => {
-      // Per A la voce di B non esiste: la pagina si ferma con un errore, senza dati di B.
+      // Per A la voce di B non esiste: 404, come per un id mai esistito, senza dati di B.
       await expect(EditFunctionalityPage({ params: Promise.resolve({ funcId: String(bEmbedded) }) }))
-        .rejects.toThrow(`Navigation item ${bEmbedded} not found`)
+        .rejects.toThrow('NEXT_NOT_FOUND')
     },
   },
   'app/(protected)/(admin)/functionalities/create/page.tsx#default': {
@@ -512,8 +512,9 @@ const CASES: Record<string, CrossTenantCase> = {
   'app/(protected)/(admin)/roles-permissions/[roleId]/page.tsx#default': {
     entry: RoleDetailPage,
     run: async () => {
+      // Per A il ruolo di B non esiste: 404, come per un id mai esistito, senza dati di B.
       await expect(RoleDetailPage({ params: Promise.resolve({ roleId: String(bServiceRole) }) }))
-        .rejects.toThrow('Failed to load role: not found')
+        .rejects.toThrow('NEXT_NOT_FOUND')
     },
   },
   'app/(protected)/(admin)/roles-permissions/page.tsx#default': {
