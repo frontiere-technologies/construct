@@ -428,7 +428,7 @@ git commit -m "feat(sidebar): current tenant and tenant switcher at the top"
 - Consumes: `tenantSettings`, permesso `manage-tenant-settings` (Task 2); chiavi `tenancy.settings.*` e voce di menu (Task 5).
 - Produces: `setSelfRegistration(enabled: boolean): Promise<void>` (`'use server'`, comincia con `await requirePermission('manage-tenant-settings')`, scrive con `withTenant(actor.tenantId)`); pagina protetta da `requirePagePermission('manage-tenant-settings')`.
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 ```ts
 it('the tenant admin turns self registration on and off for their tenant only', …)  // B invariato
@@ -436,9 +436,9 @@ it('a user without manage-tenant-settings is refused', …)
 it('the switch shows the saved state and the saved message', …)                     // componente
 ```
 
-- [ ] **Step 2–4:** come nei task precedenti; `npx vitest run components/settings guards && npm run test:integration -- lib/tenancy/tenant-settings.integration.test.ts`.
+- [✅] **Step 2–4:** come nei task precedenti; `npx vitest run components/settings guards && npm run test:integration -- lib/tenancy/tenant-settings.integration.test.ts`.
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(tenancy): tenant settings page with the self-registration switch"

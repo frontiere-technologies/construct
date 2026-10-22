@@ -393,6 +393,7 @@ describe('findDeclaration / inspectExports', () => {
  */
 const EXPECTED_DECLARATIONS: Record<string, string> = {
   'app/(protected)/(admin)/admin/languages/page.tsx#default': 'read-languages',
+  'app/(protected)/(admin)/admin/tenant-settings/page.tsx#default': 'manage-tenant-settings',
   'app/(protected)/(admin)/admin/theme/page.tsx#default': 'requireAdministratorPage',
   'app/(protected)/(admin)/admin/translations/[keyId]/edit/page.tsx#default': 'edit-translations',
   'app/(protected)/(admin)/admin/translations/create/page.tsx#default': 'manage-translation-keys',
@@ -450,6 +451,7 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/rbac/users-actions.ts#updateUserRoles': 'assign-user-roles',
   'lib/tenancy/tenant-actions.ts#chooseTenant': 'allowAnyAuthenticated',
   'lib/tenancy/tenant-actions.ts#refreshTenant': 'allowAnyAuthenticated',
+  'lib/tenancy/tenant-settings-actions.ts#setSelfRegistration': 'manage-tenant-settings',
   'lib/theme-actions.ts#saveAppTheme': 'requireAdministrator',
 }
 
