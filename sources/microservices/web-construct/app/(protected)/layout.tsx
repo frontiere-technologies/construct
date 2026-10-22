@@ -3,18 +3,36 @@ import { getSidebarMenu } from '@/lib/rbac/navigation-service'
 import { getActiveLanguage } from '@/lib/i18n/server'
 import { getDefaultLanguage } from '@/lib/i18n/language-service'
 import { normalizeNavigationLocale } from '@/lib/rbac/navigation-locales'
+import { listAvailableTenants } from '@/lib/tenancy/host-tenants'
+import { readRequestHost } from '@/lib/tenancy/request-host'
 import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
 import { Layout } from '@/components/Layout'
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const [session, language, defaultLanguage] = await Promise.all([getSession(), getActiveLanguage(), getDefaultLanguage()])
   const roleIds = (session?.user as { roleIds?: number[] })?.roleIds ?? []
+  const tenantId = await resolveRequestTenant()
+  const userId = session?.user?.id
 
-  const menuItems = await getSidebarMenu(
-    await resolveRequestTenant(),
-    roleIds,
-    normalizeNavigationLocale(language.code),
-    normalizeNavigationLocale(defaultLanguage.code),
+  // Il selettore in cima alla barra (MT4-DEC-5) legge il tenant corrente e l'elenco dal server, non
+  // dalla sessione del client, che dopo un cambio resta indietro. Un'istruzione per pagina: è
+  // l'elenco dei tenant dell'indirizzo, dove il corrente deve comparire. Se non compare (appartenenza
+  // appena tolta) il blocco manca e la richiesta dopo passa dalla rivalidazione.
+  const [menuItems, availableTenants] = await Promise.all([
+    getSidebarMenu(
+      tenantId,
+      roleIds,
+      normalizeNavigationLocale(language.code),
+      normalizeNavigationLocale(defaultLanguage.code),
+    ),
+    userId ? readRequestHost().then(host => listAvailableTenants(userId, host)) : Promise.resolve([]),
+  ])
+  const tenants = availableTenants.map(tenant => ({ id: Number(tenant.tenantId), name: tenant.name }))
+  const current = tenants.find(tenant => tenant.id === Number(tenantId))
+
+  return (
+    <Layout menuItems={menuItems} tenantSwitcher={current ? { current, tenants } : undefined}>
+      {children}
+    </Layout>
   )
-  return <Layout menuItems={menuItems}>{children}</Layout>
 }

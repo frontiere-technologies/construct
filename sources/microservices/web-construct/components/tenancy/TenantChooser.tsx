@@ -56,7 +56,7 @@ export function TenantChooser({ userName, tenants }: { userName: string; tenants
               data-testid="tenant-card"
               disabled={pending}
               onClick={() => handleChoose(tenant.tenantId)}
-              className="flex h-full w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-left text-card-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:bg-accent"
+              className="flex h-full w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-left text-card-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:bg-accent enabled:hover:text-accent-foreground"
             >
               <Building2 size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-primary" />
               <span className="flex min-w-0 flex-col gap-1">

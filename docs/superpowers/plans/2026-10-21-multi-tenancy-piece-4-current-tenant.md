@@ -392,7 +392,7 @@ git commit -m "feat(tenancy): tenant chooser, not-configured page and tenant swi
 - Consumes: `listAvailableTenants`, `chooseTenant`, `resolveRequestTenant`, chiavi `tenancy.switch.*` (Task 3, 4, 5).
 - Produces: `TenantSwitcher({ current, tenants, collapsed }: { current: { id: number; name: string }; tenants: { id: number; name: string }[]; collapsed: boolean })`; il layout protetto passa `tenantSwitcher` a `Layout` → `Sidebar` (nuova prop opzionale, così i test esistenti della barra non cambiano).
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 ```ts
 it('shows the current tenant name and no list with a single tenant', …)
@@ -401,16 +401,16 @@ it('choosing another tenant calls chooseTenant with its id', …)
 it('is reachable with the sidebar collapsed (icon button with accessible name)', …)
 ```
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
-- [ ] **Step 3: Implementa** il blocco prima delle voci in alto della colonna (`Sidebar.tsx` ~503), con le primitive shadcn e i token del tema; l'elenco usa `max-height` e scorrimento.
+- [✅] **Step 3: Implementa** il blocco prima delle voci in alto della colonna (`Sidebar.tsx` ~503), con le primitive shadcn e i token del tema; l'elenco usa `max-height` e scorrimento.
 
-- [ ] **Step 4: Verifica che passino**
+- [✅] **Step 4: Verifica che passino**
 
 Run: `npx vitest run components guards`
 Expected: PASS (salvo gli 8 fallimenti noti di `Sidebar*`).
 
-- [ ] **Step 5: Commit**
+- [✅] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(sidebar): current tenant and tenant switcher at the top"
