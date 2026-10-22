@@ -280,7 +280,7 @@ git commit -m "feat(tenancy): host tenants, available tenants and registration j
   - `resolveRequestTenant(): Promise<TenantId>` — sessione con `tenantState === 'ready'` → il tenant del token; nessuna sessione → `resolveHostTenant(await readRequestHost())`; sessione in stato `choose` o `none` → errore `tenant_not_selected` (le pagine protette non ci arrivano, vedi Task 5);
   - `selectAuthorizationSnapshot(tx, userId, { permissionCodes?, host? })` — con `host`, la stessa istruzione legge anche `tenant_eligible: boolean` (tenant della transazione `active`, non modello, e in `host_tenant_ids(host)`).
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [✅] **Step 1: Scrivi i test che falliscono**
 
 `tenant-selection.test.ts` con le cinque regole sopra, più: `current` non più disponibile e
 `lastTenantId` disponibile → `lastTenantId`; `lastTenantId` non disponibile con più tenant →
@@ -307,12 +307,12 @@ it('a token without tenant fields (session from before the release) is treated a
 it('no request parameter, form field or header other than the host changes the tenant', …)
 ```
 
-- [ ] **Step 2: Verifica che falliscano**
+- [✅] **Step 2: Verifica che falliscano**
 
 Run: `npx vitest run lib/tenancy/tenant-selection.test.ts lib/auth.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 3: Implementa**
+- [✅] **Step 3: Implementa**
 
 - `jwt`: all'accesso legge host, tenant disponibili e `lastTenantId`, applica `selectTenant`; a ogni
   richiesta successiva, se `tenantState === 'ready'`, l'istruzione unica con `host` rivalida il
@@ -324,12 +324,12 @@ Expected: FAIL.
 - `resolveRequestTenant` come sopra; i chiamanti non cambiano firma. `joinDefaultTenant` usa
   `resolveHostTenant`.
 
-- [ ] **Step 4: Verifica che passino**
+- [✅] **Step 4: Verifica che passino**
 
 Run: `npx vitest run lib && npm run test:integration -- lib/rbac lib/tenancy lib/auth-security.integration.test.ts lib/db/round-trip-budget.integration.test.ts`
 Expected: PASS; tetti invariati (o aumento motivato nel rapporto).
 
-- [ ] **Step 5: Spunta MT4-RISK-3 e commit**
+- [✅] **Step 5: Spunta MT4-RISK-3 e commit**
 
 ```bash
 git commit -m "feat(auth): current tenant in the token, revalidated on every request"

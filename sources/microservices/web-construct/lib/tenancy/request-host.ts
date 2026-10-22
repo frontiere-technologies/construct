@@ -28,12 +28,13 @@ export function normalizeHost(raw: string | null | undefined): string | null {
 /**
  * L'indirizzo dalle intestazioni di una richiesta. `x-forwarded-host` conta solo se
  * `TRUST_FORWARDED_HOST` è `true`, cioè quando davanti all'app c'è un proxy che la scrive lui:
- * altrimenti chiunque potrebbe sceglierla. Se il proxy ne manda un elenco vale il primo valore,
- * quello del client; se non è valido si ricade sull'intestazione `host`.
+ * altrimenti chiunque potrebbe sceglierla. Se arriva un elenco vale l'ultimo valore, quello che ha
+ * aggiunto il proxy fidato: i valori prima li ha scritti chi stava davanti a lui, client compreso.
+ * Se non è valido si ricade sull'intestazione `host`.
  */
 export function hostFromHeaders(requestHeaders: Headers): string | null {
   if (process.env.TRUST_FORWARDED_HOST === 'true') {
-    const forwarded = normalizeHost(requestHeaders.get('x-forwarded-host')?.split(',')[0])
+    const forwarded = normalizeHost(requestHeaders.get('x-forwarded-host')?.split(',').at(-1))
     if (forwarded) return forwarded
   }
   return normalizeHost(requestHeaders.get('host'))

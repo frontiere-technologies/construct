@@ -107,10 +107,33 @@ describeIntegration('round-trip budget', () => {
     expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(3)
   })
 
-  it('one authorization read (the jwt callback) costs at most 5 trips', async () => {
+  it('one authorization read costs at most 5 trips', async () => {
     const { resolveUserAuthorization } = await import('@/lib/rbac/auth-roles')
     const count = await measure(() => resolveUserAuthorization(defaultTestTenant(), adminUserId))
     expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(5)
+  })
+
+  // Il callback jwt a ogni richiesta (pezzo 4, §3.1, MT4-RISK-3): la rivalidazione del tenant del
+  // token entra nell'istruzione unica dell'autorizzazione, quindi stesso tetto della lettura sopra.
+  it('the jwt callback revalidating a ready token costs at most 5 trips', async () => {
+    const { revalidateTokenTenant } = await import('@/lib/tenancy/token-tenant')
+    const token = { tenantId: defaultTestTenant(), tenantState: 'ready', tenantHost: null, tenantName: null, accountActive: true, roleIds: [] }
+    let result: Awaited<ReturnType<typeof revalidateTokenTenant>> | undefined
+    const count = await measure(async () => { result = await revalidateTokenTenant(adminUserId, token, null) })
+    expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(5)
+    // Stesso esito, non solo meno viaggi: il token resta nel predefinito con i ruoli dell'amministratore.
+    expect(result).toMatchObject({ tenantId: defaultTestTenant(), tenantState: 'ready', accountActive: true })
+    expect(result!.roleIds).toContain(adminRoleId)
+    // Nessuna funzione che scorre i tenant a ogni richiesta.
+    expect(count.queries.join('\n')).not.toMatch(/available_tenants|has_deactivated_membership_on_host/)
+  })
+
+  it('the jwt callback for a token waiting for a choice costs at most 5 trips', async () => {
+    const { revalidateTokenTenant } = await import('@/lib/tenancy/token-tenant')
+    const token = { tenantId: null, tenantState: 'choose', tenantHost: null, tenantName: null, accountActive: true, roleIds: [] }
+    const count = await measure(() => revalidateTokenTenant(adminUserId, token, null))
+    expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(5)
+    expect(count.queries.join('\n')).not.toMatch(/available_tenants|has_deactivated_membership_on_host/)
   })
 
   it.each(['admin', 'reader'] as const)('resolveActor for a %s costs at most 5 trips', async kind => {

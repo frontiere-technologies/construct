@@ -332,6 +332,36 @@ describeIntegration('host tenants and available tenants', () => {
     expect(row.status).toBe('active')
   })
 
+  it("a suspended tenant's dedicated host gives an empty set, with no fallback to the main address", async () => {
+    const sHost = `zzz-s-${unique()}.localhost`
+    await withOwner(tx => tx.execute(sql`insert into public.tenant_host (host, id_tenant, is_primary) values (${sHost}, ${S}, true)`))
+    try {
+      expect(await hostTenantIds(sHost)).toEqual([])
+      // Controllo contro un passaggio a vuoto: l'indirizzo principale ha dei tenant.
+      expect(await hostTenantIds(null)).toContain(DEFAULT)
+      // memberOfAll è membro attivo di S e del predefinito: sull'indirizzo di S non trova niente.
+      expect(await listAvailableTenants(memberOfAll, sHost)).toEqual([])
+    } finally {
+      await withOwner(tx => tx.execute(sql`delete from public.tenant_host where host = ${sHost}`))
+    }
+  })
+
+  it('join_by_registration returns null for a suspended tenant and for the template, even with the switch on', async () => {
+    const newcomer = await createUser()
+    for (const target of [S, template]) {
+      // L'interruttore si accende solo in una transazione che si annulla: il modello è condiviso.
+      let joined: string | null | undefined
+      let rows: number | undefined
+      await expect(withTenant(target, async tx => {
+        await tx.execute(sql`update public.tenant_settings set self_registration = true`)
+        joined = await joinByRegistration(tx, newcomer)
+        rows = (await tx.select().from(tenantMembership).where(eq(tenantMembership.userId, newcomer))).length
+        throw rollback
+      })).rejects.toBe(rollback)
+      expect({ target, joined, rows }).toEqual({ target, joined: null, rows: 0 })
+    }
+  })
+
   it('resolveHostTenant returns A for a.localhost and default for unknown hosts', async () => {
     expect(await resolveHostTenant(aHost)).toBe(A)
     expect(await resolveHostTenant(`${aHost.toUpperCase()}:3000`)).toBe(A)

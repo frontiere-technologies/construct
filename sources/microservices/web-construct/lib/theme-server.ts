@@ -2,7 +2,7 @@ import { cache } from 'react'
 import { withTenant } from '@/lib/db/tenant-db'
 import { appTheme } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
-import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
+import { resolveRequestOrHostTenant } from '@/lib/tenancy/request-tenant'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { DEFAULT_APP_THEME, type AppTheme, type SurfaceOverrides } from './theme-vars'
 
@@ -52,12 +52,13 @@ export const getAppTheme = cache(async (tenantId: TenantId): Promise<AppTheme> =
 
 /**
  * Il tema del tenant della richiesta, per il layout radice: lì non c'è un attore e la pagina di
- * accesso è anonima. Il tenant si legge dal database, quindi anche la sua risoluzione può fallire:
- * come per `getAppTheme`, un database irraggiungibile non deve impedire di disegnare la pagina.
+ * accesso è anonima. Il tenant è quello della sessione o, senza un tenant scelto, quello
+ * dell'indirizzo (pezzo 4, MT4-DEC-11). Si legge dal database, quindi anche la sua risoluzione può
+ * fallire: come per `getAppTheme`, un database irraggiungibile non deve impedire di disegnare la pagina.
  */
 export async function getRequestAppTheme(): Promise<AppTheme> {
   try {
-    return await getAppTheme(await resolveRequestTenant())
+    return await getAppTheme(await resolveRequestOrHostTenant())
   } catch (err) {
     log.error({ err }, 'failed to resolve the tenant of the request for the application theme')
     return DEFAULT_APP_THEME

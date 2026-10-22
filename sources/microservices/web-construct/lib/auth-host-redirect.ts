@@ -46,6 +46,11 @@ export function relocateAuthUrl(url: string, authOrigin: string | null, requestO
  * La risposta di Auth.js con i suoi indirizzi riportati sull'indirizzo della richiesta: il rinvio
  * (`Location`) e, quando il client l'ha chiesto con `X-Auth-Return-Redirect` (lo fanno `signIn` e
  * `signOut` di `next-auth/react`), il campo `url` del JSON. I cookie restano tutti.
+ *
+ * Attenzione: il campo `url` diventa relativo. Con `redirect: false`, `signIn` di `next-auth/react`
+ * lo passa a `new URL(url)`, che con un indirizzo relativo lancia, e `signOut` lo restituisce
+ * relativo a chi chiama. Oggi nessuno li chiama così; chi lo farà dovrà risolvere l'indirizzo
+ * sull'origine della pagina (o lasciare il rinvio ad Auth.js).
  */
 export async function keepOnRequestHost(request: Request, response: Response, requestOrigin = ''): Promise<Response> {
   const authOrigin = configuredAuthOrigin()

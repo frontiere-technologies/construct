@@ -1,7 +1,8 @@
 import { eq, sql } from 'drizzle-orm'
 import { tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
-import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
+import { resolveHostTenant } from '@/lib/tenancy/host-tenants'
+import { readRequestHost } from '@/lib/tenancy/request-host'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 
@@ -59,9 +60,12 @@ export async function tenantMemberEmail(tenantId: TenantId, userId: string): Pro
 /**
  * Registrazione: dà alla persona l'appartenenza al tenant predefinito, con le stesse regole del
  * primo accesso (mai un'appartenenza disattivata riattivata, mai chi appartiene a un altro tenant).
+ * Il tenant è quello dell'indirizzo, perché chi si registra non ha una sessione: fuori
+ * dall'indirizzo principale la funzione SQL non crea niente (Task 8 la sostituisce con
+ * `join_by_registration`).
  */
 export async function joinDefaultTenant(userId: string): Promise<MembershipStatus | null> {
-  return withTenant(await resolveRequestTenant(), tx => ensureDefaultMembership(tx, userId))
+  return withTenant(await resolveHostTenant(await readRequestHost()), tx => ensureDefaultMembership(tx, userId))
 }
 
 /**

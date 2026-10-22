@@ -58,11 +58,18 @@ describe('readRequestHost', () => {
     expect(await readRequestHost()).toBe('evil.example')
   })
 
-  it('takes the first value of a forwarded list and falls back to host when it is invalid', async () => {
+  it('takes the last value of a forwarded list, the one the trusted proxy appended', async () => {
     vi.stubEnv('TRUST_FORWARDED_HOST', 'true')
-    mocks.headers = new Headers({ host: 'internal:8080', 'x-forwarded-host': 'B.Localhost:443, proxy.internal' })
+    // Il client ha scritto evil.example; il proxy fidato ha aggiunto l'indirizzo vero in fondo.
+    mocks.headers = new Headers({ host: 'internal:8080', 'x-forwarded-host': 'evil.example, B.Localhost:443' })
     expect(await readRequestHost()).toBe('b.localhost')
+  })
+
+  it('falls back to host when the forwarded value is invalid', async () => {
+    vi.stubEnv('TRUST_FORWARDED_HOST', 'true')
     mocks.headers = new Headers({ host: 'a.localhost:3000', 'x-forwarded-host': 'a b' })
+    expect(await readRequestHost()).toBe('a.localhost')
+    mocks.headers = new Headers({ host: 'a.localhost:3000', 'x-forwarded-host': 'b.localhost, a b' })
     expect(await readRequestHost()).toBe('a.localhost')
   })
 })

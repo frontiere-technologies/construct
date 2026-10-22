@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server'
 import NextAuth from 'next-auth'
+import type { JWT } from 'next-auth/jwt'
 import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id'
 import Google from 'next-auth/providers/google'
 import Keycloak from 'next-auth/providers/keycloak'
@@ -11,9 +12,8 @@ import { users, allowedDomains } from '@/lib/db/schema'
 import { createLogger } from '@/lib/logger'
 import { authConfig, mergeAuthCallbacks } from '@/lib/auth.config'
 import { keepOnRequestHost } from '@/lib/auth-host-redirect'
-import { resolveUserAuthorization } from '@/lib/rbac/auth-roles'
-import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
-import { isMembershipDeactivated } from '@/lib/tenancy/membership'
+import { readRequestHost } from '@/lib/tenancy/request-host'
+import { enterTenant, isSignInRefusedOnHost, revalidateTokenTenant, type TokenTenant } from '@/lib/tenancy/token-tenant'
 import {
   assertSafeAuthConfiguration,
   isActiveAccount,
@@ -125,7 +125,9 @@ function buildProviders() {
 
         // Dopo la verifica della password, così i tempi dei tentativi sbagliati restano uniformi.
         // Il messaggio per chi entra è lo stesso di un account disattivato; cambia solo il motivo nel log.
-        if (await isMembershipDeactivated(await resolveRequestTenant(), user.id)) {
+        // Si rifiuta solo chi sull'indirizzo non ha tenant disponibili e vi ha un'appartenenza
+        // disattivata (MT4-DEC-15); chi non ha nessuna appartenenza lì entra e vede il messaggio.
+        if (await isSignInRefusedOnHost(user.id, await readRequestHost())) {
           log.warn({ reason: 'membership' }, 'credentials rejected')
           return null
         }
@@ -158,7 +160,7 @@ function buildProviders() {
               .limit(1)
           })
           if (!data || !isActiveAccount(data.idUserStatus)) return null
-          if (await isMembershipDeactivated(await resolveRequestTenant(), data.id)) {
+          if (await isSignInRefusedOnHost(data.id, await readRequestHost())) {
             log.warn({ reason: 'membership' }, 'test credentials rejected')
             return null
           }
@@ -173,8 +175,11 @@ function buildProviders() {
 
 const nextAuth = NextAuth({
   ...authConfig,
-  // Lo stesso processo risponde su più indirizzi (a.localhost, b.localhost, …): Auth.js si fida
-  // dell'indirizzo della richiesta invece di pretendere AUTH_URL (pezzo 4, MT4-RISK-1).
+  // Lo stesso processo risponde su più indirizzi (a.localhost, b.localhost, …). Senza AUTH_URL,
+  // trustHost fa usare ad Auth.js l'indirizzo della richiesta; con AUTH_URL impostata (sempre, qui:
+  // costruisce i link nelle email) non cambia niente, perché next-auth riscrive comunque l'origine
+  // su AUTH_URL. A tenere sull'indirizzo della richiesta i rinvii di Auth.js è
+  // lib/auth-host-redirect.ts, negli handler in fondo a questo file (pezzo 4, MT4-RISK-1).
   trustHost: true,
   providers: buildProviders(),
   session: { strategy: 'jwt' as const },
@@ -193,7 +198,7 @@ const nextAuth = NextAuth({
           .where(eq(users.email, email))
           .limit(1))
         if (existing && !isActiveAccount(existing.idUserStatus)) return false
-        if (existing && await isMembershipDeactivated(await resolveRequestTenant(), existing.id)) return false
+        if (existing && await isSignInRefusedOnHost(existing.id, await readRequestHost())) return false
       }
       return true
     },
@@ -230,30 +235,43 @@ const nextAuth = NextAuth({
           }
         }
         token.userId = userId
-        if (userId) {
-          const authorization = await resolveUserAuthorization(await resolveRequestTenant(), userId, true)
-          token.accountActive = authorization.accountActive
-          token.roleIds = authorization.roleIds
-        }
+        // All'accesso il tenant si sceglie fra quelli disponibili sull'indirizzo (MT4-DEC-4).
+        if (userId) applyTokenTenant(token, await enterTenant(userId, await readRequestHost(), { current: null, firstEntry: true }))
       } else if (token.userId) {
-        const authorization = await resolveUserAuthorization(await resolveRequestTenant(), token.userId as string)
-        token.accountActive = authorization.accountActive
-        token.roleIds = authorization.roleIds
+        // A ogni richiesta il tenant del token si rivalida (MT4-DEC-7). Il parametro `session` di
+        // un aggiornamento (trigger 'update', anche da POST /api/auth/session del client) non entra:
+        // il tenant viene solo dal token e dall'indirizzo della richiesta.
+        applyTokenTenant(token, await revalidateTokenTenant(token.userId, token, await readRequestHost()))
       }
       return token
     },
     async session({ session, token }) {
       const accountActive = Boolean(token.accountActive)
+      const ready = token.tenantState === 'ready'
       session.user.id = accountActive ? token.userId as string : ''
-      session.user.roleIds = accountActive ? (token.roleIds as number[]) ?? [] : []
+      // Ruoli e tenant esistono solo con un tenant scelto; in 'choose' e 'none' la persona resta
+      // riconosciuta (id) per arrivare alla scelta o al messaggio (Task 5), senza autorità.
+      session.user.roleIds = accountActive && ready ? (token.roleIds as number[]) ?? [] : []
       session.user.accountActive = accountActive
       session.user.provider = token.provider as string
+      session.user.tenantState = token.tenantState ?? 'none'
+      session.user.tenantId = accountActive && ready ? token.tenantId ?? null : null
+      session.user.tenantName = ready ? token.tenantName ?? null : null
       return session
     },
   }),
 })
 
 export const { auth, signIn, signOut } = nextAuth
+
+function applyTokenTenant(token: JWT, tenant: TokenTenant): void {
+  token.tenantId = tenant.tenantId
+  token.tenantState = tenant.tenantState
+  token.tenantHost = tenant.tenantHost
+  token.tenantName = tenant.tenantName
+  token.accountActive = tenant.accountActive
+  token.roleIds = tenant.roleIds
+}
 
 // Con AUTH_URL impostata next-auth costruisce ogni indirizzo di ritorno su AUTH_URL anche con
 // trustHost: questi handler li riportano sull'indirizzo della richiesta (lib/auth-host-redirect.ts).

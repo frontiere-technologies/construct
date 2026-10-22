@@ -10,12 +10,16 @@ export type AvailableTenant = { tenantId: TenantId; name: string; isAdmin: boole
  * I tenant che rispondono sull'indirizzo e dove la persona ha un'appartenenza attiva, con l'account
  * attivo a livello globale; ordinati per nome (MT4-DEC-2). `host` nullo, sconosciuto o non valido
  * è l'indirizzo principale. Le appartenenze sono tabelle di tenant: le legge la funzione SQL, che
- * visita i tenant uno per uno e rimette `app.tenant_id` com'era (0054). Un solo viaggio.
+ * visita i tenant uno per uno e rimette `app.tenant_id` com'era (0054). Un solo viaggio, ma la
+ * funzione scorre i tenant dell'indirizzo: si chiama all'accesso, al cambio e quando la
+ * rivalidazione fallisce, mai a ogni richiesta. L'ordine è scritto qui e non affidato all'ordine
+ * in cui la funzione restituisce le righe.
  */
 export async function listAvailableTenants(userId: string, host: string | null): Promise<AvailableTenant[]> {
   const rows = await withGlobal(tx => tx.execute<{ id_tenant: string; name: string; is_admin: boolean }>(sql`
     select a.id_tenant::text as id_tenant, a.name, a.is_admin
-    from public.available_tenants(${userId}::uuid, ${normalizeHost(host)}::text) a`))
+    from public.available_tenants(${userId}::uuid, ${normalizeHost(host)}::text) a
+    order by a.name, a.id_tenant`))
   return rows.map(row => ({ tenantId: toTenantId(Number(row.id_tenant)), name: row.name, isAdmin: row.is_admin }))
 }
 
@@ -32,4 +36,15 @@ export async function resolveHostTenant(host: string | null): Promise<TenantId> 
     )::text as id`))
   if (!row?.id) throw new Error('default tenant missing')
   return toTenantId(Number(row.id))
+}
+
+/**
+ * Vero se la persona ha un'appartenenza disattivata in almeno un tenant dell'indirizzo (MT4-DEC-15):
+ * con nessun tenant disponibile lì, l'accesso si rifiuta come per l'account disattivato. Come
+ * `listAvailableTenants` scorre i tenant dell'indirizzo: solo all'accesso.
+ */
+export async function hasDeactivatedMembershipOnHost(userId: string, host: string | null): Promise<boolean> {
+  const [row] = await withGlobal(tx => tx.execute<{ deactivated: boolean }>(sql`
+    select public.has_deactivated_membership_on_host(${userId}::uuid, ${normalizeHost(host)}::text) as deactivated`))
+  return row?.deactivated === true
 }
