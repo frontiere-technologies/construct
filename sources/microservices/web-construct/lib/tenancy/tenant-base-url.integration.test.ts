@@ -1,14 +1,16 @@
 import { NextRequest } from 'next/server'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { eq, like, sql } from 'drizzle-orm'
-import { allowedDomains, appTheme, tenantMembership, users } from '@/lib/db/schema'
+import { count, eq, like, sql } from 'drizzle-orm'
+import { allowedDomains, appTheme, passwordSetTokens, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { POST as forgotPassword } from '@/app/api/auth/forgot-password/route'
 import { POST as register } from '@/app/api/auth/register/route'
 import { getRequestAppTheme } from '@/lib/theme-server'
+import { getSystemRoleIds } from './system-roles'
 import { tenantBaseUrl } from './tenant-base-url'
+import { acceptsSelfRegistration } from './tenant-settings'
 import { defaultTestTenant, tenantIdForTest } from './testing'
 import type { TenantId } from './tenant-id'
 
@@ -63,6 +65,12 @@ async function setSelfRegistration(tenantId: TenantId, value: boolean): Promise<
 async function userIdOf(email: string): Promise<string | null> {
   const [row] = await withGlobal(tx => tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1))
   return row?.id ?? null
+}
+
+/** I token di impostazione della password: una registrazione rifiutata non ne crea. */
+async function tokenCount(): Promise<number> {
+  const [row] = await withGlobal(tx => tx.select({ n: count() }).from(passwordSetTokens))
+  return row?.n ?? 0
 }
 
 async function membershipStatus(tenantId: TenantId, userId: string): Promise<string[]> {
@@ -157,6 +165,25 @@ describeIntegration('tenant base url and pre-login pages on the address of the t
     })
   })
 
+  describe('acceptsSelfRegistration', () => {
+    it('is true only for an active tenant with the switch on; a missing row or a suspended tenant is off', async () => {
+      // A nasce dal modello con l'interruttore spento; il predefinito parte acceso.
+      expect(await acceptsSelfRegistration(A)).toBe(false)
+      expect(await acceptsSelfRegistration(DEFAULT)).toBe(true)
+
+      const S = await createTenant('ZZZ Sospeso base url')
+      await setSelfRegistration(S, true)
+      expect(await acceptsSelfRegistration(S)).toBe(true)
+      await withOwner(tx => tx.execute(sql`update public.tenant set status = 'suspended' where id = ${S}`))
+      expect(await acceptsSelfRegistration(S)).toBe(false)
+
+      // Riga delle impostazioni mancante: spento, anche per un tenant attivo.
+      await withOwner(tx => tx.execute(sql`update public.tenant set status = 'active' where id = ${S}`))
+      await withTenant(S, tx => tx.execute(sql`delete from public.tenant_settings`))
+      expect(await acceptsSelfRegistration(S)).toBe(false)
+    })
+  })
+
   describe('registration and password recovery', () => {
     it('register from a.localhost joins A when A accepts self registration', async () => {
       const email = newEmail()
@@ -180,16 +207,40 @@ describeIntegration('tenant base url and pre-login pages on the address of the t
 
     it('register from a.localhost does nothing in A when the switch is off, same answer', async () => {
       const email = newEmail()
+      const tokensBefore = await tokenCount()
       onHost(`${aHost}:3000`)
       const response = await register(post('/api/auth/register', `${aHost}:3000`, { email }))
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ ok: true })
-      const userId = await userIdOf(email)
-      expect(userId).not.toBeNull()
-      expect(await membershipStatus(A, userId!)).toEqual([])
-      // Nemmeno nel predefinito: l'indirizzo di A non ricade mai sull'indirizzo principale.
-      expect(await membershipStatus(DEFAULT, userId!)).toEqual([])
+      // MT4-OK-5: non si crea nulla. Né l'account, né un token, né l'email.
+      expect(await userIdOf(email)).toBeNull()
+      expect(await tokenCount()).toBe(tokensBefore)
+      expect(mocks.sent).toEqual([])
+    })
+
+    it('register from a.localhost sends nothing to a person who already belongs to another tenant, same answer', async () => {
+      // Un account senza password, membro di C (in attesa di impostare la password): lo aggiunge ad A
+      // l'amministratore di A, e l'invito di C lo rimanda l'amministratore di C (MT4-DEC-9).
+      const email = newEmail()
+      const [created] = await withGlobal(tx => tx.insert(users).values({ email, idUserStatus: 2 }).returning({ id: users.id }))
+      await withTenant(C, async tx => {
+        const system = await getSystemRoleIds(tx)
+        await tx.insert(tenantMembership).values({ userId: created.id })
+        await tx.insert(userRole).values({ userId: created.id, idRole: system.registered })
+      })
+      await setSelfRegistration(A, true)
+      try {
+        onHost(`${aHost}:3000`)
+        const response = await register(post('/api/auth/register', `${aHost}:3000`, { email }))
+
+        expect(await response.json()).toEqual({ ok: true })
+        expect(await membershipStatus(A, created.id)).toEqual([])
+        expect(await membershipStatus(C, created.id)).toEqual(['active'])
+        expect(mocks.sent).toEqual([])
+      } finally {
+        await setSelfRegistration(A, false)
+      }
     })
 
     it('register with Host: evil.example builds no link on evil.example', async () => {

@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const calls: string[] = []
 const {
   prepareInvitation, sendInvitationEmail, joinTenantByRegistration, enforceAuthRateLimit, withGlobal,
-  resolveHostTenant, readRequestHost,
+  resolveHostTenant, readRequestHost, acceptsSelfRegistration,
 } = vi.hoisted(() => ({
+  acceptsSelfRegistration: vi.fn(),
   prepareInvitation: vi.fn(),
   sendInvitationEmail: vi.fn(),
   joinTenantByRegistration: vi.fn(),
@@ -17,9 +18,10 @@ const {
 
 vi.mock('@/lib/auth-invitations', () => ({ prepareInvitation }))
 vi.mock('@/lib/invitation-email', () => ({ sendInvitationEmail }))
-vi.mock('@/lib/tenancy/membership', () => ({ joinTenantByRegistration }))
+vi.mock('@/lib/tenancy/membership', () => ({ joinTenantByRegistration, MEMBERSHIP_ACTIVE: 'active' }))
 vi.mock('@/lib/tenancy/host-tenants', () => ({ resolveHostTenant }))
 vi.mock('@/lib/tenancy/request-host', () => ({ readRequestHost }))
+vi.mock('@/lib/tenancy/tenant-settings', () => ({ acceptsSelfRegistration }))
 vi.mock('@/lib/db/tenant-db', () => ({ withGlobal }))
 vi.mock('@/lib/auth-rate-limit', () => ({
   enforceAuthRateLimit,
@@ -48,6 +50,7 @@ describe('POST /api/auth/register', () => {
     })
     readRequestHost.mockResolvedValue('a.localhost')
     resolveHostTenant.mockResolvedValue(TENANT_A)
+    acceptsSelfRegistration.mockResolvedValue(true)
     joinTenantByRegistration.mockImplementation(async () => { calls.push('join'); return 'active' })
     sendInvitationEmail.mockImplementation(async () => { calls.push('send'); return { ok: true } })
   })
@@ -57,24 +60,51 @@ describe('POST /api/auth/register', () => {
 
     expect(await response.json()).toEqual({ ok: true })
     expect(prepareInvitation).toHaveBeenCalledWith('persona@consentito.test')
-    expect(joinTenantByRegistration).toHaveBeenCalledWith('user-1')
+    expect(joinTenantByRegistration).toHaveBeenCalledWith('user-1', TENANT_A)
     expect(calls).toEqual(['join', 'send'])
   })
 
-  it('builds the email link for the tenant of the address, never from the request', async () => {
+  it('builds the email link for the tenant it joined, reading the address once', async () => {
     await POST(request('persona@consentito.test'))
 
+    expect(readRequestHost).toHaveBeenCalledOnce()
+    expect(resolveHostTenant).toHaveBeenCalledOnce()
     expect(resolveHostTenant).toHaveBeenCalledWith('a.localhost')
+    expect(acceptsSelfRegistration).toHaveBeenCalledWith(TENANT_A)
     expect(sendInvitationEmail).toHaveBeenCalledWith(expect.objectContaining({ tokenId: 'token-1' }), TENANT_A)
   })
 
-  it('answers the same when the tenant of the address does not take the person', async () => {
-    joinTenantByRegistration.mockImplementation(async () => { calls.push('join'); return null })
+  it('creates nothing and sends nothing when the tenant of the address refuses self registration, same answer', async () => {
+    acceptsSelfRegistration.mockResolvedValue(false)
 
     const response = await POST(request('persona@consentito.test'))
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ ok: true })
+    expect(prepareInvitation).not.toHaveBeenCalled()
+    expect(joinTenantByRegistration).not.toHaveBeenCalled()
+    expect(sendInvitationEmail).not.toHaveBeenCalled()
+  })
+
+  it('creates nothing when the switch cannot be read, same answer', async () => {
+    acceptsSelfRegistration.mockRejectedValue(new Error('db down'))
+
+    const response = await POST(request('persona@consentito.test'))
+
+    expect(await response.json()).toEqual({ ok: true })
+    expect(prepareInvitation).not.toHaveBeenCalled()
+    expect(sendInvitationEmail).not.toHaveBeenCalled()
+  })
+
+  it.each([null, 'deactivated'])('sends nothing when the join leaves no active membership (%s), same answer', async joined => {
+    joinTenantByRegistration.mockImplementation(async () => { calls.push('join'); return joined })
+
+    const response = await POST(request('persona@consentito.test'))
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ ok: true })
+    expect(calls).toEqual(['join'])
+    expect(sendInvitationEmail).not.toHaveBeenCalled()
   })
 
   it('does neither when there is no invitation to send', async () => {

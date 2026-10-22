@@ -1,8 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
 import { tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
-import { resolveHostTenant } from '@/lib/tenancy/host-tenants'
-import { readRequestHost } from '@/lib/tenancy/request-host'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 
@@ -58,15 +56,15 @@ export async function tenantMemberEmail(tenantId: TenantId, userId: string): Pro
 }
 
 /**
- * Registrazione (MT4-DEC-9, MT4-DEC-10): dà alla persona l'appartenenza al tenant dell'indirizzo
- * della richiesta (il predefinito sull'indirizzo principale o su uno sconosciuto), solo se quel
- * tenant accetta registrazioni autonome, è attivo e la persona non appartiene a nessun tenant. Chi
- * si registra non ha una sessione: il tenant viene solo dall'indirizzo confrontato con il registro.
- * Ritorna lo stato dell'appartenenza dopo la chiamata, oppure `null` quando non ne esiste una; non
- * riattiva mai un'appartenenza disattivata. La logica vive in `public.join_by_registration` (0054).
+ * Registrazione (MT4-DEC-9, MT4-DEC-10): dà alla persona l'appartenenza al tenant indicato, quello
+ * dell'indirizzo della richiesta che la rotta ha già risolto (lo stesso il cui indirizzo va nel link
+ * dell'email), solo se quel tenant accetta registrazioni autonome, è attivo e la persona non
+ * appartiene a nessun tenant. Ritorna lo stato dell'appartenenza dopo la chiamata, oppure `null`
+ * quando non ne esiste una; non riattiva mai un'appartenenza disattivata. La logica vive in
+ * `public.join_by_registration` (0054).
  */
-export async function joinTenantByRegistration(userId: string): Promise<MembershipStatus | null> {
-  return withTenant(await resolveHostTenant(await readRequestHost()), async tx => {
+export async function joinTenantByRegistration(userId: string, tenantId: TenantId): Promise<MembershipStatus | null> {
+  return withTenant(tenantId, async tx => {
     const [row] = await tx.execute<{ status: string | null }>(
       sql`select public.join_by_registration(${userId}::uuid) as status`)
     return isMembershipStatus(row?.status) ? row.status : null

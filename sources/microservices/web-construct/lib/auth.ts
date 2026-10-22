@@ -197,7 +197,10 @@ const nextAuth = NextAuth({
       if (account?.provider && oidcProviders.includes(account.provider)) {
         const host = await readRequestHost()
         // Su un indirizzo dedicato a un tenant si entra con email e password (MT4-DEC-14): l'accesso
-        // OIDC resta sull'indirizzo principale. La pagina di accesso lì non mostra il bottone.
+        // OIDC resta sull'indirizzo principale. La pagina di accesso lì non mostra il bottone. Questo
+        // rifiuto è una difesa in più: next-auth costruisce il redirect_uri su AUTH_URL, quindi il
+        // ritorno dal provider di norma arriva sull'indirizzo principale, non su quello dedicato; qui
+        // si ferma un ritorno che arriva comunque con un Host dedicato.
         if (await isDedicatedHost(host)) return false
         const email = (profile?.email ?? '').toLowerCase().trim()
         const domain = email.split('@')[1] ?? ''

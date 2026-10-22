@@ -7,8 +7,9 @@ import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-lim
 import { prepareInvitation } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
 import { resolveHostTenant } from '@/lib/tenancy/host-tenants'
-import { joinTenantByRegistration } from '@/lib/tenancy/membership'
+import { joinTenantByRegistration, MEMBERSHIP_ACTIVE } from '@/lib/tenancy/membership'
 import { readRequestHost } from '@/lib/tenancy/request-host'
+import { acceptsSelfRegistration } from '@/lib/tenancy/tenant-settings'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { allowAnonymous } from '@/lib/rbac/access-declarations'
 
@@ -47,6 +48,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
+  // Il tenant dell'indirizzo, letto una volta: decide se la registrazione è accettata, dove entra la
+  // persona e l'indirizzo del link (MT4-DEC-9, MT4-DEC-10, MT4-DEC-12). L'intestazione Host sceglie
+  // al più il tenant, confrontata con il registro: un Host sconosciuto vale il predefinito, e non
+  // entra mai nel link. Se il tenant non accetta registrazioni autonome non si crea nulla, né
+  // account né token né email (MT4-OK-5); la risposta resta neutra in ogni caso.
+  let tenantId: TenantId
+  try {
+    tenantId = await resolveHostTenant(await readRequestHost())
+    if (!(await acceptsSelfRegistration(tenantId))) {
+      log.info('self registration not accepted on this address, skipping')
+      return NextResponse.json({ ok: true })
+    }
+  } catch (err) {
+    log.error({ err }, 'failed to read the tenant of the address')
+    return NextResponse.json({ ok: true })
+  }
+
   let invitation
   try {
     invitation = await prepareInvitation(normalizedEmail)
@@ -60,16 +78,19 @@ export async function POST(req: NextRequest) {
   }
   log.info({ userId: invitation.userId }, 'invitation prepared')
 
-  // La persona entra nel tenant dell'indirizzo prima dell'invio, se quel tenant la accetta
-  // (MT4-DEC-9, MT4-DEC-10); se la chiamata fallisce, niente email. La risposta resta neutra in
-  // ogni caso. Il link dell'email parte dall'indirizzo principale dello stesso tenant, mai
-  // dall'intestazione Host così com'è (MT4-DEC-12): un Host sconosciuto vale il predefinito.
-  let tenantId: TenantId
+  // La persona entra nel tenant prima dell'invio; se la chiamata fallisce, niente email. L'email
+  // parte solo se ne esce un'appartenenza attiva in quel tenant: chi è già membro di un altro tenant
+  // non entra da solo (lo aggiunge l'amministratore con "Aggiungi persona", e il suo invito lo
+  // rimanda l'amministratore del suo tenant), e chi è disattivato qui non entrerebbe comunque.
+  let joined
   try {
-    tenantId = await resolveHostTenant(await readRequestHost())
-    await joinTenantByRegistration(invitation.userId)
+    joined = await joinTenantByRegistration(invitation.userId, tenantId)
   } catch (err) {
     log.error({ err }, 'failed to join the tenant of the address')
+    return NextResponse.json({ ok: true })
+  }
+  if (joined !== MEMBERSHIP_ACTIVE) {
+    log.info({ joined }, 'no active membership in the tenant of the address, skipping the email')
     return NextResponse.json({ ok: true })
   }
 
