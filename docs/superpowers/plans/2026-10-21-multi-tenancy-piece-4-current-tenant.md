@@ -524,7 +524,7 @@ git commit -m "feat(db): tenant-create --host and tenant-host-add"
 **Interfaces:**
 - Produces: `listEntryPoints(): EntryPoint[]` (`{ kind: 'action' | 'route' | 'page'; file: string; name: string }`), usato dal guardiano dei permessi e dal test fra tenant.
 
-- [ ] **Step 1: Scrivi il test**
+- [✅] **Step 1: Scrivi il test**
 
 - Ogni ingresso dell'inventario ha un caso nel test o una voce nell'elenco delle esenzioni
   (`EXEMPT: Record<string, string>` con il motivo: salute, dizionario, preferenze personali, pagine
@@ -534,16 +534,16 @@ git commit -m "feat(db): tenant-create --host and tenant-host-add"
   dove serve); atteso 404 o 403 (rotte), errore o nessun effetto (azioni), `notFound`/redirect
   (pagine), e nessuna riga di B letta o cambiata (verifica con `withOwner` sul tenant B).
 
-- [ ] **Step 2: Verifica che fallisca** prima di completare i casi (l'inventario trova ingressi senza caso).
+- [✅] **Step 2: Verifica che fallisca** prima di completare i casi (l'inventario trova ingressi senza caso).
 
-- [ ] **Step 3: Completa i casi**
+- [✅] **Step 3: Completa i casi**
 
-- [ ] **Step 4: Verifica**
+- [✅] **Step 4: Verifica**
 
 Run: `npm run test:integration -- lib/tenancy/cross-tenant-entry-points.integration.test.ts && npx vitest run guards`
 Expected: PASS.
 
-- [ ] **Step 5: Spunta MT4-RISK-4 e commit**
+- [✅] **Step 5: Spunta MT4-RISK-4 e commit**
 
 ```bash
 git commit -m "test(tenancy): every entry point refuses another tenant's data"
