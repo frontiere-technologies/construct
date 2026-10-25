@@ -447,7 +447,7 @@ npm audit --omit=dev
 
 Mutating tests require a separate disposable database. Commands refuse to run unless the URL they are given exists, differs from `DATABASE_URL`, and `TEST_DATABASE_DISPOSABLE=1` explicitly confirms the target can be destroyed or changed. Never use a shared development, staging, or production database.
 
-The test database splits its credentials the same way the development one does, and for the same reason. `TEST_MIGRATION_DATABASE_URL` owns the schema and is read only by `db.mjs test-apply`; `TEST_DATABASE_URL` and `TEST_DATABASE_POOLED_URL` must both be a limited login inheriting only `construct_runtime`, because the integration suite and the E2E application server connect through them. Provision that login the same way as the development one:
+The test database splits its credentials the same way the development one does, and for the same reason. `TEST_MIGRATION_DATABASE_URL` owns the schema; it is read by `db.mjs test-apply` and by the owner-level test fixtures — the `db.mjs test-tenant-*` commands (which the E2E tenant fixtures run) and `withOwner`/`deleteTenantForTest` in the integration suite (`lib/db/testing.ts`) — and never by the application; `TEST_DATABASE_URL` and `TEST_DATABASE_POOLED_URL` must both be a limited login inheriting only `construct_runtime`, because the integration suite and the E2E application server connect through them. Provision that login the same way as the development one:
 
 ```bash
 export TEST_MIGRATION_DATABASE_URL='postgresql://...owner...@test-host:5432/postgres'
@@ -539,7 +539,7 @@ it. A separate project makes that mistake impossible instead of merely unlikely.
 
 The E2E fixture resets only its named users and removes the exact registration account created by that run, including after failures.
 
-`test_tenants.py` (multi-tenancy piece 4) creates its own tenants for the duration of that file only — "E2E A" on `a.localhost`, "E2E B" on `b.localhost`, "E2E C" on the main address — together with the people it needs, and removes all of them before its first test and after its last one, including after failures. Outside that file `TEST_EMAIL` keeps a single tenant on the main address, which is what every other test file expects. The fixture runs three test-only commands that connect as the owner through `TEST_MIGRATION_DATABASE_URL`; it reads that variable (with `TEST_DATABASE_DISPOSABLE`, and nothing else) from `sources/devops/db/operator.env` and passes it to those `db.mjs` subprocesses alone:
+`test_tenants.py` (multi-tenancy piece 4) creates its own tenants for the duration of that file only — "E2E A" on `a.localhost`, "E2E B" on `b.localhost`, "E2E C" on the main address — together with the people it needs, and removes all of them before its first test and after its last one, including after failures. A run killed in the middle of that file (Ctrl-C, the Mac going to sleep) cannot clean up, so the session fixture in `conftest.py` also deletes the three tenants, idempotently, at the start of every run. Outside that file `TEST_EMAIL` keeps a single tenant on the main address, which is what every other test file expects. The fixture runs three test-only commands that connect as the owner through `TEST_MIGRATION_DATABASE_URL`; it reads that variable (with `TEST_DATABASE_DISPOSABLE`, and nothing else) from `sources/devops/db/operator.env` and passes it to those `db.mjs` subprocesses alone:
 
 ```bash
 node sources/devops/db/db.mjs test-tenant-create --slug e2e-a --name "E2E A" --admin <TEST_EMAIL> --host a.localhost

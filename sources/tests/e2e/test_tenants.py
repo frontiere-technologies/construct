@@ -15,30 +15,27 @@ scelta.
 I cookie sono per indirizzo: ogni indirizzo ha il suo accesso, in un contesto
 del browser suo.
 """
-import os
 import re
-import subprocess
 import uuid
 from contextlib import contextmanager
-from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import pytest
 from playwright.sync_api import expect
 
-from helpers import do_test_login, grid_rows, nav
+from helpers import E2E_TENANT_SLUGS, do_test_login, grid_rows, nav, run_db as _db
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-OPERATOR_ENV = REPO_ROOT / "sources" / "devops" / "db" / "operator.env"
 VIEWPORT = {"width": 1440, "height": 900}
 
 # Il predefinito nasce con la migrazione 0046: id 1, nome "Default".
 DEFAULT_TENANT_ID = 1
 DEFAULT_TENANT_NAME = "Default"
-SLUG_A, NAME_A, HOST_A = "e2e-a", "E2E A", "a.localhost"
-SLUG_B, NAME_B, HOST_B = "e2e-b", "E2E B", "b.localhost"
-SLUG_C, NAME_C = "e2e-c", "E2E C"
+# Gli slug stanno in helpers.py perché anche conftest.py li cancella all'inizio di ogni sessione.
+SLUG_A, SLUG_B, SLUG_C = E2E_TENANT_SLUGS
+NAME_A, HOST_A = "E2E A", "a.localhost"
+NAME_B, HOST_B = "E2E B", "b.localhost"
+NAME_C = "E2E C"
 
 NO_TENANT_MESSAGE = "Non sei configurato su questo indirizzo."
 REGISTER_CONFIRM = "Se l'email è autorizzata riceverai un link per completare la registrazione."
@@ -95,43 +92,6 @@ def test_failed_login_stays_on_subdomain(page, base_url):
 # --- Tenant di prova --------------------------------------------------------------------------
 
 
-def _operator_env() -> dict:
-    """L'identità del proprietario del database di prova, che i comandi `test-tenant-*` usano.
-
-    Vive in operator.env e non in .env.test (vedi operator.env.example): si passa solo ai processi
-    di db.mjs, e di quel file si prendono solo le due variabili del database di prova, non quelle
-    dello sviluppo.
-    """
-    wanted = ("TEST_MIGRATION_DATABASE_URL", "TEST_DATABASE_DISPOSABLE")
-    values = {key: os.environ[key] for key in wanted if os.environ.get(key)}
-    if OPERATOR_ENV.exists():
-        for line in OPERATOR_ENV.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, value = line.split("=", 1)
-                if key.strip() in wanted:
-                    values.setdefault(key.strip(), value.strip())
-    if not values.get("TEST_MIGRATION_DATABASE_URL"):
-        pytest.fail(f"TEST_MIGRATION_DATABASE_URL manca: serve per creare i tenant di prova ({OPERATOR_ENV})")
-    return values
-
-
-def _db(*args: str, env: dict | None = None) -> str:
-    """Un comando di db.mjs sul database di prova; un errore ferma il test con il messaggio del comando.
-
-    In caso d'errore si riporta solo lo standard error: lo standard output di test-tenant-create
-    contiene un link con un token valido.
-    """
-    result = subprocess.run(
-        ["node", "sources/devops/db/db.mjs", *args],
-        cwd=REPO_ROOT, capture_output=True, text=True,
-        env={**os.environ, **_operator_env(), **(env or {})},
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"db.mjs {args[0]} non riuscito: {result.stderr.strip()}")
-    return result.stdout
-
-
 def _create_tenant(slug: str, name: str, admin: str, host: str | None = None) -> int:
     args = ["test-tenant-create", "--slug", slug, "--name", name, "--admin", admin]
     if host:
@@ -157,7 +117,7 @@ def _cleanup(people: list[str]) -> None:
     riportano tutti insieme alla fine.
     """
     errors = []
-    for slug in (SLUG_A, SLUG_B, SLUG_C):
+    for slug in E2E_TENANT_SLUGS:
         try:
             _db("test-tenant-delete", "--slug", slug)
         except Exception as error:  # noqa: BLE001 - si raccolgono e si riportano tutti
@@ -253,8 +213,11 @@ def _users_grid_emails(request, url: str) -> tuple[int, list[str]]:
 def test_choose_then_last_used(browser, base_url, test_email, tenants):
     """Primo accesso: la pagina di scelta con il predefinito e C; dal secondo, dritti nell'ultimo usato.
 
-    A e B hanno un indirizzo dedicato, quindi sull'indirizzo principale non compaiono.
+    A e B hanno un indirizzo dedicato, quindi sull'indirizzo principale non compaiono. Il "primo
+    accesso" vale per l'ultimo tenant usato vuoto: lo si svuota qui, perché un test che si ripete o
+    che gira dopo un altro (il cambio dalla barra lo scrive) non lo trova così.
     """
+    _db("test-query", f"update users set last_tenant_id = null where email = '{test_email}'")
     with _signed_in(browser, base_url, test_email, landing="/select-tenant") as page:
         expect(page.get_by_role("heading", level=1)).to_have_text(re.compile(r"^Ciao .+, dove vuoi entrare\?$"))
         expect(page.get_by_test_id("tenant-card")).to_have_count(2)
@@ -332,27 +295,38 @@ def test_subdomains_are_separate(browser, base_url, test_email, tenants):
         _expect_current_tenant(page, NAME_B)
 
 
-def test_not_configured_retry(browser, base_url, tenants):
-    """«Riprova» sul messaggio: senza tenant resta il messaggio; aggiunta ad A nel frattempo, si entra in A
-    senza rifare l'accesso."""
+def _click_retry(page, url: str) -> None:
+    """«Riprova» e l'attesa della sua azione del server: la richiesta POST che parte dal clic."""
+    with page.expect_response(lambda r: r.request.method == "POST" and r.url.startswith(url)):
+        page.get_by_role("button", name="Riprova", exact=True).click()
+
+
+def test_not_configured_retry_without_tenant(browser, base_url, tenants):
+    """«Riprova» senza nessun tenant sull'indirizzo: non si carica niente, il messaggio e l'indirizzo restano.
+
+    La persona è quella solo di B: su `a.localhost` non ha tenant, e nessun test ve la aggiunge.
+    """
     a_url = _on_host(base_url, HOST_A)
-    late = tenants.people.late
-    with _signed_in(browser, a_url, late, landing="/no-tenant") as page:
-        retry = page.get_by_role("button", name="Riprova", exact=True)
-        # L'azione del server è la richiesta POST che parte dal clic e restituisce lo stato della
-        # sessione. Senza un tenant non si carica niente: il messaggio e l'indirizzo restano.
-        with page.expect_response(lambda r: r.request.method == "POST" and r.url.startswith(a_url)):
-            retry.click()
-        expect(retry).to_be_enabled()
+    with _signed_in(browser, a_url, tenants.people.only_b, landing="/no-tenant") as page:
+        _click_retry(page, a_url)
+        expect(page.get_by_role("button", name="Riprova", exact=True)).to_be_enabled()
         expect(page.get_by_test_id("no-tenant-message")).to_have_text(NO_TENANT_MESSAGE)
         expect(page.locator('[data-testid^="tenant-switcher-"]')).to_have_count(0)
         expect(page).to_have_url(f"{a_url}/no-tenant")
 
-        # Aggiunta ad A nel frattempo: la home la carica il browser, sull'indirizzo di A (un rinvio
-        # dell'azione la farebbe disegnare a Next con l'indirizzo del server, cioè senza tenant).
+
+def test_not_configured_retry_after_joining(browser, base_url, tenants):
+    """«Riprova» dopo l'aggiunta ad A, avvenuta mentre la persona guardava il messaggio: si entra in A
+    senza rifare l'accesso.
+
+    La home la carica il browser, sull'indirizzo di A: un rinvio dell'azione la farebbe disegnare a
+    Next con l'indirizzo del server, cioè senza tenant.
+    """
+    a_url = _on_host(base_url, HOST_A)
+    late = tenants.people.late
+    with _signed_in(browser, a_url, late, landing="/no-tenant") as page:
         _db("test-tenant-member-add", "--slug", SLUG_A, "--email", late)
-        with page.expect_response(lambda r: r.request.method == "POST" and r.url.startswith(a_url)):
-            retry.click()
+        _click_retry(page, a_url)
         page.wait_for_url(f"{a_url}/", timeout=15_000)
         _expect_current_tenant(page, NAME_A)
         expect(page.get_by_test_id("no-tenant-message")).to_have_count(0)
@@ -464,5 +438,12 @@ def test_register_on_subdomain(browser, base_url, test_email, tenants):
             assert _account_count(email) == 1
             nav(admin, f"{a_url}/user-management")
             expect(grid_rows(admin).filter(has_text=email)).to_have_count(1)
-        finally:
-            _set_switch(admin, a_url, on=False)
+        except BaseException:
+            # Si rispegne comunque, ma un errore qui non deve coprire quello del test: A sparisce
+            # alla fine del file in ogni caso.
+            try:
+                _set_switch(admin, a_url, on=False)
+            except Exception:  # noqa: BLE001
+                pass
+            raise
+        _set_switch(admin, a_url, on=False)
