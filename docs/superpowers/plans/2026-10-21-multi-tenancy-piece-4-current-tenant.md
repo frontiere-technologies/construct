@@ -599,12 +599,12 @@ git commit -m "test(e2e): tenants on the main address and on subdomains"
 **Files:**
 - Modify: specifica, documento delle cose rimandate (DEF-4.1…4.4 `- [✅]` "fatto nel pezzo 4"; DEF-4.5 resta aperta), `README.md`
 
-- [ ] **Step 1: Controlli completi sul database di prova**
+- [✅] **Step 1: Controlli completi sul database di prova**
 
 Run: `cd sources/microservices/web-construct && npx tsc --noEmit && npm run lint && npm run test && npm run test:migrations && npm run test:i18n-keys && npm run test:env-contract && npm run test:docs-contract`, poi `npm run test:integration`, poi (finiti questi) l'E2E completo, poi `npm run build` registrando il codice di uscita, `schema-check` e `boundary-check` sul database di prova.
 Expected: tutto in regola; solo gli 8 fallimenti noti di `Sidebar*`.
 
-- [ ] **Step 2: Spunte e commit**
+- [✅] **Step 2: Spunte e commit**
 
 ```bash
 git commit -m "docs(multi-tenancy): tick piece-4 criteria and deferred items"
