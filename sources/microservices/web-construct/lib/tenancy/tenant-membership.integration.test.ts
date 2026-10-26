@@ -4,7 +4,7 @@ import { role, tenant, tenantMembership, userRole, users } from '@/lib/db/schema
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
-import { isMembershipDeactivated, tenantMemberEmail } from './membership'
+import { tenantMemberEmail } from './membership'
 import { getSystemRoleIds, type SystemRoleIds } from './system-roles'
 import { defaultTestTenant, tenantIdForTest } from './testing'
 import type { TenantId } from './tenant-id'
@@ -290,23 +290,6 @@ describeIntegration('tenant memberships', () => {
       return tx.execute<{ t: string }>(sql`select current_setting('app.tenant_id') as t`)
     })
     expect(t).toBe(String(B))
-  })
-
-  it('isMembershipDeactivated is true only for a deactivated row', async () => {
-    const deactivated = await createUser()
-    const active = await createUser()
-    const stranger = await createUser()
-    await withTenant(DEFAULT, tx => tx.insert(tenantMembership).values([
-      { userId: deactivated, status: 'deactivated' },
-      { userId: active },
-    ]))
-
-    expect(await isMembershipDeactivated(DEFAULT, deactivated)).toBe(true)
-    expect(await isMembershipDeactivated(DEFAULT, active)).toBe(false)
-    // Senza riga non è disattivata: ci pensa il primo accesso a darle l'appartenenza.
-    expect(await isMembershipDeactivated(DEFAULT, stranger)).toBe(false)
-    // La riga di un altro tenant non conta: da B la persona non ha riga.
-    expect(await isMembershipDeactivated(B, deactivated)).toBe(false)
   })
 
   it('tenantMemberEmail finds members of the tenant in any status, and nobody else', async () => {

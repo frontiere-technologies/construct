@@ -28,19 +28,6 @@ export async function ensureDefaultMembership(tx: TenantTx, userId: string): Pro
 }
 
 /**
- * Vero solo se nel tenant indicato la persona ha una riga di appartenenza ed è disattivata
- * (§3.1). Senza riga è falso: la riga la crea il primo accesso (`ensureDefaultMembership`).
- */
-export async function isMembershipDeactivated(tenantId: TenantId, userId: string): Promise<boolean> {
-  const [row] = await withTenant(tenantId, tx => tx
-    .select({ status: tenantMembership.status })
-    .from(tenantMembership)
-    .where(eq(tenantMembership.userId, userId))
-    .limit(1))
-  return row?.status === MEMBERSHIP_DEACTIVATED
-}
-
-/**
  * L'email di una persona che è membro del tenant indicato, in qualunque stato (anche disattivato),
  * oppure `null`. Chi è membro solo di altri tenant risponde come un id che non esiste: la RLS mostra
  * soltanto le appartenenze del tenant della transazione, e chi chiama non può distinguere i due casi.
