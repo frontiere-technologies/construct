@@ -73,7 +73,7 @@ export const TenantSettings: React.FC<{ initialEnabled: boolean; selfRegistratio
           onClick={toggle}
           className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${enabled ? 'bg-primary' : 'bg-switch-off'} ${saving ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         >
-          <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${enabled ? 'translate-x-5' : 'translate-x-1'}`} />
+          <span className={`inline-block h-3 w-3 rounded-full bg-primary-foreground transition-transform ${enabled ? 'translate-x-5' : 'translate-x-1'}`} />
         </button>
       </SettingsRow>
       <div role="status" className="min-h-5 text-sm">
