@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   application:
-    runs-on: ubuntu-latest
+    # Fissata a ubuntu-24.04: ubuntu-latest è passata a 26.04, che questa versione di Playwright non supporta.
+    # Si può tornare a ubuntu-latest quando la versione di Playwright del progetto supporta la nuova immagine.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: sources/microservices/web-construct
@@ -59,7 +61,8 @@ jobs:
         run: git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
 
   database-and-e2e:
-    runs-on: ubuntu-latest
+    # Fissata a ubuntu-24.04 come l'altro job (vedi sopra); tornare a ubuntu-latest insieme a quello.
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17
