@@ -69,14 +69,19 @@ export async function isSignInRefusedOnHost(userId: string, host: string | null)
 export async function enterTenant(
   userId: string,
   host: string | null,
-  options: { current: number | null; firstEntry: boolean },
+  options: { current: number | null; firstEntry: boolean; revalidationFailed?: boolean },
 ): Promise<TokenTenant> {
   if (options.firstEntry) {
     const hostTenant = await resolveHostTenant(host)
     await withTenant(hostTenant, tx => ensureDefaultMembership(tx, userId))
   }
   const [available, person] = await Promise.all([listAvailableTenants(userId, host), readPerson(userId)])
-  const selection = selectTenant({ available, lastTenantId: person?.lastTenantId ?? null, current: options.current })
+  const selection = selectTenant({
+    available,
+    lastTenantId: person?.lastTenantId ?? null,
+    current: options.current,
+    revalidationFailed: options.revalidationFailed,
+  })
   if (selection.state !== 'ready') {
     return {
       tenantId: null,
@@ -103,10 +108,17 @@ export async function enterTenant(
  * server, e dall'indirizzo della richiesta: nient'altro della richiesta entra qui.
  *
  * - Token senza i campi del tenant (sessione di prima del rilascio, §5.1): come un accesso nuovo.
- * - Token scelto su un altro indirizzo: si ricalcola sull'indirizzo della richiesta.
+ * - Token scelto su un altro indirizzo: si ricalcola sull'indirizzo della richiesta, con la regola
+ *   d'ingresso intera (anche l'ingresso diretto nell'unico tenant o nell'ultimo usato). Serve così
+ *   perché dopo il `redirect()` di un'azione Next disegna la pagina di arrivo con una richiesta
+ *   interna all'indirizzo del server (`Host: localhost`): mandare quella richiesta alla scelta
+ *   romperebbe il cambio di tenant. Il ricalcolo non porta mai fuori dai tenant disponibili
+ *   sull'indirizzo della richiesta (Review Focus #1).
  * - `ready`: un'istruzione sola rilegge autorizzazione e idoneità del tenant sull'indirizzo, negli
- *   stessi viaggi di prima. Se il tenant non è idoneo o la persona non vi è più attiva, si ricalcola:
- *   solo allora una lettura in più.
+ *   stessi viaggi di prima. Se sullo stesso indirizzo il tenant non è più idoneo o la persona non vi
+ *   è più attiva, si va alla scelta (se c'è almeno un tenant disponibile) o al messaggio, mai
+ *   direttamente in un altro tenant (MT4-DEC-7): la persona deve accorgersi di aver lasciato il
+ *   tenant in cui lavorava. Solo allora una lettura in più.
  * - `choose` e `none`: si rilegge solo lo stato globale dell'account; la pagina di scelta elenca i
  *   tenant da sé.
  */
@@ -124,7 +136,7 @@ export async function revalidateTokenTenant(
     if (current === null) return enterTenant(userId, host, { current: null, firstEntry: false })
     const authorization = await resolveTenantAuthorization(toTenantId(current), userId, host)
     if (!authorization.tenantEligible || !authorization.accountActive) {
-      return enterTenant(userId, host, { current, firstEntry: false })
+      return enterTenant(userId, host, { current, firstEntry: false, revalidationFailed: true })
     }
     return {
       tenantId: current,

@@ -36,9 +36,26 @@ describe('selectTenant', () => {
     expect(selectTenant({ available: [], lastTenantId: 1, current: 1 })).toEqual({ state: 'none' })
   })
 
-  it('falls back to the last used tenant when the current one is no longer available', () => {
+  it('on a recompute (token from another host) falls back to the last used tenant when the current one is not available', () => {
     expect(selectTenant({ available: available(1, 3), lastTenantId: 3, current: 2 }))
       .toEqual({ state: 'ready', tenantId: 3 })
+  })
+
+  // MT4-DEC-7: il tenant del token non supera più i controlli sullo stesso indirizzo. Nessun
+  // ingresso diretto in un altro tenant: la scelta, o il messaggio.
+  it('after a failed revalidation asks for a choice even with a single other tenant available', () => {
+    expect(selectTenant({ available: available(4), lastTenantId: null, current: 2, revalidationFailed: true }))
+      .toEqual({ state: 'choose' })
+  })
+
+  it('after a failed revalidation asks for a choice even when the last used tenant is available', () => {
+    expect(selectTenant({ available: available(1, 3), lastTenantId: 3, current: 2, revalidationFailed: true }))
+      .toEqual({ state: 'choose' })
+  })
+
+  it('after a failed revalidation gives none without available tenants', () => {
+    expect(selectTenant({ available: [], lastTenantId: 3, current: 2, revalidationFailed: true }))
+      .toEqual({ state: 'none' })
   })
 
   it('asks for a choice when the last used tenant is not available among several', () => {

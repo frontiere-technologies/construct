@@ -439,14 +439,16 @@ describeIntegration('tenant in the token, revalidated on every request', () => {
     const forged = await revalidateTokenTenant(onlyB, readyToken(B, aHost), aHost)
     expect(forged).toMatchObject({ tenantId: null, tenantState: 'none', roleIds: [] })
 
-    // Chi è membro sia di A sia di B, su a, finisce in A e mai in B.
+    // Chi è membro sia di A sia di B, su a, non finisce mai in B. Il token scelto su b si ricalcola
+    // su a ed entra in A; quello che dice di essere stato scelto su a, e lì non supera i controlli,
+    // va alla scelta (MT4-DEC-7), dove compare solo A.
     const both = await createPerson()
     await join(A, both)
     await join(B, both)
-    for (const token of [readyToken(B, bHost), readyToken(B, aHost)]) {
-      const result = await revalidateTokenTenant(both, token, aHost)
-      expect(result).toMatchObject({ tenantId: A, tenantState: 'ready', tenantHost: aHost })
-    }
+    expect(await revalidateTokenTenant(both, readyToken(B, bHost), aHost))
+      .toMatchObject({ tenantId: A, tenantState: 'ready', tenantHost: aHost })
+    expect(await revalidateTokenTenant(both, readyToken(B, aHost), aHost))
+      .toMatchObject({ tenantId: null, tenantState: 'choose', tenantHost: aHost, roleIds: [] })
   }, 30_000)
 
   it('a membership deactivated during the session moves the token to choose or none at the next request', async () => {
@@ -479,5 +481,45 @@ describeIntegration('tenant in the token, revalidated on every request', () => {
     } finally {
       await withOwner(tx => tx.execute(sql`update public.tenant set status = 'active' where id = ${C}`))
     }
+  }, 30_000)
+
+  it('a failed revalidation on the same host never enters the only other tenant nor the last used one', async () => {
+    // Un solo altro tenant sull'indirizzo: la scelta, non l'ingresso diretto in quell'altro.
+    const oneOther = await createPerson()
+    await join(TENANT, oneOther)
+    await join(C, oneOther)
+    expect(await revalidateTokenTenant(oneOther, readyToken(TENANT, null), null))
+      .toMatchObject({ tenantId: TENANT, tenantState: 'ready' })
+    await deactivate(TENANT, oneOther)
+    expect(await revalidateTokenTenant(oneOther, readyToken(TENANT, null), null))
+      .toMatchObject({ tenantId: null, tenantState: 'choose', tenantHost: null, accountActive: true, roleIds: [] })
+
+    // Più tenant e l'ultimo usato fra loro: la scelta, non l'ultimo usato.
+    const withLast = await createPerson()
+    await join(TENANT, withLast)
+    await join(C, withLast)
+    await join(D, withLast)
+    await withGlobal(tx => tx.update(users).set({ lastTenantId: D }).where(eq(users.id, withLast)))
+    await deactivate(TENANT, withLast)
+    expect(await revalidateTokenTenant(withLast, readyToken(TENANT, null), null))
+      .toMatchObject({ tenantId: null, tenantState: 'choose', roleIds: [] })
+
+    // Nessun altro tenant sull'indirizzo dedicato: il messaggio.
+    const onA = await createPerson()
+    await join(A, onA)
+    await deactivate(A, onA)
+    expect(await revalidateTokenTenant(onA, readyToken(A, aHost), aHost))
+      .toMatchObject({ tenantId: null, tenantState: 'none', tenantHost: aHost, roleIds: [] })
+  }, 30_000)
+
+  it('a token chosen on another host is still recomputed on the request host', async () => {
+    // Scelto con `localhost`, presentato senza indirizzo (lo stesso indirizzo principale nel
+    // registro, ma un'altra stringa): si ricalcola ed entra nell'unico tenant disponibile.
+    const moved = await createPerson()
+    await join(TENANT, moved)
+    await join(C, moved)
+    await deactivate(TENANT, moved)
+    expect(await revalidateTokenTenant(moved, readyToken(TENANT, 'localhost'), null))
+      .toMatchObject({ tenantId: C, tenantState: 'ready', tenantHost: null })
   }, 30_000)
 })
