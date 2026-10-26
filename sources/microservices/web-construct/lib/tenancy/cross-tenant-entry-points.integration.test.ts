@@ -551,7 +551,9 @@ const CASES: Record<string, CrossTenantCase> = {
       await setSelfRegistrationOf(B, true)
     },
     run: async () => {
-      expect(propsOf<{ initialEnabled: boolean }>(await TenantSettingsPage())).toEqual({ initialEnabled: false })
+      // L'interruttore di A (spento, quello di B è acceso); A non ha un indirizzo dedicato.
+      expect(propsOf<{ initialEnabled: boolean; selfRegistrationApplies: boolean }>(await TenantSettingsPage()))
+        .toEqual({ initialEnabled: false, selfRegistrationApplies: false })
     },
   },
   'app/(protected)/(admin)/admin/theme/page.tsx#default': {
