@@ -336,13 +336,15 @@ Indirizzo assegnato: a.localhost al tenant acme (non principale)
 - `test-tenant-create --host …` e `test-tenant-host-add` fanno lo stesso sul database di prova usa
   e getta.
 
-Limiti noti (specifica 2026-10-20, §5.3):
+Limiti noti (specifiche 2026-10-20 e 2026-10-21, §5.3):
 
-- **I tenant creati così si usano dal pezzo 4 della multi-tenancy.** Fino ad allora ogni richiesta
-  è servita dal tenant predefinito: il primo amministratore può impostare la password, ma non ha
-  ancora un modo per entrare nel suo tenant dal browser.
-- **Il modello si modifica solo via SQL**, finché il pezzo 4 non permetterà alla piattaforma, e
+- **I tenant creati così si usano dal pezzo 4 della multi-tenancy.** Il primo amministratore entra
+  dal browser: dall'indirizzo dedicato del tenant (`--host`), oppure dall'indirizzo principale con
+  la pagina di scelta o il selettore della barra laterale.
+- **Il modello si modifica solo via SQL**, finché il pezzo 5 non permetterà alla piattaforma, e
   solo a lei, di sceglierlo come tenant corrente.
+- **Lingue e traduzioni si modificano solo dal tenant predefinito** fino al pezzo 5: sono cataloghi
+  globali (MT2-DEC-11), e negli altri tenant anche l'amministratore li legge soltanto.
 
 ## Local Docker with Supabase
 
