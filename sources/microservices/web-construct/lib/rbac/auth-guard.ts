@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth-session'
-import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
+import { tenantFromSession } from '@/lib/tenancy/request-tenant'
 import { resolveActor, type Actor } from './actor'
 import type { PermissionCode } from './permission-catalog'
 
@@ -17,8 +17,12 @@ import type { PermissionCode } from './permission-catalog'
 async function currentActor(): Promise<Actor | null> {
   const session = await getSession()
   const userId = session?.user?.id
-  if (!userId) return null
-  return resolveActor(await resolveRequestTenant(), userId)
+  if (!session || !userId) return null
+  // Senza un tenant scelto (stato 'choose' o 'none') nessuna autorità: rifiuto, non un errore 500.
+  // Il tenant si legge dalla sessione già letta: una seconda auth() in una rotta rifarebbe la lettura.
+  const tenantId = tenantFromSession(session)
+  if (tenantId === null) return null
+  return resolveActor(tenantId, userId)
 }
 
 export async function requirePermission(code: PermissionCode): Promise<Actor> {

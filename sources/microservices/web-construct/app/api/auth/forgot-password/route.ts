@@ -6,6 +6,9 @@ import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
 import { AuthRateLimitExceeded, enforceAuthRateLimit } from '@/lib/auth-rate-limit'
 import { allowAnonymous } from '@/lib/rbac/access-declarations'
+import { resolveHostTenant } from '@/lib/tenancy/host-tenants'
+import { readRequestHost } from '@/lib/tenancy/request-host'
+import { tenantBaseUrl } from '@/lib/tenancy/tenant-base-url'
 
 const log = createLogger('auth:forgot-password')
 
@@ -48,9 +51,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL
-  if (!baseUrl) {
-    log.error('AUTH_URL / NEXTAUTH_URL not set')
+  // Il link parte dall'indirizzo principale del tenant dell'indirizzo della richiesta (MT4-DEC-11,
+  // MT4-DEC-12): l'intestazione Host sceglie al più il tenant, confrontata con il registro, e non
+  // entra mai nel link. Un Host sconosciuto (evil.example) vale il predefinito, cioè AUTH_URL.
+  let baseUrl: string
+  try {
+    baseUrl = await tenantBaseUrl(await resolveHostTenant(await readRequestHost()))
+  } catch (err) {
+    log.error({ err }, 'base URL for the reset link not available')
     return NextResponse.json({ ok: true })
   }
 

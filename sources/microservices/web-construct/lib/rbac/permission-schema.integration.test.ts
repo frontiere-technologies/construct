@@ -280,9 +280,10 @@ describe('travaso in menu_entry', () => {
     // per ogni riga e la migrazione svuoterebbe la tabella, cascando sulle concessioni.
     // È irraggiungibile oggi (0001_baseline.sql semina -1 prima), ma solo la metà positiva se
     // ne accorgerebbe: operations, le cinque categorie e i quindici permessi del catalogo che la
-    // 0041 ha messo al posto degli otto segnaposto della baseline, ventuno righe in tutto.
+    // 0041 ha messo al posto degli otto segnaposto della baseline, più manage-tenant-settings
+    // della 0053: ventidue righe in tutto.
     const [{ totali }] = await withGlobal(tx => tx.execute(sql`select count(*)::int as totali from public.permission`))
-    expect(totali).toBe(21)
+    expect(totali).toBe(22)
   })
 
   it('non ha più una colonna id_permission su menu_entry (MIG-4)', async () => {
@@ -483,6 +484,14 @@ describe('trigger set_updated_at, su ogni tabella che lo esegue (Task 9, giro 2)
       } finally {
         await withGlobal(tx => tx.delete(users).where(eq(users.id, created.id)))
       }
+    },
+    async tenant_settings() {
+      // Tabella di tenant (0053): una riga per tenant, che la migrazione ha già creato. Si aggiorna
+      // quella del predefinito con il suo stesso valore, così nessun altro test vede un cambiamento.
+      await expect(
+        withTenant(defaultTestTenant(), tx => tx.execute(
+          sql`update public.tenant_settings set self_registration = self_registration`)),
+      ).resolves.not.toThrow()
     },
   }
 

@@ -1,5 +1,9 @@
+import os
+import subprocess
+from pathlib import Path
 from urllib.parse import urlsplit
 
+import pytest
 from playwright.sync_api import expect
 
 
@@ -65,8 +69,14 @@ def grid_rows(page):
     return page.locator('.ag-row')
 
 
-def do_test_login(page, base_url: str, email: str) -> None:
+def do_test_login(page, base_url: str, email: str, landing="/") -> None:
     """Authenticate via the test-credentials form (requires AUTH_TEST_CREDENTIALS=true on server).
+
+    `landing` is where the login is expected to end: a path on `base_url` (the
+    home by default) or a compiled regex matched against the full URL. Since
+    multi-tenancy piece 4 a person with several tenants on the address lands on
+    /select-tenant and one with none on /no-tenant, and the redirect happens on
+    the server, so the browser never commits `/` on the way there.
 
     Locale-tolerant: the /login page normally renders in Italian (the app's
     default), but a language-switch cookie from earlier in the same browser
@@ -87,7 +97,7 @@ def do_test_login(page, base_url: str, email: str) -> None:
     page.get_by_role("button", name="Entra (test)").or_(
         page.get_by_role("button", name="Sign in (test)")
     ).click()
-    page.wait_for_url(f"{base_url}/", timeout=15_000)
+    page.wait_for_url(f"{base_url}{landing}" if isinstance(landing, str) else landing, timeout=15_000)
     page.wait_for_load_state("networkidle")
 
 
@@ -198,3 +208,63 @@ def switch_language(page, code: str) -> None:
     # The trigger is `disabled` for as long as `isSwitching` is true; waiting for it
     # to come back confirms the transition committed rather than merely started.
     expect(switcher).to_be_enabled(timeout=15_000)
+
+
+# --- db.mjs commands on the disposable test database --------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+OPERATOR_ENV = REPO_ROOT / "sources" / "devops" / "db" / "operator.env"
+
+# The tenants test_tenants.py creates (multi-tenancy piece 4). Listed here because conftest.py also
+# removes them at the start of every session: see delete_e2e_tenants.
+E2E_TENANT_SLUGS = ("e2e-a", "e2e-b", "e2e-c")
+
+
+def operator_env() -> dict:
+    """The test database's owner identity, which the `test-tenant-*` commands of db.mjs need.
+
+    It lives in operator.env, not in .env.test (see operator.env.example): it is passed only to the
+    db.mjs subprocesses, and only the two test-database variables are taken from that file, never
+    the development ones. Empty when the variable is available nowhere.
+    """
+    wanted = ("TEST_MIGRATION_DATABASE_URL", "TEST_DATABASE_DISPOSABLE")
+    values = {key: os.environ[key] for key in wanted if os.environ.get(key)}
+    if OPERATOR_ENV.exists():
+        for line in OPERATOR_ENV.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                if key.strip() in wanted:
+                    values.setdefault(key.strip(), value.strip())
+    return values if values.get("TEST_MIGRATION_DATABASE_URL") else {}
+
+
+def run_db(*args: str, env: dict | None = None) -> str:
+    """Run a db.mjs command against the test database; a failure raises with the command's message.
+
+    Only standard error is reported on failure: the standard output of test-tenant-create contains
+    a link with a valid token.
+    """
+    owner = operator_env()
+    if not owner:
+        pytest.fail(f"TEST_MIGRATION_DATABASE_URL is missing: the tenant fixtures need it ({OPERATOR_ENV})")
+    result = subprocess.run(
+        ["node", "sources/devops/db/db.mjs", *args],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+        env={**os.environ, **owner, **(env or {})},
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"db.mjs {args[0]} failed: {result.stderr.strip()}")
+    return result.stdout
+
+
+def delete_e2e_tenants() -> None:
+    """Remove the tenants test_tenants.py creates; idempotent (a missing tenant is not an error).
+
+    test_tenants.py removes them itself at the end of the file, but a run killed in the middle of it
+    (Ctrl-C, Mac sleep) leaves them behind, and "E2E C" answers on the main address: in the next run
+    TEST_EMAIL would have two tenants there and every login of every earlier file would land on
+    /select-tenant, with nothing pointing at the cause. Hence also at the start of each session.
+    """
+    for slug in E2E_TENANT_SLUGS:
+        run_db("test-tenant-delete", "--slug", slug)

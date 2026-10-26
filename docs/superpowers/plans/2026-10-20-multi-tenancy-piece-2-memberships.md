@@ -676,7 +676,7 @@ git add docs
 git commit -m "docs(multi-tenancy): tick piece-2 criteria and deferred items"
 ```
 
-- [ ] **Step 4: FERMATI e chiedi al proprietario prima di toccare il database di sviluppo**
+- [✅] **Step 4: FERMATI e chiedi al proprietario prima di toccare il database di sviluppo**
 
 Prima di chiedere, conta in sola lettura sul database di sviluppo (MT2-RISK-2):
 

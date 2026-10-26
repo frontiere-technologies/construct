@@ -45,6 +45,21 @@ describe('authentication policy', () => {
     })).toThrow(/test authentication/i)
   })
 
+  // I link nelle email e i rinvii di Auth.js partono da AUTH_URL (MT4-DEC-12): in produzione senza
+  // l'indirizzo configurato lib/auth.ts non si carica, invece di fallire alla prima email.
+  it('fails fast in production without AUTH_URL or NEXTAUTH_URL', () => {
+    expect(() => assertSafeAuthConfiguration({ NODE_ENV: 'production' })).toThrow(/AUTH_URL/)
+    expect(() => assertSafeAuthConfiguration({ NODE_ENV: 'production', AUTH_URL: '' })).toThrow(/AUTH_URL/)
+    expect(() => assertSafeAuthConfiguration({ NODE_ENV: 'production', AUTH_URL: 'https://construct.example' })).not.toThrow()
+    expect(() => assertSafeAuthConfiguration({ NODE_ENV: 'production', NEXTAUTH_URL: 'https://construct.example' })).not.toThrow()
+  })
+
+  it('does not require AUTH_URL outside production, nor while next build collects the pages', () => {
+    expect(() => assertSafeAuthConfiguration({ NODE_ENV: 'development' })).not.toThrow()
+    expect(() => assertSafeAuthConfiguration({ NODE_ENV: 'test' })).not.toThrow()
+    expect(() => assertSafeAuthConfiguration({ NODE_ENV: 'production', NEXT_PHASE: 'phase-production-build' })).not.toThrow()
+  })
+
   it('removes all authority from a missing or deactivated account', () => {
     expect(evaluateAuthorization(null, 'active', [1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
     expect(evaluateAuthorization(1, 'active', [1], 1)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })

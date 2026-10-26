@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
-import { closeOwner, withOwner } from '@/lib/db/testing'
+import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { permission, role, rolePermission, tenant, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { defaultTestTenant, tenantIdForTest } from '@/lib/tenancy/testing'
 import { getSystemRoleIds, type SystemRoleIds } from '@/lib/tenancy/system-roles'
-import { resolveUserAuthorization } from './auth-roles'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
+import { revalidateTokenTenant, type TokenTenant } from '@/lib/tenancy/token-tenant'
+import { resolveUserAuthorization, selectAuthorizationSnapshot } from './auth-roles'
 import { resolveActor } from './actor'
 import { PERMISSION_CODES } from './permission-catalog'
 import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from './types'
@@ -317,4 +319,207 @@ describeIntegration('authorization reads', () => {
     expect(await membershipStatusIn(TENANT, deactivatedInAUserId)).toBe('deactivated')
     expect(await rolesOf(deactivatedInAUserId)).toEqual([])
   })
+})
+
+/**
+ * Il tenant del token rivalidato a ogni richiesta (specifica 2026-10-21, §3.1, MT4-DEC-7; Review
+ * Focus #1 e #4). Tenant nati dal modello in beforeAll: A e B con un indirizzo dedicato ciascuno
+ * (nomi unici per esecuzione al posto di `a.localhost` e `b.localhost`), C e D sull'indirizzo
+ * principale, S sospeso. Spariscono in afterAll con le persone di prova.
+ */
+// Ogni caso fa una ventina di viaggi in serie verso il database di prova remoto: più dei 5 s
+// predefiniti. Il tempo esplicito sta su ogni caso.
+describeIntegration('tenant in the token, revalidated on every request', () => {
+  let A: TenantId
+  let B: TenantId
+  let C: TenantId
+  let D: TenantId
+  let S: TenantId
+  let template: TenantId
+  let aHost: string
+  let bHost: string
+  const tenants: TenantId[] = []
+  const people: string[] = []
+
+  async function createPerson(): Promise<string> {
+    const [row] = await withGlobal(tx => tx.insert(users)
+      .values({ email: `zzz_tokentenant_${unique()}@example.test`, idUserStatus: USER_STATUS_ACTIVE })
+      .returning({ id: users.id }))
+    people.push(row.id)
+    return row.id
+  }
+
+  async function createTenant(name: string): Promise<TenantId> {
+    const [row] = await withOwner(tx => tx.execute<{ id: string }>(
+      sql`select app_private.create_tenant_from_template(${`zzz-tt-${unique()}`.slice(0, 40)}, ${name})::text as id`))
+    const id = tenantIdForTest(Number(row.id))
+    tenants.push(id)
+    return id
+  }
+
+  /** Appartenenza attiva con il ruolo base nel tenant indicato. */
+  async function join(tenantId: TenantId, userId: string): Promise<void> {
+    await withTenant(tenantId, async tx => {
+      const system = await getSystemRoleIds(tx)
+      await tx.insert(tenantMembership).values({ userId })
+      await tx.insert(userRole).values({ userId, idRole: system.registered })
+    })
+  }
+
+  async function deactivate(tenantId: TenantId, userId: string): Promise<void> {
+    await withTenant(tenantId, tx => tx.update(tenantMembership)
+      .set({ status: 'deactivated' })
+      .where(eq(tenantMembership.userId, userId)))
+  }
+
+  async function eligible(tenantId: TenantId, host: string | null, userId: string): Promise<boolean | null> {
+    return withTenant(tenantId, async tx => (await selectAuthorizationSnapshot(tx, userId, { host })).tenantEligible)
+  }
+
+  function readyToken(tenantId: TenantId, host: string | null): TokenTenant {
+    return { tenantId, tenantState: 'ready', tenantHost: host, tenantName: null, accountActive: true, roleIds: [] }
+  }
+
+  beforeAll(async () => {
+    const [found] = await withGlobal(tx => tx.execute<{ id: string }>(sql`select id::text as id from public.tenant where is_template`))
+    if (!found) throw new Error('template tenant missing: is migration 0050 applied?')
+    template = tenantIdForTest(Number(found.id))
+    A = await createTenant('ZZZ Token A')
+    B = await createTenant('ZZZ Token B')
+    C = await createTenant('ZZZ Token C')
+    D = await createTenant('ZZZ Token D')
+    S = await createTenant('ZZZ Token S')
+    aHost = `zzz-tt-a-${unique()}.localhost`
+    bHost = `zzz-tt-b-${unique()}.localhost`
+    await withOwner(async tx => {
+      await tx.execute(sql`insert into public.tenant_host (host, id_tenant, is_primary) values (${aHost}, ${A}, true), (${bHost}, ${B}, true)`)
+      await tx.execute(sql`update public.tenant set status = 'suspended' where id = ${S}`)
+    })
+  }, 60_000)
+
+  afterAll(async () => {
+    const errors: unknown[] = []
+    const step = async (fn: () => Promise<unknown>) => { try { await fn() } catch (error) { errors.push(error) } }
+    // Appartenenze e ruoli delle persone di prova spariscono con loro (ON DELETE CASCADE).
+    if (people.length > 0) await step(() => withGlobal(tx => tx.delete(users).where(inArray(users.id, people))))
+    for (const id of tenants) await step(() => deleteTenantForTest(id))
+    await step(() => closeOwner())
+    if (errors.length > 0) throw errors[0]
+  }, 60_000)
+
+  it('tenant_eligible is false for the template, a suspended tenant, or a tenant not on the host', async () => {
+    const person = await createPerson()
+    // Controllo contro un passaggio a vuoto: il predefinito sull'indirizzo principale e A sul suo.
+    expect(await eligible(TENANT, null, person)).toBe(true)
+    expect(await eligible(TENANT, 'LOCALHOST:3000', person)).toBe(true)
+    expect(await eligible(A, aHost, person)).toBe(true)
+    expect(await eligible(A, `${aHost.toUpperCase()}:3000`, person)).toBe(true)
+
+    expect(await eligible(template, null, person)).toBe(false)
+    expect(await eligible(S, null, person)).toBe(false)
+    // Un tenant dedicato non risponde sull'indirizzo principale, né su quello di un altro tenant.
+    expect(await eligible(A, null, person)).toBe(false)
+    expect(await eligible(A, bHost, person)).toBe(false)
+    // Il predefinito non risponde su un indirizzo dedicato.
+    expect(await eligible(TENANT, aHost, person)).toBe(false)
+    // Senza host il controllo non c'è: la lettura dell'autorizzazione resta quella di prima.
+    expect(await withTenant(TENANT, async tx => (await selectAuthorizationSnapshot(tx, person)).tenantEligible)).toBeNull()
+  }, 30_000)
+
+  it('a token for B presented on a.localhost is not ready', async () => {
+    const onlyB = await createPerson()
+    await join(B, onlyB)
+    // Controllo contro un passaggio a vuoto: su b il token resta in B.
+    expect(await revalidateTokenTenant(onlyB, readyToken(B, bHost), bHost)).toMatchObject({ tenantId: B, tenantState: 'ready', accountActive: true })
+
+    // Il token scelto su b, presentato su a (cookie copiato, client non browser).
+    const moved = await revalidateTokenTenant(onlyB, readyToken(B, bHost), aHost)
+    expect(moved).toMatchObject({ tenantId: null, tenantState: 'none', tenantHost: aHost, roleIds: [] })
+    // Anche con l'indirizzo del token che coincide con quello della richiesta: decide il registro.
+    const forged = await revalidateTokenTenant(onlyB, readyToken(B, aHost), aHost)
+    expect(forged).toMatchObject({ tenantId: null, tenantState: 'none', roleIds: [] })
+
+    // Chi è membro sia di A sia di B, su a, non finisce mai in B. Il token scelto su b si ricalcola
+    // su a ed entra in A; quello che dice di essere stato scelto su a, e lì non supera i controlli,
+    // va alla scelta (MT4-DEC-7), dove compare solo A.
+    const both = await createPerson()
+    await join(A, both)
+    await join(B, both)
+    expect(await revalidateTokenTenant(both, readyToken(B, bHost), aHost))
+      .toMatchObject({ tenantId: A, tenantState: 'ready', tenantHost: aHost })
+    expect(await revalidateTokenTenant(both, readyToken(B, aHost), aHost))
+      .toMatchObject({ tenantId: null, tenantState: 'choose', tenantHost: aHost, roleIds: [] })
+  }, 30_000)
+
+  it('a membership deactivated during the session moves the token to choose or none at the next request', async () => {
+    // Con altri due tenant sull'indirizzo: la scelta.
+    const withOthers = await createPerson()
+    await join(TENANT, withOthers)
+    await join(C, withOthers)
+    await join(D, withOthers)
+    expect(await revalidateTokenTenant(withOthers, readyToken(TENANT, null), null))
+      .toMatchObject({ tenantId: TENANT, tenantState: 'ready', accountActive: true })
+    await deactivate(TENANT, withOthers)
+    expect(await revalidateTokenTenant(withOthers, readyToken(TENANT, null), null))
+      .toMatchObject({ tenantId: null, tenantState: 'choose', accountActive: true, roleIds: [] })
+
+    // Senza altri tenant sull'indirizzo: il messaggio.
+    const alone = await createPerson()
+    await join(TENANT, alone)
+    expect(await revalidateTokenTenant(alone, readyToken(TENANT, null), null)).toMatchObject({ tenantId: TENANT, tenantState: 'ready' })
+    await deactivate(TENANT, alone)
+    expect(await revalidateTokenTenant(alone, readyToken(TENANT, null), null))
+      .toMatchObject({ tenantId: null, tenantState: 'none', roleIds: [] })
+
+    // Un tenant sospeso durante la sessione vale lo stesso.
+    const inC = await createPerson()
+    await join(C, inC)
+    expect(await revalidateTokenTenant(inC, readyToken(C, null), null)).toMatchObject({ tenantId: C, tenantState: 'ready' })
+    await withOwner(tx => tx.execute(sql`update public.tenant set status = 'suspended' where id = ${C}`))
+    try {
+      expect(await revalidateTokenTenant(inC, readyToken(C, null), null)).toMatchObject({ tenantId: null, tenantState: 'none' })
+    } finally {
+      await withOwner(tx => tx.execute(sql`update public.tenant set status = 'active' where id = ${C}`))
+    }
+  }, 30_000)
+
+  it('a failed revalidation on the same host never enters the only other tenant nor the last used one', async () => {
+    // Un solo altro tenant sull'indirizzo: la scelta, non l'ingresso diretto in quell'altro.
+    const oneOther = await createPerson()
+    await join(TENANT, oneOther)
+    await join(C, oneOther)
+    expect(await revalidateTokenTenant(oneOther, readyToken(TENANT, null), null))
+      .toMatchObject({ tenantId: TENANT, tenantState: 'ready' })
+    await deactivate(TENANT, oneOther)
+    expect(await revalidateTokenTenant(oneOther, readyToken(TENANT, null), null))
+      .toMatchObject({ tenantId: null, tenantState: 'choose', tenantHost: null, accountActive: true, roleIds: [] })
+
+    // Più tenant e l'ultimo usato fra loro: la scelta, non l'ultimo usato.
+    const withLast = await createPerson()
+    await join(TENANT, withLast)
+    await join(C, withLast)
+    await join(D, withLast)
+    await withGlobal(tx => tx.update(users).set({ lastTenantId: D }).where(eq(users.id, withLast)))
+    await deactivate(TENANT, withLast)
+    expect(await revalidateTokenTenant(withLast, readyToken(TENANT, null), null))
+      .toMatchObject({ tenantId: null, tenantState: 'choose', roleIds: [] })
+
+    // Nessun altro tenant sull'indirizzo dedicato: il messaggio.
+    const onA = await createPerson()
+    await join(A, onA)
+    await deactivate(A, onA)
+    expect(await revalidateTokenTenant(onA, readyToken(A, aHost), aHost))
+      .toMatchObject({ tenantId: null, tenantState: 'none', tenantHost: aHost, roleIds: [] })
+  }, 30_000)
+
+  it('a token chosen on another host is still recomputed on the request host', async () => {
+    // Scelto con `localhost`, presentato senza indirizzo (lo stesso indirizzo principale nel
+    // registro, ma un'altra stringa): si ricalcola ed entra nell'unico tenant disponibile.
+    const moved = await createPerson()
+    await join(TENANT, moved)
+    await join(C, moved)
+    await deactivate(TENANT, moved)
+    expect(await revalidateTokenTenant(moved, readyToken(TENANT, 'localhost'), null))
+      .toMatchObject({ tenantId: C, tenantState: 'ready', tenantHost: null })
+  }, 30_000)
 })

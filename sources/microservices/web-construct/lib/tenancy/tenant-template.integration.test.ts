@@ -16,7 +16,8 @@ import type { TenantId } from './tenant-id'
 const DEFAULT = defaultTestTenant()
 
 // Le tabelle di tenant che la copia riproduce, e quelle che salta apposta (persone e appartenenze).
-const COPIED = ['menu_entry', 'menu_entry_tag', 'role', 'role_permission', 'role_functionality', 'app_theme'] as const
+const COPIED = ['menu_entry', 'menu_entry_tag', 'role', 'role_permission', 'role_functionality', 'app_theme',
+  'tenant_settings'] as const
 const ALL_TENANT_TABLES = [...COPIED, 'user_role', 'tenant_membership'] as const
 
 let template: TenantId
@@ -67,6 +68,7 @@ async function countsOf(tenantId: TenantId): Promise<Record<string, number>> {
       (select count(*)::int from public.role_permission) as role_permission,
       (select count(*)::int from public.role_functionality) as role_functionality,
       (select count(*)::int from public.app_theme) as app_theme,
+      (select count(*)::int from public.tenant_settings) as tenant_settings,
       (select count(*)::int from public.user_role) as user_role,
       (select count(*)::int from public.tenant_membership) as tenant_membership
   `), tenantId)
@@ -88,6 +90,7 @@ async function fingerprintOf(tenantId: TenantId): Promise<Record<string, string 
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.role_permission t) as role_permission,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.role_functionality t) as role_functionality,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.app_theme t) as app_theme,
+      (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_settings t) as tenant_settings,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.user_role t) as user_role,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_membership t) as tenant_membership
   `), tenantId)
@@ -127,7 +130,8 @@ async function contentOf(tenantId: TenantId): Promise<Record<string, unknown[]>>
         from public.role_functionality f
         left join ruolo r on r.id_role = f.id_role
         left join voce v on v.id_menu_entry = f.id_menu_entry) s),
-      'app_theme', (select coalesce(jsonb_agg(to_jsonb(t) - 'id_tenant' - 'date_mod'), '[]') from public.app_theme t)
+      'app_theme', (select coalesce(jsonb_agg(to_jsonb(t) - 'id_tenant' - 'date_mod'), '[]') from public.app_theme t),
+      'tenant_settings', (select coalesce(jsonb_agg(to_jsonb(t) - 'id_tenant' - 'updated_at'), '[]') from public.tenant_settings t)
     ) as content
   `), tenantId)
   return rows[0].content
@@ -177,6 +181,7 @@ describeIntegration('tenant template', () => {
     const copyCounts = await countsOf(copy)
     for (const table of COPIED) expect(copyCounts[table], table).toBe(templateCounts[table])
     expect(copyCounts.app_theme).toBe(1)
+    expect(copyCounts.tenant_settings).toBe(1)
     expect(copyCounts.role).toBeGreaterThan(0)
     expect(copyCounts.menu_entry).toBeGreaterThan(0)
     expect(copyCounts.tenant_membership).toBe(0)

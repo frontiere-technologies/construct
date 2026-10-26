@@ -31,10 +31,14 @@ export const getNavigationSubtree = cache(async (tenantId: TenantId): Promise<Us
   return buildNavTree(items, tagsByItem)
 })
 
-export const getNavigationItem = cache(async (tenantId: TenantId, id: number): Promise<UserNavigationTreeDto> => {
+/**
+ * Una voce del menu del tenant, o `null` se il tenant non ce l'ha: un id che non esiste e un id di
+ * un altro tenant rispondono allo stesso modo, e la pagina li mostra come 404 (MT4-OK-4).
+ */
+export const getNavigationItem = cache(async (tenantId: TenantId, id: number): Promise<UserNavigationTreeDto | null> => {
   const { items, tagsByItem } = await withTenant(tenantId, loadNavAndTags)
   const it = items.find(i => i.id_menu_entry === id)
-  if (!it) throw new Error(`Navigation item ${id} not found`)
+  if (!it) return null
   const tagTranslations: Record<string, string[]> = {}
   for (const t of tagsByItem.get(id) ?? []) (tagTranslations[t.tag_lan] ??= []).push(t.tag)
   return mapRowToDto(it, { tagTranslations, children: [] })

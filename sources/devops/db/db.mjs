@@ -18,6 +18,9 @@ import {
   discoverMigrations,
   parseApplyArguments,
   parseTenantCreateArguments,
+  parseTenantDeleteArguments,
+  parseTenantHostArguments,
+  parseTenantMemberArguments,
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
@@ -568,10 +571,15 @@ async function runDatabaseCommand(command, argument) {
  * che può scrivere `tenant`, in una transazione sola: un errore qualsiasi annulla tutto, tenant,
  * account, appartenenza e invito. Il tenant nuovo vale solo per la transazione (MTF-DEC-7).
  *
+ * Con `host` (specifica 2026-10-21, MT4-DEC-13) registra nella stessa transazione l'indirizzo
+ * dedicato del tenant, come principale: un indirizzo già preso annulla anche il tenant.
+ *
  * Il link stampato contiene un token valido: è il modo previsto di consegnarlo finché l'invio per
- * email non arriva con la console (pezzo 5), e non si scrive da nessun'altra parte.
+ * email non arriva con la console (pezzo 5), e non si scrive da nessun'altra parte. Con `host` il
+ * link usa l'indirizzo del tenant, come i link dell'app (`tenantBaseUrl`): `AUTH_URL` con il solo
+ * nome dell'host sostituito, schema e porta restano quelli di `AUTH_URL`.
  */
-async function runTenantCreate(connectionUrl, { slug, name, admin }) {
+async function runTenantCreate(connectionUrl, { slug, name, admin, host }) {
   const sql = postgres(connectionUrl, {
     prepare: false,
     max: 1,
@@ -582,9 +590,13 @@ async function runTenantCreate(connectionUrl, { slug, name, admin }) {
   try {
     const result = await sql.begin(async tx => {
       await tx`set local role construct_owner`
+      if (host) await assertHostFree(tx, host)
       const [{ tenantId }] = await tx`
         select app_private.create_tenant_from_template(${slug}, ${name})::text as "tenantId"
       `
+      if (host) {
+        await tx`insert into public.tenant_host (host, id_tenant, is_primary) values (${host}, ${tenantId}, true)`
+      }
       await tx`select set_config('app.tenant_id', ${tenantId}, true)`
       const [{ existed }] = await tx`select exists (select 1 from public.users where email = ${admin}) as existed`
       const [registered] = await tx`
@@ -601,12 +613,161 @@ async function runTenantCreate(connectionUrl, { slug, name, admin }) {
     })
 
     console.log(`Tenant creato: id=${result.tenantId} slug=${slug} nome=${name}`)
+    if (host) console.log(`Indirizzo principale: ${host}`)
     console.log(`Primo amministratore: ${admin} (${result.existed ? 'account esistente' : 'account nuovo'})`)
     if (result.invitationToken) {
-      const baseUrl = (process.env.AUTH_URL ?? '').replace(/\/$/, '')
+      const baseUrl = tenantLinkBase(process.env.AUTH_URL ?? '', host)
       console.log(`Link per impostare la password (valido 48 ore): ${baseUrl}/set-password?token=${result.invitationToken}`)
       if (!baseUrl) console.log("AUTH_URL non impostata: anteponi l'indirizzo del sito.")
     }
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
+/**
+ * L'indirizzo base dei link per un tenant: `AUTH_URL` senza barra finale, e con `host` il solo nome
+ * dell'host sostituito (schema, porta e percorso restano quelli di `AUTH_URL`), come `tenantBaseUrl`
+ * in lib/tenancy/tenant-base-url.ts. Senza `AUTH_URL` resta vuoto: il chiamante stampa il percorso.
+ */
+function tenantLinkBase(configured, host) {
+  if (!configured) return ''
+  if (!host) return configured.replace(/\/$/, '')
+  const url = new URL(configured)
+  url.hostname = host
+  return url.href.replace(/\/$/, '')
+}
+
+/** Un indirizzo è uno solo in tutto il registro: se è già di qualcuno il comando si ferma. */
+async function assertHostFree(tx, host) {
+  const [taken] = await tx`
+    select t.slug from public.tenant_host h join public.tenant t on t.id = h.id_tenant where h.host = ${host}
+  `
+  if (taken) throw new Error(`L'indirizzo ${host} è già assegnato al tenant ${taken.slug}`)
+}
+
+/**
+ * Assegna un indirizzo dedicato a un tenant che esiste già (specifica 2026-10-21, MT4-DEC-13,
+ * MT4-DEC-17). Una transazione sola come construct_owner, l'unico che scrive `tenant_host`. Si
+ * rifiutano, prima ancora del controllo della tabella (trigger `tenant_host_guard`), il tenant
+ * predefinito e il modello; un indirizzo già preso; e `--primary` su un tenant che ha già un
+ * indirizzo principale: l'indirizzo principale finisce nei link delle email, e cambiarlo in
+ * silenzio cambierebbe i link di tutti, quindi non si sposta da qui.
+ */
+async function runTenantHostAdd(connectionUrl, { slug, host, primary }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const [found] = await tx`select id::text as id, slug, is_template as "isTemplate" from public.tenant where slug = ${slug}`
+      if (!found) throw new Error(`Il tenant ${slug} non esiste`)
+      if (found.slug === 'default' || found.isTemplate) {
+        throw new Error(`Il tenant ${slug} non può avere un indirizzo dedicato: il predefinito risponde sull'indirizzo principale e il modello non risponde su nessun indirizzo`)
+      }
+      await assertHostFree(tx, host)
+      if (primary) {
+        const [current] = await tx`select host from public.tenant_host where id_tenant = ${found.id} and is_primary`
+        if (current) {
+          throw new Error(`Il tenant ${slug} ha già un indirizzo principale (${current.host}): aggiungi l'indirizzo senza --primary, oppure cambia il principale a mano`)
+        }
+      }
+      await tx`insert into public.tenant_host (host, id_tenant, is_primary) values (${host}, ${found.id}, ${primary})`
+    })
+    console.log(`Indirizzo assegnato: ${host} al tenant ${slug} (${primary ? 'principale' : 'non principale'})`)
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
+/**
+ * Solo per il database di prova (E2E dei tenant, specifica 2026-10-21, Task 11): dà a una persona
+ * l'appartenenza attiva a un tenant, creando l'account se manca. Con `admin` passa da
+ * `register_tenant_admin`, come il primo amministratore di tenant-create (l'invito che ne nasce per
+ * un account senza password non si stampa: qui non serve); senza, la persona riceve il solo ruolo
+ * base REGISTERED, come "Aggiungi persona". Una transazione sola come construct_owner. Il modello
+ * non ha persone.
+ */
+async function runTestTenantMemberAdd(connectionUrl, { slug, email, admin }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    const existed = await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const [found] = await tx`select id::text as id, is_template as "isTemplate" from public.tenant where slug = ${slug}`
+      if (!found) throw new Error(`Il tenant ${slug} non esiste`)
+      if (found.isTemplate) throw new Error(`Il tenant ${slug} è il modello: non ha persone`)
+      await tx`select set_config('app.tenant_id', ${found.id}, true)`
+      const [{ existed }] = await tx`select exists (select 1 from public.users where email = ${email}) as existed`
+      if (admin) {
+        await tx`select 1 from app_private.register_tenant_admin(${email})`
+        return existed
+      }
+      await tx`insert into public.users (email, auth_provider) values (${email}, 'credentials') on conflict (email) do nothing`
+      const [{ userId }] = await tx`select id::text as "userId" from public.users where email = ${email}`
+      await tx`
+        insert into public.tenant_membership (id_tenant, user_id, status) values (${found.id}, ${userId}, 'active')
+        on conflict on constraint tenant_membership_pkey do update set status = 'active'
+      `
+      await tx`
+        insert into public.user_role (id_tenant, user_id, id_role)
+        select ${found.id}, ${userId}, r.id_role from public.role r
+        where r.id_tenant = ${found.id} and r.system_key = 'REGISTERED'
+        on conflict do nothing
+      `
+      return existed
+    })
+    console.log(`Persona aggiunta al tenant ${slug}: ${email} (${existed ? 'account esistente' : 'account nuovo'}, ${admin ? 'amministratore' : 'utente'})`)
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
+/**
+ * Solo per il database di prova (E2E dei tenant, Task 11): cancella un tenant di prova con tutte le
+ * sue righe, come `deleteTenantForTest` di lib/db/testing.ts: ogni tabella di tenant del registro
+ * `app_private.table_class` (così una tabella nuova non resta indietro), poi gli indirizzi e la riga
+ * di `tenant`. Rifiuta il predefinito e il modello. Un tenant che non c'è non è un errore: la pulizia
+ * dell'E2E gira anche quando la creazione si è fermata a metà, e di nuovo all'esecuzione dopo.
+ */
+async function runTestTenantDelete(connectionUrl, { slug }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    const deleted = await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const [found] = await tx`select id::text as id, slug, is_template as "isTemplate" from public.tenant where slug = ${slug}`
+      if (!found) return false
+      if (found.slug === 'default' || found.isTemplate) {
+        throw new Error(`Il tenant ${slug} non si cancella: il predefinito e il modello vivono in ogni database`)
+      }
+      // La RLS forzata vale anche per il proprietario (MTF-DEC-4): il tenant va impostato.
+      await tx`select set_config('app.tenant_id', ${found.id}, true)`
+      const tables = await tx`select table_name as name from app_private.table_class where class = 'tenant' order by table_name`
+      // Le chiavi esterne fra tabelle di tenant sono tutte in cascata: l'ordine non conta.
+      for (const { name } of tables) {
+        await tx`delete from ${tx('public.' + name)} where id_tenant = ${found.id}`
+      }
+      await tx`delete from public.tenant_host where id_tenant = ${found.id}`
+      await tx`delete from public.tenant where id = ${found.id}`
+      return true
+    })
+    console.log(deleted ? `Tenant cancellato: ${slug}` : `Nessun tenant ${slug}: niente da cancellare`)
   } finally {
     await sql.end({ timeout: 5 })
   }
@@ -618,9 +779,10 @@ async function runCommandBody(sql, command, argument) {
     if (!emails.length) throw new Error('TEST_EMAIL or TEST_EMAIL_USER is required')
     // Lingua, tema e dimensione del testo stanno sul profilo, e il colore dell'app e' globale:
     // un test che li cambia e non li rimette a posto altera tutti quelli dopo, senza che
-    // l'errore nomini mai la causa (vedi conftest.py, clean_language_preferences).
+    // l'errore nomini mai la causa (vedi conftest.py, clean_language_preferences). Lo stesso vale
+    // per l'ultimo tenant usato (pezzo 4, MT4-DEC-6): deciderebbe da solo dove entra l'accesso dopo.
     const result = await sql`
-      update users set id_language = null, theme_mode = 'system', text_scale = 100
+      update users set id_language = null, theme_mode = 'system', text_scale = 100, last_tenant_id = null
       where email = any(${emails})
     `
     // Anche il colore del modo scuro (0038) e le quattro superfici per modo (0033): null vuol dire
@@ -657,15 +819,19 @@ const supported = new Set([
   'schema-check',
   'schema-write',
   'tenant-create',
+  'tenant-host-add',
   'test-apply',
   'test-query',
   'test-reset-e2e',
   'test-delete-user',
   'test-tenant-create',
+  'test-tenant-host-add',
+  'test-tenant-member-add',
+  'test-tenant-delete',
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email>')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug>')
   process.exit(2)
 }
 
@@ -680,6 +846,10 @@ try {
   else if (command === 'test-apply') await runMigrations(testMigrationDatabaseUrl(), parseApplyArguments(commandArguments))
   else if (command === 'tenant-create') await runTenantCreate(migrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
   else if (command === 'test-tenant-create') await runTenantCreate(testMigrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
+  else if (command === 'tenant-host-add') await runTenantHostAdd(migrationDatabaseUrl(), parseTenantHostArguments(commandArguments))
+  else if (command === 'test-tenant-host-add') await runTenantHostAdd(testMigrationDatabaseUrl(), parseTenantHostArguments(commandArguments))
+  else if (command === 'test-tenant-member-add') await runTestTenantMemberAdd(testMigrationDatabaseUrl(), parseTenantMemberArguments(commandArguments))
+  else if (command === 'test-tenant-delete') await runTestTenantDelete(testMigrationDatabaseUrl(), parseTenantDeleteArguments(commandArguments))
   else await runDatabaseCommand(command, argument)
 } catch (err) {
   console.error(`ERROR: ${err.message}`)

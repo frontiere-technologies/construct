@@ -50,8 +50,8 @@ describeIntegration('RBAC loaders through withTenant', () => {
     expect((await getAllRoles(tenant, ['SERVICE'])).map(r => r.id)).toContain(idRole)
   })
 
-  it('rejects a role that does not exist with the same message as before', async () => {
-    await expect(getRole(tenant, 999999999)).rejects.toThrow('Failed to load role: not found')
+  it('answers null for a role that does not exist: the page turns it into a 404', async () => {
+    expect(await getRole(tenant, 999999999)).toBeNull()
   })
 
   it('lists and counts users with their role names', async () => {
@@ -76,6 +76,7 @@ describeIntegration('RBAC loaders through withTenant', () => {
     expect(tree.length).toBeGreaterThan(0)
     const first = tree[0]
     expect(await getNavigationItem(tenant, first.id)).toMatchObject({ id: first.id })
+    expect(await getNavigationItem(tenant, 999999999)).toBeNull()
     expect(await getNavigationItemById(tenant, first.id)).toMatchObject({ id_menu_entry: first.id })
     expect(await getNavigationItemById(tenant, 999999999)).toBeNull()
     expect((await getParentList(tenant)).length).toBeGreaterThan(0)

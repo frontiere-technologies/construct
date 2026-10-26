@@ -61,7 +61,12 @@ export const users = pgTable('users', {
   idUserStatus: bigint('id_user_status', { mode: 'number' }).references(() => userStatus.idUserStatus).default(2),
   lastStatusTs: timestamp('last_status_ts', { withTimezone: true, mode: 'string' }),
   idLanguage: bigint('id_language', { mode: 'number' }).references(() => appLanguage.idLanguage, { onDelete: 'set null' }),
-}, (t) => [index('users_id_language_idx').on(t.idLanguage)])
+  // L'ultimo tenant in cui la persona ha lavorato (specifica 2026-10-21, §2.3, 0053).
+  lastTenantId: bigint('last_tenant_id', { mode: 'number' }).references(() => tenant.id, { onDelete: 'set null' }),
+}, (t) => [
+  index('users_id_language_idx').on(t.idLanguage),
+  index('users_last_tenant_id_idx').on(t.lastTenantId),
+])
 
 const tenantIdColumn = () => bigint('id_tenant', { mode: 'number' })
   .notNull()
@@ -81,6 +86,27 @@ export const tenant = pgTable('tenant', {
 }, (t) => [
   uniqueIndex('tenant_single_template').on(t.isTemplate).where(sql`${t.isTemplate}`),
 ])
+
+/**
+ * Il registro degli indirizzi dei tenant (specifica 2026-10-21, §2.1, 0053). Globale, in sola
+ * lettura per l'app: lo scrive la piattaforma. `host` è in minuscolo e senza porta; il predefinito e
+ * il modello non hanno indirizzi (trigger `tenant_host_guard`, MT4-DEC-17).
+ */
+export const tenantHost = pgTable('tenant_host', {
+  host: text('host').primaryKey(),
+  idTenant: bigint('id_tenant', { mode: 'number' }).notNull().references(() => tenant.id),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('tenant_host_single_primary').on(t.idTenant).where(sql`${t.isPrimary}`),
+])
+
+/** Le impostazioni del tenant: una riga per tenant (specifica 2026-10-21, §2.2, MT4-DEC-10, 0053). */
+export const tenantSettings = pgTable('tenant_settings', {
+  idTenant: bigint('id_tenant', { mode: 'number' }).primaryKey().default(sql`app_private.current_tenant_id()`).references(() => tenant.id),
+  selfRegistration: boolean('self_registration').notNull().default(false),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+})
 
 /** Il colore principale dell'app: una riga per tenant (0046; era una riga sola, 0031). */
 export const appTheme = pgTable('app_theme', {

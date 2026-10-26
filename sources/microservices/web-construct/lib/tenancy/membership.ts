@@ -1,7 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
 import { tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
-import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 
@@ -17,27 +16,15 @@ export function isMembershipStatus(value: unknown): value is MembershipStatus {
 
 /**
  * Primo accesso (MT2-DEC-12): dà alla persona l'appartenenza al tenant predefinito, se il tenant
- * della transazione è quello e la persona non appartiene a un altro tenant. Ritorna lo stato
- * dell'appartenenza dopo la chiamata, oppure `null` quando non ne esiste una. Non riattiva mai
- * un'appartenenza disattivata. La logica vive nella funzione SQL, in un solo viaggio.
+ * della transazione è quello, se accetta registrazioni autonome (MT4-DEC-10, 0054) e la persona
+ * non appartiene a un altro tenant. Ritorna lo stato dell'appartenenza dopo la chiamata, oppure
+ * `null` quando non ne esiste una. Non riattiva mai un'appartenenza disattivata. La logica vive
+ * nella funzione SQL, in un solo viaggio.
  */
 export async function ensureDefaultMembership(tx: TenantTx, userId: string): Promise<MembershipStatus | null> {
   const [row] = await tx.execute<{ status: string | null }>(
     sql`select public.ensure_default_membership(${userId}::uuid) as status`)
   return isMembershipStatus(row?.status) ? row.status : null
-}
-
-/**
- * Vero solo se nel tenant indicato la persona ha una riga di appartenenza ed è disattivata
- * (§3.1). Senza riga è falso: la riga la crea il primo accesso (`ensureDefaultMembership`).
- */
-export async function isMembershipDeactivated(tenantId: TenantId, userId: string): Promise<boolean> {
-  const [row] = await withTenant(tenantId, tx => tx
-    .select({ status: tenantMembership.status })
-    .from(tenantMembership)
-    .where(eq(tenantMembership.userId, userId))
-    .limit(1))
-  return row?.status === MEMBERSHIP_DEACTIVATED
 }
 
 /**
@@ -56,11 +43,19 @@ export async function tenantMemberEmail(tenantId: TenantId, userId: string): Pro
 }
 
 /**
- * Registrazione: dà alla persona l'appartenenza al tenant predefinito, con le stesse regole del
- * primo accesso (mai un'appartenenza disattivata riattivata, mai chi appartiene a un altro tenant).
+ * Registrazione (MT4-DEC-9, MT4-DEC-10): dà alla persona l'appartenenza al tenant indicato, quello
+ * dell'indirizzo della richiesta che la rotta ha già risolto (lo stesso il cui indirizzo va nel link
+ * dell'email), solo se quel tenant accetta registrazioni autonome, è attivo e la persona non
+ * appartiene a nessun tenant. Ritorna lo stato dell'appartenenza dopo la chiamata, oppure `null`
+ * quando non ne esiste una; non riattiva mai un'appartenenza disattivata. La logica vive in
+ * `public.join_by_registration` (0054).
  */
-export async function joinDefaultTenant(userId: string): Promise<MembershipStatus | null> {
-  return withTenant(await resolveRequestTenant(), tx => ensureDefaultMembership(tx, userId))
+export async function joinTenantByRegistration(userId: string, tenantId: TenantId): Promise<MembershipStatus | null> {
+  return withTenant(tenantId, async tx => {
+    const [row] = await tx.execute<{ status: string | null }>(
+      sql`select public.join_by_registration(${userId}::uuid) as status`)
+    return isMembershipStatus(row?.status) ? row.status : null
+  })
 }
 
 /**

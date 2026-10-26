@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -45,6 +46,12 @@ const TruncatedSpan: React.FC<TruncatedSpanProps> = ({ text, className, onShowTo
     </span>
   )
 }
+
+// Caricato a richiesta: il selettore importa l'azione del server di cambio tenant, e con essa
+// la sessione e il database. Importarlo in testa tirerebbe quella catena dentro ogni test della
+// barra, che non ha bisogno del selettore. In esecuzione si disegna sul server come il resto della
+// pagina, senza lampi (next/dynamic con il rendering sul server acceso).
+const TenantSwitcher = dynamic(() => import('./TenantSwitcher').then(module => module.TenantSwitcher))
 
 const ICON_COL_W = 'w-16'
 const TEXT_COL_W = 'w-52'
@@ -243,11 +250,19 @@ const readCollapse = (key: string, defaultValue: boolean): boolean => {
   }
 }
 
-interface SidebarProps {
-  menuItems: MenuItem[]
+/** Il tenant corrente e quelli sull'indirizzo, letti dal server (MT4-DEC-5): il selettore in cima. */
+export interface SidebarTenantSwitcher {
+  current: { id: number; name: string }
+  tenants: { id: number; name: string }[]
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
+interface SidebarProps {
+  menuItems: MenuItem[]
+  /** Facoltativo: senza, la barra non mostra il blocco del tenant. */
+  tenantSwitcher?: SidebarTenantSwitcher
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ menuItems, tenantSwitcher }) => {
   const { user: authUser, signOut } = useAuth()
   const { t } = useI18n()
   const pathname = usePathname()
@@ -497,6 +512,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems }) => {
           showToggle={col1Presentation.showColumnToggle}
           anchorClassName="-right-[9px] bottom-[9px]"
         />
+
+        {tenantSwitcher && (
+          <TenantSwitcher
+            current={tenantSwitcher.current}
+            tenants={tenantSwitcher.tenants}
+            collapsed={effCol1Collapsed}
+          />
+        )}
 
         {topItems.length > 0 && (
           <div className="p-2 space-y-1">

@@ -296,13 +296,55 @@ Il link contiene un token valido: va consegnato alla persona e non incollato alt
 email dal comando arriverà con la console di piattaforma. `test-tenant-create` fa lo stesso sul
 database di prova usa e getta (`TEST_MIGRATION_DATABASE_URL`, con `TEST_DATABASE_DISPOSABLE=1`).
 
-Limiti noti (specifica 2026-10-20, §5.3):
+### Assegnare un indirizzo a un tenant (`--host`, `db.mjs tenant-host-add`)
 
-- **I tenant creati così si usano dal pezzo 4 della multi-tenancy.** Fino ad allora ogni richiesta
-  è servita dal tenant predefinito: il primo amministratore può impostare la password, ma non ha
-  ancora un modo per entrare nel suo tenant dal browser.
-- **Il modello si modifica solo via SQL**, finché il pezzo 4 non permetterà alla piattaforma, e
+Un tenant risponde su un indirizzo dedicato (per esempio `a.localhost` in locale) se la piattaforma
+lo registra in `tenant_host`; un indirizzo non registrato è l'indirizzo principale, quello del
+tenant predefinito. Si assegna in due modi, sempre dalla piattaforma e mai dall'app (specifica
+2026-10-21, MT4-DEC-13):
+
+```bash
+set -a && . ./sources/devops/db/operator.env && set +a
+# alla creazione: l'indirizzo diventa il principale del tenant nuovo, nella stessa transazione
+node sources/devops/db/db.mjs tenant-create --slug acme --name "Acme Spa" --admin capo@acme.it --host a.localhost
+# a un tenant che esiste già
+node sources/devops/db/db.mjs tenant-host-add --slug acme --host a.localhost
+node sources/devops/db/db.mjs tenant-host-add --slug acme --host acme.example.it --primary
+```
+
+```
+Indirizzo assegnato: a.localhost al tenant acme (non principale)
+```
+
+- L'indirizzo si salva in minuscolo, senza porta e senza punto finale (`A.Localhost:3000` diventa
+  `a.localhost`), la forma con cui l'app lo confronta. Un indirizzo IPv6 non si può registrare.
+- L'indirizzo **principale** è quello dei link nelle email del tenant (invito, impostazione e
+  recupero della password): `AUTH_URL` con il solo nome dell'host sostituito, schema e porta
+  restano quelli di `AUTH_URL`. Con `--host` anche il link stampato da `tenant-create` lo usa
+  (`AUTH_URL=http://localhost:3000` e `--host a.localhost` danno
+  `http://a.localhost:3000/set-password?token=…`); senza `--host` resta `AUTH_URL`. Un tenant senza
+  indirizzo principale usa `AUTH_URL`.
+- `tenant-host-add` senza `--primary` aggiunge un indirizzo in più. Con `--primary` il comando
+  **rifiuta** un tenant che ha già un indirizzo principale: i link di tutte le email cambierebbero in
+  silenzio, quindi il principale non si sposta da qui. Per cambiarlo si aggiunge il nuovo
+  indirizzo senza `--primary` e si scambia il principale a mano con SQL.
+- Si rifiutano (uscita 1, `ERROR: …`, nulla cambia nel database) un indirizzo già assegnato a
+  qualunque tenant, uno slug che non esiste e il tenant predefinito (slug `default`) e il modello
+  (slug `template`), che non hanno indirizzi dedicati (MT4-DEC-17: il predefinito resta il tenant
+  dell'indirizzo principale, il modello non risponde su nessun indirizzo). Con `tenant-create
+  --host` un indirizzo già preso annulla anche la creazione del tenant.
+- `test-tenant-create --host …` e `test-tenant-host-add` fanno lo stesso sul database di prova usa
+  e getta.
+
+Limiti noti (specifiche 2026-10-20 e 2026-10-21, §5.3):
+
+- **I tenant creati così si usano dal pezzo 4 della multi-tenancy.** Il primo amministratore entra
+  dal browser: dall'indirizzo dedicato del tenant (`--host`), oppure dall'indirizzo principale con
+  la pagina di scelta o il selettore della barra laterale.
+- **Il modello si modifica solo via SQL**, finché il pezzo 5 non permetterà alla piattaforma, e
   solo a lei, di sceglierlo come tenant corrente.
+- **Lingue e traduzioni si modificano solo dal tenant predefinito** fino al pezzo 5: sono cataloghi
+  globali (MT2-DEC-11), e negli altri tenant anche l'amministratore li legge soltanto.
 
 ## Local Docker with Supabase
 
@@ -407,7 +449,7 @@ npm audit --omit=dev
 
 Mutating tests require a separate disposable database. Commands refuse to run unless the URL they are given exists, differs from `DATABASE_URL`, and `TEST_DATABASE_DISPOSABLE=1` explicitly confirms the target can be destroyed or changed. Never use a shared development, staging, or production database.
 
-The test database splits its credentials the same way the development one does, and for the same reason. `TEST_MIGRATION_DATABASE_URL` owns the schema and is read only by `db.mjs test-apply`; `TEST_DATABASE_URL` and `TEST_DATABASE_POOLED_URL` must both be a limited login inheriting only `construct_runtime`, because the integration suite and the E2E application server connect through them. Provision that login the same way as the development one:
+The test database splits its credentials the same way the development one does, and for the same reason. `TEST_MIGRATION_DATABASE_URL` owns the schema; it is read by `db.mjs test-apply` and by the owner-level test fixtures — the `db.mjs test-tenant-*` commands (which the E2E tenant fixtures run) and `withOwner`/`deleteTenantForTest` in the integration suite (`lib/db/testing.ts`) — and never by the application; `TEST_DATABASE_URL` and `TEST_DATABASE_POOLED_URL` must both be a limited login inheriting only `construct_runtime`, because the integration suite and the E2E application server connect through them. Provision that login the same way as the development one:
 
 ```bash
 export TEST_MIGRATION_DATABASE_URL='postgresql://...owner...@test-host:5432/postgres'
@@ -498,6 +540,16 @@ database — a pooler URL and a direct URL, or the same database with a differen
 it. A separate project makes that mistake impossible instead of merely unlikely.
 
 The E2E fixture resets only its named users and removes the exact registration account created by that run, including after failures.
+
+`test_tenants.py` (multi-tenancy piece 4) creates its own tenants for the duration of that file only — "E2E A" on `a.localhost`, "E2E B" on `b.localhost`, "E2E C" on the main address — together with the people it needs, and removes all of them before its first test and after its last one, including after failures. A run killed in the middle of that file (Ctrl-C, the Mac going to sleep) cannot clean up, so the session fixture in `conftest.py` also deletes the three tenants, idempotently, at the start of every run. Outside that file `TEST_EMAIL` keeps a single tenant on the main address, which is what every other test file expects. The fixture runs three test-only commands that connect as the owner through `TEST_MIGRATION_DATABASE_URL`; it reads that variable (with `TEST_DATABASE_DISPOSABLE`, and nothing else) from `sources/devops/db/operator.env` and passes it to those `db.mjs` subprocesses alone:
+
+```bash
+node sources/devops/db/db.mjs test-tenant-create --slug e2e-a --name "E2E A" --admin <TEST_EMAIL> --host a.localhost
+node sources/devops/db/db.mjs test-tenant-member-add --slug e2e-b --email <email> [--admin]
+node sources/devops/db/db.mjs test-tenant-delete --slug e2e-a
+```
+
+`test-tenant-member-add` gives the person an active membership (creating the account if missing): the base role only, or also the tenant administrator role with `--admin`. `test-tenant-delete` removes every row of the tenant from the tenant tables, its addresses and the tenant itself; a tenant that does not exist is not an error, and the default tenant and the template are refused. `test-reset-e2e` also clears the last used tenant of the two E2E accounts.
 
 ## Adding application pages
 

@@ -11,10 +11,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth-session', () => ({ getSession: mocks.getSession }))
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))
-// Il tenant della richiesta ora si legge dal database: un test unitario non lo apre.
+// Il tenant viene dalla sessione già letta (pezzo 4, §3.1). Il modulo vero importa la sessione e il
+// database: qui una copia della stessa regola, senza connessioni.
 vi.mock('@/lib/tenancy/request-tenant', async () => {
-  const { defaultTestTenant } = await import('@/lib/tenancy/testing')
-  return { resolveRequestTenant: async () => defaultTestTenant() }
+  const { tenantIdForTest } = await import('@/lib/tenancy/testing')
+  return {
+    tenantFromSession: (session: { user?: { tenantState?: string; tenantId?: number | null } }) =>
+      session.user?.tenantState === 'ready' && typeof session.user.tenantId === 'number' ? tenantIdForTest(session.user.tenantId) : null,
+  }
 })
 // Mock completo, non parziale: il modulo vero importa `@/lib/db`, e un test unitario non deve
 // aprire una connessione. `auth-guard` da `./actor` usa solo `resolveActor` e il tipo `Actor`.
@@ -22,13 +26,15 @@ vi.mock('./actor', () => ({ resolveActor: mocks.resolveActor }))
 
 const { requireAdministrator, requireAdministratorPage, requirePagePermission, requirePermission } = await import('./auth-guard')
 
+const READY_SESSION = { user: { id: 'u1', tenantState: 'ready', tenantId: defaultTestTenant() } }
+
 function actor(codes: PermissionCode[], isAdmin = false): Actor {
   return { userId: 'u1', tenantId: defaultTestTenant(), roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, permissions: new Set(codes) }
 }
 
 describe('requirePermission', () => {
   beforeEach(() => {
-    mocks.getSession.mockReset().mockResolvedValue({ user: { id: 'u1' } })
+    mocks.getSession.mockReset().mockResolvedValue(READY_SESSION)
     mocks.resolveActor.mockReset()
     mocks.redirect.mockClear()
   })
@@ -54,11 +60,25 @@ describe('requirePermission', () => {
     mocks.resolveActor.mockResolvedValue(null)
     await expect(requirePermission('read-menu')).rejects.toThrow('Unauthorized')
   })
+
+  it('reads the actor in the tenant of the session', async () => {
+    mocks.resolveActor.mockResolvedValue(actor(['read-menu']))
+    mocks.getSession.mockResolvedValue({ user: { id: 'u1', tenantState: 'ready', tenantId: 7 } })
+    await requirePermission('read-menu')
+    expect(mocks.resolveActor).toHaveBeenCalledWith(7, 'u1')
+  })
+
+  it.each(['choose', 'none'])('rejects a session in state %s as unauthorized, not as an error, without asking the database', async state => {
+    mocks.getSession.mockResolvedValue({ user: { id: 'u1', tenantState: state, tenantId: null } })
+    await expect(requirePermission('read-menu')).rejects.toThrow('Unauthorized')
+    await expect(requireAdministrator()).rejects.toThrow('Unauthorized')
+    expect(mocks.resolveActor).not.toHaveBeenCalled()
+  })
 })
 
 describe('requirePagePermission', () => {
   beforeEach(() => {
-    mocks.getSession.mockReset().mockResolvedValue({ user: { id: 'u1' } })
+    mocks.getSession.mockReset().mockResolvedValue(READY_SESSION)
     mocks.resolveActor.mockReset()
     mocks.redirect.mockClear()
   })
@@ -74,11 +94,18 @@ describe('requirePagePermission', () => {
     mocks.resolveActor.mockResolvedValue(reader)
     await expect(requirePagePermission('read-menu')).resolves.toBe(reader)
   })
+
+  it('redirects a session without a chosen tenant instead of failing', async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: 'u1', tenantState: 'choose', tenantId: null } })
+    await expect(requirePagePermission('read-menu')).rejects.toThrow('NEXT_REDIRECT /')
+    await expect(requireAdministratorPage()).rejects.toThrow('NEXT_REDIRECT /')
+    expect(mocks.resolveActor).not.toHaveBeenCalled()
+  })
 })
 
 describe('requireAdministrator', () => {
   beforeEach(() => {
-    mocks.getSession.mockReset().mockResolvedValue({ user: { id: 'u1' } })
+    mocks.getSession.mockReset().mockResolvedValue(READY_SESSION)
     mocks.resolveActor.mockReset()
     mocks.redirect.mockClear()
   })

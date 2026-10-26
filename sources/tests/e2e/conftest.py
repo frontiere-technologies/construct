@@ -1,11 +1,12 @@
 import os
 import subprocess
 import uuid
+import warnings
 import pytest
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-from helpers import do_test_login, nav
+from helpers import delete_e2e_tenants, do_test_login, nav, operator_env
 
 _env_file = Path(__file__).parent / ".env.test"
 if _env_file.exists():
@@ -38,9 +39,20 @@ def _reset_language_preferences() -> None:
     )
 
 
+def _delete_leftover_tenants() -> None:
+    # Tenants left by a test_tenants.py run killed halfway (see helpers.delete_e2e_tenants). Before
+    # test-reset-e2e, which then clears the last used tenant of the two E2E accounts. Without the
+    # owner identity the step is skipped with a warning: the run cannot have created them either.
+    if not operator_env():
+        warnings.warn("TEST_MIGRATION_DATABASE_URL not available: leftover E2E tenants not checked")
+        return
+    delete_e2e_tenants()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def clean_language_preferences():
     _require_disposable_test_database()
+    _delete_leftover_tenants()
     _reset_language_preferences()
     try:
         yield

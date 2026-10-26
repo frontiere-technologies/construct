@@ -85,38 +85,127 @@ export function parseApplyArguments(args) {
   return { to: args[1] }
 }
 
+// Un indirizzo nella forma con cui l'app lo confronta e `tenant_host.host` lo salva (specifica
+// 2026-10-21, MT4-DEC-13): minuscolo, senza porta e senza punto finale (`A.Localhost:3000` →
+// `a.localhost`). È la stessa regola di `normalizeHost` in lib/tenancy/request-host.ts, duplicata
+// perché questo file non importa codice dell'app; i due test devono restare allineati. Un indirizzo
+// IPv6 non si registra: il controllo della tabella rifiuta i due punti. `null` se non è valido.
+const HOST_NAME = /^[a-z0-9-]+(\.[a-z0-9-]+)*$/
+const MAX_HOST_LENGTH = 253
+
+export function normalizeHostArgument(raw) {
+  const value = raw?.trim().toLowerCase()
+  if (!value) return null
+  const portAt = value.lastIndexOf(':')
+  if (portAt !== -1 && !/^\d{1,5}$/.test(value.slice(portAt + 1))) return null
+  const name = (portAt === -1 ? value : value.slice(0, portAt)).replace(/\.$/, '')
+  if (!name || name.length > MAX_HOST_LENGTH || !HOST_NAME.test(name)) return null
+  return name
+}
+
+function parseHostOption(raw) {
+  const host = normalizeHostArgument(raw)
+  if (!host) throw new Error(`--host non è un indirizzo valido: "${raw}"`)
+  return host
+}
+
+// Le opzioni con un valore, ognuna una volta sola; `booleanFlags` sono quelle senza valore.
+function collectFlags(args, valueFlags, booleanFlags = []) {
+  const values = new Map()
+  for (let index = 0; index < args.length; index += 1) {
+    const flag = args[index]
+    const equals = flag.indexOf('=')
+    if (flag.startsWith('--') && equals > 0 && valueFlags.includes(flag.slice(0, equals))) {
+      throw new Error(`Argomento non previsto "${flag}": usa ${flag.slice(0, equals)} ${flag.slice(equals + 1)}`)
+    }
+    const isBoolean = booleanFlags.includes(flag)
+    if (!isBoolean && !valueFlags.includes(flag)) throw new Error(`Argomento non previsto "${flag}"`)
+    if (values.has(flag)) throw new Error(`${flag} compare due volte`)
+    if (isBoolean) {
+      values.set(flag, true)
+      continue
+    }
+    if (index + 1 >= args.length) throw new Error(`${flag} richiede un valore`)
+    values.set(flag, args[index + 1])
+    index += 1
+  }
+  return values
+}
+
+function parseSlugOption(slug) {
+  if (!TENANT_SLUG.test(slug)) {
+    throw new Error(`Lo slug "${slug}" non è valido: da 3 a 40 caratteri fra a-z, 0-9 e -`)
+  }
+  return slug
+}
+
+// L'email si normalizza come la normalizza l'app (minuscole, senza spazi).
+function parseEmailOption(flag, raw) {
+  const email = raw.trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+$/.test(email)) throw new Error(`${flag} non è un indirizzo email: "${email}"`)
+  return email
+}
+
 // tenant-create (specifica 2026-10-20, §3.3): le tre opzioni sono obbligatorie e ognuna compare una
-// volta sola. Lo slug segue il controllo di tenant.slug, così un valore sbagliato fallisce prima di
-// aprire la connessione; l'email si normalizza come la normalizza l'app (minuscole, senza spazi).
+// volta sola; `--host` è facoltativa (MT4-DEC-13). Lo slug segue il controllo di tenant.slug, così un
+// valore sbagliato fallisce prima di aprire la connessione; l'email si normalizza come la normalizza
+// l'app (minuscole, senza spazi).
 const TENANT_CREATE_FLAGS = ['--slug', '--name', '--admin']
 const TENANT_SLUG = /^[a-z0-9-]{3,40}$/
 
 export function parseTenantCreateArguments(args) {
-  const values = new Map()
-  for (let index = 0; index < args.length; index += 2) {
-    const flag = args[index]
-    const equals = flag.indexOf('=')
-    if (flag.startsWith('--') && equals > 0 && TENANT_CREATE_FLAGS.includes(flag.slice(0, equals))) {
-      throw new Error(`Argomento non previsto "${flag}": usa ${flag.slice(0, equals)} ${flag.slice(equals + 1)}`)
-    }
-    if (!TENANT_CREATE_FLAGS.includes(flag)) throw new Error(`Argomento non previsto "${flag}"`)
-    if (values.has(flag)) throw new Error(`${flag} compare due volte`)
-    if (index + 1 >= args.length) throw new Error(`${flag} richiede un valore`)
-    values.set(flag, args[index + 1])
-  }
+  const values = collectFlags(args, [...TENANT_CREATE_FLAGS, '--host'])
   for (const flag of TENANT_CREATE_FLAGS) {
-    if (!values.has(flag)) throw new Error(`Manca ${flag}: tenant-create --slug <slug> --name <nome> --admin <email>`)
+    if (!values.has(flag)) throw new Error(`Manca ${flag}: tenant-create --slug <slug> --name <nome> --admin <email> [--host <indirizzo>]`)
   }
 
-  const slug = values.get('--slug')
-  if (!TENANT_SLUG.test(slug)) {
-    throw new Error(`Lo slug "${slug}" non è valido: da 3 a 40 caratteri fra a-z, 0-9 e -`)
-  }
+  const slug = parseSlugOption(values.get('--slug'))
   const name = values.get('--name').trim()
   if (!name) throw new Error('--name non può essere vuoto')
-  const admin = values.get('--admin').trim().toLowerCase()
-  if (!/^[^@\s]+@[^@\s]+$/.test(admin)) throw new Error(`--admin non è un indirizzo email: "${admin}"`)
-  return { slug, name, admin }
+  const admin = parseEmailOption('--admin', values.get('--admin'))
+  const result = { slug, name, admin }
+  if (values.has('--host')) result.host = parseHostOption(values.get('--host'))
+  return result
+}
+
+// tenant-host-add (specifica 2026-10-21, MT4-DEC-13): assegna un indirizzo dedicato a un tenant che
+// esiste già. `--primary` non ha valore e rende l'indirizzo quello dei link nelle email.
+export function parseTenantHostArguments(args) {
+  const values = collectFlags(args, ['--slug', '--host'], ['--primary'])
+  for (const flag of ['--slug', '--host']) {
+    if (!values.has(flag)) throw new Error(`Manca ${flag}: tenant-host-add --slug <slug> --host <indirizzo> [--primary]`)
+  }
+  return {
+    slug: parseSlugOption(values.get('--slug')),
+    host: parseHostOption(values.get('--host')),
+    primary: values.has('--primary'),
+  }
+}
+
+// test-tenant-member-add (solo database di prova, E2E dei tenant): dà a una persona l'appartenenza
+// attiva a un tenant; `--admin` la rende anche amministratrice, come il primo amministratore di
+// tenant-create.
+export function parseTenantMemberArguments(args) {
+  const values = collectFlags(args, ['--slug', '--email'], ['--admin'])
+  for (const flag of ['--slug', '--email']) {
+    if (!values.has(flag)) throw new Error(`Manca ${flag}: test-tenant-member-add --slug <slug> --email <email> [--admin]`)
+  }
+  return {
+    slug: parseSlugOption(values.get('--slug')),
+    email: parseEmailOption('--email', values.get('--email')),
+    admin: values.has('--admin'),
+  }
+}
+
+// test-tenant-delete (solo database di prova, E2E dei tenant): cancella un tenant di prova con
+// tutte le sue righe. Il predefinito si rifiuta già qui; il modello, che si riconosce solo dal
+// database, lo rifiuta il comando.
+export function parseTenantDeleteArguments(args) {
+  const values = collectFlags(args, ['--slug'])
+  if (!values.has('--slug')) throw new Error('Manca --slug: test-tenant-delete --slug <slug>')
+  const slug = parseSlugOption(values.get('--slug'))
+  if (slug === 'default') throw new Error('Il tenant predefinito non si cancella')
+  return { slug }
 }
 
 export async function applyPendingMigrations(adapter, migrations, { to } = {}) {

@@ -4204,3 +4204,523 @@ begin
   end if;
 end;
 $$;
+
+-- Migration: 0053_tenant_hosts_and_settings.sql
+-- Multi-tenancy, pezzo 4 (specifica 2026-10-21, §2.1–§2.3, MT4-DEC-10, MT4-DEC-13, MT4-DEC-17): il
+-- registro degli indirizzi dei tenant, le impostazioni del tenant (registrazioni autonome), l'ultimo
+-- tenant usato da ogni persona e il permesso per modificare le impostazioni. Gira come
+-- construct_owner, con app.tenant_id vuoto finché la sezione 6 non lo imposta.
+
+-- 1. Il registro degli indirizzi (§2.1) --------------------------------------------------------
+-- Un indirizzo si salva in minuscolo e senza porta (`A.Localhost:3000` → `a.localhost`), nella
+-- stessa forma in cui l'app lo confronta: il controllo rifiuta tutto il resto. Un indirizzo assente
+-- dal registro è l'indirizzo principale. Al più un indirizzo principale per tenant: è quello dei link
+-- nelle email (MT4-DEC-12). Globale in sola lettura per l'app: lo scrive la piattaforma (MT4-DEC-13).
+create table public.tenant_host (
+  host text primary key check (host = lower(host) and host !~ ':'),
+  id_tenant bigint not null references public.tenant(id),
+  is_primary boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create unique index tenant_host_single_primary on public.tenant_host (id_tenant) where is_primary;
+select app_private.declare_global_table('public.tenant_host', false,
+  'registro degli indirizzi dei tenant; lo scrive la piattaforma (pezzo 4, MT4-DEC-13)');
+
+-- Il tenant predefinito resta il tenant dell'indirizzo principale e il modello non risponde su
+-- nessun indirizzo (MT4-DEC-17): il rifiuto sta qui, oltre che nei comandi di db.mjs.
+create function app_private.tenant_host_guard() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+begin
+  if exists (
+    select 1 from public.tenant t where t.id = new.id_tenant and (t.slug = 'default' or t.is_template)
+  ) then
+    raise exception using errcode = 'P0001', message = 'host_not_allowed';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app_private.tenant_host_guard() from public;
+create trigger tenant_host_guard
+  before insert or update on public.tenant_host
+  for each row execute function app_private.tenant_host_guard();
+
+-- 2. Le impostazioni del tenant (§2.2, MT4-DEC-10) ---------------------------------------------
+-- Una riga per tenant. Dato di tenant, scritto dall'amministratore del tenant: tabella di tenant.
+create table public.tenant_settings (
+  id_tenant bigint primary key default app_private.current_tenant_id() references public.tenant(id),
+  self_registration boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+create trigger tenant_settings_updated_at
+  before update on public.tenant_settings
+  for each row execute function public.set_updated_at();
+select app_private.protect_tenant_table('public.tenant_settings'::regclass);
+
+-- 3. L'ultimo tenant usato (§2.3) --------------------------------------------------------------
+-- Un valore per persona, su users che è globale. L'indice serve alla cancellazione di un tenant.
+alter table public.users add column last_tenant_id bigint references public.tenant(id) on delete set null;
+create index users_last_tenant_id_idx on public.users (last_tenant_id);
+
+-- 4. Il permesso (modello 0041) ----------------------------------------------------------------
+-- Direttamente sotto la categoria Amministrazione, dopo le sue quattro sottocategorie.
+insert into public.permission
+  (name, code, id_parent, order_position, description, item_translation, kind, origin, is_immutable)
+select 'manage-tenant-settings', 'manage-tenant-settings', c.id_permission, 4,
+       'Impostazioni del tenant: per ora le registrazioni autonome',
+       '{"EN":{"name":"Manage tenant settings"},"IT":{"name":"Gestire le impostazioni del tenant"}}'::jsonb,
+       'GRANT', 'SOURCE', 1
+from public.permission c
+where c.name = 'Amministrazione' and c.id_parent = -1 and c.kind = 'CATEGORY' and c.origin = 'SOURCE';
+
+-- 5. La copia di un tenant conosce tenant_settings ---------------------------------------------
+-- Stessa firma e stesso corpo della 0051, più tenant_settings: il tenant nuovo riceve il valore
+-- della sorgente (il modello: spento), oppure spento se la sorgente non ha la riga.
+create or replace function app_private.copy_tenant(p_source bigint, p_slug text, p_name text, p_is_template boolean)
+returns bigint
+language plpgsql security invoker set search_path = '' set client_min_messages = warning as $$
+declare
+  -- Le tabelle di tenant che questa funzione conosce. Una tabella di tenant nuova va aggiunta a
+  -- uno dei due elenchi, e se va copiata anche al corpo della funzione: finché non succede la
+  -- copia si rifiuta, invece di far nascere tenant senza quei dati (Review Focus #4).
+  v_copiate constant text[] := array['menu_entry', 'menu_entry_tag', 'role', 'role_permission',
+                                     'role_functionality', 'app_theme', 'tenant_settings'];
+  v_saltate constant text[] := array['user_role', 'tenant_membership'];
+  v_sconosciuta text;
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_nuovo bigint;
+begin
+  select c.table_name into v_sconosciuta
+  from app_private.table_class c
+  where c.class = 'tenant' and c.table_name <> all (v_copiate || v_saltate)
+  order by c.table_name
+  limit 1;
+  if v_sconosciuta is not null then
+    raise exception using errcode = 'P0001', message = 'tenant_table_not_copied:' || v_sconosciuta;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = p_source) then
+    raise exception using errcode = 'P0001', message = 'source_tenant_missing';
+  end if;
+
+  insert into public.tenant (slug, name, is_template) values (p_slug, p_name, p_is_template)
+  returning id into v_nuovo;
+
+  -- Lettura, con il contesto del tenant di partenza. Le tabelle temporanee si ricreano a ogni
+  -- chiamata: la funzione si può chiamare più volte nella stessa transazione.
+  perform pg_catalog.set_config('app.tenant_id', p_source::text, true);
+
+  drop table if exists pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema,
+    pg_temp.copy_tenant_impostazioni;
+
+  create temporary table copy_tenant_voce as
+  select m.id_menu_entry as id_vecchio, pg_catalog.nextval('public.s_id_menu_entry') as id_nuovo,
+         m.id_parent, m.name, m.order_position, m.navbar_position, m.icon_path, m.id_functionality_type,
+         m.functionality_link, m.open_in_new_tab, m.item_translation, m.is_immutable
+  from public.menu_entry m
+  where m.id_tenant = p_source;
+
+  create temporary table copy_tenant_ruolo as
+  select r.id_role as id_vecchio, pg_catalog.nextval('public.s_id_role') as id_nuovo,
+         r.id_role_type, r.description, r.system_key
+  from public.role r
+  where r.id_tenant = p_source;
+
+  create temporary table copy_tenant_etichetta as
+  select t.id_menu_entry, t.tag_lan, t.tag from public.menu_entry_tag t where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_permesso as
+  select p.id_role, p.id_permission from public.role_permission p where p.id_tenant = p_source;
+
+  create temporary table copy_tenant_funzionalita as
+  select f.id_role, f.id_menu_entry from public.role_functionality f where f.id_tenant = p_source;
+
+  create temporary table copy_tenant_tema as
+  select t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark
+  from public.app_theme t
+  where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_impostazioni as
+  select s.self_registration from public.tenant_settings s where s.id_tenant = p_source;
+
+  -- Scrittura, con il contesto del tenant nuovo e gli id nuovi. Il controllo sul genitore delle
+  -- voci è differito alla fine della transazione, quindi l'ordine delle righe non conta.
+  perform pg_catalog.set_config('app.tenant_id', v_nuovo::text, true);
+
+  insert into public.menu_entry (id_menu_entry, id_tenant, id_parent, name, order_position, navbar_position,
+    icon_path, id_functionality_type, functionality_link, open_in_new_tab, item_translation, is_immutable,
+    created_at, updated_at)
+  select v.id_nuovo, v_nuovo, genitore.id_nuovo, v.name, v.order_position, v.navbar_position,
+         v.icon_path, v.id_functionality_type, v.functionality_link, v.open_in_new_tab, v.item_translation,
+         v.is_immutable, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_voce v
+  left join pg_temp.copy_tenant_voce genitore on genitore.id_vecchio = v.id_parent;
+
+  insert into public.menu_entry_tag (id_tenant, id_menu_entry, tag_lan, tag, date_ins)
+  select v_nuovo, v.id_nuovo, e.tag_lan, e.tag, pg_catalog.now()
+  from pg_temp.copy_tenant_etichetta e
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = e.id_menu_entry;
+
+  insert into public.role (id_role, id_tenant, id_role_type, description, system_key, date_ins, date_mod)
+  select r.id_nuovo, v_nuovo, r.id_role_type, r.description, r.system_key, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_ruolo r;
+
+  -- Il permesso resta lo stesso id: il catalogo dei permessi è globale.
+  insert into public.role_permission (id_tenant, id_role, id_permission)
+  select v_nuovo, r.id_nuovo, p.id_permission
+  from pg_temp.copy_tenant_permesso p
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = p.id_role;
+
+  insert into public.role_functionality (id_tenant, id_role, id_menu_entry)
+  select v_nuovo, r.id_nuovo, v.id_nuovo
+  from pg_temp.copy_tenant_funzionalita f
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = f.id_role
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = f.id_menu_entry;
+
+  insert into public.app_theme (id_tenant, primary_color, primary_dark, background_light, card_light,
+    accent_light, sidebar_light, background_dark, card_dark, accent_dark, sidebar_dark, date_mod)
+  select v_nuovo, t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark, pg_catalog.now()
+  from pg_temp.copy_tenant_tema t;
+
+  -- Sempre una riga: ogni tenant ha le sue impostazioni.
+  insert into public.tenant_settings (id_tenant, self_registration, updated_at)
+  values (v_nuovo, coalesce((select s.self_registration from pg_temp.copy_tenant_impostazioni s), false),
+          pg_catalog.now());
+
+  drop table pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema,
+    pg_temp.copy_tenant_impostazioni;
+
+  -- Il tenant di chi ha chiamato torna com'era: le istruzioni successive della transazione non
+  -- devono lavorare nel tenant nuovo.
+  perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+  return v_nuovo;
+end;
+$$;
+revoke all on function app_private.copy_tenant(bigint, text, text, boolean) from public;
+
+-- 6. Le righe dei tenant che esistono già ------------------------------------------------------
+-- Ultima sezione apposta, come nella 0050: scrive tabelle di tenant cambiando app.tenant_id.
+-- Il predefinito accetta le registrazioni autonome (il comportamento di oggi), il modello no, e
+-- quindi nemmeno ogni tenant nuovo (MT4-DEC-10). Un tenant già creato dal modello prima di questa
+-- migrazione (db.mjs tenant-create, pezzo 2) riceve la riga del modello, spenta. Il permesso nuovo
+-- va al ruolo TENANT_ADMIN di ogni tenant: il modello lo passa alle copie future.
+do $$
+declare
+  v_tenant record;
+begin
+  for v_tenant in select t.id, t.slug from public.tenant t order by t.id loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant.id::text, true);
+    insert into public.tenant_settings (id_tenant, self_registration)
+    values (v_tenant.id, v_tenant.slug = 'default');
+    insert into public.role_permission (id_tenant, id_role, id_permission)
+    select v_tenant.id, r.id_role, p.id_permission
+    from public.role r
+    cross join public.permission p
+    where r.id_tenant = v_tenant.id and r.system_key = 'TENANT_ADMIN' and p.code = 'manage-tenant-settings'
+    on conflict do nothing;
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', '', true);
+end
+$$;
+
+-- Migration: 0054_tenant_selection_functions.sql
+-- Multi-tenancy, pezzo 4 (specifica 2026-10-21, §2.4, MT4-DEC-1, MT4-DEC-2, MT4-DEC-9, MT4-DEC-10,
+-- MT4-DEC-15): quali tenant rispondono su un indirizzo, quali di questi la persona può usare,
+-- l'appartenenza disattivata sull'indirizzo, l'ingresso con la registrazione e l'interruttore delle
+-- registrazioni autonome nell'ingresso al tenant predefinito. Solo funzioni: nessuna tabella cambia.
+--
+-- Le appartenenze sono tabelle di tenant e una funzione security definer è vietata: come
+-- app_private.is_member_elsewhere (0048), le funzioni che leggono più tenant li visitano uno per uno
+-- cambiando app.tenant_id, e rimettono il valore di partenza prima di ogni uscita. Un errore a metà
+-- non ha bisogno di rimetterlo: annulla la transazione, o il savepoint che riporta indietro anche
+-- l'impostazione.
+
+-- 1. I tenant che rispondono su un indirizzo (MT4-DEC-1) ---------------------------------------
+-- L'indirizzo si confronta nella forma del registro (0053) e di normalizeHost in lib/tenancy:
+-- minuscolo, senza spazi ai lati, senza porta e senza punto finale (`A.Localhost.:3000` →
+-- `a.localhost`). Qui si normalizza di nuovo, così chi chiama da SQL con l'indirizzo grezzo ottiene
+-- la stessa risposta dell'app. Un valore che normalizeHost rifiuterebbe non è mai nel registro,
+-- perché il registro non ammette i due punti: in entrambi i casi è l'indirizzo principale.
+--
+-- Un indirizzo del registro dà il suo tenant e non ricade mai sull'indirizzo principale; ogni altro
+-- indirizzo, nullo compreso, è l'indirizzo principale e dà i tenant senza indirizzo dedicato. In
+-- entrambi i casi rispondono solo i tenant attivi che non sono il modello: un tenant sospeso o
+-- archiviato non risponde, e il suo indirizzo resta suo (insieme vuoto).
+create function public.host_tenant_ids(p_host text) returns setof bigint
+language sql stable security invoker set search_path = '' as $$
+  with indirizzo as (
+    select pg_catalog.regexp_replace(
+             pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(p_host)), ':[0-9]{1,5}$', ''),
+             '\.$', '') as host
+  ),
+  dedicato as (
+    select h.id_tenant from public.tenant_host h join indirizzo i on i.host = h.host
+  )
+  select t.id
+  from public.tenant t
+  where t.status = 'active'
+    and not t.is_template
+    and case
+          when exists (select 1 from dedicato) then t.id in (select d.id_tenant from dedicato d)
+          else not exists (select 1 from public.tenant_host h where h.id_tenant = t.id)
+        end
+$$;
+revoke all on function public.host_tenant_ids(text) from public;
+grant execute on function public.host_tenant_ids(text) to construct_runtime;
+
+-- 2. I tenant che la persona può usare sull'indirizzo (§2.4, MT4-DEC-2) ------------------------
+-- Fra i tenant dell'indirizzo, quelli dove la persona ha un'appartenenza attiva; nessuno se il suo
+-- account è disattivato a livello globale. is_admin: ha il ruolo TENANT_ADMIN del tenant. Il ciclo
+-- visita i tenant in ordine di nome, quindi le righe escono già ordinate. Si chiama anche senza
+-- tenant (withGlobal): non usa app_private.current_tenant_id(), che lì fallirebbe.
+create function public.available_tenants(p_user_id uuid, p_host text)
+returns table (id_tenant bigint, name text, is_admin boolean)
+language plpgsql security invoker set search_path = '' as $$
+#variable_conflict use_column
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_tenant record;
+begin
+  -- Prima di ogni cambio di app.tenant_id: qui non c'è niente da rimettere.
+  if not exists (select 1 from public.users u where u.id = p_user_id and u.id_user_status = 2) then
+    return;
+  end if;
+
+  for v_tenant in
+    select t.id, t.name
+    from public.tenant t
+    where t.id in (select h.id from public.host_tenant_ids(p_host) as h(id))
+    order by t.name, t.id
+  loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant.id::text, true);
+    return query
+      select v_tenant.id, v_tenant.name, exists (
+        select 1
+        from public.user_role ur
+        join public.role r on r.id_tenant = ur.id_tenant and r.id_role = ur.id_role
+        where ur.id_tenant = v_tenant.id and ur.user_id = p_user_id and r.system_key = 'TENANT_ADMIN'
+      )
+      from public.tenant_membership m
+      where m.id_tenant = v_tenant.id and m.user_id = p_user_id and m.status = 'active';
+  end loop;
+
+  perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+  return;
+end;
+$$;
+revoke all on function public.available_tenants(uuid, text) from public;
+grant execute on function public.available_tenants(uuid, text) to construct_runtime;
+
+-- 3. Un'appartenenza disattivata sull'indirizzo (MT4-DEC-15) ----------------------------------
+-- Vero se in almeno un tenant dell'indirizzo la persona ha un'appartenenza disattivata. Lo stato
+-- globale dell'account non conta qui: lo guarda già l'autorizzazione.
+create function public.has_deactivated_membership_on_host(p_user_id uuid, p_host text) returns boolean
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_tenant bigint;
+begin
+  for v_tenant in select h.id from public.host_tenant_ids(p_host) as h(id) order by h.id loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant::text, true);
+    if exists (
+      select 1 from public.tenant_membership m
+      where m.id_tenant = v_tenant and m.user_id = p_user_id and m.status = 'deactivated'
+    ) then
+      perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+      return true;
+    end if;
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+  return false;
+end;
+$$;
+revoke all on function public.has_deactivated_membership_on_host(uuid, text) from public;
+grant execute on function public.has_deactivated_membership_on_host(uuid, text) to construct_runtime;
+
+-- 4. L'ingresso con la registrazione (MT4-DEC-9, MT4-DEC-10) -----------------------------------
+-- Nel tenant corrente, cioè quello dell'indirizzo da cui la persona si registra. Ritorna null se il
+-- tenant non accetta registrazioni autonome (riga di impostazioni mancante = spento; anche un
+-- tenant non attivo o il modello non accettano); lo stato dell'appartenenza che c'è già qui, che
+-- non si riattiva mai; null se la persona è membro di un altro tenant (la aggiunge l'amministratore
+-- con "Aggiungi persona"). Altrimenti crea l'appartenenza attiva con il ruolo base REGISTERED e
+-- ritorna 'active'. Chi chiama risponde comunque in modo neutro.
+create function public.join_by_registration(p_user_id uuid) returns text
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_status text;
+  v_registered bigint;
+begin
+  if not exists (
+    select 1
+    from public.tenant t
+    join public.tenant_settings s on s.id_tenant = t.id
+    where t.id = v_tenant and t.status = 'active' and not t.is_template and s.self_registration
+  ) then
+    return null;
+  end if;
+
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  if found then
+    return v_status;
+  end if;
+  -- Rimette app.tenant_id da sola (0048).
+  if app_private.is_member_elsewhere(p_user_id) then
+    return null;
+  end if;
+
+  select r.id_role into v_registered from public.role r where r.id_tenant = v_tenant and r.system_key = 'REGISTERED';
+  if v_registered is null then
+    raise exception using errcode = 'P0001', message = 'system_roles_missing';
+  end if;
+
+  insert into public.tenant_membership (id_tenant, user_id, status) values (v_tenant, p_user_id, 'active')
+  on conflict (id_tenant, user_id) do nothing;
+  if found then
+    insert into public.user_role (id_tenant, user_id, id_role) values (v_tenant, p_user_id, v_registered)
+    on conflict do nothing;
+    return 'active';
+  end if;
+  -- Una transazione concorrente ha creato la riga per prima: vale il suo stato.
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  return v_status;
+end;
+$$;
+revoke all on function public.join_by_registration(uuid) from public;
+grant execute on function public.join_by_registration(uuid) to construct_runtime;
+
+-- 5. L'ingresso nel tenant predefinito segue l'interruttore (MT4-DEC-10) ------------------------
+-- Corpo della 0048 più un controllo: se il predefinito non accetta registrazioni autonome (o non ha
+-- la riga delle impostazioni), nessuno vi entra da solo. Chi è già membro riceve il suo stato come
+-- prima, qualunque sia l'interruttore: il controllo viene dopo. Stessa firma: i permessi restano.
+create or replace function public.ensure_default_membership(p_user_id uuid) returns text
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_status text;
+begin
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  if found then
+    return v_status;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = v_tenant and t.slug = 'default') then
+    return null;
+  end if;
+  if not exists (
+    select 1 from public.tenant_settings s where s.id_tenant = v_tenant and s.self_registration
+  ) then
+    return null;
+  end if;
+  if app_private.is_member_elsewhere(p_user_id) then
+    return null;
+  end if;
+
+  insert into public.tenant_membership (id_tenant, user_id, status) values (v_tenant, p_user_id, 'active')
+  on conflict (id_tenant, user_id) do nothing;
+  -- Se una transazione concorrente ha creato la riga per prima, vale il suo stato.
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  return v_status;
+end;
+$$;
+
+-- Migration: 0055_piece4_translations_and_menu.sql
+-- Multi-tenancy, pezzo 4 (specifica 2026-10-21, §3.2, MT4-DEC-3, MT4-DEC-4, MT4-DEC-5, MT4-DEC-10): le
+-- parole della pagina di scelta, del messaggio "Non sei configurato su questo indirizzo", del
+-- selettore della barra laterale e della pagina Impostazioni del tenant, più la voce di menu di
+-- quella pagina. Gira come construct_owner, con app.tenant_id vuoto finché la sezione 2 non lo
+-- imposta; la sezione 2 lo rimette com'era prima di uscire.
+
+-- 1. Le chiavi di traduzione ---------------------------------------------------------------------
+-- Solo additiva: apply_translation_seed non riscrive mai una chiave esistente. «Riprova» sul
+-- messaggio riusa errors.retry. Il segnaposto del saluto è {{name}}, la forma di lib/i18n/interpolate.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"tenancy.choose.title","namespace":"tenancy","module":"rbac","description":"Tenant chooser page: greeting above the tenant cards. {{name}} is the person's name or email","it":"Ciao {{name}}, dove vuoi entrare?","en":"Hi {{name}}, where do you want to go?"},
+    {"key":"tenancy.choose.hint","namespace":"tenancy","module":"rbac","description":"Tenant chooser page: note under the greeting","it":"Potrai cambiare in qualunque momento dalla barra laterale.","en":"You can switch at any time from the sidebar."},
+    {"key":"tenancy.role.admin","namespace":"tenancy","module":"rbac","description":"Tenant card and switcher: the person is an administrator of the tenant","it":"Amministratore","en":"Administrator"},
+    {"key":"tenancy.role.user","namespace":"tenancy","module":"rbac","description":"Tenant card and switcher: the person is a user of the tenant, not an administrator","it":"Utente","en":"User"},
+    {"key":"tenancy.none.message","namespace":"tenancy","module":"rbac","description":"Page shown to a signed-in person with no tenant on the address they used","it":"Non sei configurato su questo indirizzo.","en":"You are not set up on this address."},
+    {"key":"tenancy.none.logout","namespace":"tenancy","module":"rbac","description":"Not-configured page: button that signs out","it":"Esci","en":"Sign out"},
+    {"key":"tenancy.switch.label","namespace":"tenancy","module":"rbac","description":"Sidebar tenant switcher: accessible label of the button that opens the tenant list","it":"Cambia tenant","en":"Switch tenant"},
+    {"key":"tenancy.switch.current","namespace":"tenancy","module":"rbac","description":"Sidebar tenant switcher: marks the tenant the person is working in","it":"Tenant corrente","en":"Current tenant"},
+    {"key":"tenancy.settings.title","namespace":"tenancy","module":"rbac","description":"Tenant settings page: title","it":"Impostazioni del tenant","en":"Tenant settings"},
+    {"key":"tenancy.settings.self_registration","namespace":"tenancy","module":"rbac","description":"Tenant settings page: label of the self-registration switch","it":"Accetta registrazioni autonome","en":"Accept self-registration"},
+    {"key":"tenancy.settings.self_registration_hint","namespace":"tenancy","module":"rbac","description":"Tenant settings page: explanation under the self-registration switch","it":"Chi si registra da questo indirizzo entra nel tenant, se non è già membro di un altro.","en":"People who sign up from this address join the tenant, unless they already belong to another one."},
+    {"key":"tenancy.settings.saved","namespace":"tenancy","module":"rbac","description":"Tenant settings page: confirmation after saving","it":"Impostazioni salvate.","en":"Settings saved."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- 2. La voce di menu "Impostazioni del tenant" ----------------------------------------------------
+-- Le voci di menu sono righe di tenant: la voce nasce in ogni tenant che ha "Theme & Styles"
+-- (admin/theme), cioè il predefinito, il modello (che la passa alle copie future) e ogni tenant già
+-- creato dal modello. Sta subito dopo "Theme & Styles", con lo stesso genitore: le voci successive
+-- scendono di un posto. È concessa al ruolo TENANT_ADMIN del tenant; la pagina la protegge il
+-- permesso manage-tenant-settings (0053), che lo stesso ruolo ha già.
+do $$
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_tenant record;
+  v_tema record;
+  v_voce bigint;
+begin
+  for v_tenant in select t.id from public.tenant t order by t.id loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant.id::text, true);
+
+    select m.id_parent, m.order_position, m.id_functionality_type, m.open_in_new_tab
+    into v_tema
+    from public.menu_entry m
+    where m.id_tenant = v_tenant.id and m.functionality_link = 'admin/theme'
+    order by m.id_menu_entry
+    limit 1;
+
+    if found and not exists (
+      select 1 from public.menu_entry m
+      where m.id_tenant = v_tenant.id and m.functionality_link = 'admin/tenant-settings'
+    ) then
+      update public.menu_entry m
+      set order_position = m.order_position + 1
+      where m.id_tenant = v_tenant.id
+        and m.id_parent is not distinct from v_tema.id_parent
+        and m.order_position > v_tema.order_position;
+
+      insert into public.menu_entry (id_tenant, id_parent, name, order_position, navbar_position, icon_path,
+        id_functionality_type, functionality_link, open_in_new_tab, item_translation, is_immutable)
+      values (v_tenant.id, v_tema.id_parent, 'Tenant settings', v_tema.order_position + 1, null, 'Building2',
+        v_tema.id_functionality_type, 'admin/tenant-settings', v_tema.open_in_new_tab,
+        '{"EN":{"name":"Tenant settings"},"IT":{"name":"Impostazioni del tenant"}}'::jsonb, 1)
+      returning id_menu_entry into v_voce;
+
+      insert into public.role_functionality (id_tenant, id_role, id_menu_entry)
+      select v_tenant.id, r.id_role, v_voce
+      from public.role r
+      where r.id_tenant = v_tenant.id and r.system_key = 'TENANT_ADMIN'
+      on conflict do nothing;
+    end if;
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', coalesce(v_origine, ''), true);
+end
+$$;
+
+-- Migration: 0056_piece4_self_registration_no_address.sql
+-- Multi-tenancy, pezzo 4 (specifica 2026-10-21, §3.2, MT4-DEC-9, MT4-DEC-10): la riga che la pagina
+-- Impostazioni del tenant mostra al posto dell'interruttore delle registrazioni autonome quando il
+-- tenant non ha un indirizzo dedicato e non è il predefinito: dall'indirizzo principale chi si
+-- registra entra nel predefinito, quindi lì l'interruttore non avrebbe effetto. Solo additiva:
+-- apply_translation_seed non riscrive mai una chiave esistente.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"tenancy.settings.self_registration_no_address","namespace":"tenancy","module":"rbac","description":"Tenant settings page: shown instead of the self-registration switch when the tenant has no dedicated address and is not the default tenant","it":"Questo tenant non ha un indirizzo dedicato: chi si registra dall'indirizzo principale entra nel tenant predefinito, quindi qui le registrazioni autonome non hanno effetto.","en":"This tenant has no dedicated address: people who sign up on the main address join the default tenant, so self-registration has no effect here."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;

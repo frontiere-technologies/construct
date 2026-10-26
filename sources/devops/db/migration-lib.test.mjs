@@ -9,8 +9,12 @@ import {
   assertAppliedMigrationChecksums,
   discoverMigrations,
   migrationChecksum,
+  normalizeHostArgument,
   parseApplyArguments,
   parseTenantCreateArguments,
+  parseTenantDeleteArguments,
+  parseTenantHostArguments,
+  parseTenantMemberArguments,
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
@@ -313,4 +317,85 @@ test('rejects a missing flag, an unknown flag, a bad slug, an admin without @', 
     assert.throws(() => parseTenantCreateArguments(['--slug', 'acme', '--name', 'X', '--admin', admin]),
       /--admin/, admin)
   }
+})
+
+// Gli indirizzi dei tenant (specifica 2026-10-21, MT4-DEC-13): stessa forma di `normalizeHost` di
+// lib/tenancy/request-host.ts (minuscolo, senza porta, senza punto finale), perché l'app confronta
+// con la forma che il comando ha salvato.
+test('normalizeHostArgument lowercases and strips port and trailing dot, like the app', () => {
+  assert.equal(normalizeHostArgument('A.Localhost:3000'), 'a.localhost')
+  assert.equal(normalizeHostArgument('  acme.example.it. '), 'acme.example.it')
+  assert.equal(normalizeHostArgument('a.localhost'), 'a.localhost')
+  assert.equal(normalizeHostArgument('xn--caf-dma.example'), 'xn--caf-dma.example')
+  for (const bad of ['', '   ', 'a b.localhost', 'a/b', 'user@a.localhost', 'a.localhost:abc', 'a..localhost', '.', 'http://a.localhost', 'a.localhost:99999999', '[::1]', '[::1]:3000']) {
+    assert.equal(normalizeHostArgument(bad), null, JSON.stringify(bad))
+  }
+  assert.equal(normalizeHostArgument(undefined), null)
+})
+
+test('tenant-create accepts --host and normalizes it', () => {
+  const base = ['--slug', 'acme', '--name', 'Acme Spa', '--admin', 'capo@acme.it']
+  assert.deepEqual(parseTenantCreateArguments([...base, '--host', ' A.Localhost:3000 ']),
+    { slug: 'acme', name: 'Acme Spa', admin: 'capo@acme.it', host: 'a.localhost' })
+  assert.deepEqual(parseTenantCreateArguments(['--host', 'a.localhost', ...base]),
+    { slug: 'acme', name: 'Acme Spa', admin: 'capo@acme.it', host: 'a.localhost' })
+  // Senza --host il risultato non cambia.
+  assert.deepEqual(parseTenantCreateArguments(base), { slug: 'acme', name: 'Acme Spa', admin: 'capo@acme.it' })
+  assert.throws(() => parseTenantCreateArguments([...base, '--host', 'a b']), /--host/)
+  assert.throws(() => parseTenantCreateArguments([...base, '--host']), /--host/)
+  assert.throws(() => parseTenantCreateArguments([...base, '--host', 'a.localhost', '--host', 'b.localhost']), /--host/)
+  assert.throws(() => parseTenantCreateArguments([...base, '--host=a.localhost']), /--host a\.localhost/)
+})
+
+test('tenant-host-add requires --slug and --host and accepts --primary', () => {
+  assert.deepEqual(parseTenantHostArguments(['--slug', 'acme', '--host', 'A.Localhost:3000']),
+    { slug: 'acme', host: 'a.localhost', primary: false })
+  assert.deepEqual(parseTenantHostArguments(['--primary', '--host', 'a.localhost', '--slug', 'acme']),
+    { slug: 'acme', host: 'a.localhost', primary: true })
+  assert.deepEqual(parseTenantHostArguments(['--slug', 'acme', '--host', 'a.localhost', '--primary']),
+    { slug: 'acme', host: 'a.localhost', primary: true })
+  assert.throws(() => parseTenantHostArguments([]), /--slug/)
+  assert.throws(() => parseTenantHostArguments(['--slug', 'acme']), /--host/)
+  assert.throws(() => parseTenantHostArguments(['--host', 'a.localhost']), /--slug/)
+  assert.throws(() => parseTenantHostArguments(['--slug', 'acme', '--host', 'a.localhost', '--name', 'X']), /--name/)
+  assert.throws(() => parseTenantHostArguments(['--slug', 'acme', '--host', 'a.localhost', 'extra']), /extra/)
+  assert.throws(() => parseTenantHostArguments(['--slug', 'acme', '--host', 'a.localhost', '--primary', '--primary']), /--primary/)
+  assert.throws(() => parseTenantHostArguments(['--slug', 'acme', '--host', 'a.localhost', '--slug', 'b']), /--slug/)
+  assert.throws(() => parseTenantHostArguments(['--slug', 'acme', '--host']), /--host/)
+  assert.throws(() => parseTenantHostArguments(['--slug', 'acme', '--host', 'a b']), /--host/)
+  assert.throws(() => parseTenantHostArguments(['--slug', 'Ab', '--host', 'a.localhost']), /slug/)
+  assert.throws(() => parseTenantHostArguments(['--slug=acme', '--host', 'a.localhost']), /--slug acme/)
+})
+
+// I comandi di prova per l'E2E dei tenant (specifica 2026-10-21, Task 11): aggiungono una persona a
+// un tenant di prova e cancellano il tenant alla fine. Stesse regole di tenant-create per slug ed
+// email; il predefinito non si cancella mai.
+test('test-tenant-member-add requires --slug and --email and accepts --admin', () => {
+  assert.deepEqual(parseTenantMemberArguments(['--slug', 'e2e-b', '--email', ' Solo-B@Construct.DEV ']),
+    { slug: 'e2e-b', email: 'solo-b@construct.dev', admin: false })
+  assert.deepEqual(parseTenantMemberArguments(['--admin', '--email', 'b@construct.dev', '--slug', 'e2e-b']),
+    { slug: 'e2e-b', email: 'b@construct.dev', admin: true })
+  assert.throws(() => parseTenantMemberArguments([]), /--slug/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b']), /--email/)
+  assert.throws(() => parseTenantMemberArguments(['--email', 'b@construct.dev']), /--slug/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b', '--email', 'b@construct.dev', '--host', 'x']), /--host/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b', '--email', 'b@construct.dev', 'extra']), /extra/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b', '--email', 'b@construct.dev', '--admin', '--admin']), /--admin/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b', '--email']), /--email/)
+  assert.throws(() => parseTenantMemberArguments(['--slug=e2e-b', '--email', 'b@construct.dev']), /--slug e2e-b/)
+  assert.throws(() => parseTenantMemberArguments(['--slug', 'Ab', '--email', 'b@construct.dev']), /slug/)
+  for (const email of ['b.construct.dev', ' ', '@', 'b@', '@construct.dev']) {
+    assert.throws(() => parseTenantMemberArguments(['--slug', 'e2e-b', '--email', email]), /--email/, email)
+  }
+})
+
+test('test-tenant-delete requires --slug and refuses the default tenant', () => {
+  assert.deepEqual(parseTenantDeleteArguments(['--slug', 'e2e-a']), { slug: 'e2e-a' })
+  assert.throws(() => parseTenantDeleteArguments([]), /--slug/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug']), /--slug/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', '--slug', 'e2e-b']), /--slug/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', '--admin']), /--admin/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', 'extra']), /extra/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'Ab']), /slug/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'default']), /predefinito/)
 })

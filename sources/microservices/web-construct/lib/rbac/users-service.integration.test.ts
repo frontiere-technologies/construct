@@ -167,7 +167,8 @@ describeIntegration('users page from tenant memberships', () => {
     // Dal tenant B si vede l'altro lato, non i membri del predefinito.
     const fromB = await listUsers(B, { page: 0, size: 100, emailSearch: PREFIX })
     expect(fromB.users.map(row => row.id)).toEqual([onlyB])
-  })
+    // DB remoto: quattro utenti creati e tre letture in sequenza; oltre 5 s nelle esecuzioni complete.
+  }, 15_000)
 
   it('filters and sorts by the membership status', async () => {
     const active = await defaultMember('f_attivo')

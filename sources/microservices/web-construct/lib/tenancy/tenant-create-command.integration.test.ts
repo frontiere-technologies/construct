@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { eq, inArray } from 'drizzle-orm'
-import { passwordSetTokens, tenant, tenantMembership, userRole, users } from '@/lib/db/schema'
+import { passwordSetTokens, tenant, tenantHost, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
@@ -15,7 +15,9 @@ import type { TenantId } from './tenant-id'
 /**
  * Il comando `db.mjs test-tenant-create` (specifica 2026-10-20, §3.3, MT2-DEC-9, MT2-DEC-10,
  * MT2-OK-4): crea un tenant dal modello e registra il primo amministratore, in una transazione
- * sola. Il comando gira come processo figlio, con l'ambiente che vitest.integration.config.ts ha
+ * sola. Con `--host` (specifica 2026-10-21, MT4-DEC-13) registra anche l'indirizzo principale, e
+ * `test-tenant-host-add` ne assegna uno a un tenant esistente (MT4-DEC-17: non al predefinito né
+ * al modello). Il comando gira come processo figlio, con l'ambiente che vitest.integration.config.ts ha
  * già riempito (TEST_MIGRATION_DATABASE_URL e TEST_DATABASE_DISPOSABLE).
  */
 const run = promisify(execFile)
@@ -32,14 +34,37 @@ let adminId: string
 
 interface CommandResult { code: number; stdout: string; stderr: string }
 
-async function tenantCreate(args: string[], env: NodeJS.ProcessEnv = { ...process.env, AUTH_URL }): Promise<CommandResult> {
+async function runCommand(command: string, args: string[], env: NodeJS.ProcessEnv): Promise<CommandResult> {
   try {
-    const { stdout, stderr } = await run('node', ['../../devops/db/db.mjs', 'test-tenant-create', ...args], { cwd: APP_DIR, env })
+    const { stdout, stderr } = await run('node', ['../../devops/db/db.mjs', command, ...args], { cwd: APP_DIR, env })
     return { code: 0, stdout, stderr }
   } catch (error) {
     const failure = error as { code?: number; stdout?: string; stderr?: string }
     return { code: failure.code ?? -1, stdout: failure.stdout ?? '', stderr: failure.stderr ?? '' }
   }
+}
+
+function tenantCreate(args: string[], env: NodeJS.ProcessEnv = { ...process.env, AUTH_URL }): Promise<CommandResult> {
+  return runCommand('test-tenant-create', args, env)
+}
+
+function tenantHostAdd(args: string[]): Promise<CommandResult> {
+  return runCommand('test-tenant-host-add', args, { ...process.env, AUTH_URL })
+}
+
+/** Un indirizzo dedicato di prova, già nella forma normalizzata. */
+function hostName(): string {
+  return `zz-${unique()}.localhost`
+}
+
+async function hostRows(host: string) {
+  return withGlobal(tx => tx.select({ host: tenantHost.host, idTenant: tenantHost.idTenant, isPrimary: tenantHost.isPrimary })
+    .from(tenantHost).where(eq(tenantHost.host, host)))
+}
+
+async function hostRowsOf(tenantId: TenantId) {
+  return withGlobal(tx => tx.select({ host: tenantHost.host, isPrimary: tenantHost.isPrimary })
+    .from(tenantHost).where(eq(tenantHost.idTenant, tenantId)).orderBy(tenantHost.host))
 }
 
 function slug(): string {
@@ -242,5 +267,137 @@ describeIntegration('db.mjs test-tenant-create', () => {
     const stillOne = await withTenant(newTenant, tx => tx.select({ userId: tenantMembership.userId }).from(tenantMembership)
       .where(eq(tenantMembership.status, 'active')))
     expect(stillOne.map(row => row.userId)).toEqual([adminId])
+  }, 60_000)
+  it('tenant-create --host registers it as primary and the set-password link uses it', async () => {
+    const host = hostName()
+    const address = email()
+    const newSlug = slug()
+    const env = { ...process.env, AUTH_URL: 'http://localhost:3000' }
+    // L'indirizzo arriva con maiuscole, spazi e porta: si salva normalizzato.
+    const result = await tenantCreate(['--slug', newSlug, '--name', 'Con indirizzo', '--admin', address, '--host', ` ${host.toUpperCase()}:3000 `], env)
+    expect(result.stderr).toBe('')
+    expect(result.code).toBe(0)
+    const tenantId = trackTenant(result.stdout)
+    const id = await userIdOf(address)
+    if (id) createdUserIds.push(id)
+
+    const lines = result.stdout.trimEnd().split('\n')
+    expect(lines).toHaveLength(4)
+    expect(lines[0]).toBe(`Tenant creato: id=${tenantId} slug=${newSlug} nome=Con indirizzo`)
+    expect(lines[1]).toBe(`Indirizzo principale: ${host}`)
+    expect(lines[2]).toBe(`Primo amministratore: ${address} (account nuovo)`)
+    // Schema e porta di AUTH_URL, solo il nome dell'host è quello del tenant (come tenantBaseUrl).
+    expect(lines[3]).toMatch(new RegExp(`^Link per impostare la password \\(valido 48 ore\\): http://${host.replace(/\./g, '\\.')}:3000/set-password\\?token=[0-9a-f-]{36}$`))
+    expect(await hostRows(host)).toEqual([{ host, idTenant: tenantId, isPrimary: true }])
+  }, 60_000)
+
+  it('tenant-create --host with a host already taken fails and creates nothing', async () => {
+    const taken = hostName()
+    const added = await tenantHostAdd(['--slug', firstSlug, '--host', taken])
+    expect(added.code, added.stderr).toBe(0)
+
+    const address = email()
+    const newSlug = slug()
+    const tenantsBefore = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).orderBy(tenant.id))
+    const result = await tenantCreate(['--slug', newSlug, '--name', 'Indirizzo preso', '--admin', address, '--host', taken])
+    if (result.code === 0) trackTenant(result.stdout)
+    expect(result.code).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain(`L'indirizzo ${taken} è già assegnato`)
+    expect(await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).orderBy(tenant.id))).toEqual(tenantsBefore)
+    expect(await userIdOf(address)).toBeUndefined()
+    expect(await hostRows(taken)).toEqual([{ host: taken, idTenant: newTenant, isPrimary: false }])
+  }, 90_000)
+
+  it('tenant-create with an invalid --host fails before touching the database', async () => {
+    const address = email()
+    const result = await tenantCreate(['--slug', slug(), '--name', 'Indirizzo storto', '--admin', address, '--host', 'a b/c'])
+    expect(result.code).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toMatch(/^ERROR: --host non è un indirizzo valido/)
+    expect(await userIdOf(address)).toBeUndefined()
+  })
+
+  it('tenant-host-add adds a non-primary host, normalized, to an existing tenant', async () => {
+    const host = hostName()
+    const result = await tenantHostAdd(['--slug', firstSlug, '--host', ` ${host.toUpperCase()}:3000 `])
+    expect(result.stderr).toBe('')
+    expect(result.code).toBe(0)
+    expect(result.stdout.trimEnd().split('\n')).toEqual([`Indirizzo assegnato: ${host} al tenant ${firstSlug} (non principale)`])
+    expect(await hostRows(host)).toEqual([{ host, idTenant: newTenant, isPrimary: false }])
+  }, 60_000)
+
+  it('tenant-host-add --primary makes it the primary, and a second primary is refused', async () => {
+    // Il tenant di questo test è nuovo: nessun indirizzo, quindi nessun principale.
+    const address = email()
+    const ownSlug = slug()
+    const created = await tenantCreate(['--slug', ownSlug, '--name', 'Principale', '--admin', address])
+    expect(created.code, created.stderr).toBe(0)
+    const ownTenant = trackTenant(created.stdout)
+    const id = await userIdOf(address)
+    if (id) createdUserIds.push(id)
+
+    const first = hostName()
+    const added = await tenantHostAdd(['--slug', ownSlug, '--host', first, '--primary'])
+    expect(added.stderr).toBe('')
+    expect(added.code).toBe(0)
+    expect(added.stdout.trimEnd().split('\n')).toEqual([`Indirizzo assegnato: ${first} al tenant ${ownSlug} (principale)`])
+
+    // Un secondo principale si rifiuta, senza spostare quello che c'è: va tolto o cambiato a mano.
+    const second = hostName()
+    const refused = await tenantHostAdd(['--slug', ownSlug, '--host', second, '--primary'])
+    expect(refused.code).toBe(1)
+    expect(refused.stdout).toBe('')
+    expect(refused.stderr).toContain(`Il tenant ${ownSlug} ha già un indirizzo principale (${first})`)
+    expect(await hostRowsOf(ownTenant)).toEqual([{ host: first, isPrimary: true }])
+
+    // Lo stesso indirizzo senza --primary entra.
+    const plain = await tenantHostAdd(['--slug', ownSlug, '--host', second])
+    expect(plain.code, plain.stderr).toBe(0)
+    expect((await hostRowsOf(ownTenant)).map(row => [row.host, row.isPrimary]).sort())
+      .toEqual([[first, true], [second, false]].sort())
+  }, 90_000)
+
+  it('tenant-host-add refuses a host already taken, and changes nothing', async () => {
+    const host = hostName()
+    const added = await tenantHostAdd(['--slug', firstSlug, '--host', host])
+    expect(added.code, added.stderr).toBe(0)
+    const before = await hostRowsOf(newTenant)
+
+    // Stesso tenant e tenant diverso: l'indirizzo è uno solo in tutto il registro.
+    for (const target of [firstSlug, 'default']) {
+      const result = await tenantHostAdd(['--slug', target, '--host', host.toUpperCase()])
+      expect(result.code).toBe(1)
+      expect(result.stdout).toBe('')
+      expect(result.stderr).toMatch(/^ERROR: /)
+    }
+    const again = await tenantHostAdd(['--slug', firstSlug, '--host', host])
+    expect(again.code).toBe(1)
+    expect(again.stderr).toContain(`L'indirizzo ${host} è già assegnato`)
+    expect(await hostRowsOf(newTenant)).toEqual(before)
+    expect(await hostRows(host)).toEqual([{ host, idTenant: newTenant, isPrimary: false }])
+  }, 90_000)
+
+  it('tenant-host-add refuses the default tenant and the template', async () => {
+    for (const target of ['default', 'template']) {
+      const host = hostName()
+      const result = await tenantHostAdd(['--slug', target, '--host', host, '--primary'])
+      expect(result.code, target).toBe(1)
+      expect(result.stdout).toBe('')
+      expect(result.stderr).toContain(`Il tenant ${target} non può avere un indirizzo dedicato`)
+      expect(await hostRows(host)).toEqual([])
+    }
+  }, 60_000)
+
+  it('tenant-host-add refuses an unknown slug and an invalid host', async () => {
+    const host = hostName()
+    const unknown = await tenantHostAdd(['--slug', `zzz-nessuno-${unique()}`.slice(0, 40), '--host', host])
+    expect(unknown.code).toBe(1)
+    expect(unknown.stderr).toMatch(/^ERROR: Il tenant .* non esiste/)
+    expect(await hostRows(host)).toEqual([])
+
+    const invalid = await tenantHostAdd(['--slug', firstSlug, '--host', 'http://a.localhost'])
+    expect(invalid.code).toBe(1)
+    expect(invalid.stderr).toMatch(/^ERROR: --host non è un indirizzo valido/)
   }, 60_000)
 })

@@ -31,7 +31,7 @@ function GoogleIcon() {
   )
 }
 
-function LoginForm() {
+function LoginForm({ canSignInWithGoogle }: { canSignInWithGoogle: boolean }) {
   const { t } = useI18n()
   const searchParams = useSearchParams()
   const errorCode = searchParams.get('error')
@@ -207,27 +207,33 @@ function LoginForm() {
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-[#4b5563]">{t('auth.login.divider')}</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
+          {/* Su un indirizzo dedicato a un tenant Google non c'è (MT4-DEC-14): resta sull'indirizzo
+              principale, e con lui il divisore che lo separa dal modulo. */}
+          {canSignInWithGoogle && (
+            <>
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-[#4b5563]">{t('auth.login.divider')}</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
 
-          {/* Google button: not a <Button> and not tokenised on purpose. These
-              are Google's own prescribed sign-in button colours (border/bg/
-              text/hover), not an untokenised app neutral — repainting them
-              with a tenant's theme would violate Google's branding
-              guidelines and would look wrong on a dark theme. They stay raw
-              and stay in the raw-colour ratchet as justified residue. */}
-          <button
-            type="button"
-            onClick={() => signIn('google', { callbackUrl: '/' })}
-            className="w-full flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition shadow-sm"
-          >
-            <GoogleIcon />
-            {t('auth.login.google')}
-          </button>
+              {/* Google button: not a <Button> and not tokenised on purpose. These
+                  are Google's own prescribed sign-in button colours (border/bg/
+                  text/hover), not an untokenised app neutral — repainting them
+                  with a tenant's theme would violate Google's branding
+                  guidelines and would look wrong on a dark theme. They stay raw
+                  and stay in the raw-colour ratchet as justified residue. */}
+              <button
+                type="button"
+                onClick={() => signIn('google', { callbackUrl: '/' })}
+                className="w-full flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition shadow-sm"
+              >
+                <GoogleIcon />
+                {t('auth.login.google')}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -297,10 +303,10 @@ function LoginForm() {
   )
 }
 
-export function Login() {
+export function Login({ canSignInWithGoogle }: { canSignInWithGoogle: boolean }) {
   return (
     <Suspense>
-      <LoginForm />
+      <LoginForm canSignInWithGoogle={canSignInWithGoogle} />
     </Suspense>
   )
 }

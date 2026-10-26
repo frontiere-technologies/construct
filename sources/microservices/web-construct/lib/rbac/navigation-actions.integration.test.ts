@@ -286,7 +286,9 @@ describeIntegration('navigation mutations against the database', () => {
       connection.release()
       await sql.end({ timeout: 5 })
     }
-  })
+    // DB remoto: una voce creata, un blocco consultivo e una cancellazione in attesa; oltre 5 s nelle
+    // esecuzioni complete. Il margine serve solo alla latenza: il blocco vero resterebbe comunque entro 15 s.
+  }, 15_000)
 
   // Una cartella che contiene qualcosa non si elimina (richiesta del 2026-10-12): prima si
   // svuota. Il rifiuto e' del server, non solo dell'interfaccia, e non cancella niente: ne' la

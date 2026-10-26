@@ -61,6 +61,8 @@ describe('POST /api/admin/send-invite', () => {
     expect(tenantMemberEmail).toHaveBeenCalledWith(TENANT_A, 'user-1')
     expect(prepareInvitation).toHaveBeenCalledWith('persona@esempio.test', 'admin-a')
     expect(sendInvitationEmail).toHaveBeenCalledOnce()
+    // Il link parte dall'indirizzo del tenant di chi invita (MT4-DEC-12).
+    expect(sendInvitationEmail).toHaveBeenCalledWith(expect.objectContaining({ tokenId: 'token-1' }), TENANT_A)
   })
 
   it('answers 403 without an actor allowed to invite', async () => {
