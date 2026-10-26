@@ -1,8 +1,9 @@
 'use client'
 
 import { useTransition } from 'react'
-import { unstable_rethrow, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Building2, ChevronsUpDown } from 'lucide-react'
+import { loadPage } from '@/components/tenancy/load-page'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -31,9 +32,9 @@ const TRIGGER_CLS =
  * l'icona, con il nome accessibile (cambio e tenant corrente) e il nome intero nel suggerimento.
  *
  * Il tenant corrente arriva dal server come proprietà, non dalla sessione del client, che dopo un
- * cambio resta indietro finché non si rilegge. La scelta chiama l'azione dentro una transizione: il
- * rinvio alla home arriva come errore e va lasciato passare (`unstable_rethrow`); un rifiuto
- * (tenant non più disponibile) ricarica la pagina invece di farla fallire.
+ * cambio resta indietro finché non si rilegge. La scelta chiama l'azione dentro una transizione,
+ * poi il browser carica la home da capo (`loadPage`, vedi lib/tenancy/tenant-actions.ts); un
+ * rifiuto (tenant non più disponibile) ricarica la pagina invece di farla fallire.
  */
 export function TenantSwitcher({
   current,
@@ -54,10 +55,11 @@ export function TenantSwitcher({
     startTransition(async () => {
       try {
         await chooseTenant(tenantId)
-      } catch (error) {
-        unstable_rethrow(error)
+      } catch {
         router.refresh()
+        return
       }
+      loadPage('/')
     })
   }
 

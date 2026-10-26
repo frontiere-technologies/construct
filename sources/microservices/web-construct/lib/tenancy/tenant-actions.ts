@@ -1,6 +1,5 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 import { unstable_update } from '@/lib/auth'
 import { getSession } from '@/lib/auth-session'
@@ -17,9 +16,13 @@ import type { TenantState } from './tenant-selection'
  *
  * Nessuna autorità nel tenant: chi sceglie non ne ha ancora uno, o lo sta lasciando. Serve solo una
  * persona riconosciuta con l'account attivo, e l'id richiesto vale solo se compare fra i tenant
- * disponibili sull'indirizzo della richiesta (MT4-DEC-7). Dopo la scelta si va alla home con
- * `redirect` di Next: `unstable_update` non passa dagli handler che tengono i rinvii di Auth.js
- * sull'indirizzo della richiesta (lib/auth-host-redirect.ts).
+ * disponibili sull'indirizzo della richiesta (MT4-DEC-7).
+ *
+ * Nessuna delle due azioni porta altrove: restituiscono lo stato a cui è arrivata la sessione e la
+ * home la carica il browser da capo (components/tenancy/load-page.ts). Un `redirect` qui farebbe
+ * disegnare la home a Next con una richiesta interna all'indirizzo del server (`Host: localhost`),
+ * non a quello della richiesta: su un indirizzo dedicato il proxy ricalcolerebbe il tenant
+ * sull'indirizzo principale.
  */
 
 /** La persona della sessione, se riconosciuta e con l'account attivo; altrimenti rifiuto. */
@@ -34,9 +37,10 @@ async function signedInPerson(): Promise<string> {
  * Entra nel tenant scelto. L'id arriva dal client: si accetta solo se è fra i tenant disponibili
  * sull'indirizzo, altrimenti `tenant_not_available` e niente cambia. Una scelta esplicita aggiorna
  * l'ultimo tenant usato (MT4-DEC-16); il token si aggiorna con il solo id, e il callback `jwt` lo
- * ricontrolla da sé.
+ * ricontrolla da sé. Restituisce lo stato della sessione dopo l'aggiornamento; la pagina dopo la
+ * carica il browser (TenantChooser, TenantSwitcher).
  */
-export async function chooseTenant(tenantId: number): Promise<void> {
+export async function chooseTenant(tenantId: number): Promise<TenantState> {
   allowAnyAuthenticated()
   const userId = await signedInPerson()
   if (typeof tenantId !== 'number' || !Number.isSafeInteger(tenantId) || tenantId <= 0) {
@@ -47,8 +51,8 @@ export async function chooseTenant(tenantId: number): Promise<void> {
   if (!chosen) throw new Error('tenant_not_available')
 
   await withGlobal(tx => tx.update(users).set({ lastTenantId: chosen.tenantId }).where(eq(users.id, userId)))
-  await unstable_update({ user: { tenantId: chosen.tenantId } })
-  redirect('/')
+  const session = await unstable_update({ user: { tenantId: chosen.tenantId } })
+  return session?.user?.tenantState ?? 'none'
 }
 
 /**
@@ -57,10 +61,8 @@ export async function chooseTenant(tenantId: number): Promise<void> {
  * rifare l'accesso. Non sceglie niente e non scrive l'ultimo tenant usato; il callback `jwt`
  * ricalcola solo un token in `choose` o `none`.
  *
- * Restituisce lo stato a cui è arrivata la sessione e non porta altrove: un `redirect` qui farebbe
- * disegnare la home a Next con una richiesta interna all'indirizzo del server (`localhost`), e su un
- * indirizzo dedicato il proxy ricalcolerebbe il tenant sull'indirizzo principale. La pagina dopo la
- * carica il browser (components/tenancy/TenantNotConfigured.tsx).
+ * Restituisce lo stato a cui è arrivata la sessione, come `chooseTenant`; la pagina dopo la carica
+ * il browser (components/tenancy/TenantNotConfigured.tsx).
  */
 export async function refreshTenant(): Promise<TenantState> {
   allowAnyAuthenticated()

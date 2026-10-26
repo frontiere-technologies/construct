@@ -13,10 +13,11 @@ import { TenantSwitcher } from './TenantSwitcher'
  * tenant sull'indirizzo; con la barra compressa resta raggiungibile da un bottone con nome
  * accessibile. jsdom non fa impaginazione: dello scorrimento si controllano le classi.
  */
-const mocks = vi.hoisted(() => ({ chooseTenant: vi.fn(), refresh: vi.fn() }))
+const mocks = vi.hoisted(() => ({ chooseTenant: vi.fn(), refresh: vi.fn(), loadPage: vi.fn() }))
 
 vi.mock('@/context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/lib/tenancy/tenant-actions', () => ({ chooseTenant: mocks.chooseTenant }))
+vi.mock('@/components/tenancy/load-page', () => ({ loadPage: mocks.loadPage }))
 vi.mock('next/navigation', async importOriginal => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
   useRouter: () => ({ refresh: mocks.refresh }),
@@ -44,8 +45,9 @@ const press = (el: Element, key: string) =>
 const options = () => Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemradio"]'))
 
 beforeEach(() => {
-  mocks.chooseTenant.mockReset().mockResolvedValue(undefined)
+  mocks.chooseTenant.mockReset().mockResolvedValue('ready')
   mocks.refresh.mockReset()
+  mocks.loadPage.mockReset()
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -88,6 +90,8 @@ describe('TenantSwitcher', () => {
 
     expect(mocks.chooseTenant).toHaveBeenCalledTimes(1)
     expect(mocks.chooseTenant).toHaveBeenCalledWith(9)
+    // La home la carica il browser da capo, non un redirect dell'azione.
+    expect(mocks.loadPage).toHaveBeenCalledWith('/')
   })
 
   it('choosing the current tenant does nothing', () => {

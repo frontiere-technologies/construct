@@ -26,7 +26,8 @@ vi.mock('@/lib/auth-session', () => ({ getSession: async () => mocks.session }))
 vi.mock('@/lib/auth', () => ({ unstable_update: mocks.unstableUpdate }))
 vi.mock('next/headers', () => ({ headers: async () => mocks.headers }))
 vi.mock('next/navigation', () => ({
-  // Come in Next, redirect lancia: qui con un messaggio che dice dove.
+  // Come in Next, redirect lancia: qui con un messaggio che dice dove. Le azioni non lo usano più
+  // (la home la carica il browser), e un rinvio farebbe fallire il caso.
   redirect: (url: string) => { throw new Error(`NEXT_REDIRECT:${url}`) },
 }))
 vi.mock('react', async importOriginal => ({
@@ -127,7 +128,9 @@ describeIntegration('tenant choice and switch', () => {
 
   describe('chooseTenant', () => {
     it('chooseTenant to an available tenant updates last_tenant_id', async () => {
-      await expect(chooseTenant(C)).rejects.toThrow('NEXT_REDIRECT:/')
+      // La sessione come la restituisce unstable_update dopo il callback jwt.
+      mocks.unstableUpdate.mockResolvedValue({ user: { tenantState: 'ready' } })
+      await expect(chooseTenant(C)).resolves.toBe('ready')
 
       expect(await lastTenantOf(person)).toBe(C)
       // Il token si aggiorna con il solo id richiesto: il callback jwt lo ricontrolla da sé.
@@ -136,7 +139,7 @@ describeIntegration('tenant choice and switch', () => {
 
       // Dalla barra laterale, con un tenant già scelto, vale lo stesso.
       mocks.session = signedIn(person, 'ready')
-      await expect(chooseTenant(DEFAULT)).rejects.toThrow('NEXT_REDIRECT:/')
+      await expect(chooseTenant(DEFAULT)).resolves.toBe('ready')
       expect(await lastTenantOf(person)).toBe(DEFAULT)
     }, 30_000)
 
@@ -162,7 +165,8 @@ describeIntegration('tenant choice and switch', () => {
       // Sull'indirizzo di A, invece, A è disponibile e C no.
       mocks.headers = new Headers({ host: `${aHost.toUpperCase()}:3000` })
       await expect(chooseTenant(C)).rejects.toThrow('tenant_not_available')
-      await expect(chooseTenant(A)).rejects.toThrow('NEXT_REDIRECT:/')
+      mocks.unstableUpdate.mockResolvedValue({ user: { tenantState: 'ready' } })
+      await expect(chooseTenant(A)).resolves.toBe('ready')
       expect(await lastTenantOf(person)).toBe(A)
     }, 30_000)
 

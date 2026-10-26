@@ -12,7 +12,7 @@ import { TenantChooser, type TenantChoice } from './TenantChooser'
  * nome e ruolo, griglia che va a capo, elenco che scorre quando i tenant sono molti. jsdom non fa
  * impaginazione: si controllano le classi che la decidono.
  */
-const mocks = vi.hoisted(() => ({ chooseTenant: vi.fn(), refresh: vi.fn() }))
+const mocks = vi.hoisted(() => ({ chooseTenant: vi.fn(), refresh: vi.fn(), loadPage: vi.fn() }))
 
 vi.mock('@/context/I18nContext', () => ({
   useI18n: () => ({
@@ -20,6 +20,7 @@ vi.mock('@/context/I18nContext', () => ({
   }),
 }))
 vi.mock('@/lib/tenancy/tenant-actions', () => ({ chooseTenant: mocks.chooseTenant }))
+vi.mock('./load-page', () => ({ loadPage: mocks.loadPage }))
 vi.mock('next/navigation', async importOriginal => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
   useRouter: () => ({ refresh: mocks.refresh }),
@@ -42,8 +43,9 @@ function fixedWidthClasses(element: Element): string[] {
 }
 
 beforeEach(() => {
-  mocks.chooseTenant.mockReset().mockResolvedValue(undefined)
+  mocks.chooseTenant.mockReset().mockResolvedValue('ready')
   mocks.refresh.mockReset()
+  mocks.loadPage.mockReset()
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -82,6 +84,8 @@ describe('TenantChooser', () => {
 
     expect(mocks.chooseTenant).toHaveBeenCalledTimes(1)
     expect(mocks.chooseTenant).toHaveBeenCalledWith(9)
+    // La home la carica il browser da capo, non un redirect dell'azione.
+    expect(mocks.loadPage).toHaveBeenCalledWith('/')
   })
 
   it('reloads the list when the server refuses the choice', async () => {
@@ -91,6 +95,7 @@ describe('TenantChooser', () => {
     await act(async () => cards()[0].click())
 
     expect(mocks.refresh).toHaveBeenCalledTimes(1)
+    expect(mocks.loadPage).not.toHaveBeenCalled()
   })
 
   it('stays scrollable with twelve tenants', () => {

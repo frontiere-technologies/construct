@@ -1,10 +1,11 @@
 'use client'
 
 import { useTransition } from 'react'
-import { unstable_rethrow, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Building2 } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
 import { chooseTenant } from '@/lib/tenancy/tenant-actions'
+import { loadPage } from './load-page'
 
 /** Un tenant fra cui scegliere: l'id, il nome e il ruolo della persona lì. */
 export interface TenantChoice {
@@ -17,24 +18,26 @@ export interface TenantChoice {
  * La pagina di scelta (specifica 2026-10-21, §3.2, MT4-DEC-4): un saluto, la nota sul cambio dalla
  * barra laterale e una scheda per tenant con nome e ruolo. Le schede stanno in una griglia che va a
  * capo da sola; con molti tenant (almeno dieci) l'elenco ha un'altezza limitata e scorre, senza
- * larghezze fisse. Un clic sceglie: l'azione ricontrolla il tenant sul server e porta alla home.
+ * larghezze fisse. Un clic sceglie: l'azione ricontrolla il tenant sul server, poi il browser carica
+ * la home.
  */
 export function TenantChooser({ userName, tenants }: { userName: string; tenants: TenantChoice[] }) {
   const { t } = useI18n()
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
-  // Il rinvio alla home arriva come errore e va lasciato passare (unstable_rethrow). Un rifiuto
-  // (tenant non più disponibile dopo che la pagina è stata disegnata) ricarica l'elenco invece di
-  // far fallire la pagina.
+  // Dopo la scelta la home la carica il browser da capo (`loadPage`), non un rinvio dell'azione:
+  // vedi lib/tenancy/tenant-actions.ts. Un rifiuto (tenant non più disponibile dopo che la pagina è
+  // stata disegnata) ricarica l'elenco invece di far fallire la pagina.
   const handleChoose = (tenantId: number) => {
     startTransition(async () => {
       try {
         await chooseTenant(tenantId)
-      } catch (error) {
-        unstable_rethrow(error)
+      } catch {
         router.refresh()
+        return
       }
+      loadPage('/')
     })
   }
 
