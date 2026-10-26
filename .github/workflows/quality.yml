@@ -151,7 +151,8 @@ jobs:
         # verifica sopra, non letto da TEST_MIGRATION_DATABASE_URL: è il
         # contratto di provision-runtime-role in db.mjs. La password qui deve
         # combaciare con quella usata per sovrascrivere TEST_DATABASE_URL nel
-        # passo "Run database integration tests" più sotto.
+        # passo "Run database integration tests" e per DATABASE_URL nel passo
+        # "Start the app against the disposable database", più sotto.
         run: |
           MIGRATION_DATABASE_URL="$TEST_DATABASE_URL" \
           CONSTRUCT_RUNTIME_DB_USER=construct_app \
@@ -165,11 +166,17 @@ jobs:
           if not exists(select 1 from users u join user_role ur on ur.user_id=u.id and ur.id_role=1 where u.email='legacy-admin@example.com') then raise exception 'legacy administrator was not migrated'; end if;
           end \$\$;"
       - name: Seed isolated E2E users
+        # Dalla 0048 un ruolo richiede l'appartenenza al tenant (user_role_membership_fkey):
+        # prima l'appartenenza, poi i ruoli. Tutto nel tenant predefinito, che test-query
+        # imposta a livello di transazione (db.mjs, runDatabaseCommand); id_tenant lo riempie
+        # il default di colonna. I ruoli si cercano per system_key e nel tenant corrente, non
+        # per id: il superutente non vede la RLS, quindi il filtro sul tenant va scritto.
         run: >-
           node sources/devops/db/db.mjs test-query
           "insert into users(email, auth_provider) values ('admin-e2e@example.com','test'), ('user-e2e@example.com','test') on conflict(email) do nothing;
-          insert into user_role(user_id,id_role) select id,0 from users where email in ('admin-e2e@example.com','user-e2e@example.com') on conflict do nothing;
-          insert into user_role(user_id,id_role) select id,1 from users where email='admin-e2e@example.com' on conflict do nothing;"
+          insert into tenant_membership(user_id, status) select id, 'active' from users where email in ('admin-e2e@example.com','user-e2e@example.com') on conflict do nothing;
+          insert into user_role(user_id,id_role) select u.id, r.id_role from users u join role r on r.id_tenant = app_private.current_tenant_id() and r.system_key = 'REGISTERED' where u.email in ('admin-e2e@example.com','user-e2e@example.com') on conflict do nothing;
+          insert into user_role(user_id,id_role) select u.id, r.id_role from users u join role r on r.id_tenant = app_private.current_tenant_id() and r.system_key = 'TENANT_ADMIN' where u.email = 'admin-e2e@example.com' on conflict do nothing;"
       - name: Run database integration tests
         # Sovrascrive TEST_DATABASE_URL del job (il superutente) col login
         # limitato appena provisionato: è la connessione che la prova
@@ -183,8 +190,18 @@ jobs:
         working-directory: sources/microservices/web-construct
       - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
+      - name: Resolve the tenant subdomains used by test_tenants.py
+        # Chromium manda già *.localhost al computer locale, ma le richieste fatte
+        # senza browser (ctx.request di Playwright, dal processo Node) passano dal
+        # resolver di sistema: le due righe in /etc/hosts tolgono la dipendenza da
+        # come il runner risolve i sottodomini di localhost.
+        run: echo "127.0.0.1 a.localhost b.localhost" | sudo tee -a /etc/hosts
       - name: Start the app against the disposable database
-        run: DATABASE_URL="$TEST_DATABASE_URL" npm run dev > /tmp/construct-next.log 2>&1 &
+        # Con il login limitato del runtime, come in produzione e come la
+        # configurazione web-construct-e2e in locale, non con il superutente del
+        # job: il superutente salta la RLS, e l'isolamento fra tenant che
+        # test_tenants.py verifica passerebbe o fallirebbe per la ragione sbagliata.
+        run: DATABASE_URL="postgresql://construct_app:construct-app-ci-runtime-password@127.0.0.1:5432/construct_test" npm run dev > /tmp/construct-next.log 2>&1 &
         working-directory: sources/microservices/web-construct
       - name: Wait for the app
         run: |
