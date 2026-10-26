@@ -30,12 +30,15 @@ afterEach(() => {
   container = undefined
 })
 
-function render(initialEnabled: boolean) {
+function render(initialEnabled: boolean, selfRegistrationApplies = true) {
   act(() => {
     root = createRoot(container!)
-    root.render(<TenantSettings initialEnabled={initialEnabled} />)
+    root.render(<TenantSettings initialEnabled={initialEnabled} selfRegistrationApplies={selfRegistrationApplies} />)
   })
 }
+
+/** Quante volte compare l'etichetta dell'interruttore (non la sua spiegazione, `…_hint`). */
+const labelCount = () => (container!.textContent!.match(/tenancy\.settings\.self_registration(?!_)/g) ?? []).length
 
 const toggle = () => container!.querySelector<HTMLButtonElement>('[role="switch"]')!
 
@@ -60,6 +63,20 @@ describe('TenantSettings', () => {
     await act(async () => { toggle().click() })
     expect(mocks.setSelfRegistration).toHaveBeenCalledWith(false)
     expect(toggle().getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('shows the switch label once: the section has no heading with the same words', () => {
+    render(false)
+    expect(labelCount()).toBe(1)
+  })
+
+  // Senza un indirizzo dedicato chi si registra dall'indirizzo principale entra nel predefinito
+  // (MT4-DEC-9): l'interruttore lì non avrebbe effetto, quindi c'è una riga che lo spiega.
+  it('without an address of its own the tenant gets an explanation instead of the switch', () => {
+    render(true, false)
+    expect(container!.querySelector('[role="switch"]')).toBeNull()
+    expect(container!.textContent).toContain('tenancy.settings.self_registration_no_address')
+    expect(container!.textContent).toContain('tenancy.settings.title')
   })
 
   it('keeps the previous state and does not say saved when the action fails', async () => {

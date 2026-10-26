@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { tenantSettings } from '@/lib/db/schema'
-import { withTenant } from '@/lib/db/tenant-db'
-import type { TenantId } from './tenant-id'
+import { withGlobal, withTenant } from '@/lib/db/tenant-db'
+import { DEFAULT_TENANT_SLUG, type TenantId } from './tenant-id'
 
 /**
  * Se il tenant accetta registrazioni autonome (specifica 2026-10-21, MT4-DEC-10). Una riga mancante
@@ -28,4 +28,17 @@ export async function acceptsSelfRegistration(tenantId: TenantId): Promise<boole
       where t.id = ${tenantId} and t.status = 'active' and not t.is_template and s.self_registration
     ) as accepts`))
   return row?.accepts === true
+}
+
+/**
+ * Se l'interruttore delle registrazioni autonome ha effetto sul tenant (MT4-DEC-9, MT4-DEC-10): solo
+ * per il tenant predefinito, in cui entra chi si registra dall'indirizzo principale, e per un tenant
+ * con un indirizzo dedicato. Senza un indirizzo suo nessuno può registrarsi nel tenant, e la pagina
+ * delle impostazioni lo spiega al posto dell'interruttore.
+ */
+export async function selfRegistrationApplies(tenantId: TenantId): Promise<boolean> {
+  const [row] = await withGlobal(tx => tx.execute<{ applies: boolean }>(sql`
+    select exists (select 1 from public.tenant t where t.id = ${tenantId} and t.slug = ${DEFAULT_TENANT_SLUG})
+      or exists (select 1 from public.tenant_host h where h.id_tenant = ${tenantId}) as applies`))
+  return row?.applies === true
 }

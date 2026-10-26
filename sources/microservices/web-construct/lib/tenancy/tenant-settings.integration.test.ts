@@ -5,7 +5,7 @@ import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { getSystemRoleIds } from './system-roles'
-import { tenantIdForTest } from './testing'
+import { defaultTestTenant, tenantIdForTest } from './testing'
 import type { TenantId } from './tenant-id'
 
 /**
@@ -21,6 +21,7 @@ vi.mock('react', async importOriginal => ({
 }))
 
 const { setSelfRegistration } = await import('./tenant-settings-actions')
+const { selfRegistrationApplies } = await import('./tenant-settings')
 
 let A: TenantId
 let B: TenantId
@@ -116,6 +117,20 @@ describeIntegration('tenant settings: self-registration switch', () => {
     await setSelfRegistration(true)
     expect(await selfRegistrationOf(A)).toBe(true)
   })
+
+  it('self-registration applies to the default tenant and to a tenant with an address of its own only', async () => {
+    expect(await selfRegistrationApplies(defaultTestTenant())).toBe(true)
+    // A non ha indirizzi: dall'indirizzo principale si entra nel predefinito (MT4-DEC-9).
+    expect(await selfRegistrationApplies(A)).toBe(false)
+    const host = `zzz-ts-${unique()}.localhost`
+    await withOwner(tx => tx.execute(sql`insert into public.tenant_host (host, id_tenant, is_primary) values (${host}, ${A}, true)`))
+    try {
+      expect(await selfRegistrationApplies(A)).toBe(true)
+      expect(await selfRegistrationApplies(B)).toBe(false)
+    } finally {
+      await withOwner(tx => tx.execute(sql`delete from public.tenant_host where host = ${host}`))
+    }
+  }, 30_000)
 
   it('a user without manage-tenant-settings is refused', async () => {
     workingIn(registered, A)
