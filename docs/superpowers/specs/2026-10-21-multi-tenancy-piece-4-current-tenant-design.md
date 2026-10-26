@@ -240,4 +240,5 @@ ingresso diretto), senza costringere a rifare il login. **Scelta di progetto.**
 
 - Su `a.localhost` e `b.localhost` non si entra con Google fino al pezzo 6.
 - Il modello si modifica solo via SQL fino al pezzo 5.
+- Lingue e traduzioni (cataloghi globali, MT2-DEC-11) si modificano solo dagli attori del tenant predefinito fino al pezzo 5: negli altri tenant i permessi `manage-languages`, `edit-translations` e `manage-translation-keys` non valgono, anche per l'amministratore; la lettura resta.
 - La cache delle pagine si svuota per tutti a ogni modifica (DEF-4.5).

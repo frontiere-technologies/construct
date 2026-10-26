@@ -90,12 +90,17 @@ interface CrossTenantCase {
 const PERSONAL = 'preferenze personali: agisce solo sulla riga globale della persona della sessione, senza id e senza righe di tenant'
 const GLOBAL_LANGUAGES = 'catalogo globale delle lingue (MT2-DEC-11, DEF-2.4): gli id sono di righe globali, non esistono righe di B da chiedere'
 const GLOBAL_TRANSLATIONS = 'catalogo globale delle traduzioni (MT2-DEC-11, DEF-2.4): gli id sono di righe globali, non esistono righe di B da chiedere'
+// Le scritture dei cataloghi globali: fino al pezzo 5 le può fare solo un attore del tenant
+// predefinito (§5.3); il rifiuto per gli altri tenant è provato in
+// lib/i18n/global-catalog-tenant.integration.test.ts.
+const GLOBAL_LANGUAGES_WRITE = `${GLOBAL_LANGUAGES}; scrittura riservata al tenant predefinito fino al pezzo 5 (provata in global-catalog-tenant.integration.test.ts)`
+const GLOBAL_TRANSLATIONS_WRITE = `${GLOBAL_TRANSLATIONS}; scrittura riservata al tenant predefinito fino al pezzo 5 (provata in global-catalog-tenant.integration.test.ts)`
 const ANONYMOUS = 'anonima: nessun id di tenant in ingresso; il tenant, dove serve, viene dall\'indirizzo confrontato con il registro (Task 8)'
 
 const EXEMPT: Record<string, string> = {
   'app/(protected)/(admin)/admin/languages/page.tsx#default': GLOBAL_LANGUAGES,
-  'app/(protected)/(admin)/admin/translations/[keyId]/edit/page.tsx#default': GLOBAL_TRANSLATIONS,
-  'app/(protected)/(admin)/admin/translations/create/page.tsx#default': GLOBAL_TRANSLATIONS,
+  'app/(protected)/(admin)/admin/translations/[keyId]/edit/page.tsx#default': GLOBAL_TRANSLATIONS_WRITE,
+  'app/(protected)/(admin)/admin/translations/create/page.tsx#default': GLOBAL_TRANSLATIONS_WRITE,
   'app/(protected)/(admin)/admin/translations/page.tsx#default': GLOBAL_TRANSLATIONS,
   'app/(protected)/[...slug]/page.tsx#default': 'la home per qualunque percorso: non riceve id e non legge righe di tenant (il menu lo disegna il layout)',
   'app/(protected)/page.tsx#default': 'la home: non riceve id e non legge righe di tenant (il menu lo disegna il layout)',
@@ -117,14 +122,14 @@ const EXEMPT: Record<string, string> = {
   'app/api/i18n/translations-grid/route.ts#POST': GLOBAL_TRANSLATIONS,
   'app/no-tenant/page.tsx#default': 'il messaggio "non configurato": legge solo lo stato della sessione, nessun id e nessuna riga di tenant',
   'lib/appearance-actions.ts#saveAppearance': PERSONAL,
-  'lib/i18n/language-actions.ts#createLanguage': GLOBAL_LANGUAGES,
-  'lib/i18n/language-actions.ts#deleteLanguage': GLOBAL_LANGUAGES,
-  'lib/i18n/language-actions.ts#setDefaultLanguage': GLOBAL_LANGUAGES,
-  'lib/i18n/language-actions.ts#setLanguageActive': GLOBAL_LANGUAGES,
-  'lib/i18n/language-actions.ts#updateLanguage': GLOBAL_LANGUAGES,
-  'lib/i18n/translation-actions.ts#createTranslationKey': GLOBAL_TRANSLATIONS,
-  'lib/i18n/translation-actions.ts#deleteTranslationKey': GLOBAL_TRANSLATIONS,
-  'lib/i18n/translation-actions.ts#saveTranslations': GLOBAL_TRANSLATIONS,
+  'lib/i18n/language-actions.ts#createLanguage': GLOBAL_LANGUAGES_WRITE,
+  'lib/i18n/language-actions.ts#deleteLanguage': GLOBAL_LANGUAGES_WRITE,
+  'lib/i18n/language-actions.ts#setDefaultLanguage': GLOBAL_LANGUAGES_WRITE,
+  'lib/i18n/language-actions.ts#setLanguageActive': GLOBAL_LANGUAGES_WRITE,
+  'lib/i18n/language-actions.ts#updateLanguage': GLOBAL_LANGUAGES_WRITE,
+  'lib/i18n/translation-actions.ts#createTranslationKey': GLOBAL_TRANSLATIONS_WRITE,
+  'lib/i18n/translation-actions.ts#deleteTranslationKey': GLOBAL_TRANSLATIONS_WRITE,
+  'lib/i18n/translation-actions.ts#saveTranslations': GLOBAL_TRANSLATIONS_WRITE,
   'lib/i18n/user-language-actions.ts#getPreferredLanguage': PERSONAL,
   'lib/i18n/user-language-actions.ts#setPreferredLanguage': PERSONAL,
   'lib/profile-actions.ts#saveProfile': PERSONAL,

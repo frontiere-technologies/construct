@@ -3,7 +3,7 @@ import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole } from '@/lib/db/schema'
 import { evaluateAuthorization } from '@/lib/auth-policy'
 import { ensureDefaultMembership, isMembershipStatus, type MembershipStatus } from '@/lib/tenancy/membership'
-import type { TenantId } from '@/lib/tenancy/tenant-id'
+import { DEFAULT_TENANT_SLUG, type TenantId } from '@/lib/tenancy/tenant-id'
 import type { SystemRoleIds } from '@/lib/tenancy/system-roles'
 
 type UserAuthorization = { accountActive: boolean; roleIds: number[]; isAdmin: boolean }
@@ -22,6 +22,11 @@ export interface AuthorizationSnapshot {
   tenantEligible: boolean | null
   /** Solo con `host`: il nome del tenant della transazione, per la sessione. */
   tenantName: string | null
+  /**
+   * Il tenant della transazione è il predefinito: solo lì si scrivono i cataloghi globali fino al
+   * pezzo 5 (`GLOBAL_CATALOG_WRITE_CODES` in `actor.ts`).
+   */
+  tenantIsDefault: boolean
 }
 
 type SnapshotRow = {
@@ -34,6 +39,7 @@ type SnapshotRow = {
   permission_codes: string[] | null
   tenant_eligible: boolean | null
   tenant_name: string | null
+  tenant_is_default: boolean | null
 }
 
 /**
@@ -80,7 +86,8 @@ export async function selectAuthorizationSnapshot(
       coalesce((select array_agg(ur.id_role order by ur.id_role)::text[] from public.user_role ur where ur.user_id = ${userId}), '{}') as role_ids,
       ${codes} as permission_codes,
       ${tenantEligible} as tenant_eligible,
-      ${tenantName} as tenant_name
+      ${tenantName} as tenant_name,
+      exists (select 1 from public.tenant t where t.id = app_private.current_tenant_id() and t.slug = ${DEFAULT_TENANT_SLUG}) as tenant_is_default
   `)
   if (row.registered === null || row.tenant_admin === null) throw new Error('system roles missing')
   return {
@@ -93,6 +100,7 @@ export async function selectAuthorizationSnapshot(
     permissionCodes: row.permission_codes ?? [],
     tenantEligible: row.tenant_eligible,
     tenantName: row.tenant_name,
+    tenantIsDefault: row.tenant_is_default === true,
   }
 }
 
