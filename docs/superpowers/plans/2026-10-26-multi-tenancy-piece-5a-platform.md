@@ -144,9 +144,9 @@ it('TENANT_ADMIN holds read-tenant-audit in default, template and a fresh copy',
   - guardia: nessun file fuori da `lib/platform/**` importa `lib/platform/db` (e i test d'integrazione dedicati);
   - `boundary-check`: l'identità di piattaforma esiste solo se configurata, è membro di `construct_owner` con NOINHERIT, non ha BYPASSRLS né superuser, e il ruolo dell'app non ne è membro.
 
-- [ ] **Step 1: Test** — `withPlatform` scrive `tenant` e `tenant_host`; senza `set local role` non potrebbe (verifica 42501 con una connessione dell'app); la guardia fallisce con un import finto fuori da `lib/platform`.
-- [ ] **Step 2–4:** come sopra; `npm run test:integration -- lib/platform`, `npx vitest run guards`, `npm run test:env-contract`, `boundary-check` sul database di prova.
-- [ ] **Step 5: Commit** — `feat(platform): dedicated database identity reachable only from lib/platform`
+- [✅] **Step 1: Test** — `withPlatform` scrive `tenant` e `tenant_host`; senza `set local role` non potrebbe (verifica 42501 con una connessione dell'app); la guardia fallisce con un import finto fuori da `lib/platform`.
+- [✅] **Step 2–4:** come sopra; `npm run test:integration -- lib/platform`, `npx vitest run guards`, `npm run test:env-contract`, `boundary-check` sul database di prova.
+- [✅] **Step 5: Commit** — `feat(platform): dedicated database identity reachable only from lib/platform`
 
 ---
 
