@@ -256,11 +256,19 @@ export function appSourceFiles(): string[] {
  */
 export const SIGNED_IN_PAGES_OUTSIDE_PROTECTED = ['app/select-tenant/page.tsx', 'app/no-tenant/page.tsx']
 
+/**
+ * Le pagine della console della piattaforma (pezzo 5a, MT5-DEC-3): sotto `app/platform/`, fuori da
+ * `(protected)` perché il layout protetto disegna il menu di un tenant. Ogni pagina nuova lì sotto
+ * entra nell'inventario da sola, senza che nessuno la aggiunga a mano.
+ */
+export const PLATFORM_PAGES = /^app\/platform\/(.*\/)?page\.tsx$/
+
 export function scannedFiles(): string[] {
   return appSourceFiles()
     .filter(path =>
       /^app\/api\/.*\/route\.ts$/.test(path)
       || /^app\/\(protected\)\/.*\/?page\.tsx$/.test(path)
+      || PLATFORM_PAGES.test(path)
       || SIGNED_IN_PAGES_OUTSIDE_PROTECTED.includes(path)
       || isServerActionsSource(readFileSync(path, 'utf8'), path))
 }

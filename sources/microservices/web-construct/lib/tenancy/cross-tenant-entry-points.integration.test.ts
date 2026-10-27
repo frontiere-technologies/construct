@@ -95,6 +95,12 @@ const GLOBAL_TRANSLATIONS = 'catalogo globale delle traduzioni (MT2-DEC-11, DEF-
 // lib/i18n/global-catalog-tenant.integration.test.ts.
 const GLOBAL_LANGUAGES_WRITE = `${GLOBAL_LANGUAGES}; scrittura riservata al tenant predefinito fino al pezzo 5 (provata in global-catalog-tenant.integration.test.ts)`
 const GLOBAL_TRANSLATIONS_WRITE = `${GLOBAL_TRANSLATIONS}; scrittura riservata al tenant predefinito fino al pezzo 5 (provata in global-catalog-tenant.integration.test.ts)`
+// Le porte della console (pezzo 5a): non ricevono id di tenant e non leggono righe di tenant; un
+// amministratore di tenant che non è di piattaforma è rifiutato dalla guardia, provato in
+// lib/platform/platform-console.integration.test.ts e lib/platform/platform-admin-actions.integration.test.ts.
+// Che nessuna porta della piattaforma esca dai conteggi e dalle email degli amministratori (MT5-OK-2)
+// lo prova lib/platform/tenant-service.integration.test.ts.
+const PLATFORM_DOOR = 'porta della console: riservata all\'amministratore di piattaforma (la guardia lo rilegge dal database), nessun id di tenant in ingresso; dai tenant escono solo conteggi ed email degli amministratori (MT5-OK-2)'
 const ANONYMOUS = 'anonima: nessun id di tenant in ingresso; il tenant, dove serve, viene dall\'indirizzo confrontato con il registro (Task 8)'
 
 const EXEMPT: Record<string, string> = {
@@ -120,7 +126,10 @@ const EXEMPT: Record<string, string> = {
   'app/api/i18n/preferences/language/route.ts#GET': PERSONAL,
   'app/api/i18n/preferences/language/route.ts#PUT': PERSONAL,
   'app/api/i18n/translations-grid/route.ts#POST': GLOBAL_TRANSLATIONS,
+  'app/api/platform/tenants-grid/route.ts#POST': PLATFORM_DOOR,
   'app/no-tenant/page.tsx#default': 'il messaggio "non configurato": legge solo lo stato della sessione, nessun id e nessuna riga di tenant',
+  'app/platform/admins/page.tsx#default': PLATFORM_DOOR,
+  'app/platform/page.tsx#default': PLATFORM_DOOR,
   'lib/appearance-actions.ts#saveAppearance': PERSONAL,
   'lib/i18n/language-actions.ts#createLanguage': GLOBAL_LANGUAGES_WRITE,
   'lib/i18n/language-actions.ts#deleteLanguage': GLOBAL_LANGUAGES_WRITE,
@@ -132,6 +141,8 @@ const EXEMPT: Record<string, string> = {
   'lib/i18n/translation-actions.ts#saveTranslations': GLOBAL_TRANSLATIONS_WRITE,
   'lib/i18n/user-language-actions.ts#getPreferredLanguage': PERSONAL,
   'lib/i18n/user-language-actions.ts#setPreferredLanguage': PERSONAL,
+  'lib/platform/platform-admin-actions.ts#addPlatformAdmin': `${PLATFORM_DOOR}; agisce su un account globale, non su una riga di tenant`,
+  'lib/platform/platform-admin-actions.ts#removePlatformAdmin': `${PLATFORM_DOOR}; agisce su un account globale, non su una riga di tenant`,
   'lib/profile-actions.ts#saveProfile': PERSONAL,
   'lib/tenancy/tenant-actions.ts#refreshTenant': 'non riceve id: chiede al callback jwt di ricalcolare un token in choose/none, che sceglie solo fra i tenant disponibili (Task 4, Task 5)',
 }

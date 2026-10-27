@@ -1,4 +1,5 @@
 import { and, eq, isNull, lte, ne } from 'drizzle-orm'
+import type { PlatformAuditTx } from '@/lib/audit/audit-types'
 import { withGlobal, withTenant, type AnyTx, type TenantTx } from '@/lib/db/tenant-db'
 import { passwordSetTokens, users } from '@/lib/db/schema'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
@@ -18,7 +19,7 @@ export interface PreparedInvitation {
  * voce del registro): token, appartenenza e voce stanno o cadono insieme (MT5-DEC-15).
  */
 export async function prepareInvitationIn(
-  transaction: AnyTx,
+  transaction: AnyTx | PlatformAuditTx,
   email: string,
   requestedBy?: string,
 ): Promise<PreparedInvitation | null> {

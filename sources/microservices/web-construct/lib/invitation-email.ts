@@ -1,7 +1,7 @@
 import { sendEmail } from '@/lib/mailer'
 import { createLogger } from '@/lib/logger'
 import { recordInvitationDelivery, type PreparedInvitation } from '@/lib/auth-invitations'
-import { tenantBaseUrl } from '@/lib/tenancy/tenant-base-url'
+import { mainBaseUrl, tenantBaseUrl } from '@/lib/tenancy/tenant-base-url'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 
 const log = createLogger('invitation-email')
@@ -44,9 +44,21 @@ function buildText(setPasswordUrl: string): string {
  * richiesta. Non lancia: chi chiama decide cosa rispondere in base al risultato.
  */
 export async function sendInvitationEmail(invitation: PreparedInvitation, tenantId: TenantId): Promise<InvitationEmailResult> {
+  return deliverInvitation(invitation, () => tenantBaseUrl(tenantId))
+}
+
+/**
+ * Come `sendInvitationEmail`, ma con il link verso l'indirizzo principale (`AUTH_URL`): per chi non
+ * è in nessun tenant, come un amministratore di piattaforma nominato dalla console (MT5-DEC-23).
+ */
+export async function sendMainAddressInvitationEmail(invitation: PreparedInvitation): Promise<InvitationEmailResult> {
+  return deliverInvitation(invitation, async () => mainBaseUrl())
+}
+
+async function deliverInvitation(invitation: PreparedInvitation, resolveBaseUrl: () => Promise<string>): Promise<InvitationEmailResult> {
   let baseUrl: string
   try {
-    baseUrl = await tenantBaseUrl(tenantId)
+    baseUrl = await resolveBaseUrl()
   } catch (err) {
     // Senza AUTH_URL il codice resta quello di oggi; un registro che non si legge è un'altra cosa.
     const code = err instanceof Error && err.message === 'server_configuration' ? 'server_configuration' : 'base_url_unavailable'

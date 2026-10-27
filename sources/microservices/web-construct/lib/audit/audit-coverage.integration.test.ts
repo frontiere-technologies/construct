@@ -16,6 +16,7 @@ import {
 import { createLanguage, deleteLanguage, setDefaultLanguage, setLanguageActive, updateLanguage } from '@/lib/i18n/language-actions'
 import { createTranslationKey, deleteTranslationKey, saveTranslations } from '@/lib/i18n/translation-actions'
 import { createNavigationItem, deleteNavigationItem, moveNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'
+import { addPlatformAdmin, removePlatformAdmin } from '@/lib/platform/platform-admin-actions'
 import { createRole, deleteRole, renameRole, updateRolePermissions } from '@/lib/rbac/roles-actions'
 import { FUNCTYPE_EXTERNAL_LINK, USER_STATUS_DEACTIVATED, type CreateNavItemInput } from '@/lib/rbac/types'
 import { addUserByEmail, setUserStatus, updateUserRoles } from '@/lib/rbac/users-actions'
@@ -66,7 +67,10 @@ vi.mock('react', async importOriginal => ({
   cache: <T>(fn: T) => fn,
 }))
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ info: () => undefined, warn: () => undefined, error: () => undefined }) }))
-vi.mock('@/lib/invitation-email', () => ({ sendInvitationEmail: async () => ({ ok: true }) }))
+vi.mock('@/lib/invitation-email', () => ({
+  sendInvitationEmail: async () => ({ ok: true }),
+  sendMainAddressInvitationEmail: async () => ({ ok: true }),
+}))
 vi.mock('@/lib/auth-rate-limit', () => ({
   enforceAuthRateLimit: async () => undefined,
   AuthRateLimitExceeded: class AuthRateLimitExceeded extends Error {},
@@ -87,6 +91,7 @@ const EXEMPT: Record<string, string> = {
   'app/api/i18n/languages-grid/route.ts#POST': READ,
   'app/api/i18n/preferences/language/route.ts#PUT': PERSONAL,
   'app/api/i18n/translations-grid/route.ts#POST': READ,
+  'app/api/platform/tenants-grid/route.ts#POST': READ,
   'app/api/rbac/roles-grid/route.ts#POST': READ,
   'app/api/rbac/users-grid/route.ts#POST': READ,
   'lib/appearance-actions.ts#saveAppearance': PERSONAL,
@@ -110,6 +115,7 @@ let adminA: Person
 let memberA: Person
 let person: Person
 let catalogAdmin: Person
+let platformAdmin: Person
 let allowedDomain: string
 let hostA: string
 let readMenuPermission: number
@@ -125,6 +131,7 @@ const state = {
   languageId: 0,
   languageCode: '',
   keyId: 0,
+  platformAdminEmail: '',
 }
 
 async function createUser(label: string): Promise<Person> {
@@ -210,7 +217,7 @@ async function tenantRows(tenantId: TenantId = A): Promise<AuditRow[]> {
 
 /** Le voci del registro della piattaforma scritte dalle persone di questo test (le altre non sono sue). */
 async function platformRows(): Promise<AuditRow[]> {
-  const actors = [adminA.id, memberA.id, catalogAdmin.id, person.id]
+  const actors = [adminA.id, memberA.id, catalogAdmin.id, person.id, platformAdmin.id]
   return withOwner(tx => tx.select({
     id: platformAuditEvent.id, idTenant: platformAuditEvent.idTenant, operation: platformAuditEvent.operation, objectType: platformAuditEvent.objectType,
     objectId: platformAuditEvent.objectId, actorKind: platformAuditEvent.actorKind, actorUserId: platformAuditEvent.actorUserId,
@@ -233,8 +240,10 @@ interface AuditCase {
   /** L'export vero: confrontato con l'inventario. */
   entry: unknown
   sink: 'tenant' | 'platform'
-  /** Chi riesce: l'amministratore di A (predefinito), l'amministratore del tenant predefinito o la persona che si registra. */
-  as?: 'adminA' | 'catalogAdmin' | 'self'
+  /** Chi riesce: l'amministratore di A (predefinito), l'amministratore del tenant predefinito, l'amministratore di piattaforma o la persona che si registra. */
+  as?: 'adminA' | 'catalogAdmin' | 'platformAdmin' | 'self'
+  /** La veste scritta nella voce: la persona del tenant (predefinita) o la piattaforma (console). */
+  kind?: 'person' | 'platform'
   /** Prepara lo stato prima della chiamata che riesce. */
   arrange?: () => Promise<void>
   /** Una chiamata che dev'essere rifiutata; di norma la stessa `run` con la sessione di un membro senza permessi. */
@@ -408,6 +417,21 @@ const CASES: Record<string, AuditCase> = {
     run: async () => { expect(await deleteTranslationKey(state.keyId)).toEqual({ error: null }) },
     expected: [{ operation: 'translation.key.delete', objectType: 'translation_key', objectId: () => state.keyId }],
   },
+  // La console: l'attore è l'amministratore di piattaforma, la veste è «platform», nessun tenant toccato.
+  'lib/platform/platform-admin-actions.ts#addPlatformAdmin': {
+    entry: addPlatformAdmin, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    run: async () => {
+      state.platformAdminEmail = `zzz_audit_padmin_${unique()}@example.test`
+      createdEmails.push(state.platformAdminEmail)
+      expect(await addPlatformAdmin(state.platformAdminEmail)).toEqual({ ok: true, invited: true })
+    },
+    expected: [{ operation: 'platform.admin.add', objectType: 'user', objectId: () => userIdOf(state.platformAdminEmail) }],
+  },
+  'lib/platform/platform-admin-actions.ts#removePlatformAdmin': {
+    entry: removePlatformAdmin, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    run: async () => { expect(await removePlatformAdmin(await userIdOf(state.platformAdminEmail))).toEqual({ ok: true }) },
+    expected: [{ operation: 'platform.admin.remove', objectType: 'user', objectId: () => userIdOf(state.platformAdminEmail) }],
+  },
 }
 
 function languageInput(over: Partial<{ name: string; isActive: boolean }> = {}) {
@@ -474,6 +498,9 @@ describeIntegration('every door that writes records its audit row in the same tr
     memberA = await createUser('member')
     person = await createUser('person')
     catalogAdmin = await createUser('catalog')
+    platformAdmin = await createUser('platform')
+    // L'attributo lo scrive solo il proprietario (un trigger lo nega al ruolo dell'app).
+    await withOwner(tx => tx.update(users).set({ isPlatformAdmin: true }).where(eq(users.id, platformAdmin.id)))
     await addMember(A, adminA.id, true)
     await addMember(A, memberA.id, false)
     await addMember(A, person.id, false)
@@ -507,7 +534,7 @@ describeIntegration('every door that writes records its audit row in the same tr
     }))
     await step(cleanupTestData)
     await step(() => withOwner(tx => tx.delete(platformAuditEvent).where(inArray(
-      platformAuditEvent.actorUserId, [adminA.id, memberA.id, catalogAdmin.id, person.id, TEST_ACTOR_ID]))))
+      platformAuditEvent.actorUserId, [adminA.id, memberA.id, catalogAdmin.id, person.id, platformAdmin.id, TEST_ACTOR_ID]))))
     await step(() => withOwner(tx => tx.delete(allowedDomains).where(eq(allowedDomains.domain, allowedDomain))))
     if (createdEmails.length > 0) {
       await step(() => withGlobal(tx => tx.delete(users).where(inArray(users.email, createdEmails))))
@@ -532,18 +559,19 @@ describeIntegration('every door that writes records its audit row in the same tr
       expect(await rowsOf(c.sink), 'a refused call left an audit row').toEqual(before)
 
       // Riuscita: voci attese, nello stesso ordine, scritte da chi ha agito.
-      mocks.session = sessionOf(c.as === 'catalogAdmin' ? catalogAdmin : adminA, c.as === 'catalogAdmin' ? DEFAULT : A)
+      const signedIn = c.as === 'catalogAdmin' ? catalogAdmin : c.as === 'platformAdmin' ? platformAdmin : adminA
+      mocks.session = sessionOf(signedIn, c.as === 'catalogAdmin' ? DEFAULT : A)
       await c.arrange?.()
       const lastId = (await rowsOf(c.sink)).reduce((max, row) => Math.max(max, row.id), 0)
       await c.run()
       const written = (await rowsOf(c.sink)).filter(row => row.id > lastId)
 
       expect(written.map(row => row.operation)).toEqual(c.expected.map(entry => entry.operation))
-      const actor = c.actor ? await c.actor() : (c.as === 'catalogAdmin' ? catalogAdmin : adminA)
+      const actor = c.actor ? await c.actor() : signedIn
       for (const [index, expected] of c.expected.entries()) {
         expect(written[index].objectType).toBe(expected.objectType)
         expect(written[index].objectId).toBe(String(await expected.objectId()))
-        expect(written[index].actorKind).toBe('person')
+        expect(written[index].actorKind).toBe(c.kind ?? 'person')
         expect(written[index].actorUserId).toBe(actor.id)
         // L'email è quella dell'account al momento dell'azione.
         expect(written[index].actorEmail).toBe(actor.email)

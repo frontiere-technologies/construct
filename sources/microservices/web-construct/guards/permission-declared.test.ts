@@ -195,6 +195,8 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'app/(protected)/profile/page.tsx#default': 'allowAnyAuthenticated',
   'app/(protected)/settings/page.tsx#default': 'allowAnyAuthenticated',
   'app/no-tenant/page.tsx#default': 'allowAnyAuthenticated',
+  'app/platform/admins/page.tsx#default': 'requirePlatformAdminPage',
+  'app/platform/page.tsx#default': 'requirePlatformAdminPage',
   'app/select-tenant/page.tsx#default': 'allowAnyAuthenticated',
   'app/api/admin/send-invite/route.ts#POST': 'invite-users',
   'app/api/auth/change-password/route.ts#POST': 'allowSelfService',
@@ -209,6 +211,7 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'app/api/i18n/preferences/language/route.ts#GET': 'allowSelfService',
   'app/api/i18n/preferences/language/route.ts#PUT': 'allowSelfService',
   'app/api/i18n/translations-grid/route.ts#POST': 'read-translations',
+  'app/api/platform/tenants-grid/route.ts#POST': 'requirePlatformAdmin',
   'app/api/rbac/roles-grid/route.ts#POST': 'read-roles',
   'app/api/rbac/users-grid/route.ts#POST': 'read-users',
   'lib/appearance-actions.ts#saveAppearance': 'allowSelfService',
@@ -222,6 +225,8 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/i18n/translation-actions.ts#saveTranslations': 'edit-translations',
   'lib/i18n/user-language-actions.ts#getPreferredLanguage': 'allowSelfService',
   'lib/i18n/user-language-actions.ts#setPreferredLanguage': 'allowSelfService',
+  'lib/platform/platform-admin-actions.ts#addPlatformAdmin': 'requirePlatformAdmin',
+  'lib/platform/platform-admin-actions.ts#removePlatformAdmin': 'requirePlatformAdmin',
   'lib/profile-actions.ts#saveProfile': 'allowSelfService',
   'lib/rbac/navigation-actions.ts#createNavigationItem': 'manage-menu',
   'lib/rbac/navigation-actions.ts#deleteNavigationItem': 'manage-menu',
@@ -269,6 +274,10 @@ describe('permission declared', () => {
     expect(files).toContain('app/(protected)/(admin)/functionalities/page.tsx')
     expect(files).toContain('app/(protected)/page.tsx')
     for (const page of SIGNED_IN_PAGES_OUTSIDE_PROTECTED) expect(files).toContain(page)
+    // La console della piattaforma, fuori da (protected): ogni pagina sotto app/platform/.
+    expect(files).toContain('app/platform/page.tsx')
+    expect(files).toContain('app/platform/admins/page.tsx')
+    expect(files).toContain('app/api/platform/tenants-grid/route.ts')
   })
 
   it('declares access first in every server action, route handler and protected page', () => {

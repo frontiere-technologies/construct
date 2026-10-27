@@ -193,6 +193,7 @@ const AUDIT_OPERATION_FILES = [
   'app/api/admin/send-invite/route.ts',
   'lib/i18n/language-actions.ts',
   'lib/i18n/translation-actions.ts',
+  'lib/platform/platform-admin-actions.ts',
 ]
 const NOT_A_KEY = [
   // Structured-log field names for pino, not user-facing copy.
