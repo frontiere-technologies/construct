@@ -10,6 +10,7 @@ import { prepareInvitationIn } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
 import { createLogger } from '@/lib/logger'
 import { addTenantMember, MEMBERSHIP_ACTIVE, MEMBERSHIP_DEACTIVATED } from '@/lib/tenancy/membership'
+import { assertTenantActive } from '@/lib/tenancy/tenant-status'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { emailSchema, roleIdsSchema, userIdSchema, userStatusSchema } from './action-input-schemas'
 import { assertCanChangeRoles, assertCanChangeStatus, symmetricDifference } from './grant-guards'
@@ -145,6 +146,8 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
   // Account (se manca), token d'invito e appartenenza nascono in una transazione sola, nel tenant
   // dell'attore, insieme alla voce del registro: o tutto o niente (MT5-DEC-15).
   const invitation = await withTenant(actor.tenantId, async tx => {
+    // Un tenant sospeso o archiviato non manda inviti né aggiunge persone (MT5-DEC-25).
+    await assertTenantActive(tx)
     const prepared = await prepareInvitationIn(tx, normalizedEmail, actor.userId)
     const userId = prepared?.userId ?? await findUserIdByEmail(tx, normalizedEmail)
     const added = await addTenantMember(tx, userId)

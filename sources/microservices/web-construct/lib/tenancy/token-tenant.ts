@@ -3,7 +3,7 @@ import { isActiveAccount } from '@/lib/auth-policy'
 import { users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { resolveTenantAuthorization, resolveUserAuthorization } from '@/lib/rbac/auth-roles'
-import { hasDeactivatedMembershipOnHost, listAvailableTenants, resolveHostTenant } from './host-tenants'
+import { hasDeactivatedMembershipOnHost, hasInactiveMembershipOnHost, listAvailableTenants, resolveHostTenant } from './host-tenants'
 import { ensureDefaultMembership } from './membership'
 import { normalizeHost } from './request-host'
 import { toTenantId } from './tenant-id'
@@ -20,6 +20,9 @@ import { selectTenant, type TenantState } from './tenant-selection'
  * - `accountActive`: in `ready` account e appartenenza attivi nel tenant; in `choose` e `none` solo
  *   l'account globale, così la persona resta riconosciuta e può arrivare alla scelta o al messaggio.
  * - `roleIds`: i ruoli nel tenant, vuoti fuori da `ready`.
+ * - `tenantNoneReason`: solo con `tenantState === 'none'`: `suspended` se l'unico tenant della
+ *   persona sull'indirizzo è sospeso o archiviato (MT5-DEC-7, MT5-DEC-8), altrimenti `null` (il
+ *   messaggio generico). Si ricalcola quando il token entra in `none`, non a ogni richiesta.
  * - `isPlatformAdmin`: l'attributo dell'account (MT5-DEC-1): serve al proxy per portare
  *   l'amministratore di piattaforma alla console; non è mai una decisione, che ogni porta della
  *   console riprende dal database. Fuori da `ready` vale solo sull'indirizzo principale: la console
@@ -32,8 +35,12 @@ export interface TokenTenant {
   tenantName: string | null
   accountActive: boolean
   roleIds: number[]
+  tenantNoneReason: TenantNoneReason
   isPlatformAdmin: boolean
 }
+
+/** Perché la persona non ha un tenant sull'indirizzo: `suspended` se ce l'ha, ma sospeso o archiviato. */
+export type TenantNoneReason = 'suspended' | null
 
 const TENANT_STATES: readonly TenantState[] = ['ready', 'choose', 'none']
 
@@ -113,6 +120,8 @@ export async function enterTenant(
       tenantName: null,
       accountActive: isActiveAccount(person?.status),
       roleIds: [],
+      // Solo senza nessun tenant disponibile: una lettura in più, che chi sceglie fra più tenant non paga.
+      tenantNoneReason: selection.state === 'none' && (await hasInactiveMembershipOnHost(userId, host)) ? 'suspended' : null,
       isPlatformAdmin: platformAdminOf(person),
     }
   }
@@ -124,6 +133,7 @@ export async function enterTenant(
     tenantName: available.find(tenant => tenant.tenantId === selection.tenantId)?.name ?? null,
     accountActive: authorization.accountActive,
     roleIds: authorization.roleIds,
+    tenantNoneReason: null,
     isPlatformAdmin: authorization.isPlatformAdmin,
   }
 }
@@ -170,6 +180,7 @@ export async function revalidateTokenTenant(
       tenantName: authorization.tenantName,
       accountActive: true,
       roleIds: authorization.roleIds,
+      tenantNoneReason: null,
       isPlatformAdmin: authorization.isPlatformAdmin,
     }
   }
@@ -182,6 +193,8 @@ export async function revalidateTokenTenant(
     tenantName: null,
     accountActive: isActiveAccount(person?.status),
     roleIds: [],
+    // Il token lo ricalcola chi ci arriva (accesso, «Riprova»): qui resta com'era, così la pagina non cambia messaggio da sola.
+    tenantNoneReason: token.tenantState === 'none' && token.tenantNoneReason === 'suspended' ? 'suspended' : null,
     isPlatformAdmin: platformAdminOf(person),
   }
 }
@@ -238,6 +251,7 @@ export async function updateTokenTenant(
     tenantName: chosen.name,
     accountActive: authorization.accountActive,
     roleIds: authorization.roleIds,
+    tenantNoneReason: null,
     isPlatformAdmin: authorization.isPlatformAdmin,
   }
 }

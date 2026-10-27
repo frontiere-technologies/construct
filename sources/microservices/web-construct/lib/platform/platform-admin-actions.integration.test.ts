@@ -203,12 +203,20 @@ describeIntegration('addPlatformAdmin', () => {
   it('keeps the person an administrator when the email cannot be sent, and says no invitation went out', async () => {
     mocks.sendInvite.mockResolvedValue({ ok: false, code: 'email_delivery_failed' })
     const email = address('mailfail')
-    expect(await addPlatformAdmin(email)).toEqual({ ok: true, invited: false })
+    // Un risultato a parte: la console deve dire che l'invito non è partito e come recuperare.
+    expect(await addPlatformAdmin(email)).toEqual({ ok: true, invited: false, inviteFailed: true })
     const account = await userByEmail(email)
     createdUserIds.push(account.id)
     expect(account.isPlatformAdmin).toBe(true)
     // La voce c'è lo stesso: la modifica è avvenuta.
     expect(await auditOf(account.id)).toHaveLength(1)
+  }, 30_000)
+
+  it('says the same when the email sender throws', async () => {
+    mocks.sendInvite.mockRejectedValue(new Error('smtp down'))
+    const email = address('mailthrow')
+    expect(await addPlatformAdmin(email)).toEqual({ ok: true, invited: false, inviteFailed: true })
+    createdUserIds.push((await userByEmail(email)).id)
   }, 30_000)
 
   it('does nothing and writes nothing for an account that already is an administrator', async () => {

@@ -83,6 +83,32 @@ describe('PlatformAdmins', () => {
     expect(document.querySelector('[role="status"]')?.textContent).toBe('platform.admins.add.done_invited')
   })
 
+  it('tells the operator the invitation was not sent, and how to recover, when the email failed', async () => {
+    add.mockResolvedValue({ ok: true, invited: false, inviteFailed: true })
+    render([ME])
+    await click(buttonNamed('platform.admins.add.open'))
+    type(emailField(), 'nuovo@esempio.it')
+    await click(buttonNamed('platform.admins.add.submit'))
+    // Un messaggio a parte, che si legge come un avviso e non come «Amministratore aggiunto».
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('platform.admins.add.done_invite_failed')
+    expect(document.querySelector('[role="status"]')).toBe(null)
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the email after a successful add, so the dialog cannot add the same person twice by mistake', async () => {
+    add.mockResolvedValue({ ok: true, invited: true })
+    render([ME])
+    await click(buttonNamed('platform.admins.add.open'))
+    type(emailField(), 'nuovo@esempio.it')
+    await click(buttonNamed('platform.admins.add.submit'))
+    expect(emailField().value).toBe('')
+    expect(buttonNamed('platform.admins.add.submit').disabled).toBe(true)
+    // L'esito resta leggibile finché non si scrive di nuovo.
+    expect(document.querySelector('[role="status"]')?.textContent).toBe('platform.admins.add.done_invited')
+    type(emailField(), 'altro@esempio.it')
+    expect(document.querySelector('[role="status"]')).toBe(null)
+  })
+
   it('does not call the action for an email that is not one', async () => {
     render([ME])
     await click(buttonNamed('platform.admins.add.open'))
@@ -131,11 +157,22 @@ describe('PlatformAdmins', () => {
     expect(refresh).not.toHaveBeenCalled()
   })
 
-  it('disables removing the last active administrator and says why', () => {
+  it('disables removing the last active administrator and says why, in visible text the button points to', () => {
     render([ME, DEACTIVATED])
     const button = rowOf('me@example.test').querySelector('button')!
     expect(button.disabled).toBe(true)
-    expect(button.title).toBe('platform.admins.remove.last_hint')
+    // Il motivo è testo nella pagina (non un `title`, che su un bottone spento non si vede da tastiera né da touch).
+    const hint = document.getElementById(button.getAttribute('aria-describedby')!)
+    expect(hint?.textContent).toBe('platform.admins.remove.last_hint')
+    expect(rowOf('me@example.test').textContent).toContain('platform.admins.remove.last_hint')
+    expect(button.title).toBe('')
+  })
+
+  it('shows no hint on a button that can be used', () => {
+    render([ME, OTHER])
+    const button = rowOf('other@example.test').querySelector('button')!
+    expect(button.getAttribute('aria-describedby')).toBe(null)
+    expect(rowOf('other@example.test').textContent).not.toContain('last_hint')
   })
 
   it('allows removing anyone while two administrators are active', () => {

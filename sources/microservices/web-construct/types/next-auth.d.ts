@@ -1,4 +1,5 @@
 import { DefaultSession } from 'next-auth'
+import type { TenantNoneReason } from '@/lib/tenancy/token-tenant'
 import type { TenantState } from '@/lib/tenancy/tenant-selection'
 
 declare module 'next-auth' {
@@ -12,6 +13,8 @@ declare module 'next-auth' {
       tenantState: TenantState
       tenantId: number | null
       tenantName: string | null
+      // Con `tenantState === 'none'`: `suspended` se l'unico tenant della persona sull'indirizzo è sospeso o archiviato (pezzo 5a, MT5-DEC-7).
+      tenantNoneReason: TenantNoneReason
       // Un indizio per il menu e il proxy (pezzo 5a, MT5-DEC-3): ogni porta della console rilegge l'attributo dal database.
       isPlatformAdmin: boolean
     } & DefaultSession['user']
@@ -29,6 +32,7 @@ declare module 'next-auth/jwt' {
     tenantState?: TenantState
     tenantHost?: string | null
     tenantName?: string | null
+    tenantNoneReason?: TenantNoneReason
     isPlatformAdmin?: boolean
   }
 }

@@ -24,6 +24,10 @@ import { createNavigationItem, deleteNavigationItem, moveNavigationItem, updateN
 import { createRole, deleteRole, renameRole, updateRolePermissions } from '@/lib/rbac/roles-actions'
 import { FUNCTYPE_EMBEDDED_PAGE, FUNCTYPE_EXTERNAL_LINK, USER_STATUS_DEACTIVATED, type CreateNavItemInput } from '@/lib/rbac/types'
 import { addUserByEmail, setUserStatus, updateUserRoles } from '@/lib/rbac/users-actions'
+import PlatformTenantPage from '@/app/platform/tenants/[tenantId]/page'
+import {
+  addTenantAdmin, addTenantHost, createTenant as createPlatformTenant, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus,
+} from '@/lib/platform/tenant-actions'
 import { saveAppTheme } from '@/lib/theme-actions'
 import { getSystemRoleIds } from './system-roles'
 import { chooseTenant } from './tenant-actions'
@@ -448,6 +452,53 @@ const CASES: Record<string, CrossTenantCase> = {
       expect(result).toEqual({ saved: true, error: null })
       const [row] = await withOwner(tx => tx.select({ color: appTheme.primaryColor }).from(appTheme), A)
       expect(row).toEqual({ color: A_THEME_COLOR })
+    },
+  },
+
+  // --- Le porte della console che nominano un tenant (pezzo 5a, Task 8) ---------------------------
+  // La sessione dei casi è l'amministratore di A: un amministratore di tenant, non di piattaforma. La
+  // guardia rilegge l'attributo dal database e rifiuta, e B (tenant, indirizzi, persone, token) resta com'era.
+  'lib/platform/tenant-actions.ts#createTenant': {
+    entry: createPlatformTenant,
+    run: async () => {
+      await expect(createPlatformTenant({ name: 'ZZZ preso da A', slug: `zzz-xt-new-${unique()}`.slice(0, 40), adminEmail: bOtherEmail }))
+        .rejects.toThrow('Unauthorized')
+    },
+  },
+  'lib/platform/tenant-actions.ts#setTenantStatus': {
+    entry: setTenantStatus,
+    run: async () => {
+      await expect(setTenantStatus(Number(B), 'suspended')).rejects.toThrow('Unauthorized')
+      await expect(setTenantStatus(Number(B), 'archived', 'preso da A')).rejects.toThrow('Unauthorized')
+    },
+  },
+  'lib/platform/tenant-actions.ts#addTenantHost': {
+    entry: addTenantHost,
+    run: async () => { await expect(addTenantHost(Number(B), `zzz-xt-${unique()}.example.test`, true)).rejects.toThrow('Unauthorized') },
+  },
+  'lib/platform/tenant-actions.ts#setPrimaryHost': {
+    entry: setPrimaryHost,
+    run: async () => { await expect(setPrimaryHost(Number(B), 'b.example.test')).rejects.toThrow('Unauthorized') },
+  },
+  'lib/platform/tenant-actions.ts#removeTenantHost': {
+    entry: removeTenantHost,
+    run: async () => { await expect(removeTenantHost(Number(B), 'b.example.test')).rejects.toThrow('Unauthorized') },
+  },
+  'lib/platform/tenant-actions.ts#addTenantAdmin': {
+    entry: addTenantAdmin,
+    run: async () => { await expect(addTenantAdmin(Number(B), bOtherEmail)).rejects.toThrow('Unauthorized') },
+  },
+  'lib/platform/tenant-actions.ts#resendTenantInvite': {
+    entry: resendTenantInvite,
+    run: async () => {
+      // bUser è l'amministratore di B senza password: un invito per lui creerebbe un token (l'impronta lo vedrebbe).
+      await expect(resendTenantInvite(Number(B), bUser)).rejects.toThrow('Unauthorized')
+    },
+  },
+  'app/platform/tenants/[tenantId]/page.tsx#default': {
+    entry: PlatformTenantPage,
+    run: async () => {
+      await expect(PlatformTenantPage({ params: Promise.resolve({ tenantId: String(B) }) })).rejects.toThrow('NEXT_NOT_FOUND')
     },
   },
 

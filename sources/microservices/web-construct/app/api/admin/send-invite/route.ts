@@ -7,6 +7,7 @@ import { deniedActor } from '@/lib/rbac/route-denial'
 import { prepareInvitation } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
 import { tenantMemberEmail } from '@/lib/tenancy/membership'
+import { assertTenantActive, TenantInactiveError } from '@/lib/tenancy/tenant-status'
 
 const log = createLogger('admin:send-invite')
 
@@ -33,11 +34,18 @@ export async function POST(req: NextRequest) {
     // Il token e la voce del registro nascono nella stessa transazione, nel tenant di chi invita.
     invitation = await prepareInvitation(email, actor.userId, {
       tenantId: actor.tenantId,
-      record: (tx, prepared) => recordTenantAudit(tx, auditActorOf(actor), {
-        operation: 'member.invite', objectType: 'user', objectId: prepared.userId, details: { expiresAt: prepared.expiresAt },
-      }),
+      record: async (tx, prepared) => {
+        // Un tenant sospeso o archiviato non manda inviti (MT5-DEC-25): l'errore annulla anche il token.
+        await assertTenantActive(tx)
+        await recordTenantAudit(tx, auditActorOf(actor), {
+          operation: 'member.invite', objectType: 'user', objectId: prepared.userId, details: { expiresAt: prepared.expiresAt },
+        })
+      },
     })
   } catch (err) {
+    if (err instanceof TenantInactiveError) {
+      return NextResponse.json({ error: 'Il tenant è sospeso: gli inviti sono bloccati.' }, { status: 409 })
+    }
     log.error({ err }, 'failed to prepare invite token')
     return NextResponse.json({ error: 'Errore interno.' }, { status: 500 })
   }

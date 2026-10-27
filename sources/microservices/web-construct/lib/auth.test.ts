@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   listAvailableTenants: vi.fn(),
   resolveHostTenant: vi.fn(),
   hasDeactivatedMembershipOnHost: vi.fn(),
+  hasInactiveMembershipOnHost: vi.fn(),
   isDedicatedHost: vi.fn(),
   ensureDefaultMembership: vi.fn(),
   resolveUserAuthorization: vi.fn(),
@@ -76,6 +77,7 @@ vi.mock('@/lib/tenancy/host-tenants', () => ({
   listAvailableTenants: mocks.listAvailableTenants,
   resolveHostTenant: mocks.resolveHostTenant,
   hasDeactivatedMembershipOnHost: mocks.hasDeactivatedMembershipOnHost,
+  hasInactiveMembershipOnHost: mocks.hasInactiveMembershipOnHost,
   isDedicatedHost: mocks.isDedicatedHost,
 }))
 vi.mock('@/lib/tenancy/membership', async importOriginal => ({
@@ -173,6 +175,7 @@ beforeEach(() => {
   mocks.listAvailableTenants.mockReset().mockResolvedValue(tenants(DEFAULT_TENANT))
   mocks.resolveHostTenant.mockReset().mockResolvedValue(DEFAULT_TENANT)
   mocks.hasDeactivatedMembershipOnHost.mockReset().mockResolvedValue(false)
+  mocks.hasInactiveMembershipOnHost.mockReset().mockResolvedValue(false)
   mocks.isDedicatedHost.mockReset().mockResolvedValue(false)
   mocks.ensureDefaultMembership.mockReset().mockResolvedValue('active')
   mocks.resolveUserAuthorization.mockReset().mockResolvedValue(ROLES)
@@ -335,6 +338,32 @@ describe('tenant chosen at sign-in (MT4-DEC-4, MT4-DEC-15, MT4-DEC-16)', () => {
     expect(mocks.resolveUserAuthorization).toHaveBeenCalledWith(OTHER_TENANT, USER.id, true)
     const session = await sessionOf(token)
     expect(session.user).toMatchObject({ id: USER.id, tenantState: 'ready', tenantId: OTHER_TENANT, tenantName: `Tenant ${OTHER_TENANT}`, roleIds: [0] })
+  })
+
+  it('sign-in with no tenant available and a suspended one on the address gives none with the suspended reason, and the session carries it (MT5-DEC-7)', async () => {
+    mocks.listAvailableTenants.mockResolvedValue([])
+    mocks.hasInactiveMembershipOnHost.mockResolvedValue(true)
+
+    const token = await signInToken()
+
+    expect(token).toMatchObject({ tenantState: 'none', tenantId: null, tenantNoneReason: 'suspended' })
+    expect(mocks.hasInactiveMembershipOnHost).toHaveBeenCalledWith(USER.id, 'localhost')
+    expect((await sessionOf(token)).user).toMatchObject({ tenantState: 'none', tenantNoneReason: 'suspended' })
+  })
+
+  it('a session in none without the reason, or in another state, carries no reason; the generic message stays', async () => {
+    mocks.listAvailableTenants.mockResolvedValue([])
+    const token = await signInToken()
+    expect(token).toMatchObject({ tenantState: 'none', tenantNoneReason: null })
+    expect((await sessionOf(token)).user).toMatchObject({ tenantNoneReason: null })
+    // Un motivo rimasto in un token che non è più `none` non esce.
+    expect((await sessionOf({ ...token, tenantState: 'choose', tenantNoneReason: 'suspended' })).user).toMatchObject({ tenantNoneReason: null })
+  })
+
+  it('does not look for a suspended tenant when the person has one to work in or to choose from', async () => {
+    mocks.listAvailableTenants.mockResolvedValue(tenants(DEFAULT_TENANT, OTHER_TENANT))
+    await signInToken()
+    expect(mocks.hasInactiveMembershipOnHost).not.toHaveBeenCalled()
   })
 
   it('sign-in with several tenants and no last tenant gives state choose', async () => {

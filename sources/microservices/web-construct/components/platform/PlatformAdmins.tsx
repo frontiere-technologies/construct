@@ -29,6 +29,7 @@ export function PlatformAdmins({ admins, currentUserId }: Props) {
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<PlatformAdminRow | null>(null)
   const [removeFailed, setRemoveFailed] = useState(false)
+  const hintPrefix = useId()
 
   const activeCount = admins.filter(admin => admin.active).length
 
@@ -83,13 +84,19 @@ export function PlatformAdmins({ admins, currentUserId }: Props) {
                     </span>
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <Button
-                      variant="outline" size="sm" disabled={isLastActive}
-                      title={isLastActive ? t('platform.admins.remove.last_hint') : undefined}
-                      onClick={() => { setRemoveFailed(false); setRemoving(admin) }}
-                    >
-                      {t('platform.admins.remove.action')}
-                    </Button>
+                    <div className="flex flex-col items-end gap-1">
+                      <Button
+                        variant="outline" size="sm" disabled={isLastActive}
+                        aria-describedby={isLastActive ? `${hintPrefix}-${admin.id}` : undefined}
+                        onClick={() => { setRemoveFailed(false); setRemoving(admin) }}
+                      >
+                        {t('platform.admins.remove.action')}
+                      </Button>
+                      {/* Il perché è testo nella pagina: un `title` su un bottone spento non si legge da tastiera né da touch. */}
+                      {isLastActive && (
+                        <span id={`${hintPrefix}-${admin.id}`} className="max-w-48 text-xs text-muted-foreground">{t('platform.admins.remove.last_hint')}</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )
@@ -114,7 +121,7 @@ export function PlatformAdmins({ admins, currentUserId }: Props) {
   )
 }
 
-type Outcome = { kind: 'done' | 'done_invited' | 'invalid' | 'error' } | null
+type Outcome = { kind: 'done' | 'done_invited' | 'done_invite_failed' | 'invalid' | 'error' } | null
 
 /** Il dialogo si monta solo da aperto: riaprendolo, il campo e l'esito ripartono da zero. */
 function AddAdminDialog({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
@@ -133,7 +140,9 @@ function AddAdminDialog({ onClose, onAdded }: { onClose: () => void; onAdded: ()
     setBusy(true); setOutcome(null)
     try {
       const result = await addPlatformAdmin(email)
-      setOutcome({ kind: result.invited ? 'done_invited' : 'done' })
+      setOutcome({ kind: result.inviteFailed ? 'done_invite_failed' : result.invited ? 'done_invited' : 'done' })
+      // Il campo si svuota: l'esito resta leggibile e lo stesso invio non si ripete per sbaglio.
+      setEmail('')
       onAdded()
     } catch {
       setOutcome({ kind: 'error' })
@@ -152,6 +161,9 @@ function AddAdminDialog({ onClose, onAdded }: { onClose: () => void; onAdded: ()
         <div className="mt-3 min-h-5 text-sm">
           {(outcome?.kind === 'done' || outcome?.kind === 'done_invited') && (
             <p role="status" className="text-foreground">{t(`platform.admins.add.${outcome.kind}`)}</p>
+          )}
+          {outcome?.kind === 'done_invite_failed' && (
+            <p role="alert" className="text-warning-muted-foreground">{t('platform.admins.add.done_invite_failed')}</p>
           )}
           {outcome?.kind === 'invalid' && <p role="alert" className="text-destructive-muted-foreground">{t('platform.admins.add.invalid_email')}</p>}
           {outcome?.kind === 'error' && <p role="alert" className="text-destructive-muted-foreground">{t('platform.admins.add.error')}</p>}

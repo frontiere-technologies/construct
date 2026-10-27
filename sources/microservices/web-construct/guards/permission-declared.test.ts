@@ -197,6 +197,7 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'app/no-tenant/page.tsx#default': 'allowAnyAuthenticated',
   'app/platform/admins/page.tsx#default': 'requirePlatformAdminPage',
   'app/platform/page.tsx#default': 'requirePlatformAdminPage',
+  'app/platform/tenants/[tenantId]/page.tsx#default': 'requirePlatformAdminPage',
   'app/select-tenant/page.tsx#default': 'allowAnyAuthenticated',
   'app/api/admin/send-invite/route.ts#POST': 'invite-users',
   'app/api/auth/change-password/route.ts#POST': 'allowSelfService',
@@ -227,6 +228,13 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/i18n/user-language-actions.ts#setPreferredLanguage': 'allowSelfService',
   'lib/platform/platform-admin-actions.ts#addPlatformAdmin': 'requirePlatformAdmin',
   'lib/platform/platform-admin-actions.ts#removePlatformAdmin': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#addTenantAdmin': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#addTenantHost': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#createTenant': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#removeTenantHost': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#resendTenantInvite': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#setPrimaryHost': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#setTenantStatus': 'requirePlatformAdmin',
   'lib/profile-actions.ts#saveProfile': 'allowSelfService',
   'lib/rbac/navigation-actions.ts#createNavigationItem': 'manage-menu',
   'lib/rbac/navigation-actions.ts#deleteNavigationItem': 'manage-menu',
@@ -277,6 +285,7 @@ describe('permission declared', () => {
     // La console della piattaforma, fuori da (protected): ogni pagina sotto app/platform/.
     expect(files).toContain('app/platform/page.tsx')
     expect(files).toContain('app/platform/admins/page.tsx')
+    expect(files).toContain('app/platform/tenants/[tenantId]/page.tsx')
     expect(files).toContain('app/api/platform/tenants-grid/route.ts')
   })
 

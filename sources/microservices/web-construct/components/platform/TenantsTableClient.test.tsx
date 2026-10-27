@@ -13,17 +13,20 @@ import { TenantsTableClient } from './TenantsTableClient'
  * La griglia vera (ag-grid) non si disegna in jsdom: qui se ne legge la configurazione, cioè le
  * colonne, i filtri e come ogni cella mostra una riga (specifica 2026-10-26, MT5-DEC-4).
  */
-const grid = vi.hoisted(() => ({ props: null as null | { columnDefs: ColDef<PlatformTenantRow>[]; initialFilterModel?: unknown; initialSortModel?: unknown } }))
+const grid = vi.hoisted(() => ({ props: null as null | { columnDefs: ColDef<PlatformTenantRow>[]; initialFilterModel?: unknown; initialSortModel?: unknown; onRowClicked?: (row: PlatformTenantRow) => void } }))
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }))
 vi.mock('@/components/grid/DataGrid', () => ({
   GRID_BLOCK_SIZE: 50,
   DataGrid: (props: NonNullable<typeof grid.props>) => { grid.props = props; return <div data-testid="grid" /> },
 }))
 vi.mock('@/components/grid/GridToolbar', () => ({ GridToolbar: () => <div data-testid="toolbar" /> }))
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => nav,
   usePathname: () => '/platform',
   useSearchParams: () => new URLSearchParams(),
 }))
+// Il modulo vero è una server action: arriva al database, che qui non c'è.
+vi.mock('@/lib/platform/tenant-actions', () => ({ createTenant: vi.fn() }))
 vi.mock('@/context/I18nContext', () => ({
   useI18n: () => ({ t: (key: string) => key, fmt: { date: (value: string) => `date:${value}` } }),
 }))
@@ -44,7 +47,7 @@ const defaultProps: TenantsUrlParams = {
 let root: Root | undefined
 let container: HTMLDivElement | undefined
 
-beforeEach(() => { grid.props = null })
+beforeEach(() => { grid.props = null; nav.push.mockReset() })
 afterEach(() => {
   act(() => root?.unmount())
   container?.remove()
@@ -118,5 +121,20 @@ describe('TenantsTableClient', () => {
       .toEqual(['active', 'suspended', 'archived'])
     expect(props.initialFilterModel).toMatchObject({ status: { value: 'archived' }, name: { filter: 'Ac' } })
     expect(props.initialSortModel).toEqual([{ colId: 'name', sort: 'asc' }])
+  })
+
+  it('opens the tenant page when a row is clicked', () => {
+    const props = render()
+    props.onRowClicked!(base)
+    expect(nav.push).toHaveBeenCalledWith('/platform/tenants/7')
+  })
+
+  it('opens the new-tenant dialog from the "New tenant" button', () => {
+    render()
+    const button = container!.querySelector<HTMLButtonElement>('[data-testid="new-tenant"]')!
+    expect(button.textContent).toBe('platform.tenants.new')
+    expect(document.querySelector('[role="dialog"]')).toBe(null)
+    act(() => button.click())
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('platform.tenant.new.title')
   })
 })

@@ -37,11 +37,25 @@ export async function platformTransaction<T>(
   }
   return platformDatabase().transaction(async tx => {
     await tx.execute(sql`set local role construct_owner`)
-    if (tenantId !== undefined) {
-      await tx.execute(sql.raw(`select set_config('app.tenant_id', '${tenantId}', true)`))
-    }
+    if (tenantId !== undefined) await setTransactionTenant(tx, tenantId)
     return fn(tx)
   })
+}
+
+/** Imposta il tenant della transazione: un intero positivo, l'unico valore che entra nel testo SQL (MTP-DEC-3). */
+async function setTransactionTenant(tx: PlatformTransaction, tenantId: number): Promise<void> {
+  if (!Number.isSafeInteger(tenantId) || tenantId <= 0) throw new Error('invalid tenant id')
+  await tx.execute(sql.raw(`select set_config('app.tenant_id', '${tenantId}', true)`))
+}
+
+/**
+ * Passa, dentro una transazione della piattaforma già aperta, al tenant indicato. Serve a chi crea
+ * il tenant nella stessa transazione (la console: il tenant nuovo non esiste prima di aprirla) e
+ * deve scrivere subito la sua voce nel registro del tenant. Il tenant vale fino alla fine della
+ * transazione, come con `platformTransaction`.
+ */
+export async function enterTenantInPlatformTransaction(tx: PlatformTransaction, tenantId: number): Promise<void> {
+  await setTransactionTenant(tx, tenantId)
 }
 
 /** Per i test di integrazione: chiude il pool, così il processo può uscire. */

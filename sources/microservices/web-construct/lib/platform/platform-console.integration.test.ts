@@ -13,6 +13,7 @@ import { POST } from '@/app/api/platform/tenants-grid/route'
 import PlatformLayout from '@/app/platform/layout'
 import PlatformTenantsPage from '@/app/platform/page'
 import PlatformAdminsPage from '@/app/platform/admins/page'
+import PlatformTenantPage from '@/app/platform/tenants/[tenantId]/page'
 
 /**
  * La console contro il database vero (specifica 2026-10-26, MT5-DEC-3, MT5-DEC-4): il suo layout,
@@ -40,6 +41,7 @@ vi.mock('@/lib/logger', () => ({ createLogger: () => ({ info: () => undefined, w
 vi.mock('@/components/Layout', () => ({ Layout: () => null }))
 vi.mock('@/components/platform/TenantsTableClient', () => ({ TenantsTableClient: () => null }))
 vi.mock('@/components/platform/PlatformAdmins', () => ({ PlatformAdmins: () => null }))
+vi.mock('@/components/platform/TenantDetail', () => ({ TenantDetail: () => null }))
 vi.mock('@/lib/platform/db', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/platform/db')>()
   return { ...actual, withPlatform: vi.fn(actual.withPlatform) }
@@ -215,5 +217,33 @@ describeIntegration('the console pages and layout', () => {
       { props: { children: { props: Record<string, unknown> } } }
     const grid = element.props.children
     expect(grid.props).toMatchObject({ status: 'archived', sortField: 'slug', sortDir: 'DESC', search: 'Ac' })
+  })
+})
+
+describeIntegration('the tenant page', () => {
+  const pageOf = (tenantId: string) => PlatformTenantPage({ params: Promise.resolve({ tenantId }) })
+
+  it('renders the tenant of the id for a platform admin, with its data for the detail component', async () => {
+    mocks.session = sessionOf(platformAdmin)
+    const element = await pageOf('1') as unknown as { props: { title: string; subtitle: string; children: { props: { tenant: { id: number; slug: string } } } } }
+    expect(element.props.subtitle).toBe('default')
+    expect(element.props.children.props.tenant).toMatchObject({ id: 1, slug: 'default' })
+  })
+
+  it.each(['999999999', 'abc', '0', '-3', '1.5', '', '1e3', '99999999999999999999'])('is a 404 for the id %j', async id => {
+    mocks.session = sessionOf(platformAdmin)
+    await expect(pageOf(id)).rejects.toThrow('NEXT_NOT_FOUND')
+  })
+
+  it('is a 404 for a tenant administrator, a signed-out visitor and a dedicated address, and reads nothing', async () => {
+    vi.mocked(withPlatform).mockClear()
+    mocks.session = sessionOf(tenantAdmin, true)
+    await expect(pageOf('1')).rejects.toThrow('NEXT_NOT_FOUND')
+    mocks.session = null
+    await expect(pageOf('1')).rejects.toThrow('NEXT_NOT_FOUND')
+    mocks.session = sessionOf(platformAdmin)
+    mocks.headers = new Headers({ host: dedicatedHost })
+    await expect(pageOf('1')).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(withPlatform).not.toHaveBeenCalled()
   })
 })

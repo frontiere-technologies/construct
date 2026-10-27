@@ -278,6 +278,8 @@ const nextAuth = NextAuth({
       session.user.tenantState = token.tenantState ?? 'none'
       session.user.tenantId = accountActive && ready ? token.tenantId ?? null : null
       session.user.tenantName = ready ? token.tenantName ?? null : null
+      // Solo per il messaggio «spazio sospeso» della pagina senza tenant (MT5-DEC-7).
+      session.user.tenantNoneReason = token.tenantState === 'none' && token.tenantNoneReason === 'suspended' ? 'suspended' : null
       // Solo un indizio per il menu e il proxy (MT5-DEC-3): la console decide dal database.
       session.user.isPlatformAdmin = accountActive && token.isPlatformAdmin === true
       return session
@@ -302,6 +304,7 @@ function applyTokenTenant(token: JWT, tenant: TokenTenant): void {
   token.tenantName = tenant.tenantName
   token.accountActive = tenant.accountActive
   token.roleIds = tenant.roleIds
+  token.tenantNoneReason = tenant.tenantNoneReason
   token.isPlatformAdmin = tenant.isPlatformAdmin
 }
 

@@ -14,6 +14,8 @@ import {
   TENANT_STATUSES, tenantsFilterModelToSearchParams, tenantsUrlParamsToFilterModel, tenantsUrlParamsToSortModel,
   type PlatformTenantRow, type TenantsGridFilterModel, type TenantsUrlParams,
 } from '@/lib/platform/tenants-grid-query'
+import { Button } from '@/components/ui/button'
+import { NewTenantDialog } from './NewTenantDialog'
 import { TenantStatusBadge } from './TenantStatusBadge'
 import { createTenantsDatasource } from './tenants-datasource'
 
@@ -25,7 +27,8 @@ type Cell = { data?: PlatformTenantRow }
 /**
  * L'elenco dei tenant della console (specifica 2026-10-26, MT5-DEC-4): nome, slug, indirizzo
  * principale, stato, persone attive, amministratori, data di creazione. Il modello arriva in cima
- * dal server, segnato a parte; gli archiviati si vedono solo con il filtro di stato. Le persone attive
+ * dal server, segnato a parte; gli archiviati si vedono solo con il filtro di stato. Un clic sulla riga
+ * apre la scheda del tenant; «Nuovo tenant» apre il modulo di creazione (MT5-DEC-5, MT5-DEC-6). Le persone attive
  * e gli amministratori si contano tenant per tenant e non si ordinano né si filtrano.
  */
 export function TenantsTableClient(props: TenantsUrlParams) {
@@ -34,6 +37,7 @@ export function TenantsTableClient(props: TenantsUrlParams) {
   const pathname = usePathname()
   const sp = useSearchParams()
   const [gridApi, setGridApi] = useState<GridApi<PlatformTenantRow> | null>(null)
+  const [creating, setCreating] = useState(false)
   const gridApiRef = useRef<GridApi<PlatformTenantRow> | null>(null)
 
   const gridUrlSync = useGridUrlSync(pathname, sp.toString(), url => router.replace(url))
@@ -87,6 +91,9 @@ export function TenantsTableClient(props: TenantsUrlParams) {
 
   return (
     <>
+      <div className="mb-3 flex justify-end">
+        <Button size="sm" data-testid="new-tenant" onClick={() => setCreating(true)}>{t('platform.tenants.new')}</Button>
+      </div>
       <GridToolbar
         gridApi={gridApi}
         columns={columnLabels}
@@ -104,8 +111,15 @@ export function TenantsTableClient(props: TenantsUrlParams) {
           const active = event.api.getColumnState().find(column => column.sort)
           setParam({ sort: active?.colId ?? null, direction: active ? (active.sort === 'asc' ? 'ASC' : 'DESC') : null })
         }}
+        onRowClicked={row => router.push(`/platform/tenants/${row.id}`)}
         onGridReady={(event: GridReadyEvent<PlatformTenantRow>) => { gridApiRef.current = event.api; setGridApi(event.api) }}
       />
+      {creating && (
+        <NewTenantDialog
+          onClose={() => setCreating(false)}
+          onCreated={() => gridApi?.refreshInfiniteCache()}
+        />
+      )}
     </>
   )
 }

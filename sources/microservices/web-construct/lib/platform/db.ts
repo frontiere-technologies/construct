@@ -1,4 +1,4 @@
-import { closePlatformDatabase, platformTransaction, type PlatformTransaction } from '@/lib/db/platform-database'
+import { closePlatformDatabase, enterTenantInPlatformTransaction, platformTransaction, type PlatformTransaction } from '@/lib/db/platform-database'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 
 /** Una transazione dell'identità di piattaforma, già passata a construct_owner. */
@@ -22,6 +22,15 @@ export type PlatformTx = PlatformTransaction & { readonly __txBrand: 'PlatformTx
  */
 export function withPlatform<T>(fn: (tx: PlatformTx) => Promise<T>, tenantId?: TenantId): Promise<T> {
   return platformTransaction(tx => fn(tx as PlatformTx), tenantId)
+}
+
+/**
+ * Passa al tenant indicato dentro la transazione di piattaforma già aperta: per la creazione di un
+ * tenant, che nasce nella transazione e vi scrive subito la voce del suo registro. Per un tenant che
+ * esiste già si apre `withPlatform(fn, tenantId)`. Un intero positivo, o fallisce.
+ */
+export function enterTenant(tx: PlatformTx, tenantId: number): Promise<void> {
+  return enterTenantInPlatformTransaction(tx, tenantId)
 }
 
 /** Solo per i test di integrazione: chiude il pool dell'identità di piattaforma. */

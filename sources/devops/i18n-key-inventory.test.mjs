@@ -194,6 +194,7 @@ const AUDIT_OPERATION_FILES = [
   'lib/i18n/language-actions.ts',
   'lib/i18n/translation-actions.ts',
   'lib/platform/platform-admin-actions.ts',
+  'lib/platform/tenant-actions.ts',
 ]
 const NOT_A_KEY = [
   // Structured-log field names for pino, not user-facing copy.

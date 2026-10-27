@@ -42,7 +42,22 @@ afterEach(() => {
   container?.remove()
 })
 
+function renderWith(props: React.ComponentProps<typeof TenantNotConfigured>) {
+  act(() => root?.render(<TenantNotConfigured {...props} />))
+}
+
 describe('TenantNotConfigured', () => {
+  it('shows the generic message by default', () => {
+    expect(container!.querySelector('[data-testid="no-tenant-message"]')!.textContent).toBe('tenancy.none.message')
+  })
+
+  it('shows the suspended message when the only tenant of the person on this address is suspended or archived (MT5-DEC-7)', () => {
+    renderWith({ suspended: true })
+    expect(container!.querySelector('[data-testid="no-tenant-message"]')!.textContent).toBe('tenancy.suspended.message')
+    // Riprova e Esci restano: la riattivazione si scopre ricalcolando il tenant.
+    expect(retryButton()).toBeDefined()
+  })
+
   it('loads the home in the browser when the retry finds a tenant', async () => {
     mocks.refreshTenant.mockResolvedValue('ready')
 

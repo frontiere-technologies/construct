@@ -3,7 +3,8 @@ import { tenant, tenantHost } from '@/lib/db/schema'
 import { escapeLikePattern, normalizeTextSearch, type TextSearch } from '@/lib/grid-text-search'
 import { nextDay } from '@/lib/rbac/date-utils'
 import { requirePlatformAdmin } from '@/lib/rbac/auth-guard'
-import { withPlatform } from './db'
+import { DEFAULT_TENANT_SLUG } from '@/lib/tenancy/tenant-id'
+import { enterTenant, withPlatform } from './db'
 import type { PlatformTenantRow, PlatformTenantsQuery, PlatformTenantStatus, TenantSortField } from './tenants-grid-query'
 
 export type { PlatformTenantRow, PlatformTenantsQuery, PlatformTenantStatus } from './tenants-grid-query'
@@ -91,6 +92,69 @@ export async function listTenantsForPlatform(query: PlatformTenantsQuery): Promi
         createdAt: new Date(row.createdAt).toISOString(),
       })),
       total,
+    }
+  })
+}
+
+/** Un amministratore del tenant com'è nella scheda: l'id serve a rimandargli l'invito. */
+export type PlatformTenantAdmin = { userId: string; email: string; hasPassword: boolean }
+
+/** La scheda di un tenant (MT5-DEC-6): i dati, gli indirizzi, gli amministratori. */
+export type PlatformTenantDetail = {
+  id: number
+  slug: string
+  name: string
+  status: PlatformTenantStatus
+  isTemplate: boolean
+  isDefault: boolean
+  createdAt: string
+  hosts: { host: string; isPrimary: boolean }[]
+  admins: PlatformTenantAdmin[]
+}
+
+/**
+ * La scheda di un tenant per la console, o `null` se non esiste. Come l'elenco, una porta della
+ * piattaforma: verifica l'amministratore prima di aprire la transazione. Dal tenant esce solo ciò
+ * che la scheda deve mostrare (MT5-OK-2): gli amministratori attivi (email, e se hanno già una
+ * password, per sapere a chi rimandare l'invito), nient'altro delle sue persone. Il modello non ha
+ * persone: la scheda non le cerca.
+ */
+export async function getTenantForPlatform(tenantId: number): Promise<PlatformTenantDetail | null> {
+  await requirePlatformAdmin()
+  if (!Number.isSafeInteger(tenantId) || tenantId <= 0) return null
+
+  return withPlatform(async tx => {
+    const [row] = await tx.select().from(tenant).where(eq(tenant.id, tenantId)).limit(1)
+    if (!row) return null
+    const hosts = await tx.select({ host: tenantHost.host, isPrimary: tenantHost.isPrimary })
+      .from(tenantHost).where(eq(tenantHost.idTenant, tenantId)).orderBy(desc(tenantHost.isPrimary), asc(tenantHost.host))
+
+    let admins: PlatformTenantAdmin[] = []
+    if (!row.isTemplate) {
+      await enterTenant(tx, tenantId)
+      // Stessi requisiti di app_private.count_active_admins: appartenenza attiva, account attivo, ruolo TENANT_ADMIN.
+      const found = await tx.execute<{ user_id: string; email: string; has_password: boolean }>(sql`
+        select distinct u.id as user_id, u.email, (u.password_hash is not null) as has_password
+        from public.tenant_membership m
+        join public.users u on u.id = m.user_id
+        join public.user_role ur on ur.id_tenant = m.id_tenant and ur.user_id = m.user_id
+        join public.role r on r.id_tenant = ur.id_tenant and r.id_role = ur.id_role
+        where m.id_tenant = ${tenantId} and m.status = 'active' and u.id_user_status = 2
+          and r.system_key = 'TENANT_ADMIN' and u.email is not null
+        order by u.email`)
+      admins = found.map(admin => ({ userId: admin.user_id, email: admin.email, hasPassword: admin.has_password }))
+    }
+
+    return {
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      status: row.status as PlatformTenantStatus,
+      isTemplate: row.isTemplate,
+      isDefault: row.slug === DEFAULT_TENANT_SLUG,
+      createdAt: new Date(row.createdAt).toISOString(),
+      hosts,
+      admins,
     }
   })
 }

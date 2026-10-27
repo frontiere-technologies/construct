@@ -22,9 +22,9 @@ const log = createLogger('platform-admin-actions')
  * password (nuovo, o mai invitato) riceve un invito d'accesso: il token nasce nella stessa
  * transazione, l'email parte dopo il commit verso l'indirizzo principale (la persona non è in
  * nessun tenant) e non entra mai nel registro (MT5-RISK-4). Un invio che fallisce si registra nel
- * log e lascia la nomina com'è: `invited` dice se l'invito è partito.
+ * log e lascia la nomina com'è: `invited` dice se l'invito è partito e `inviteFailed` che doveva partire e non è partito.
  */
-export async function addPlatformAdmin(email: string): Promise<{ ok: true; invited: boolean }> {
+export async function addPlatformAdmin(email: string): Promise<{ ok: true; invited: boolean; inviteFailed?: true }> {
   const actor = await requirePlatformAdmin()
   const parsed = emailSchema.safeParse(email)
   if (!parsed.success) throw new Error('Email non valida')
@@ -52,12 +52,14 @@ export async function addPlatformAdmin(email: string): Promise<{ ok: true; invit
   if (!outcome.changed || !outcome.invitation) return { ok: true, invited: false }
   try {
     const sent = await sendMainAddressInvitationEmail(outcome.invitation)
-    if (!sent.ok) log.error({ code: sent.code }, 'platform administrator invitation email not sent')
-    return { ok: true, invited: sent.ok }
+    if (sent.ok) return { ok: true, invited: true }
+    log.error({ code: sent.code }, 'platform administrator invitation email not sent')
   } catch (err) {
     log.error({ err }, 'platform administrator invitation email failed')
-    return { ok: true, invited: false }
   }
+  // La nomina c'è, l'invito no: la persona non ha una password e «Password dimenticata» non le serve
+  // (per un account senza password non esiste un recupero). La console lo dice, e si riprova togliendola e nominandola di nuovo.
+  return { ok: true, invited: false, inviteFailed: true }
 }
 
 /**

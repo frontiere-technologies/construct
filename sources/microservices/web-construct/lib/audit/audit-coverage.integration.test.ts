@@ -17,6 +17,9 @@ import { createLanguage, deleteLanguage, setDefaultLanguage, setLanguageActive, 
 import { createTranslationKey, deleteTranslationKey, saveTranslations } from '@/lib/i18n/translation-actions'
 import { createNavigationItem, deleteNavigationItem, moveNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'
 import { addPlatformAdmin, removePlatformAdmin } from '@/lib/platform/platform-admin-actions'
+import {
+  addTenantAdmin, addTenantHost, createTenant as createPlatformTenant, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus,
+} from '@/lib/platform/tenant-actions'
 import { createRole, deleteRole, renameRole, updateRolePermissions } from '@/lib/rbac/roles-actions'
 import { FUNCTYPE_EXTERNAL_LINK, USER_STATUS_DEACTIVATED, type CreateNavItemInput } from '@/lib/rbac/types'
 import { addUserByEmail, setUserStatus, updateUserRoles } from '@/lib/rbac/users-actions'
@@ -132,6 +135,10 @@ const state = {
   languageCode: '',
   keyId: 0,
   platformAdminEmail: '',
+  consoleTenantId: 0,
+  consoleHostA: '',
+  consoleHostB: '',
+  consoleAdminEmail: '',
 }
 
 async function createUser(label: string): Promise<Person> {
@@ -431,6 +438,67 @@ const CASES: Record<string, AuditCase> = {
     entry: removePlatformAdmin, sink: 'platform', as: 'platformAdmin', kind: 'platform',
     run: async () => { expect(await removePlatformAdmin(await userIdOf(state.platformAdminEmail))).toEqual({ ok: true }) },
     expected: [{ operation: 'platform.admin.remove', objectType: 'user', objectId: () => userIdOf(state.platformAdminEmail) }],
+  },
+  // Il ciclo di vita di un tenant dalla console (Task 8): ogni azione scrive nel registro della
+  // piattaforma (qui) e in quello del tenant (provato in lib/platform/tenant-actions.integration.test.ts).
+  // Un tenant nuovo, poi i suoi indirizzi e amministratori, per ultimo la sospensione (che blocca gli inviti).
+  'lib/platform/tenant-actions.ts#createTenant': {
+    entry: createPlatformTenant, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    run: async () => {
+      const adminEmail = `zzz_audit_first_${unique()}@example.test`
+      createdEmails.push(adminEmail)
+      const result = await createPlatformTenant({ name: 'ZZZ Console', slug: `zzz-audit-new-${unique()}`.slice(0, 40), adminEmail })
+      if (!result.ok) throw new Error('the tenant was not created')
+      expect(result.invited).toBe(true)
+      state.consoleTenantId = result.tenantId
+      createdTenants.push(tenantIdForTest(result.tenantId))
+    },
+    expected: [{ operation: 'tenant.create', objectType: 'tenant', objectId: () => state.consoleTenantId }],
+  },
+  'lib/platform/tenant-actions.ts#addTenantHost': {
+    entry: addTenantHost, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    run: async () => {
+      state.consoleHostA = `zzz-audit-ca-${unique()}.example.test`
+      expect(await addTenantHost(state.consoleTenantId, state.consoleHostA, true)).toEqual({ ok: true })
+    },
+    // Il primo indirizzo è anche il principale: due voci.
+    expected: [
+      { operation: 'tenant.host.add', objectType: 'tenant_host', objectId: () => state.consoleHostA },
+      { operation: 'tenant.host.primary', objectType: 'tenant_host', objectId: () => state.consoleHostA },
+    ],
+  },
+  'lib/platform/tenant-actions.ts#setPrimaryHost': {
+    entry: setPrimaryHost, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    arrange: async () => {
+      state.consoleHostB = `zzz-audit-cb-${unique()}.example.test`
+      expect(await addTenantHost(state.consoleTenantId, state.consoleHostB, false)).toEqual({ ok: true })
+    },
+    run: async () => { expect(await setPrimaryHost(state.consoleTenantId, state.consoleHostB)).toEqual({ ok: true }) },
+    expected: [{ operation: 'tenant.host.primary', objectType: 'tenant_host', objectId: () => state.consoleHostB }],
+  },
+  'lib/platform/tenant-actions.ts#removeTenantHost': {
+    entry: removeTenantHost, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    run: async () => { expect(await removeTenantHost(state.consoleTenantId, state.consoleHostA)).toEqual({ ok: true }) },
+    expected: [{ operation: 'tenant.host.remove', objectType: 'tenant_host', objectId: () => state.consoleHostA }],
+  },
+  'lib/platform/tenant-actions.ts#addTenantAdmin': {
+    entry: addTenantAdmin, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    run: async () => {
+      state.consoleAdminEmail = `zzz_audit_tadmin_${unique()}@example.test`
+      createdEmails.push(state.consoleAdminEmail)
+      expect(await addTenantAdmin(state.consoleTenantId, state.consoleAdminEmail)).toEqual({ ok: true, invited: true })
+    },
+    expected: [{ operation: 'tenant.admin.add', objectType: 'user', objectId: () => userIdOf(state.consoleAdminEmail) }],
+  },
+  'lib/platform/tenant-actions.ts#resendTenantInvite': {
+    entry: resendTenantInvite, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    run: async () => { expect(await resendTenantInvite(state.consoleTenantId, await userIdOf(state.consoleAdminEmail))).toEqual({ ok: true, invited: true }) },
+    expected: [{ operation: 'tenant.invite.resend', objectType: 'user', objectId: () => userIdOf(state.consoleAdminEmail) }],
+  },
+  'lib/platform/tenant-actions.ts#setTenantStatus': {
+    entry: setTenantStatus, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    run: async () => { expect(await setTenantStatus(state.consoleTenantId, 'suspended', 'prova')).toEqual({ ok: true }) },
+    expected: [{ operation: 'tenant.status', objectType: 'tenant', objectId: () => state.consoleTenantId }],
   },
 }
 
