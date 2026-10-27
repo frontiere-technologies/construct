@@ -288,7 +288,7 @@ it('the platform audit row of createTenant contains no link or token', …)
   - attore in assistenza: permessi di `TENANT_ADMIN` del tenant meno la gestione del permesso di assistenza; `auditActorOf` dà veste `platform`;
   - `SupportBanner`: fascia sempre visibile "Stai lavorando come piattaforma in {{tenant}}, fino alle {{time}}" con "Esci".
 
-- [ ] **Step 1: Test**
+- [✅] **Step 1: Test**
 
 ```ts
 it('without consent startSupport is refused and nothing is written', …)
@@ -300,8 +300,8 @@ it('changes during support are written in the tenant audit with actor_kind platf
 it('during support the consent actions are refused', …)
 ```
 
-- [ ] **Step 2–4:** come sopra.
-- [ ] **Step 5: Spunta MT5-RISK-2 e commit** — `feat(platform): support access only with the tenant's time-limited consent`
+- [✅] **Step 2–4:** come sopra.
+- [✅] **Step 5: Spunta MT5-RISK-2 e commit** — `feat(platform): support access only with the tenant's time-limited consent`
 
 ---
 
