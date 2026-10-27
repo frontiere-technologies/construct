@@ -194,7 +194,7 @@ it('the ready path keeps its round-trip caps', …)
   - `auditActorOf(actor: Actor | PlatformActor): AuditActor` (veste `platform` quando l'attore è in assistenza, Task 9);
   - `sanitizeAuditDetails(details): Record<string, unknown>`: toglie chiavi che contengono `password`, `token`, `link`, `secret` (MT5-RISK-4).
 
-- [ ] **Step 1: Test di copertura** — riusa l'inventario del pezzo 4 (`guards/entry-point-inventory.ts`): ogni porta che modifica dati ha un caso (successo → voce con l'operazione attesa; fallimento → nessuna voce) o un'esenzione motivata (preferenze personali, password, accesso, letture). Il test fallisce se compare una porta nuova senza caso né esenzione.
+- [✅] **Step 1: Test di copertura** — riusa l'inventario del pezzo 4 (`guards/entry-point-inventory.ts`): ogni porta che modifica dati ha un caso (successo → voce con l'operazione attesa; fallimento → nessuna voce) o un'esenzione motivata (preferenze personali, password, accesso, letture). Il test fallisce se compare una porta nuova senza caso né esenzione.
 
 ```ts
 it('createRole writes role.create in the tenant audit of the actor tenant', …)
@@ -203,10 +203,10 @@ it('details never contain password, token or link keys', …)
 it('language and translation writes go to the platform audit, not to a tenant audit', …)
 ```
 
-- [ ] **Step 2: Verifica che falliscano** — il test di copertura elenca le porte scoperte.
-- [ ] **Step 3: Helper e una chiamata per porta, dentro la stessa transazione della modifica.**
-- [ ] **Step 4:** `npm run test:integration -- lib/audit lib/rbac lib/i18n lib/tenancy`, `npx vitest run lib guards`; Expected: PASS.
-- [ ] **Step 5: Spunta MT5-OK-1, MT5-RISK-3, MT5-RISK-4 e commit** — `feat(audit): every tenant change writes its audit row in the same transaction`
+- [✅] **Step 2: Verifica che falliscano** — il test di copertura elenca le porte scoperte.
+- [✅] **Step 3: Helper e una chiamata per porta, dentro la stessa transazione della modifica.**
+- [✅] **Step 4:** `npm run test:integration -- lib/audit lib/rbac lib/i18n lib/tenancy`, `npx vitest run lib guards`; Expected: PASS.
+- [✅] **Step 5: Spunta MT5-OK-1, MT5-RISK-3, MT5-RISK-4 e commit** — `feat(audit): every tenant change writes its audit row in the same transaction`
 
 ---
 
