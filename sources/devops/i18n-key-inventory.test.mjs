@@ -184,6 +184,7 @@ const AUDIT_OPERATION = /^(role|menu|member|theme|settings|support|tenant|platfo
 const AUDIT_OPERATION_FILES = [
   'lib/audit/audit-types.ts',
   'lib/rbac/roles-actions.ts',
+  'lib/rbac/auth-roles.ts',
   'lib/rbac/navigation-actions.ts',
   'lib/rbac/users-actions.ts',
   'lib/tenancy/membership.ts',

@@ -55,6 +55,11 @@ export async function tenantMemberEmail(tenantId: TenantId, userId: string): Pro
  * stessa transazione (MT5-DEC-15); chi si registra è la persona che agisce (veste `person`, email
  * dall'account). Una persona già membro non cambia niente e non lascia voce: per saperlo la
  * funzione SQL non basta (risponde `active` in entrambi i casi), quindi si legge prima l'appartenenza.
+ *
+ * Limite noto: quella lettura non prende un lucchetto. Due registrazioni simultanee della stessa
+ * persona potrebbero leggere entrambe «nessuna appartenenza» e scrivere entrambe `member.join`:
+ * al peggio una voce doppia, mai una voce persa (l'appartenenza nasce una volta sola, `on conflict
+ * do nothing`, e almeno una delle due transazioni la vede nascere).
  */
 export async function joinTenantByRegistration(userId: string, tenantId: TenantId): Promise<MembershipStatus | null> {
   return withTenant(tenantId, async tx => {

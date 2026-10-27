@@ -41,4 +41,12 @@ describe('auditActorOf', () => {
     expect(auditActorOf({ userId: 'u2', email: 'admin@example.test' }))
       .toEqual({ userId: 'u2', email: 'admin@example.test', kind: 'platform' })
   })
+
+  it('decides by the tenant the actor is bound to, not by which other fields it carries', () => {
+    const tenantActor = {
+      userId: 'u3', tenantId: defaultTestTenant(), roleIds: [], isAdmin: false, isPlatformAdmin: false,
+      permissions: new Set<never>(), email: 'would-be-extra-field@example.test',
+    }
+    expect(auditActorOf(tenantActor)).toEqual({ userId: 'u3', email: null, kind: 'person' })
+  })
 })

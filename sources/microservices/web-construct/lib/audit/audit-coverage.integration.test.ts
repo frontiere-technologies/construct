@@ -22,6 +22,7 @@ import { addUserByEmail, setUserStatus, updateUserRoles } from '@/lib/rbac/users
 import { saveAppTheme } from '@/lib/theme-actions'
 import { POST as sendInvite } from '@/app/api/admin/send-invite/route'
 import { POST as register } from '@/app/api/auth/register/route'
+import { resolveUserAuthorization } from '@/lib/rbac/auth-roles'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { setSelfRegistration } from '@/lib/tenancy/tenant-settings-actions'
 import { defaultTestTenant, tenantIdForTest } from '@/lib/tenancy/testing'
@@ -79,7 +80,7 @@ const PASSWORD = 'password della persona (MT5-DEC-14): non si registra, e nel re
 const READ = 'lettura: restituisce dati e non ne modifica (le griglie sono POST per portare il filtro nel corpo)'
 
 const EXEMPT: Record<string, string> = {
-  'app/api/auth/[...nextauth]/route.ts#POST': 'accesso (MT5-DEC-14): gli accessi non si registrano; anche l\'ingresso automatico nel tenant predefinito parte dal callback jwt, non da una porta',
+  'app/api/auth/[...nextauth]/route.ts#POST': 'l\'evento di accesso (MT5-DEC-14): gli accessi non si registrano. Le righe di tenant che il primo accesso crea (appartenenza e ruolo base nel tenant predefinito, dal callback jwt) invece si registrano: vedi il caso «first sign-in» più sotto',
   'app/api/auth/change-password/route.ts#POST': PASSWORD,
   'app/api/auth/forgot-password/route.ts#POST': `${PASSWORD}; scrive solo il token di recupero`,
   'app/api/auth/set-password/route.ts#POST': `${PASSWORD}; consuma il token d'invito o di recupero`,
@@ -188,6 +189,7 @@ async function setSelfRegistrationOf(tenantId: TenantId, enabled: boolean): Prom
 
 type AuditRow = {
   id: number
+  idTenant: number | null
   operation: string
   objectType: string | null
   objectId: string | null
@@ -200,7 +202,7 @@ type AuditRow = {
 /** Le voci del registro del tenant A, come proprietario (la RLS forzata vale anche per lui). */
 async function tenantRows(tenantId: TenantId = A): Promise<AuditRow[]> {
   return withOwner(tx => tx.select({
-    id: tenantAuditEvent.id, operation: tenantAuditEvent.operation, objectType: tenantAuditEvent.objectType,
+    id: tenantAuditEvent.id, idTenant: tenantAuditEvent.idTenant, operation: tenantAuditEvent.operation, objectType: tenantAuditEvent.objectType,
     objectId: tenantAuditEvent.objectId, actorKind: tenantAuditEvent.actorKind, actorUserId: tenantAuditEvent.actorUserId,
     actorEmail: tenantAuditEvent.actorEmail, details: tenantAuditEvent.details,
   }).from(tenantAuditEvent).orderBy(asc(tenantAuditEvent.id)), tenantId)
@@ -210,7 +212,7 @@ async function tenantRows(tenantId: TenantId = A): Promise<AuditRow[]> {
 async function platformRows(): Promise<AuditRow[]> {
   const actors = [adminA.id, memberA.id, catalogAdmin.id, person.id]
   return withOwner(tx => tx.select({
-    id: platformAuditEvent.id, operation: platformAuditEvent.operation, objectType: platformAuditEvent.objectType,
+    id: platformAuditEvent.id, idTenant: platformAuditEvent.idTenant, operation: platformAuditEvent.operation, objectType: platformAuditEvent.objectType,
     objectId: platformAuditEvent.objectId, actorKind: platformAuditEvent.actorKind, actorUserId: platformAuditEvent.actorUserId,
     actorEmail: platformAuditEvent.actorEmail, details: platformAuditEvent.details,
   }).from(platformAuditEvent).where(inArray(platformAuditEvent.actorUserId, actors)).orderBy(asc(platformAuditEvent.id)))
@@ -614,8 +616,38 @@ describeIntegration('every door that writes records its audit row in the same tr
     const written = (await platformRows()).slice(platformBefore.length)
     expect(written.map(row => row.operation)).toEqual(['translation.key.create', 'translation.key.delete'])
     expect(written.every(row => row.actorKind === 'person' && row.actorUserId === catalogAdmin.id)).toBe(true)
+    // Nessun tenant toccato: le righe della piattaforma per lingue e traduzioni non portano un tenant.
+    expect(written.map(row => row.idTenant)).toEqual([null, null])
     // Il registro del tenant dell'attore non cambia: le lingue e le traduzioni non sono dati di tenant.
     expect(await tenantRows(DEFAULT)).toEqual(defaultBefore)
+  })
+
+  it('first sign-in into the default tenant writes member.join and member.roles, a second sign-in writes nothing', async () => {
+    const newcomer = await createUser('signin')
+    // Il predefinito accetta registrazioni autonome (MT4-DEC-10) solo se l'interruttore è acceso: acceso per il test, rimesso com'era.
+    const [settings] = await withOwner(tx => tx.select({ on: tenantSettings.selfRegistration }).from(tenantSettings), DEFAULT)
+    await withOwner(tx => tx.update(tenantSettings).set({ selfRegistration: true }), DEFAULT)
+    try {
+      const before = await tenantRows(DEFAULT)
+      // Quello che fa il callback jwt al primo accesso: appartenenza e ruolo base, nella stessa transazione delle righe.
+      const first = await resolveUserAuthorization(DEFAULT, newcomer.id, true)
+      expect(first.accountActive).toBe(true)
+      const written = (await tenantRows(DEFAULT)).filter(row => !before.some(old => old.id === row.id))
+      expect(written.map(row => row.operation)).toEqual(['member.join', 'member.roles'])
+      for (const row of written) {
+        expect(row).toMatchObject({
+          objectType: 'user', objectId: newcomer.id, actorKind: 'person', actorUserId: newcomer.id, actorEmail: newcomer.email,
+        })
+      }
+      expect(written[1].details).toEqual({ systemKey: 'REGISTERED' })
+
+      // Il secondo accesso non crea niente, quindi non scrive niente.
+      const afterFirst = await tenantRows(DEFAULT)
+      await resolveUserAuthorization(DEFAULT, newcomer.id, true)
+      expect(await tenantRows(DEFAULT)).toEqual(afterFirst)
+    } finally {
+      await withOwner(tx => tx.update(tenantSettings).set({ selfRegistration: settings.on }), DEFAULT)
+    }
   })
 
   it('details never contain password, token or link keys', async () => {

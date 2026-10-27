@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole } from '@/lib/db/schema'
+import type { AuditActor } from '@/lib/audit/audit-types'
+import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { evaluateAuthorization, isActiveAccount } from '@/lib/auth-policy'
 import { ensureDefaultMembership, isMembershipStatus, type MembershipStatus } from '@/lib/tenancy/membership'
 import { DEFAULT_TENANT_SLUG, type TenantId } from '@/lib/tenancy/tenant-id'
@@ -16,6 +18,12 @@ export interface AuthorizationSnapshot {
   userExists: boolean
   status: number | null
   membershipStatus: MembershipStatus | null
+  /**
+   * L'appartenenza è stata creata in questa stessa transazione (`created_at = now()`: il default
+   * della colonna è `now()`, che vale l'inizio della transazione). Serve al primo accesso per
+   * registrare `member.join` senza un viaggio in più: la lettura dello stato c'è già.
+   */
+  membershipCreatedNow: boolean
   roleIds: number[]
   system: SystemRoleIds
   permissionCodes: string[]
@@ -44,6 +52,7 @@ type SnapshotRow = {
   user_exists: boolean
   status: string | null
   membership_status: string | null
+  membership_created_now: boolean | null
   role_ids: string[] | null
   permission_codes: string[] | null
   tenant_eligible: boolean | null
@@ -93,6 +102,7 @@ export async function selectAuthorizationSnapshot(
       exists (select 1 from public.users u where u.id = ${userId}) as user_exists,
       (select u.id_user_status from public.users u where u.id = ${userId})::text as status,
       (select m.status from public.tenant_membership m where m.user_id = ${userId}) as membership_status,
+      (select m.created_at = now() from public.tenant_membership m where m.user_id = ${userId}) as membership_created_now,
       coalesce((select array_agg(ur.id_role order by ur.id_role)::text[] from public.user_role ur where ur.user_id = ${userId}), '{}') as role_ids,
       ${codes} as permission_codes,
       ${tenantEligible} as tenant_eligible,
@@ -106,6 +116,7 @@ export async function selectAuthorizationSnapshot(
     status: row.status === null ? null : Number(row.status),
     // La RLS lascia vedere solo l'appartenenza al tenant corrente.
     membershipStatus: isMembershipStatus(row.membership_status) ? row.membership_status : null,
+    membershipCreatedNow: row.membership_created_now === true,
     roleIds: (row.role_ids ?? []).map(Number),
     system: { registered: Number(row.registered), tenantAdmin: Number(row.tenant_admin) },
     permissionCodes: row.permission_codes ?? [],
@@ -127,11 +138,25 @@ export async function selectUserAuthorization(
   const snapshot = await selectAuthorizationSnapshot(tx, userId)
   if (!snapshot.userExists) return { ...evaluateAuthorization(null, null, [], snapshot.system.tenantAdmin), isPlatformAdmin: false }
   let roleIds = snapshot.roleIds
+  // Le righe che il primo accesso crea si registrano (MT5-DEC-14 esclude l'evento di accesso, non
+  // le righe di tenant), nella stessa transazione: una persona, veste `person`, email dall'account.
+  // Si scrive solo se l'appartenenza o il ruolo nascono adesso: la via comune non scrive niente e
+  // non ha viaggi in più.
+  const actor: AuditActor = { userId, email: null, kind: 'person' }
+  if (ensureRegisteredRole && snapshot.membershipCreatedNow) {
+    await recordTenantAudit(tx, actor, { operation: 'member.join', objectType: 'user', objectId: userId })
+  }
   // Il ruolo base si aggiunge solo a chi può agire: account e appartenenza attivi.
   const canAct = evaluateAuthorization(snapshot.status, snapshot.membershipStatus, roleIds, snapshot.system.tenantAdmin).accountActive
   if (ensureRegisteredRole && canAct && !roleIds.includes(snapshot.system.registered)) {
-    await tx.insert(userRole).values({ userId, idRole: snapshot.system.registered }).onConflictDoNothing()
+    const inserted = await tx.insert(userRole).values({ userId, idRole: snapshot.system.registered })
+      .onConflictDoNothing().returning({ idRole: userRole.idRole })
     roleIds = [...roleIds, snapshot.system.registered].sort((a, b) => a - b)
+    if (inserted.length > 0) {
+      await recordTenantAudit(tx, actor, {
+        operation: 'member.roles', objectType: 'user', objectId: userId, details: { systemKey: 'REGISTERED' },
+      })
+    }
   }
   return {
     ...evaluateAuthorization(snapshot.status, snapshot.membershipStatus, roleIds, snapshot.system.tenantAdmin),

@@ -98,6 +98,8 @@ export function sanitizeAuditDetails(details: Record<string, unknown> | undefine
  * dell'attore di tenant.
  */
 export function auditActorOf(actor: AuditActorSource): AuditActor {
-  if (!('email' in actor)) return { userId: actor.userId, email: null, kind: 'person' }
+  // Si distingue da ciò che solo l'attore del tenant ha, il tenant (`tenantId`): un campo che un
+  // giorno si aggiungesse a `PlatformActor`, come l'email, non cambia la veste di nessuno.
+  if ('tenantId' in actor) return { userId: actor.userId, email: null, kind: 'person' }
   return { userId: actor.userId, email: actor.email, kind: 'platform' }
 }

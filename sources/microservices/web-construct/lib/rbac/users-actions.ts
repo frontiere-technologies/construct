@@ -4,9 +4,9 @@ import { and, eq, sql } from 'drizzle-orm'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { withGlobal, withTenant, type TenantTx } from '@/lib/db/tenant-db'
+import { withTenant, type AnyTx, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole, users } from '@/lib/db/schema'
-import { prepareInvitation } from '@/lib/auth-invitations'
+import { prepareInvitationIn } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
 import { createLogger } from '@/lib/logger'
 import { addTenantMember, MEMBERSHIP_ACTIVE, MEMBERSHIP_DEACTIVATED } from '@/lib/tenancy/membership'
@@ -142,15 +142,20 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
   if (!parsed.success) throw new Error('Email non valida')
   const normalizedEmail = parsed.data
 
-  // `prepareInvitation` crea l'account se manca e ritorna `null` quando ha già una password.
-  const invitation = await prepareInvitation(normalizedEmail, actor.userId)
-  const userId = invitation?.userId ?? await findUserIdByEmail(normalizedEmail)
-  await withTenant(actor.tenantId, async tx => {
-    // Una persona già membro non cambia niente: niente voce (la voce racconta una modifica).
-    if (!(await addTenantMember(tx, userId))) return
-    await recordTenantAudit(tx, auditActorOf(actor), {
-      operation: 'member.add', objectType: 'user', objectId: userId, details: { invited: invitation !== null },
-    })
+  // Account (se manca), token d'invito e appartenenza nascono in una transazione sola, nel tenant
+  // dell'attore, insieme alla voce del registro: o tutto o niente (MT5-DEC-15).
+  const invitation = await withTenant(actor.tenantId, async tx => {
+    const prepared = await prepareInvitationIn(tx, normalizedEmail, actor.userId)
+    const userId = prepared?.userId ?? await findUserIdByEmail(tx, normalizedEmail)
+    const added = await addTenantMember(tx, userId)
+    // Una persona già membro non cambia l'appartenenza (niente `member.add`), ma un token nuovo è un invito.
+    if (added || prepared) {
+      await recordTenantAudit(tx, auditActorOf(actor), {
+        operation: added ? 'member.add' : 'member.invite', objectType: 'user', objectId: userId,
+        details: added ? { invited: prepared !== null } : { expiresAt: prepared?.expiresAt },
+      })
+    }
+    return prepared
   })
 
   if (invitation) {
@@ -165,8 +170,8 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
   return { ok: true }
 }
 
-async function findUserIdByEmail(email: string): Promise<string> {
-  const [row] = await withGlobal(tx => tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1))
+async function findUserIdByEmail(tx: AnyTx, email: string): Promise<string> {
+  const [row] = await tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
   if (!row) throw new Error('Failed to add user: account not found')
   return row.id
 }
