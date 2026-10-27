@@ -285,8 +285,9 @@ describeIntegration('createTenant', () => {
   }, 60_000)
 
   it('refuses the main address as a dedicated address, and the slug of the default tenant', async () => {
+    // Lo stesso rifiuto di addTenantHost (`invalid`).
     expect(await createTenant({ name: 'ZZZ M', slug: slugOf('mainhost'), host: MAIN_HOST.toUpperCase(), adminEmail: emailOf('mainhost') }))
-      .toEqual({ ok: false, reason: 'taken' })
+      .toEqual({ ok: false, reason: 'invalid' })
     expect(await createTenant({ name: 'ZZZ D', slug: 'default', adminEmail: emailOf('defslug') })).toEqual({ ok: false, reason: 'taken' })
   }, 60_000)
 
@@ -317,7 +318,7 @@ describeIntegration('createTenant', () => {
 
   it('says an address that is not a host name is not valid, before touching the database', async () => {
     expect(await createTenant({ name: 'N', slug: 'zzz-tl-ok-slug', host: 'not a host', adminEmail: 'a@example.test' }))
-      .toEqual({ ok: false, reason: 'invalid_host' })
+      .toEqual({ ok: false, reason: 'invalid' })
     expect(withPlatform).not.toHaveBeenCalled()
   })
 
@@ -678,6 +679,16 @@ describeIntegration('tenant administrators', () => {
     expect(await tokensOf(waiting.id)).toEqual([])
     expect(mocks.sendEmail).not.toHaveBeenCalled()
     expect([(await platformAuditOf(pending)).length, (await tenantAuditOf(pending)).length]).toEqual(rowsBefore)
+  }, 60_000)
+
+  it('resendTenantInvite is refused for an administrator whose account is globally deactivated', async () => {
+    const id = await seedTenant('res4')
+    const waiting = await seedAdmin(id, 'offwaiting', { password: false })
+    await withOwner(tx => tx.execute(sql`update public.users set id_user_status = 1 where id = ${waiting.id}::uuid`))
+    await expect(resendTenantInvite(id, waiting.id)).rejects.toThrow()
+    expect(await tokensOf(waiting.id)).toEqual([])
+    expect(mocks.sendEmail).not.toHaveBeenCalled()
+    expect(await platformAuditOf(id)).toEqual([])
   }, 60_000)
 
   it('add admin and resend invite are refused in an archived tenant and in the template', async () => {

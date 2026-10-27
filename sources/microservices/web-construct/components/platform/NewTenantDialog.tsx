@@ -15,7 +15,7 @@ interface Props {
   onCreated: (tenantId: number) => void
 }
 
-type Outcome = { kind: 'invited' | 'existing' | 'invite_failed' | 'taken' | 'invalid_host' | 'invalid' | 'error' } | null
+type Outcome = { kind: 'invited' | 'existing' | 'invite_failed' | 'taken' | 'bad_host' | 'invalid' | 'error' } | null
 
 /**
  * Il modulo "Nuovo tenant" (specifica 2026-10-26, MT5-DEC-5): nome, slug (proposto dal nome finché
@@ -58,7 +58,7 @@ export function NewTenantDialog({ onClose, onCreated }: Props) {
     setBusy(true); setOutcome(null)
     try {
       const result = await createTenant(input)
-      if (!result.ok) { setOutcome({ kind: result.reason }); return }
+      if (!result.ok) { setOutcome({ kind: result.reason === 'invalid' ? 'bad_host' : result.reason }); return }
       setOutcome({ kind: result.inviteFailed ? 'invite_failed' : result.invited ? 'invited' : 'existing' })
       onCreated(result.tenantId)
     } catch {
@@ -95,7 +95,7 @@ export function NewTenantDialog({ onClose, onCreated }: Props) {
           <div className="min-h-5 text-sm">
             {outcome?.kind === 'invalid' && <p role="alert" className="text-destructive-muted-foreground">{t('platform.tenant.new.invalid')}</p>}
             {outcome?.kind === 'taken' && <p role="alert" className="text-destructive-muted-foreground">{t('platform.tenant.new.error_taken')}</p>}
-            {outcome?.kind === 'invalid_host' && <p role="alert" className="text-destructive-muted-foreground">{t('platform.tenant.new.host_invalid')}</p>}
+            {outcome?.kind === 'bad_host' && <p role="alert" className="text-destructive-muted-foreground">{t('platform.tenant.new.host_invalid')}</p>}
             {outcome?.kind === 'error' && <p role="alert" className="text-destructive-muted-foreground">{t('platform.tenant.new.error')}</p>}
           </div>
           <div className="mt-2 flex justify-end gap-2">

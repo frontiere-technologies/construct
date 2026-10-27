@@ -26,10 +26,10 @@ export function withPlatform<T>(fn: (tx: PlatformTx) => Promise<T>, tenantId?: T
 
 /**
  * Passa al tenant indicato dentro la transazione di piattaforma già aperta: per la creazione di un
- * tenant, che nasce nella transazione e vi scrive subito la voce del suo registro. Per un tenant che
- * esiste già si apre `withPlatform(fn, tenantId)`. Un intero positivo, o fallisce.
+ * tenant, che nasce nella transazione e vi scrive subito la voce del suo registro (il `TenantId` lo
+ * dà `createdTenantId`). Per un tenant che esiste già si apre `withPlatform(fn, tenantId)`.
  */
-export function enterTenant(tx: PlatformTx, tenantId: number): Promise<void> {
+export function enterTenant(tx: PlatformTx, tenantId: TenantId): Promise<void> {
   return enterTenantInPlatformTransaction(tx, tenantId)
 }
 

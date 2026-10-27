@@ -27,6 +27,7 @@ vi.mock('next/navigation', () => ({
 }))
 // Il modulo vero è una server action: arriva al database, che qui non c'è.
 vi.mock('@/lib/platform/tenant-actions', () => ({ createTenant: vi.fn() }))
+vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }))
 vi.mock('@/context/I18nContext', () => ({
   useI18n: () => ({ t: (key: string) => key, fmt: { date: (value: string) => `date:${value}` } }),
 }))
@@ -121,6 +122,13 @@ describe('TenantsTableClient', () => {
       .toEqual(['active', 'suspended', 'archived'])
     expect(props.initialFilterModel).toMatchObject({ status: { value: 'archived' }, name: { filter: 'Ac' } })
     expect(props.initialSortModel).toEqual([{ colId: 'name', sort: 'asc' }])
+  })
+
+  it('renders the name as a real link to the tenant page, outside the row click, so the keyboard can open it', () => {
+    const link = cell(column(render(), 'name'), base).querySelector('a')!
+    expect(link.getAttribute('href')).toBe('/platform/tenants/7')
+    expect(link.textContent).toBe('Acme')
+    expect(link.hasAttribute('data-grid-no-row-click')).toBe(true)
   })
 
   it('opens the tenant page when a row is clicked', () => {

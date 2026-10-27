@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import type { ColDef, FilterChangedEvent, GridApi, GridReadyEvent, SortChangedEvent } from 'ag-grid-community'
 import { DataGrid } from '@/components/grid/DataGrid'
@@ -49,7 +50,8 @@ export function TenantsTableClient(props: TenantsUrlParams) {
       field: 'name', headerName: t('platform.tenants.name'), sortable: true, ...TENANT_TEXT_FILTER,
       cellRenderer: ({ data }: Cell) => data ? (
         <span className="flex items-center gap-2">
-          <span className="font-medium">{data.name}</span>
+          {/* Un vero collegamento: la scheda si apre anche da tastiera. Il clic sul collegamento non passa dal clic di riga. */}
+          <Link href={`/platform/tenants/${data.id}`} data-grid-no-row-click className="font-medium text-primary underline-offset-4 hover:underline">{data.name}</Link>
           {data.isTemplate && (
             <span data-testid="tenant-template-badge" className="rounded-full bg-accent px-2 py-0.5 text-xs text-foreground-secondary">
               {t('platform.tenants.template_badge')}

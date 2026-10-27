@@ -54,7 +54,7 @@ async function setTransactionTenant(tx: PlatformTransaction, tenantId: number): 
  * deve scrivere subito la sua voce nel registro del tenant. Il tenant vale fino alla fine della
  * transazione, come con `platformTransaction`.
  */
-export async function enterTenantInPlatformTransaction(tx: PlatformTransaction, tenantId: number): Promise<void> {
+export async function enterTenantInPlatformTransaction(tx: PlatformTransaction, tenantId: TenantId): Promise<void> {
   await setTransactionTenant(tx, tenantId)
 }
 

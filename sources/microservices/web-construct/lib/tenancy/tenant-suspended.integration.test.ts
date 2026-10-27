@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { eq, inArray, sql } from 'drizzle-orm'
-import { passwordSetTokens, tenantMembership, userRole, users } from '@/lib/db/schema'
+import { allowedDomains, passwordSetTokens, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
@@ -30,10 +30,16 @@ vi.mock('@/lib/rbac/auth-guard', () => ({
 }))
 vi.mock('@/lib/mailer', () => ({ sendEmail: mocks.sendEmail }))
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ info: () => undefined, warn: () => undefined, error: () => undefined }) }))
-vi.mock('next/headers', () => ({ headers: async () => new Headers({ host: 'localhost:3000' }) }))
+const request = vi.hoisted(() => ({ host: 'localhost:3000' }))
+vi.mock('next/headers', () => ({ headers: async () => new Headers({ host: request.host }) }))
+vi.mock('@/lib/auth-rate-limit', () => ({
+  enforceAuthRateLimit: async () => undefined,
+  AuthRateLimitExceeded: class AuthRateLimitExceeded extends Error {},
+}))
 
 const { addUserByEmail } = await import('@/lib/rbac/users-actions')
 const { POST: sendInvite } = await import('@/app/api/admin/send-invite/route')
+const { POST: register } = await import('@/app/api/auth/register/route')
 
 const createdTenants: TenantId[] = []
 const createdUserIds: string[] = []
@@ -176,6 +182,9 @@ describeIntegration('the doors of a suspended or archived tenant: no invitations
     return userId
   }
   const accountCount = async (email: string) => (await withGlobal(tx => tx.select({ id: users.id }).from(users).where(eq(users.email, email)))).length
+  const registerRequest = (email: string) => new NextRequest('http://localhost:3000/api/auth/register', {
+    method: 'POST', body: JSON.stringify({ email }), headers: { 'content-type': 'application/json' },
+  })
 
   it.each(['suspended', 'archived'] as const)('addUserByEmail is refused in a %s tenant: no account, no token, no email', async status => {
     const id = await seedTenant(`door-${status}`)
@@ -216,5 +225,36 @@ describeIntegration('the doors of a suspended or archived tenant: no invitations
     expect(response.status).toBe(409)
     expect(await withGlobal(tx => tx.select({ id: passwordSetTokens.id }).from(passwordSetTokens).where(eq(passwordSetTokens.userId, waiting[0].id)))).toEqual([])
     expect(mocks.sendEmail).not.toHaveBeenCalled()
+  }, 60_000)
+
+  it.each(['suspended', 'archived'] as const)('the real register route creates nothing for a registration into a %s tenant, with the switch on', async status => {
+    const host = `zzz-ts-reg-${status}-${unique()}.example.test`
+    const domain = `zzz-ts-${unique()}.example.test`
+    const id = await seedTenant(`reg-${status}`, { host })
+    await withOwner(async tx => {
+      await tx.execute(sql`update public.tenant_settings set self_registration = true where id_tenant = ${id}`)
+      await tx.insert(allowedDomains).values({ domain, active: true })
+    }, id)
+    try {
+      // Con il tenant attivo la registrazione dall'indirizzo del tenant funziona: la prova non è vuota.
+      const open = `zzz_ts_open_${unique()}@${domain}`
+      request.host = host
+      expect((await register(registerRequest(open))).status).toBe(200)
+      expect(await accountCount(open)).toBe(1)
+      createdUserIds.push((await withGlobal(tx => tx.select({ id: users.id }).from(users).where(eq(users.email, open))))[0].id)
+      expect(mocks.sendEmail).toHaveBeenCalledTimes(1)
+      mocks.sendEmail.mockClear()
+
+      await setStatus(id, status)
+      const closed = `zzz_ts_closed_${unique()}@${domain}`
+      const response = await register(registerRequest(closed))
+      // La risposta resta neutra, e non nasce né account né token né email (MT5-DEC-25).
+      expect(await response.json()).toEqual({ ok: true })
+      expect(await accountCount(closed)).toBe(0)
+      expect(mocks.sendEmail).not.toHaveBeenCalled()
+    } finally {
+      request.host = 'localhost:3000'
+      await withOwner(tx => tx.delete(allowedDomains).where(eq(allowedDomains.domain, domain)))
+    }
   }, 60_000)
 })

@@ -818,6 +818,13 @@ async function runDatabaseCommand(command, argument) {
  * Con `host` (specifica 2026-10-21, MT4-DEC-13) registra nella stessa transazione l'indirizzo
  * dedicato del tenant, come principale: un indirizzo già preso annulla anche il tenant.
  *
+ * Nota (Task 8, pezzo 5a): la console crea i tenant con `app_private.create_platform_tenant`
+ * (0060), che ripete questa stessa sequenza in SQL ma senza consegnare l'invito. Le regole oggi
+ * esistono quindi in due versioni, questa in JavaScript e quella della 0060 (il commento in testa a
+ * quella migrazione non può dirlo: una migrazione applicata non si modifica nemmeno nei commenti, il
+ * checksum lo impedisce). Farle usare al comando la funzione SQL di `register_tenant_admin` e
+ * `create_platform_tenant` è un lavoro per una migrazione successiva, non di questo task.
+ *
  * Il link stampato contiene un token valido: è il modo previsto di consegnarlo finché l'invio per
  * email non arriva con la console (pezzo 5), e non si scrive da nessun'altra parte. Con `host` il
  * link usa l'indirizzo del tenant, come i link dell'app (`tenantBaseUrl`): `AUTH_URL` con il solo

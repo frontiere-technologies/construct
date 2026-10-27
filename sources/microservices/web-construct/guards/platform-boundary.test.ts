@@ -17,6 +17,9 @@ import { describe, expect, it } from 'vitest'
  * lo importa solo lib/platform/db.ts: fuori da lib/db/ e lib/platform/ non lo importa nessuno.
  * Si scandiscono anche i file alla radice del progetto (proxy.ts e simili).
  *
+ * Regola 1b: `lib/tenancy/platform-tenant` (che trasforma l'id di un tenant che arriva alla console in
+ * un `TenantId`) lo importa solo lib/platform/** e i file di test.
+ *
  * Regola 2: i nomi dell'identità (`PLATFORM_DATABASE_URL`, `TEST_PLATFORM_DATABASE_URL`,
  * `resolvePlatformDatabaseUrl`) compaiono, nel codice (non nei commenti), solo in lib/test-database.ts,
  * lib/db/platform-database.ts e nei file di test. Altrimenti un altro modulo di lib/db/ potrebbe
@@ -29,6 +32,8 @@ const ROOT = join(__dirname, '..')
 const SOURCE_ROOTS = ['app', 'components', 'context', 'guards', 'lib', 'types']
 const PLATFORM_MODULES = new Set(['lib/platform/db'])
 const PLATFORM_CLIENT_MODULES = new Set(['lib/db/platform-database'])
+// Dà un TenantId a un id che arriva dalla console (`existingTenantId`) o appena creato (`createdTenantId`): fuori dalla piattaforma sarebbe una via per costruire un TenantId da un numero qualsiasi.
+const PLATFORM_TENANT_MODULES = new Set(['lib/tenancy/platform-tenant'])
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory).flatMap(name => {
@@ -84,6 +89,7 @@ const importsAny = (modules: Set<string>) => (file: SourceFile) =>
 
 const importsPlatformDb = importsAny(PLATFORM_MODULES)
 const importsPlatformClient = importsAny(PLATFORM_CLIENT_MODULES)
+const importsPlatformTenant = importsAny(PLATFORM_TENANT_MODULES)
 
 const PLATFORM_NAMES = ['PLATFORM_DATABASE_URL', 'TEST_PLATFORM_DATABASE_URL', 'resolvePlatformDatabaseUrl']
 const NAME_OWNERS = new Set(['lib/test-database.ts', 'lib/db/platform-database.ts'])
@@ -112,6 +118,7 @@ function platformBoundaryOffenders(sources: SourceFile[]): string[] {
   return [
     ...sources.filter(file => !insidePlatform(file.path) && importsPlatformDb(file)),
     ...sources.filter(file => !insidePlatform(file.path) && !insideDb(file.path) && importsPlatformClient(file)),
+    ...sources.filter(file => !insidePlatform(file.path) && !isTestFile(file.path) && importsPlatformTenant(file)),
     ...sources.filter(file => !NAME_OWNERS.has(file.path) && !isTestFile(file.path) && mentionsPlatformNames(file.text)),
   ].map(file => file.path).sort()
 }
@@ -199,6 +206,21 @@ describe('platform boundary detectors', () => {
       expect(platformBoundaryOffenders([{ path: owner, text: forms[0] }]), owner).toEqual([])
     }
     expect(platformBoundaryOffenders([{ path: 'lib/db/x.ts', text: `// PLATFORM_DATABASE_URL e resolvePlatformDatabaseUrl\nconst a = 1` }])).toEqual([])
+  })
+
+  it('confines lib/tenancy/platform-tenant, which turns a number into a TenantId, to lib/platform/ and tests', () => {
+    const forms = [
+      `import { createdTenantId } from '@/lib/tenancy/platform-tenant'`,
+      `import { existingTenantId } from './platform-tenant'`,
+      `export { createdTenantId } from '@/lib/tenancy/platform-tenant'`,
+      `const m = await import('@/lib/tenancy/platform-tenant')`,
+    ]
+    for (const form of forms) {
+      expect(platformBoundaryOffenders([{ path: 'lib/tenancy/x.ts', text: form }]), form).toEqual(['lib/tenancy/x.ts'])
+    }
+    expect(platformBoundaryOffenders([{ path: outside, text: forms[0] }])).toEqual([outside])
+    expect(platformBoundaryOffenders([{ path: 'lib/platform/x.ts', text: forms[0] }])).toEqual([])
+    expect(platformBoundaryOffenders([{ path: 'lib/tenancy/x.integration.test.ts', text: forms[0] }])).toEqual([])
   })
 
   it('does not take a neighbour for the module', () => {

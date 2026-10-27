@@ -103,12 +103,12 @@ function assertAcceptsPeople(row: TenantRowLocked): void {
  */
 export async function createTenant(
   input: { name: string; slug: string; host?: string; adminEmail: string },
-): Promise<{ ok: true; tenantId: number; invited: boolean; inviteFailed?: true } | { ok: false; reason: 'taken' | 'invalid_host' }> {
+): Promise<{ ok: true; tenantId: number; invited: boolean; inviteFailed?: true } | { ok: false; reason: 'taken' | 'invalid' }> {
   const actor = await requirePlatformAdmin()
   const parsed = createTenantInputSchema.parse(input)
   const host = parsed.host === undefined ? null : normalizeHost(parsed.host)
-  if (parsed.host !== undefined && host === null) return { ok: false, reason: 'invalid_host' }
-  if (host !== null && host === mainHost()) return { ok: false, reason: 'taken' }
+  // Un indirizzo che non è un nome di host, o che è quello principale dell'app, non è ammesso: lo stesso rifiuto di addTenantHost.
+  if (parsed.host !== undefined && (host === null || host === mainHost())) return { ok: false, reason: 'invalid' }
 
   let created: { tenantId: TenantId; invitation: PreparedInvitation | null }
   try {
@@ -374,6 +374,8 @@ export async function resendTenantInvite(
     assertAcceptsPeople(await lockTenant(tx, tenantKey))
     const state = await readAdminState(tx, { userId: targetId })
     if (!state || !state.isAdmin) throw new Error('Non è un amministratore di questo tenant')
+    // Come addTenantAdmin: un account disattivato a livello globale non riceve inviti.
+    if (!state.active) throw new Error("L'account è disattivato")
     if (state.hasPassword) return null
     const [account] = await tx.select({ email: users.email }).from(users).where(eq(users.id, targetId)).limit(1)
     const prepared = await prepareInvitationIn(tx, account.email ?? '', actor.userId)

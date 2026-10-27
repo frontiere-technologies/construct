@@ -122,7 +122,7 @@ describe('NewTenantDialog', () => {
   })
 
   it('says the address is not valid when the server refuses it as a host name', async () => {
-    create.mockResolvedValue({ ok: false, reason: 'invalid_host' })
+    create.mockResolvedValue({ ok: false, reason: 'invalid' })
     render()
     fillValid('not a host')
     await submit()

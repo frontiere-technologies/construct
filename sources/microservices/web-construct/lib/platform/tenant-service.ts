@@ -4,7 +4,8 @@ import { escapeLikePattern, normalizeTextSearch, type TextSearch } from '@/lib/g
 import { nextDay } from '@/lib/rbac/date-utils'
 import { requirePlatformAdmin } from '@/lib/rbac/auth-guard'
 import { DEFAULT_TENANT_SLUG } from '@/lib/tenancy/tenant-id'
-import { enterTenant, withPlatform } from './db'
+import { existingTenantId } from '@/lib/tenancy/platform-tenant'
+import { withPlatform } from './db'
 import type { PlatformTenantRow, PlatformTenantsQuery, PlatformTenantStatus, TenantSortField } from './tenants-grid-query'
 
 export type { PlatformTenantRow, PlatformTenantsQuery, PlatformTenantStatus } from './tenants-grid-query'
@@ -122,6 +123,12 @@ export type PlatformTenantDetail = {
 export async function getTenantForPlatform(tenantId: number): Promise<PlatformTenantDetail | null> {
   await requirePlatformAdmin()
   if (!Number.isSafeInteger(tenantId) || tenantId <= 0) return null
+  // Il TenantId nasce solo se il tenant esiste; la transazione ha subito il tenant, per leggere gli amministratori.
+  const tenantKey = await existingTenantId(tenantId).catch((error: unknown) => {
+    if (error instanceof Error && error.message === 'tenant_not_found') return null
+    throw error
+  })
+  if (tenantKey === null) return null
 
   return withPlatform(async tx => {
     const [row] = await tx.select().from(tenant).where(eq(tenant.id, tenantId)).limit(1)
@@ -131,7 +138,6 @@ export async function getTenantForPlatform(tenantId: number): Promise<PlatformTe
 
     let admins: PlatformTenantAdmin[] = []
     if (!row.isTemplate) {
-      await enterTenant(tx, tenantId)
       // Stessi requisiti di app_private.count_active_admins: appartenenza attiva, account attivo, ruolo TENANT_ADMIN.
       const found = await tx.execute<{ user_id: string; email: string; has_password: boolean }>(sql`
         select distinct u.id as user_id, u.email, (u.password_hash is not null) as has_password
@@ -156,5 +162,5 @@ export async function getTenantForPlatform(tenantId: number): Promise<PlatformTe
       hosts,
       admins,
     }
-  })
+  }, tenantKey)
 }
