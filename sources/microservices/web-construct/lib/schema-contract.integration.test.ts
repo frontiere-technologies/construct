@@ -415,7 +415,8 @@ describeIntegration('database runtime boundary', () => {
       select tc.table_name, 'insert-only table the runtime can read, update, delete or truncate'
       from app_private.table_class tc
       where tc.class = 'global_insert_only'
-        and has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'select,update,delete,truncate,references,trigger')
+        and (has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'delete,truncate,trigger')
+          or has_any_column_privilege('construct_runtime', format('public.%I', tc.table_name), 'select,update,references'))
       union all
       select tc.table_name, 'insert-only table with a policy beyond global_owner and global_insert'
       from app_private.table_class tc
@@ -429,12 +430,11 @@ describeIntegration('database runtime boundary', () => {
         where p.schemaname = 'public' and p.tablename = tc.table_name and p.policyname = 'global_insert'
           and p.cmd = 'INSERT' and p.roles = array['construct_runtime']::name[])
       union all
-      select tc.table_name, 'insert-only table whose identity sequence gives the runtime more than usage'
+      select tc.table_name, 'insert-only table whose identity sequence is reachable by the runtime'
       from app_private.table_class tc
       where tc.class = 'global_insert_only'
         and pg_get_serial_sequence(format('public.%I', tc.table_name), 'id') is not null
-        and (not has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', tc.table_name), 'id'), 'usage')
-          or has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', tc.table_name), 'id'), 'select,update'))
+        and has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', tc.table_name), 'id'), 'usage,select,update')
       order by 1, 2
     `))
     expect(violations).toEqual([])
@@ -458,16 +458,35 @@ describeIntegration('database runtime boundary', () => {
       where not has_table_privilege('construct_runtime', format('public.%I', t.name), 'select')
          or not has_table_privilege('construct_runtime', format('public.%I', t.name), 'insert')
       union all
-      select t.name, 'the runtime can update, delete or truncate'
+      select t.name, 'the runtime can update, delete, truncate, reference or trigger'
       from unnest(array['tenant_audit_event']) as t(name)
-      where has_table_privilege('construct_runtime', format('public.%I', t.name), 'update,delete,truncate')
+      where has_table_privilege('construct_runtime', format('public.%I', t.name), 'delete,truncate,trigger')
+         or has_any_column_privilege('construct_runtime', format('public.%I', t.name), 'update,references')
       union all
-      select t.name, 'the identity sequence gives the runtime other than usage'
+      select t.name, 'the identity sequence is reachable by the runtime'
       from unnest(array['tenant_audit_event']) as t(name)
       where pg_get_serial_sequence(format('public.%I', t.name), 'id') is null
-         or not has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', t.name), 'id'), 'usage')
-         or has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', t.name), 'id'), 'select,update')
+         or has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', t.name), 'id'), 'usage,select,update')
       order by 1, 2
+    `))
+    expect(violations).toEqual([])
+  })
+
+  /**
+   * Il confine del flag di amministratore di piattaforma (0057): users è scrivibile dal ruolo
+   * dell'app, e solo questo trigger impedisce di crearne uno con un insert o un update. Se manca,
+   * è disattivato o non copre insert e update per riga, la sicurezza dell'identità di piattaforma
+   * (MT5-RISK-1) non regge più.
+   */
+  it('keeps the platform admin guard trigger on users enabled', async () => {
+    const violations = await withGlobal(tx => tx.execute<{ name: string; problem: string }>(sql`
+      select 'public.users' as name, 'the platform admin guard trigger is missing, disabled or not before insert or update on each row' as problem
+      where not exists (
+        select 1 from pg_trigger g
+        where g.tgrelid = 'public.users'::regclass and g.tgname = 'users_platform_admin_guard' and g.tgenabled in ('O', 'A')
+          and g.tgfoid in (select p.oid from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app_private' and p.proname = 'guard_platform_admin_flag')
+          and g.tgtype & (1 | 2 | 4 | 16) = (1 | 2 | 4 | 16))
     `))
     expect(violations).toEqual([])
   })

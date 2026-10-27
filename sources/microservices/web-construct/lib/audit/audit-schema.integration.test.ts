@@ -43,6 +43,14 @@ async function failureFrom(operation: Promise<unknown>): Promise<{ codes: string
   throw new Error('expected the database to refuse')
 }
 
+/** Gli indirizzi dei fixture di utente: spariscono in afterAll, comunque vadano i test. */
+const createdEmails: string[] = []
+function trackedEmail(kind: string): string {
+  const email = `zzz-${kind}-${unique()}@example.test`
+  createdEmails.push(email)
+  return email
+}
+
 function slug(): string {
   return `zzz-audit-${unique()}`.slice(0, 40)
 }
@@ -85,6 +93,11 @@ describeIntegration('audit tables, platform admin and support consent', () => {
 
   afterAll(async () => {
     const errors: unknown[] = []
+    try {
+      for (const email of createdEmails) {
+        await withOwner(tx => tx.execute(sql`delete from public.users where email = ${email}`))
+      }
+    } catch (error) { errors.push(error) }
     for (const id of createdTenants) {
       try { await deleteTenantForTest(id) } catch (error) { errors.push(error) }
     }
@@ -190,6 +203,9 @@ describeIntegration('audit tables, platform admin and support consent', () => {
   }, 60_000)
 
   it('ensure_default_membership creates nothing for a platform admin', async () => {
+    const adminEmail = trackedEmail('platform')
+    const [admin] = await withOwner(tx => tx.execute<{ id: string }>(sql`
+      insert into public.users (email, is_platform_admin) values (${adminEmail}, true) returning id::text as id`))
     const rollback = new Error('rollback')
     let outcome: { admin: string | null; adminMemberships: number; control: string | null } | null = null
     try {
@@ -197,12 +213,8 @@ describeIntegration('audit tables, platform admin and support consent', () => {
         // Il predefinito accetta le registrazioni autonome solo se l'interruttore è acceso: lo si
         // accende nella transazione, che poi si annulla.
         await tx.execute(sql`update public.tenant_settings set self_registration = true`)
-        const adminEmail = `zzz-platform-${unique()}@example.test`
-        const controlEmail = `zzz-control-${unique()}@example.test`
-        const [admin] = await tx.execute<{ id: string }>(sql`
-          insert into public.users (email, is_platform_admin) values (${adminEmail}, true) returning id::text as id`)
         const [control] = await tx.execute<{ id: string }>(sql`
-          insert into public.users (email) values (${controlEmail}) returning id::text as id`)
+          insert into public.users (email) values (${trackedEmail('control')}) returning id::text as id`)
         const [adminResult] = await tx.execute<{ status: string | null }>(sql`
           select public.ensure_default_membership(${admin.id}::uuid) as status`)
         const [controlResult] = await tx.execute<{ status: string | null }>(sql`
@@ -219,6 +231,89 @@ describeIntegration('audit tables, platform admin and support consent', () => {
     // il null dell'amministratore non direbbe niente.
     expect(outcome).toEqual({ admin: null, adminMemberships: 0, control: 'active' })
   }, 30_000)
+
+  it('ensure_default_membership still returns the status of a platform admin who is already a member', async () => {
+    const [admin] = await withOwner(tx => tx.execute<{ id: string }>(sql`
+      insert into public.users (email, is_platform_admin) values (${trackedEmail('member')}, true) returning id::text as id`))
+    const rollback = new Error('rollback')
+    const statuses: (string | null)[] = []
+    try {
+      await withTenant(DEFAULT, async tx => {
+        // Anche con le registrazioni spente: chi è già membro riceve il suo stato, qualunque
+        // sia l'interruttore (come prima della 0057).
+        await tx.execute(sql`update public.tenant_settings set self_registration = false`)
+        await tx.execute(sql`
+          insert into public.tenant_membership (user_id, status) values (${admin.id}::uuid, 'active')`)
+        const [active] = await tx.execute<{ status: string | null }>(sql`
+          select public.ensure_default_membership(${admin.id}::uuid) as status`)
+        statuses.push(active.status)
+        await tx.execute(sql`
+          update public.tenant_membership set status = 'deactivated' where user_id = ${admin.id}::uuid`)
+        const [deactivated] = await tx.execute<{ status: string | null }>(sql`
+          select public.ensure_default_membership(${admin.id}::uuid) as status`)
+        statuses.push(deactivated.status)
+        throw rollback
+      })
+    } catch (error) {
+      if (error !== rollback) throw error
+    }
+    expect(statuses).toEqual(['active', 'deactivated'])
+  }, 30_000)
+
+  it('the runtime role cannot create a user who is a platform admin', async () => {
+    const failure = await failureFrom(withGlobal(tx => tx.execute(sql`
+      insert into public.users (email, is_platform_admin) values (${trackedEmail('mass')}, true)`)))
+    expect(failure.codes).toContain('42501')
+    expect(failure.text).toContain('is_platform_admin')
+  })
+
+  it('the runtime role cannot set or clear the platform admin flag of an existing user', async () => {
+    const plainEmail = trackedEmail('plain')
+    const adminEmail = trackedEmail('admin')
+    await withGlobal(tx => tx.execute(sql`insert into public.users (email) values (${plainEmail})`))
+    await withOwner(tx => tx.execute(sql`insert into public.users (email, is_platform_admin) values (${adminEmail}, true)`))
+
+    const grant = await failureFrom(withGlobal(tx => tx.execute(sql`
+      update public.users set is_platform_admin = true where email = ${plainEmail}`)))
+    expect(grant.codes).toContain('42501')
+    const revoke = await failureFrom(withGlobal(tx => tx.execute(sql`
+      update public.users set is_platform_admin = false where email = ${adminEmail}`)))
+    expect(revoke.codes).toContain('42501')
+
+    const flags = await withOwner(tx => tx.execute<{ email: string; is_platform_admin: boolean }>(sql`
+      select email, is_platform_admin from public.users where email in (${plainEmail}, ${adminEmail}) order by email`))
+    expect(flags.map(row => [row.email === plainEmail, row.is_platform_admin]).sort()).toEqual([[false, true], [true, false]])
+  }, 30_000)
+
+  it('the runtime role can still insert and update users, flag untouched or restated', async () => {
+    const email = trackedEmail('normal')
+    await withGlobal(tx => tx.execute(sql`insert into public.users (email, name) values (${email}, 'Prima')`))
+    await withGlobal(tx => tx.execute(sql`update public.users set name = 'Dopo' where email = ${email}`))
+    // Drizzle riscrive ogni colonna: lo stesso valore non è un cambio.
+    await withGlobal(tx => tx.execute(sql`
+      update public.users set name = 'Ancora', is_platform_admin = false where email = ${email}`))
+    const rows = await withOwner(tx => tx.execute<{ name: string; is_platform_admin: boolean }>(sql`
+      select name, is_platform_admin from public.users where email = ${email}`))
+    expect(rows).toEqual([{ name: 'Ancora', is_platform_admin: false }])
+  })
+
+  it('construct_owner can set and clear the platform admin flag', async () => {
+    const email = trackedEmail('owner')
+    await withOwner(tx => tx.execute(sql`insert into public.users (email) values (${email})`))
+    const read = () => withOwner(tx => tx.execute<{ is_platform_admin: boolean }>(sql`
+      select is_platform_admin from public.users where email = ${email}`))
+    await withOwner(tx => tx.execute(sql`update public.users set is_platform_admin = true where email = ${email}`))
+    expect(await read()).toEqual([{ is_platform_admin: true }])
+    await withOwner(tx => tx.execute(sql`update public.users set is_platform_admin = false where email = ${email}`))
+    expect(await read()).toEqual([{ is_platform_admin: false }])
+  })
+
+  it('gives the runtime role no privilege at all on the audit identity sequences', async () => {
+    const rows = await withGlobal(tx => tx.execute<{ name: string; any_privilege: boolean }>(sql`
+      select s.name, has_sequence_privilege('construct_runtime', pg_get_serial_sequence(s.name, 'id'), 'usage,select,update') as any_privilege
+      from unnest(array['public.tenant_audit_event', 'public.platform_audit_event']) as s(name)`))
+    expect(rows.map(row => row.any_privilege)).toEqual([false, false])
+  })
 
   it('has no platform admin by default and stores the attribute on users', async () => {
     const rollback = new Error('rollback')

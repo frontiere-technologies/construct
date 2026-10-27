@@ -9,6 +9,29 @@
 -- tenant. Il comando di db.mjs e la console lo impostano (Task 2 e seguenti).
 alter table public.users add column is_platform_admin boolean not null default false;
 
+-- Chi può cambiarlo. Sbloccare l'identità di piattaforma (MT5-RISK-1) dipende da questo valore, ma
+-- users è scrivibile dal ruolo dell'app (0047) e una concessione per colonna spezzerebbe gli insert
+-- di Drizzle, che elencano ogni colonna con il suo DEFAULT. Il confine è quindi un trigger: rifiuta
+-- (42501) un valore vero in inserimento e ogni cambio in aggiornamento, a meno che chi scrive sia
+-- construct_owner o ne erediti i privilegi (migrazioni, comandi di db.mjs con `set local role
+-- construct_owner`, identità di piattaforma). Il ruolo dell'app e il suo login non lo sono.
+create function app_private.guard_platform_admin_flag() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+begin
+  if (case tg_op when 'INSERT' then new.is_platform_admin
+        else new.is_platform_admin is distinct from old.is_platform_admin end)
+     and not pg_catalog.pg_has_role(current_user, 'construct_owner', 'USAGE') then
+    raise exception using errcode = '42501',
+      message = 'is_platform_admin can only be changed by construct_owner';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app_private.guard_platform_admin_flag() from public;
+create trigger users_platform_admin_guard
+  before insert or update on public.users
+  for each row execute function app_private.guard_platform_admin_flag();
+
 -- 2. Il permesso di assistenza (§2.3, MT5-DEC-10) ----------------------------------------------
 -- Dati di tenant, scritti dall'amministratore del tenant nelle impostazioni: fino a quando vale il
 -- permesso, chi l'ha concesso e quando. Un permesso scaduto o revocato (support_until nullo o
@@ -81,11 +104,12 @@ create table public.tenant_audit_event (
 );
 create index tenant_audit_event_occurred_idx on public.tenant_audit_event (id_tenant, occurred_at desc);
 select app_private.protect_tenant_table('public.tenant_audit_event'::regclass);
--- I privilegi di default (0002) danno al ruolo dell'app anche update e delete: qui si tolgono. Della
--- sequenza dell'identità resta il solo usage, quello che serve a inserire (nextval).
+-- I privilegi di default (0002) danno al ruolo dell'app anche update e delete: qui si tolgono. Una
+-- colonna `generated always as identity` non chiede al chiamante nessun privilegio sulla sequenza
+-- (il valore lo prende il motore, non la persona che inserisce): la concessione di default su di
+-- essa (usage, select) si toglie del tutto, e non resta niente che permetta di leggerla o muoverla.
 revoke update, delete, truncate on public.tenant_audit_event from construct_runtime;
 revoke all on sequence public.tenant_audit_event_id_seq from construct_runtime;
-grant usage on sequence public.tenant_audit_event_id_seq to construct_runtime;
 
 -- 5. Il registro della piattaforma (§2.4, MT5-DEC-14, MT5-DEC-15, MT5-DEC-22, MT5-DEC-24) -------
 -- Le stesse colonne, più il tenant toccato (facoltativo: un'azione può non riguardare un tenant).
@@ -108,8 +132,8 @@ create index platform_audit_event_occurred_idx on public.platform_audit_event (o
 create index platform_audit_event_tenant_idx on public.platform_audit_event (id_tenant, occurred_at desc);
 select app_private.declare_global_insert_only_table('public.platform_audit_event',
   'registro della piattaforma; il ruolo dell''app ci inserisce soltanto (pezzo 5a, MT5-DEC-15, MT5-DEC-24)');
+-- Come sopra: nessun privilegio sulla sequenza dell'identità.
 revoke all on sequence public.platform_audit_event_id_seq from construct_runtime;
-grant usage on sequence public.platform_audit_event_id_seq to construct_runtime;
 
 -- 6. Il permesso per leggere il registro del tenant (modello 0041) ------------------------------
 -- Direttamente sotto la categoria Amministrazione, dopo manage-tenant-settings (0053).
