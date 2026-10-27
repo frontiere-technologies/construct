@@ -255,7 +255,7 @@ it('language and translation writes go to the platform audit, not to a tenant au
   - `addTenantAdmin(tenantId, email)`, `resendTenantInvite(tenantId, userId)` — rifiutate in un tenant sospeso o archiviato (MT5-DEC-25);
   - token: stato `none` con `tenantNoneReason: 'suspended' | null`; `/no-tenant` mostra "Questo spazio è sospeso. Contatta il tuo amministratore." quando l'unico tenant della persona sull'indirizzo è sospeso o archiviato.
 
-- [ ] **Step 1: Test**
+- [✅] **Step 1: Test**
 
 ```ts
 it('createTenant copies the template, sets the primary host, makes the admin, and emails a link to the tenant host', …)
@@ -268,8 +268,8 @@ it('each console action writes one row in the platform audit and one in the tena
 it('the platform audit row of createTenant contains no link or token', …)
 ```
 
-- [ ] **Step 2–4:** come sopra.
-- [ ] **Step 5: Spunta MT5-OK-3 (parte senza browser) e commit** — `feat(platform): create tenants with an emailed invitation and manage their lifecycle`
+- [✅] **Step 2–4:** come sopra.
+- [✅] **Step 5: Spunta MT5-OK-3 (parte senza browser) e commit** — `feat(platform): create tenants with an emailed invitation and manage their lifecycle`
 
 ---
 
