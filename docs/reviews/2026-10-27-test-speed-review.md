@@ -86,3 +86,4 @@ git) e i rapporti dei subagenti di questa revisione.
 ## Difetti notati di passaggio
 
 - [ ] ID=TS-25, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Funzione definita due volte e test senza pulizia garantita, Fix description=`_create_category` è definita due volte in `test_functionalities.py` (righe 331 e 629, vale la seconda); i test `test_tipologia_in_edit_*` non hanno `try/finally` e, se falliscono, lasciano voci nel menu condiviso.
+- [ ] ID=TS-26, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Test di stato utente che dipende dall'ordine, Fix description=`test_users.py::test_status_toggle_updates_grid_in_place` cambia lo stato dell'utente più recente: nella serie completa è quello creato da `test_register.py`, ma se `test_users.py` gira da solo è l'amministratore stesso e il test fallisce. Va fatto lavorare su un utente creato apposta (notato nella fase A).
