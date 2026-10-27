@@ -4,9 +4,11 @@ import type { TenantId } from './tenant-id'
 /**
  * Lo stato del tenant nel token di sessione (specifica 2026-10-21, §3.1): `ready` lavora in un
  * tenant; `choose` deve scegliere fra più tenant dell'indirizzo; `none` non ha tenant sull'indirizzo
- * e vede il messaggio di MT4-DEC-3.
+ * e vede il messaggio di MT4-DEC-3. `support` (pezzo 5a, §3.2, MT5-DEC-10): l'amministratore di
+ * piattaforma lavora in assistenza in un tenant che gliel'ha permesso (o nel modello), come in
+ * `ready` ma senza esserne membro; non nasce mai dalla regola di scelta qui sotto.
  */
-export type TenantState = 'ready' | 'choose' | 'none'
+export type TenantState = 'ready' | 'choose' | 'none' | 'support'
 
 export type TenantSelection = { state: 'ready'; tenantId: TenantId } | { state: 'choose' } | { state: 'none' }
 

@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addTenantAdmin, addTenantHost, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus,
 } from '@/lib/platform/tenant-actions'
+import { startSupport } from '@/lib/platform/support-actions'
 import type { PlatformTenantDetail } from '@/lib/platform/tenant-service'
+import { loadPage } from '@/components/tenancy/load-page'
 import { TenantDetail } from './TenantDetail'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -14,7 +16,7 @@ import { TenantDetail } from './TenantDetail'
 vi.mock('@/context/I18nContext', () => ({
   useI18n: () => ({
     t: (key: string, params?: Record<string, string>) => params ? `${key}|${JSON.stringify(params)}` : key,
-    fmt: { date: (value: string) => `date:${value}` },
+    fmt: { date: (value: string) => `date:${value}`, dateTime: (value: string) => `dt:${value}` },
   }),
 }))
 const refresh = vi.fn()
@@ -25,6 +27,9 @@ vi.mock('@/lib/platform/tenant-actions', () => ({
   addTenantAdmin: vi.fn(), addTenantHost: vi.fn(), removeTenantHost: vi.fn(),
   resendTenantInvite: vi.fn(), setPrimaryHost: vi.fn(), setTenantStatus: vi.fn(),
 }))
+vi.mock('@/lib/platform/support-actions', () => ({ startSupport: vi.fn() }))
+// jsdom non naviga: l'ingresso carica la home del tenant da capo, nel browser.
+vi.mock('@/components/tenancy/load-page', () => ({ loadPage: vi.fn() }))
 
 const status = vi.mocked(setTenantStatus)
 const addHost = vi.mocked(addTenantHost)
@@ -32,6 +37,8 @@ const removeHost = vi.mocked(removeTenantHost)
 const makePrimary = vi.mocked(setPrimaryHost)
 const addAdmin = vi.mocked(addTenantAdmin)
 const resend = vi.mocked(resendTenantInvite)
+const enter = vi.mocked(startSupport)
+const load = vi.mocked(loadPage)
 const setNativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
 const setAreaValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!
 
@@ -39,12 +46,13 @@ const ACME: PlatformTenantDetail = {
   id: 7, slug: 'acme', name: 'Acme', status: 'active', isTemplate: false, isDefault: false, createdAt: '2026-07-01T10:00:00Z',
   hosts: [{ host: 'acme.example.test', isPrimary: true }, { host: 'acme2.example.test', isPrimary: false }],
   admins: [{ userId: 'u-1', email: 'capo@acme.test', hasPassword: true }, { userId: 'u-2', email: 'nuovo@acme.test', hasPassword: false }],
+  support: { until: null },
 }
 
 let root: Root | undefined
 let container: HTMLDivElement | undefined
 
-beforeEach(() => { for (const mock of [status, addHost, removeHost, makePrimary, addAdmin, resend, refresh]) mock.mockReset() })
+beforeEach(() => { for (const mock of [status, addHost, removeHost, makePrimary, addAdmin, resend, refresh, enter, load]) mock.mockReset() })
 afterEach(() => {
   act(() => root?.unmount())
   container?.remove()
@@ -333,5 +341,58 @@ describe('TenantDetail: the template', () => {
     expect(buttonNamed('platform.tenant.host.add')).toBeUndefined()
     expect(buttonNamed('platform.tenant.admin.add')).toBeUndefined()
     expect(buttonNamed('platform.tenant.status.suspend')).toBeUndefined()
+  })
+})
+
+// Pezzo 5a, Task 9 (MT5-DEC-6, MT5-DEC-10, MT5-DEC-11): lo stato del permesso e l'ingresso di assistenza.
+describe('TenantDetail: support', () => {
+  const CONSENT = { ...ACME, support: { until: '2026-10-28T10:00:00.000Z' } }
+  const supportSection = () => sectionOf('platform.tenant.detail.support')
+
+  it('without consent says so, and the enter button is off with the reason written in the page', () => {
+    render()
+    expect(supportSection().textContent).toContain('platform.support.none')
+    const button = need('platform.support.enter')
+    expect(button.disabled).toBe(true)
+    expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBe('platform.support.disabled_hint')
+  })
+
+  it('with consent shows the expiry and enters with a written reason, then loads the tenant home', async () => {
+    enter.mockResolvedValue({ state: 'support' })
+    render(CONSENT)
+    expect(supportSection().textContent).toContain('platform.support.until|{"time":"dt:2026-10-28T10:00:00.000Z"}')
+    await click(need('platform.support.enter'))
+    expect(dialog().textContent).toContain('platform.support.enter_title')
+
+    // Senza motivo non parte (MT5-DEC-9).
+    await click(need('platform.support.enter_submit'))
+    expect(alertText()).toBe('platform.tenant.status.reason_required')
+    expect(enter).not.toHaveBeenCalled()
+
+    type(dialog().querySelector('textarea')!, '  controllo del menu  ')
+    await click(need('platform.support.enter_submit'))
+    expect(enter).toHaveBeenCalledWith(7, 'controllo del menu')
+    expect(load).toHaveBeenCalledWith('/')
+  })
+
+  it('a refused entry shows the generic error and stays on the page', async () => {
+    enter.mockRejectedValue(new Error('un dettaglio'))
+    render(CONSENT)
+    await click(need('platform.support.enter'))
+    type(dialog().querySelector('textarea')!, 'motivo')
+    await click(need('platform.support.enter_submit'))
+    expect(alertText()).toBe('platform.support.enter_error')
+    expect(load).not.toHaveBeenCalled()
+  })
+
+  it.each(['suspended', 'archived'] as const)('in a %s tenant the consent does not open the door', status => {
+    render({ ...CONSENT, status })
+    expect(need('platform.support.enter').disabled).toBe(true)
+  })
+
+  it('the template is always enterable, without consent', () => {
+    render({ ...ACME, isTemplate: true, hosts: [], admins: [] })
+    expect(supportSection().textContent).toContain('platform.support.template')
+    expect(need('platform.support.enter').disabled).toBe(false)
   })
 })

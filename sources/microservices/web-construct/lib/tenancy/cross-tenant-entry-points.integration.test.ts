@@ -29,9 +29,11 @@ import {
   addTenantAdmin, addTenantHost, createTenant as createPlatformTenant, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus,
 } from '@/lib/platform/tenant-actions'
 import { saveAppTheme } from '@/lib/theme-actions'
+import { endSupport, startSupport } from '@/lib/platform/support-actions'
 import { getSystemRoleIds } from './system-roles'
 import { chooseTenant } from './tenant-actions'
 import { setSelfRegistration } from './tenant-settings-actions'
+import { grantSupportConsent, revokeSupportConsent } from './support-consent-actions'
 import { tenantIdForTest } from './testing'
 import type { TenantId } from './tenant-id'
 
@@ -308,6 +310,16 @@ async function setSelfRegistrationOf(tenantId: TenantId, enabled: boolean): Prom
   await withOwner(tx => tx.update(tenantSettings).set({ selfRegistration: enabled }), tenantId)
 }
 
+/** Il permesso di assistenza di un tenant, scritto dal fixture: valido per un'ora o tolto. */
+async function setConsentOf(tenantId: TenantId, valid: boolean): Promise<void> {
+  await withOwner(tx => tx.update(tenantSettings).set({ supportUntil: valid ? sql`now() + interval '1 hour'` : null }), tenantId)
+}
+
+async function consentOf(tenantId: TenantId): Promise<string | null> {
+  const [row] = await withOwner(tx => tx.select({ until: tenantSettings.supportUntil }).from(tenantSettings), tenantId)
+  return row?.until ?? null
+}
+
 async function lastTenantOf(userId: string): Promise<number | null> {
   const [row] = await withGlobal(tx => tx.select({ last: users.lastTenantId }).from(users).where(eq(users.id, userId)))
   return row?.last ?? null
@@ -441,6 +453,31 @@ const CASES: Record<string, CrossTenantCase> = {
       expect(row).toEqual({ on: true })
     },
   },
+  // --- Il permesso di assistenza (pezzo 5a, Task 9) -----------------------------------------------
+  // Come setSelfRegistration: nessun parametro dice il tenant, si scrive quello dell'attore.
+  'lib/tenancy/support-consent-actions.ts#grantSupportConsent': {
+    entry: grantSupportConsent,
+    arrange: async () => {
+      await setConsentOf(A, false)
+      await setConsentOf(B, false)
+    },
+    run: async () => {
+      await grantSupportConsent('1h')
+      expect(await consentOf(A)).not.toBeNull()
+    },
+  },
+  'lib/tenancy/support-consent-actions.ts#revokeSupportConsent': {
+    entry: revokeSupportConsent,
+    arrange: async () => {
+      await setConsentOf(A, true)
+      await setConsentOf(B, true)
+    },
+    run: async () => {
+      // A perde il permesso, B (l'impronta) lo tiene.
+      expect(await revokeSupportConsent()).toEqual({ ok: true })
+      expect(await consentOf(A)).toBeNull()
+    },
+  },
   'lib/theme-actions.ts#saveAppTheme': {
     entry: saveAppTheme,
     run: async () => {
@@ -493,6 +530,25 @@ const CASES: Record<string, CrossTenantCase> = {
     run: async () => {
       // bUser è l'amministratore di B senza password: un invito per lui creerebbe un token (l'impronta lo vedrebbe).
       await expect(resendTenantInvite(Number(B), bUser)).rejects.toThrow('Unauthorized')
+    },
+  },
+  // L'ingresso di assistenza (Task 9): l'amministratore di A non è amministratore di piattaforma, e
+  // nemmeno con il permesso valido di B entra in B o scrive nei suoi registri.
+  'lib/platform/support-actions.ts#startSupport': {
+    entry: startSupport,
+    arrange: () => setConsentOf(B, true),
+    run: async () => {
+      await expect(startSupport(Number(B), 'preso da A')).rejects.toThrow('Unauthorized')
+      expect(mocks.unstableUpdate).not.toHaveBeenCalled()
+    },
+  },
+  'lib/platform/support-actions.ts#endSupport': {
+    entry: endSupport,
+    run: async () => {
+      // Una sessione che si dice in assistenza in B: la guardia rilegge l'attributo e rifiuta, nessuna uscita nei registri di B.
+      mocks.session = { ...sessionOf(adminA), user: { ...sessionOf(adminA).user, tenantState: 'support', tenantId: Number(B) } }
+      await expect(endSupport()).rejects.toThrow('Unauthorized')
+      expect(mocks.unstableUpdate).not.toHaveBeenCalled()
     },
   },
   'app/platform/tenants/[tenantId]/page.tsx#default': {
@@ -611,11 +667,14 @@ const CASES: Record<string, CrossTenantCase> = {
     arrange: async () => {
       await setSelfRegistrationOf(A, false)
       await setSelfRegistrationOf(B, true)
+      await setConsentOf(A, false)
+      await setConsentOf(B, true)
     },
     run: async () => {
-      // L'interruttore di A (spento, quello di B è acceso); A non ha un indirizzo dedicato.
+      // L'interruttore di A (spento, quello di B è acceso); A non ha un indirizzo dedicato. Il
+      // permesso di assistenza è quello di A (nessuno), non quello di B (valido).
       expect(propsOf<{ initialEnabled: boolean; selfRegistrationApplies: boolean }>(await TenantSettingsPage()))
-        .toEqual({ initialEnabled: false, selfRegistrationApplies: false })
+        .toEqual({ initialEnabled: false, selfRegistrationApplies: false, support: { until: null, inProgress: false, locked: false } })
     },
   },
   'app/(protected)/(admin)/admin/theme/page.tsx#default': {

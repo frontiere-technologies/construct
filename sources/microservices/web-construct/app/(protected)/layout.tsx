@@ -9,6 +9,7 @@ import { listAvailableTenants } from '@/lib/tenancy/host-tenants'
 import { readRequestHost } from '@/lib/tenancy/request-host'
 import { resolveRequestTenant } from '@/lib/tenancy/request-tenant'
 import { Layout } from '@/components/Layout'
+import { SupportBanner } from '@/components/tenancy/SupportBanner'
 
 const log = createLogger('protected-layout')
 
@@ -49,8 +50,13 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   const tenants = availableTenants.map(tenant => ({ id: Number(tenant.tenantId), name: tenant.name }))
   const current = tenants.find(tenant => tenant.id === Number(tenantId))
 
+  // In assistenza (MT5-DEC-10) la fascia con tenant e scadenza è sempre visibile, su ogni pagina del tenant.
+  const banner = session?.user?.tenantState === 'support'
+    ? <SupportBanner tenantName={session.user.tenantName ?? ''} until={session.user.supportUntil ?? null} />
+    : undefined
+
   return (
-    <Layout menuItems={menuItems} tenantSwitcher={current ? { current, tenants } : undefined}>
+    <Layout menuItems={menuItems} tenantSwitcher={current ? { current, tenants } : undefined} banner={banner}>
       {children}
     </Layout>
   )

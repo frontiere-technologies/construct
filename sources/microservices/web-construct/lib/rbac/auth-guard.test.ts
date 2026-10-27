@@ -6,6 +6,7 @@ import type { PermissionCode } from './permission-catalog'
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   resolveActor: vi.fn(),
+  resolveSupportActor: vi.fn(),
   resolvePlatformAdmin: vi.fn(),
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
   redirect: vi.fn((url: string) => { throw new Error(`NEXT_REDIRECT ${url}`) }),
@@ -22,12 +23,15 @@ vi.mock('@/lib/tenancy/request-tenant', async () => {
   const { tenantIdForTest } = await import('@/lib/tenancy/testing')
   return {
     tenantFromSession: (session: { user?: { tenantState?: string; tenantId?: number | null } }) =>
-      session.user?.tenantState === 'ready' && typeof session.user.tenantId === 'number' ? tenantIdForTest(session.user.tenantId) : null,
+      (session.user?.tenantState === 'ready' || session.user?.tenantState === 'support') && typeof session.user.tenantId === 'number'
+        ? tenantIdForTest(session.user.tenantId)
+        : null,
+    isSupportSession: (session: { user?: { tenantState?: string } }) => session.user?.tenantState === 'support',
   }
 })
 // Mock completo, non parziale: il modulo vero importa `@/lib/db`, e un test unitario non deve
 // aprire una connessione. `auth-guard` da `./actor` usa solo `resolveActor` e il tipo `Actor`.
-vi.mock('./actor', () => ({ resolveActor: mocks.resolveActor }))
+vi.mock('./actor', () => ({ resolveActor: mocks.resolveActor, resolveSupportActor: mocks.resolveSupportActor }))
 
 const {
   requireAdministrator, requireAdministratorPage, requirePagePermission, requirePermission,
@@ -175,5 +179,27 @@ describe('requirePlatformAdmin', () => {
     await expect(requirePlatformAdmin()).rejects.toThrow('Unauthorized')
     await expect(requirePlatformAdminPage()).rejects.toThrow('NEXT_NOT_FOUND')
     expect(mocks.resolvePlatformAdmin).not.toHaveBeenCalled()
+  })
+})
+
+// Pezzo 5a, Task 9 (§3.2, MT5-DEC-12): in assistenza la persona non è membro del tenant, e l'attore
+// lo dà il permesso riletto dal database, non l'appartenenza.
+describe('the actor of a support session', () => {
+  beforeEach(() => {
+    mocks.getSession.mockReset().mockResolvedValue({ user: { id: 'u1', tenantState: 'support', tenantId: defaultTestTenant() } })
+    mocks.resolveActor.mockReset()
+    mocks.resolveSupportActor.mockReset()
+  })
+
+  it('reads the support actor of the supported tenant, never the membership actor', async () => {
+    mocks.resolveSupportActor.mockResolvedValue({ ...actor(['manage-roles'], true), support: true })
+    await expect(requirePermission('manage-roles')).resolves.toMatchObject({ support: true })
+    expect(mocks.resolveSupportActor).toHaveBeenCalledWith(defaultTestTenant(), 'u1')
+    expect(mocks.resolveActor).not.toHaveBeenCalled()
+  })
+
+  it('refuses when the support conditions no longer hold', async () => {
+    mocks.resolveSupportActor.mockResolvedValue(null)
+    await expect(requirePermission('read-menu')).rejects.toThrow('Unauthorized')
   })
 })

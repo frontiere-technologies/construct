@@ -13,11 +13,12 @@ function isPlatformPath(pathname: string): boolean {
 /**
  * Dove sta di casa una sessione secondo lo stato del tenant: `choose` → la pagina di scelta,
  * `none` → il messaggio "Non sei configurato su questo indirizzo" (per un amministratore di
- * piattaforma la console, MT5-DEC-3), `ready` → la home. Uno stato mancante o sconosciuto vale
- * `none`, come nel callback `session`: mai un tenant per difetto.
+ * piattaforma la console, MT5-DEC-3), `ready` → la home. `support` (pezzo 5a, §3.2) è come `ready`:
+ * la piattaforma lavora nel tenant assistito, che il callback jwt ha già rivalidato. Uno stato
+ * mancante o sconosciuto vale `none`, come nel callback `session`: mai un tenant per difetto.
  */
 function homeOfTenantState(tenantState: unknown, isPlatformAdmin: boolean): '/' | '/select-tenant' | '/no-tenant' | '/platform' {
-  if (tenantState === 'ready') return '/'
+  if (tenantState === 'ready' || tenantState === 'support') return '/'
   if (tenantState === 'choose') return '/select-tenant'
   return isPlatformAdmin ? PLATFORM_HOME : '/no-tenant'
 }

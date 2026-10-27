@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth-session'
-import { tenantFromSession } from '@/lib/tenancy/request-tenant'
-import { resolveActor, type Actor } from './actor'
+import { isSupportSession, tenantFromSession } from '@/lib/tenancy/request-tenant'
+import { resolveActor, resolveSupportActor, type Actor } from './actor'
 import type { PermissionCode } from './permission-catalog'
 import { resolvePlatformAdmin, type PlatformActor } from './platform-admin'
 
@@ -25,7 +25,8 @@ async function currentActor(): Promise<Actor | null> {
   // Il tenant si legge dalla sessione già letta: una seconda auth() in una rotta rifarebbe la lettura.
   const tenantId = tenantFromSession(session)
   if (tenantId === null) return null
-  return resolveActor(tenantId, userId)
+  // In assistenza (pezzo 5a, §3.2) la persona non è membro del tenant: l'attore lo dà il permesso, riletto.
+  return isSupportSession(session) ? resolveSupportActor(tenantId, userId) : resolveActor(tenantId, userId)
 }
 
 export async function requirePermission(code: PermissionCode): Promise<Actor> {

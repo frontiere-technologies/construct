@@ -8,7 +8,9 @@ import { tenantIdForTest } from '@/lib/tenancy/testing'
 const mocks = vi.hoisted(() => ({
   listAvailableTenants: vi.fn(),
   logError: vi.fn(),
-  session: { user: { id: 'u1', roleIds: [1] } } as { user: { id: string; roleIds: number[]; isPlatformAdmin?: boolean } },
+  session: { user: { id: 'u1', roleIds: [1] } } as {
+    user: { id: string; roleIds: number[]; isPlatformAdmin?: boolean; tenantState?: string; tenantName?: string | null; supportUntil?: string | null }
+  },
   resolvePlatformAdmin: vi.fn(),
 }))
 
@@ -29,11 +31,13 @@ vi.mock('@/lib/tenancy/request-tenant', async () => {
 })
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: mocks.logError, warn: vi.fn(), info: vi.fn() }) }))
 vi.mock('@/components/Layout', () => ({ Layout: () => null }))
+vi.mock('@/components/tenancy/SupportBanner', () => ({ SupportBanner: () => null }))
 
 const { default: ProtectedLayout } = await import('./layout')
 
 interface LayoutProps {
   menuItems: unknown[]
+  banner?: { props: { tenantName: string; until: string | null } }
   tenantSwitcher?: { current: { id: number; name: string }; tenants: { id: number; name: string }[] }
 }
 
@@ -113,5 +117,23 @@ describe('ProtectedLayout', () => {
 
     expect(props.menuItems).toEqual([{ id: 1 }])
     expect(mocks.logError).toHaveBeenCalledTimes(1)
+  })
+
+  // Pezzo 5a, Task 9: in assistenza la fascia è sempre visibile, con tenant e scadenza (MT5-DEC-10).
+  it('renders the support banner in support state, with the tenant and the expiry', async () => {
+    mocks.listAvailableTenants.mockResolvedValue([])
+    mocks.session = { user: { id: 'u1', roleIds: [1], tenantState: 'support', tenantName: 'Acme', supportUntil: '2026-10-27T12:00:00.000Z' } }
+
+    const props = await renderLayout()
+
+    expect(props.banner?.props).toEqual({ tenantName: 'Acme', until: '2026-10-27T12:00:00.000Z' })
+    // Il tenant in assistenza non è fra quelli della persona: nessun selettore che porti altrove.
+    expect(props.tenantSwitcher).toBeUndefined()
+  })
+
+  it('renders no banner outside support', async () => {
+    mocks.listAvailableTenants.mockResolvedValue([])
+    mocks.session = { user: { id: 'u1', roleIds: [1], tenantState: 'ready' } }
+    expect((await renderLayout()).banner).toBeUndefined()
   })
 })

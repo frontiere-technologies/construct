@@ -49,4 +49,14 @@ describe('auditActorOf', () => {
     }
     expect(auditActorOf(tenantActor)).toEqual({ userId: 'u3', email: null, kind: 'person' })
   })
+
+  // Pezzo 5a, Task 9 (MT5-DEC-12, MT5-DEC-14): in assistenza l'attore è del tenant ma agisce come piattaforma.
+  it('presents a platform admin in support as the platform, by the explicit support marker', () => {
+    const supportActor: Actor = {
+      userId: 'u4', tenantId: defaultTestTenant(), roleIds: [1], isAdmin: true, isPlatformAdmin: true, permissions: new Set(), support: true,
+    }
+    expect(auditActorOf(supportActor)).toEqual({ userId: 'u4', email: null, kind: 'platform' })
+    // L'attributo di piattaforma da solo non basta: un amministratore di piattaforma che è anche membro del tenant agisce come persona.
+    expect(auditActorOf({ ...supportActor, support: undefined })).toEqual({ userId: 'u4', email: null, kind: 'person' })
+  })
 })

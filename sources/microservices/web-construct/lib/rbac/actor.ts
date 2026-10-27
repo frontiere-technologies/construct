@@ -1,6 +1,8 @@
 import { cache } from 'react'
 import { withTenant } from '@/lib/db/tenant-db'
 import { evaluateAuthorization, isActiveAccount } from '@/lib/auth-policy'
+import { readRequestHost } from '@/lib/tenancy/request-host'
+import { selectSupportAccess, supportConditionsHold } from '@/lib/tenancy/support-consent'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { selectAuthorizationSnapshot } from './auth-roles'
 import { PERMISSION_CODES, isPermissionCode, type PermissionCode } from './permission-catalog'
@@ -14,6 +16,13 @@ export interface Actor {
   /** Attributo dell'account (MT5-DEC-1), letto con il resto dell'autorizzazione: non è un permesso del tenant. */
   isPlatformAdmin: boolean
   permissions: ReadonlySet<PermissionCode>
+  /**
+   * L'amministratore di piattaforma in assistenza nel tenant (pezzo 5a, MT5-DEC-12): ha i permessi
+   * di un amministratore del tenant, ma nel registro agisce come piattaforma (`auditActorOf`) e non
+   * tocca il permesso di assistenza. Assente per una persona del tenant: lo mette solo
+   * `resolveSupportActor`, mai la forma dell'oggetto.
+   */
+  support?: true
 }
 
 /**
@@ -80,3 +89,27 @@ export const resolveActor = cache(async (tenantId: TenantId, userId: string): Pr
     }
     return buildActor(userId, tenantId, authorization, snapshot.permissionCodes, { defaultTenant: snapshot.tenantIsDefault })
   }))
+
+/**
+ * L'attore dell'amministratore di piattaforma in assistenza (pezzo 5a, §3.2, MT5-DEC-12): non è
+ * membro del tenant, quindi `resolveActor` non lo riconosce. Ha i permessi del ruolo TENANT_ADMIN
+ * del tenant, cioè quelli di un amministratore (DEC-5), con la stessa regola dei cataloghi globali;
+ * la gestione del permesso di assistenza la rifiutano le sue azioni (`support`).
+ *
+ * Non si fida del token: rilegge nella stessa istruzione tutto ciò che la rivalidazione controlla
+ * (permesso valido o modello, tenant attivo, attributo e account, indirizzo principale, voce
+ * d'ingresso aperta). Una lettura per richiesta, come `resolveActor`.
+ */
+export const resolveSupportActor = cache(async (tenantId: TenantId, userId: string): Promise<Actor | null> => {
+  const host = await readRequestHost()
+  const access = await withTenant(tenantId, tx => selectSupportAccess(tx, userId, host, { entry: true }))
+  if (!supportConditionsHold(access) || !access.entryOpen) return null
+  const actor = buildActor(
+    userId,
+    tenantId,
+    { accountActive: true, roleIds: [access.tenantAdminRoleId], isAdmin: true, isPlatformAdmin: true },
+    [],
+    { defaultTenant: access.isDefault },
+  )
+  return actor && { ...actor, support: true }
+})

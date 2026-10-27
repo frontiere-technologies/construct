@@ -23,7 +23,7 @@ describe('effective Auth.js callback configuration', () => {
 describe('routing by tenant state', () => {
   type AuthorizedParams = Parameters<NonNullable<typeof authConfig.callbacks.authorized>>[0]
 
-  function signedIn(tenantState: 'ready' | 'choose' | 'none') {
+  function signedIn(tenantState: 'ready' | 'choose' | 'none' | 'support') {
     return { user: { id: 'user-1', accountActive: true, tenantState }, expires: '2099-01-01T00:00:00.000Z' }
   }
 
@@ -56,6 +56,16 @@ describe('routing by tenant state', () => {
     expect(await destination('/', signedIn('ready'))).toBe(true)
     expect(await destination('/settings', signedIn('ready'))).toBe(true)
     expect(await destination('/login', signedIn('ready'))).toBe('/')
+  })
+
+  // Pezzo 5a, Task 9: in assistenza la piattaforma lavora nel tenant come in `ready` (MT5-DEC-12).
+  it('a support session behaves like a ready one: the tenant pages open, the chooser and the message send home', async () => {
+    for (const page of ['/', '/settings', '/user-management', '/admin/tenant-settings']) {
+      expect(await destination(page, signedIn('support'))).toBe(true)
+    }
+    expect(await destination('/select-tenant', signedIn('support'))).toBe('/')
+    expect(await destination('/no-tenant', signedIn('support'))).toBe('/')
+    expect(await destination('/login', signedIn('support'))).toBe('/')
   })
 
   it('without a session the chooser and the message send to /login', async () => {

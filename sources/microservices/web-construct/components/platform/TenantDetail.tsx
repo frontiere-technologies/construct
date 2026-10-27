@@ -8,7 +8,9 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { loadPage } from '@/components/tenancy/load-page'
 import { useI18n } from '@/context/I18nContext'
+import { startSupport } from '@/lib/platform/support-actions'
 import {
   addTenantAdmin, addTenantHost, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus,
   type HostActionResult,
@@ -47,7 +49,8 @@ interface Props {
  * passa al server la conferma esplicita. Un errore del server non si mostra mai: in produzione non
  * arriva e il testo è sempre quello generico (i rifiuti previsti hanno il loro messaggio, perché le
  * azioni li restituiscono come risultato). Chi decide è il server: i bottoni spenti dicono solo
- * perché. Le sezioni di assistenza e degli eventi della piattaforma arrivano con i Task 9 e 10.
+ * perché. L'assistenza (MT5-DEC-10, MT5-DEC-11): lo stato del permesso del tenant e l'ingresso,
+ * con un motivo scritto; il modello si apre sempre. Gli eventi della piattaforma arrivano con il Task 10.
  */
 export function TenantDetail({ tenant }: Props) {
   const { t, fmt } = useI18n()
@@ -58,10 +61,14 @@ export function TenantDetail({ tenant }: Props) {
   const [addingAdmin, setAddingAdmin] = useState(false)
   const [hostToMakePrimary, setHostToMakePrimary] = useState<string | null>(null)
   const [hostToRemove, setHostToRemove] = useState<string | null>(null)
+  const [enteringSupport, setEnteringSupport] = useState(false)
   const hintId = useId()
+  const supportHintId = useId()
 
   const fixed = tenant.isTemplate || tenant.isDefault
   const takesPeople = !tenant.isTemplate && tenant.status === 'active'
+  // Lo stesso controllo del server (che decide comunque): tenant attivo e permesso valido, o il modello.
+  const canEnterSupport = tenant.status === 'active' && (tenant.isTemplate || tenant.support.until !== null)
   const done = () => router.refresh()
 
   /** L'esito di un'azione sugli indirizzi: aggiorna la pagina, o spiega il rifiuto. */
@@ -167,6 +174,24 @@ export function TenantDetail({ tenant }: Props) {
         </ul>
       </section>
 
+      <section aria-labelledby={`${hintId}-support`} className="rounded-lg border border-border-subtle p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 id={`${hintId}-support`} className="text-base font-semibold">{t('platform.tenant.detail.support')}</h2>
+          <Button
+            size="sm" disabled={!canEnterSupport} aria-describedby={canEnterSupport ? undefined : supportHintId}
+            onClick={() => { setNotice(null); setEnteringSupport(true) }}
+          >
+            {t('platform.support.enter')}
+          </Button>
+        </div>
+        <p className="text-sm text-foreground">
+          {tenant.isTemplate
+            ? t('platform.support.template')
+            : tenant.support.until ? t('platform.support.until', { time: fmt.dateTime(tenant.support.until) }) : t('platform.support.none')}
+        </p>
+        {!canEnterSupport && <p id={supportHintId} className="mt-2 text-sm text-muted-foreground">{t('platform.support.disabled_hint')}</p>}
+      </section>
+
       {statusChange && (
         <StatusDialog
           tenant={tenant} change={statusChange} onClose={() => setStatusChange(null)}
@@ -174,6 +199,7 @@ export function TenantDetail({ tenant }: Props) {
           onFailed={() => { setStatusChange(null); setNotice({ kind: 'error', text: t('platform.tenant.status.error') }) }}
         />
       )}
+      {enteringSupport && <SupportDialog tenantId={tenant.id} onClose={() => setEnteringSupport(false)} />}
       {addingHost && <AddHostDialog tenantId={tenant.id} onClose={() => setAddingHost(false)} onAdded={done} />}
       {addingAdmin && <AddAdminDialog tenantId={tenant.id} onClose={() => setAddingAdmin(false)} onAdded={done} />}
       {hostToMakePrimary && (
@@ -194,6 +220,57 @@ export function TenantDetail({ tenant }: Props) {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * L'ingresso in assistenza (MT5-DEC-9, MT5-DEC-10): un motivo scritto, che finisce nei due registri.
+ * Dopo l'ingresso il browser carica la home del tenant da capo, con la sessione appena aggiornata.
+ */
+function SupportDialog({ tenantId, onClose }: { tenantId: number; onClose: () => void }) {
+  const { t } = useI18n()
+  const [reason, setReason] = useState('')
+  const [missingReason, setMissingReason] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const titleId = useId()
+  const reasonId = useId()
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (busy) return
+    const trimmed = reason.trim()
+    if (!trimmed) { setMissingReason(true); return }
+    setBusy(true); setFailed(false)
+    try {
+      await startSupport(tenantId, trimmed)
+    } catch {
+      setFailed(true)
+      setBusy(false)
+      return
+    }
+    loadPage('/')
+  }
+
+  return (
+    <AccessibleDialog titleId={titleId} onClose={onClose} busy={busy} panelClassName="bg-popover rounded-xl p-6 w-full max-w-md shadow-xl">
+      <form onSubmit={submit} noValidate>
+        <h2 id={titleId} className="mb-4 text-lg font-bold">{t('platform.support.enter_title')}</h2>
+        <label htmlFor={reasonId} className="mb-1 block text-xs font-medium text-muted-foreground">{t('platform.tenant.status.reason')}</label>
+        <Textarea
+          id={reasonId} data-dialog-initial-focus rows={3} maxLength={500} value={reason}
+          onChange={event => { setReason(event.target.value); setMissingReason(false) }}
+        />
+        <div className="mt-1 min-h-5 text-sm">
+          {missingReason && <p role="alert" className="text-destructive-muted-foreground">{t('platform.tenant.status.reason_required')}</p>}
+          {failed && <p role="alert" className="text-destructive-muted-foreground">{t('platform.support.enter_error')}</p>}
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" variant="outline" data-dialog-close onClick={onClose}>{t('common.actions.cancel')}</Button>
+          <Button type="submit" disabled={busy}>{t('platform.support.enter_submit')}</Button>
+        </div>
+      </form>
+    </AccessibleDialog>
   )
 }
 

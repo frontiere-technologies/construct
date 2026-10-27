@@ -29,6 +29,8 @@ import { POST as register } from '@/app/api/auth/register/route'
 import { enterTenant } from '@/lib/tenancy/token-tenant'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { setSelfRegistration } from '@/lib/tenancy/tenant-settings-actions'
+import { grantSupportConsent, revokeSupportConsent } from '@/lib/tenancy/support-consent-actions'
+import { endSupport, startSupport } from '@/lib/platform/support-actions'
 import { defaultTestTenant, tenantIdForTest } from '@/lib/tenancy/testing'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 
@@ -197,6 +199,11 @@ async function userIdOf(email: string): Promise<string> {
   return row.id
 }
 
+/** Il permesso di assistenza di A, scritto dal fixture: valido per un'ora o tolto. */
+async function setConsentOf(tenantId: TenantId, valid: boolean): Promise<void> {
+  await withOwner(tx => tx.update(tenantSettings).set({ supportUntil: valid ? sql`now() + interval '1 hour'` : null }), tenantId)
+}
+
 async function setSelfRegistrationOf(tenantId: TenantId, enabled: boolean): Promise<void> {
   await withOwner(tx => tx.update(tenantSettings).set({ selfRegistration: enabled }), tenantId)
 }
@@ -341,6 +348,18 @@ const CASES: Record<string, AuditCase> = {
     arrange: () => setSelfRegistrationOf(A, false),
     run: async () => { await setSelfRegistration(true) },
     expected: [{ operation: 'settings.self_registration', objectType: 'tenant_settings', objectId: () => A }],
+  },
+  // Il permesso di assistenza è un'azione del tenant (MT5-DEC-20): solo nel registro del tenant.
+  'lib/tenancy/support-consent-actions.ts#grantSupportConsent': {
+    entry: grantSupportConsent, sink: 'tenant',
+    run: async () => { await grantSupportConsent('1h') },
+    expected: [{ operation: 'support.grant', objectType: 'tenant_settings', objectId: () => A }],
+  },
+  'lib/tenancy/support-consent-actions.ts#revokeSupportConsent': {
+    entry: revokeSupportConsent, sink: 'tenant',
+    arrange: () => setConsentOf(A, true),
+    run: async () => { expect(await revokeSupportConsent()).toEqual({ ok: true }) },
+    expected: [{ operation: 'support.revoke', objectType: 'tenant_settings', objectId: () => A }],
   },
   'app/api/admin/send-invite/route.ts#POST': {
     entry: sendInvite, sink: 'tenant',
@@ -494,6 +513,30 @@ const CASES: Record<string, AuditCase> = {
     entry: resendTenantInvite, sink: 'platform', as: 'platformAdmin', kind: 'platform',
     run: async () => { expect(await resendTenantInvite(state.consoleTenantId, await userIdOf(state.consoleAdminEmail))).toEqual({ ok: true, invited: true }) },
     expected: [{ operation: 'tenant.invite.resend', objectType: 'user', objectId: () => userIdOf(state.consoleAdminEmail) }],
+  },
+  // Ingresso e uscita di assistenza (MT5-DEC-20): nel registro della piattaforma (qui) e in quello del
+  // tenant, con la veste della piattaforma (provato in lib/platform/support-actions.integration.test.ts).
+  'lib/platform/support-actions.ts#startSupport': {
+    entry: startSupport, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    refuse: async () => {
+      // Chi non è amministratore di piattaforma, e la piattaforma senza permesso: nessuna voce.
+      await expect(startSupport(Number(A), 'prova')).rejects.toThrow('Unauthorized')
+      mocks.session = sessionOf(platformAdmin, A)
+      await setConsentOf(A, false)
+      await expect(startSupport(Number(A), 'prova')).rejects.toThrow('support_not_allowed')
+    },
+    arrange: () => setConsentOf(A, true),
+    run: async () => { await startSupport(Number(A), 'prova') },
+    expected: [{ operation: 'support.enter', objectType: 'tenant', objectId: () => A }],
+  },
+  'lib/platform/support-actions.ts#endSupport': {
+    entry: endSupport, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    arrange: async () => {
+      const session = sessionOf(platformAdmin, A)
+      mocks.session = { ...session, user: { ...session.user, tenantState: 'support' } }
+    },
+    run: async () => { await endSupport() },
+    expected: [{ operation: 'support.exit', objectType: 'tenant', objectId: () => A }],
   },
   'lib/platform/tenant-actions.ts#setTenantStatus': {
     entry: setTenantStatus, sink: 'platform', as: 'platformAdmin', kind: 'platform',

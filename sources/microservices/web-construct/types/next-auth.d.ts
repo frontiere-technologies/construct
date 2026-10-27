@@ -14,9 +14,12 @@ declare module 'next-auth' {
       tenantId: number | null
       tenantName: string | null
       // Con `tenantState === 'none'`: `suspended` se l'unico tenant della persona sull'indirizzo è sospeso o archiviato (pezzo 5a, MT5-DEC-7).
-      tenantNoneReason: TenantNoneReason
+      tenantNoneReason: 'suspended' | null
       // Un indizio per il menu e il proxy (pezzo 5a, MT5-DEC-3): ogni porta della console rilegge l'attributo dal database.
       isPlatformAdmin: boolean
+      // Solo con `tenantState === 'support'` (pezzo 5a, MT5-DEC-10): scadenza del permesso (nulla nel modello) e motivo, per la fascia.
+      supportUntil: string | null
+      supportReason: string | null
     } & DefaultSession['user']
   }
 }
@@ -34,5 +37,7 @@ declare module 'next-auth/jwt' {
     tenantName?: string | null
     tenantNoneReason?: TenantNoneReason
     isPlatformAdmin?: boolean
+    supportUntil?: string | null
+    supportReason?: string | null
   }
 }

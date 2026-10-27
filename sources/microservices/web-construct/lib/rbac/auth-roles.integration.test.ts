@@ -378,7 +378,7 @@ describeIntegration('tenant in the token, revalidated on every request', () => {
   }
 
   function readyToken(tenantId: TenantId, host: string | null): TokenTenant {
-    return { tenantId, tenantState: 'ready', tenantHost: host, tenantName: null, accountActive: true, roleIds: [], tenantNoneReason: null, isPlatformAdmin: false }
+    return { tenantId, tenantState: 'ready', tenantHost: host, tenantName: null, accountActive: true, roleIds: [], tenantNoneReason: null, isPlatformAdmin: false, supportUntil: null, supportReason: null }
   }
 
   beforeAll(async () => {

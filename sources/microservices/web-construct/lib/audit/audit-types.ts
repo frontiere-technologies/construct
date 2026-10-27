@@ -93,13 +93,14 @@ export function sanitizeAuditDetails(details: Record<string, unknown> | undefine
  * porta l'email (si legge dall'account al momento della scrittura, `recordTenantAudit`): qui resta
  * nulla, e la voce la completa con la stessa istruzione.
  *
- * Il caso dell'assistenza (un attore del tenant che è la piattaforma in assistenza, e quindi
- * `platform`) arriva con il Task 9: si aggiunge qui, in questa sola funzione, accanto al caso
- * dell'attore di tenant.
+ * Il caso dell'assistenza (pezzo 5a, MT5-DEC-12, MT5-DEC-14): l'amministratore di piattaforma in
+ * assistenza è un attore del tenant (ha il tenant e i permessi), ma nel registro agisce come
+ * piattaforma, con il proprio account. Lo dice il discriminante esplicito `support`, che solo
+ * `resolveSupportActor` mette: mai la forma dell'oggetto.
  */
 export function auditActorOf(actor: AuditActorSource): AuditActor {
   // Si distingue da ciò che solo l'attore del tenant ha, il tenant (`tenantId`): un campo che un
   // giorno si aggiungesse a `PlatformActor`, come l'email, non cambia la veste di nessuno.
-  if ('tenantId' in actor) return { userId: actor.userId, email: null, kind: 'person' }
+  if ('tenantId' in actor) return { userId: actor.userId, email: null, kind: actor.support === true ? 'platform' : 'person' }
   return { userId: actor.userId, email: actor.email, kind: 'platform' }
 }

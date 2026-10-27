@@ -427,6 +427,23 @@ describe('tenant chosen at sign-in (MT4-DEC-4, MT4-DEC-15, MT4-DEC-16)', () => {
     expect((await sessionOf({ ...none, accountActive: false, isPlatformAdmin: true })).user).toMatchObject({ isPlatformAdmin: false })
   })
 
+  // Pezzo 5a, Task 9 (§3.2): in assistenza la sessione porta il tenant assistito come `ready`, più scadenza e motivo per la fascia.
+  it('a support token gives a session in the supported tenant with the expiry and the reason, and nothing of them elsewhere', async () => {
+    const support: Token = {
+      userId: USER.id, provider: 'credentials', accountActive: true, roleIds: [1], tenantId: 7, tenantState: 'support',
+      tenantHost: 'localhost', tenantName: 'Acme', isPlatformAdmin: true, supportUntil: '2026-10-27T12:00:00.000Z', supportReason: 'controllo',
+    }
+    expect((await sessionOf(support)).user).toMatchObject({
+      id: USER.id, tenantState: 'support', tenantId: 7, tenantName: 'Acme', roleIds: [1],
+      supportUntil: '2026-10-27T12:00:00.000Z', supportReason: 'controllo',
+    })
+    // Fuori dall'assistenza i campi non passano, anche se il token li portasse ancora.
+    expect((await sessionOf({ ...support, tenantState: 'ready' })).user).toMatchObject({ supportUntil: null, supportReason: null })
+    // Un'assistenza appena finita non è il messaggio dello spazio sospeso.
+    expect((await sessionOf({ ...support, tenantState: 'none', tenantNoneReason: 'support_ended' })).user)
+      .toMatchObject({ tenantId: null, roleIds: [], tenantNoneReason: null })
+  })
+
   it('gives the first default membership before listing the tenants of the address (MT2-DEC-12)', async () => {
     const order: string[] = []
     mocks.ensureDefaultMembership.mockImplementation(async () => { order.push('ensure'); return 'active' })

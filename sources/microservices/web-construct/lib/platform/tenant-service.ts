@@ -5,6 +5,7 @@ import { nextDay } from '@/lib/rbac/date-utils'
 import { requirePlatformAdmin } from '@/lib/rbac/auth-guard'
 import { DEFAULT_TENANT_SLUG } from '@/lib/tenancy/tenant-id'
 import { existingTenantId } from '@/lib/tenancy/platform-tenant'
+import { readSupportConsent } from '@/lib/tenancy/support-consent'
 import { withPlatform } from './db'
 import type { PlatformTenantRow, PlatformTenantsQuery, PlatformTenantStatus, TenantSortField } from './tenants-grid-query'
 
@@ -111,6 +112,8 @@ export type PlatformTenantDetail = {
   createdAt: string
   hosts: { host: string; isPrimary: boolean }[]
   admins: PlatformTenantAdmin[]
+  /** Lo stato del permesso di assistenza (MT5-DEC-6): la scadenza, se vale. Chi l'ha concesso resta del tenant (MT5-OK-2). */
+  support: { until: string | null }
 }
 
 /**
@@ -151,6 +154,9 @@ export async function getTenantForPlatform(tenantId: number): Promise<PlatformTe
       admins = found.map(admin => ({ userId: admin.user_id, email: admin.email, hasPassword: admin.has_password }))
     }
 
+    // Il modello non ha bisogno del permesso (MT5-DEC-11): la scheda lo dice da sé.
+    const consent = row.isTemplate ? { until: null } : await readSupportConsent(tx)
+
     return {
       id: row.id,
       slug: row.slug,
@@ -161,6 +167,7 @@ export async function getTenantForPlatform(tenantId: number): Promise<PlatformTe
       createdAt: new Date(row.createdAt).toISOString(),
       hosts,
       admins,
+      support: { until: consent.until },
     }
   }, tenantKey)
 }

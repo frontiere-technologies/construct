@@ -18,6 +18,7 @@ import {
   enterTenant,
   isSignInRefusedOnHost,
   revalidateTokenTenant,
+  sessionTenantOf,
   updateTokenTenant,
   type TokenTenant,
 } from '@/lib/tenancy/token-tenant'
@@ -268,20 +269,13 @@ const nextAuth = NextAuth({
     },
     async session({ session, token }) {
       const accountActive = Boolean(token.accountActive)
-      const ready = token.tenantState === 'ready'
       session.user.id = accountActive ? token.userId as string : ''
-      // Ruoli e tenant esistono solo con un tenant scelto; in 'choose' e 'none' la persona resta
-      // riconosciuta (id) per arrivare alla scelta o al messaggio (Task 5), senza autorità.
-      session.user.roleIds = accountActive && ready ? (token.roleIds as number[]) ?? [] : []
       session.user.accountActive = accountActive
       session.user.provider = token.provider as string
-      session.user.tenantState = token.tenantState ?? 'none'
-      session.user.tenantId = accountActive && ready ? token.tenantId ?? null : null
-      session.user.tenantName = ready ? token.tenantName ?? null : null
-      // Solo per il messaggio «spazio sospeso» della pagina senza tenant (MT5-DEC-7).
-      session.user.tenantNoneReason = token.tenantState === 'none' && token.tenantNoneReason === 'suspended' ? 'suspended' : null
-      // Solo un indizio per il menu e il proxy (MT5-DEC-3): la console decide dal database.
-      session.user.isPlatformAdmin = accountActive && token.isPlatformAdmin === true
+      // Il tenant (pezzo 4, §3.1) e l'assistenza (pezzo 5a, §3.2): ruoli e tenant solo con un tenant
+      // in cui si lavora (`ready` o `support`); in 'choose' e 'none' la persona resta riconosciuta
+      // (id) per arrivare alla scelta o al messaggio, senza autorità.
+      Object.assign(session.user, sessionTenantOf(token))
       return session
     },
   }),
@@ -306,6 +300,8 @@ function applyTokenTenant(token: JWT, tenant: TokenTenant): void {
   token.roleIds = tenant.roleIds
   token.tenantNoneReason = tenant.tenantNoneReason
   token.isPlatformAdmin = tenant.isPlatformAdmin
+  token.supportUntil = tenant.supportUntil
+  token.supportReason = tenant.supportReason
 }
 
 // Con AUTH_URL impostata next-auth costruisce ogni indirizzo di ritorno su AUTH_URL anche con
