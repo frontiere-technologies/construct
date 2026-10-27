@@ -124,9 +124,9 @@ it('TENANT_ADMIN holds read-tenant-audit in default, template and a fresh copy',
 **Interfaces:**
 - Produces: nessun ruolo senza `system_key` con descrizione `'Tenant Super Administrator'` in nessun tenant né nel modello; chi aveva solo quel ruolo conserva `REGISTERED`.
 
-- [ ] **Step 1: Test** — `it('no tenant nor the template has the Tenant Super Administrator role', …)`; `it('a person who had only role 2 still has the base role', …)` (fixture: crea il caso in un tenant di prova prima di applicare la 0058 con `test-apply --to 0057`).
-- [ ] **Step 2–4:** migrazione che scorre i tenant impostando e rimettendo `app.tenant_id`; `test-apply`, `schema-write`, `schema-check`; integrazione su `lib/rbac lib/tenancy`.
-- [ ] **Step 5: Commit** — `feat(rbac): remove the unused Tenant Super Administrator role`
+- [✅] **Step 1: Test** — `it('no tenant nor the template has the Tenant Super Administrator role', …)`; `it('a person who had only role 2 still has the base role', …)` (fixture: crea il caso in un tenant di prova prima di applicare la 0058 con `test-apply --to 0057`).
+- [✅] **Step 2–4:** migrazione che scorre i tenant impostando e rimettendo `app.tenant_id`; `test-apply`, `schema-write`, `schema-check`; integrazione su `lib/rbac lib/tenancy`.
+- [✅] **Step 5: Commit** — `feat(rbac): remove the unused Tenant Super Administrator role`
 
 ---
 
