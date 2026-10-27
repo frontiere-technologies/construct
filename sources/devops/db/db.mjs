@@ -495,21 +495,83 @@ async function boundaryCheck() {
         where tc.class <> 'tenant' and not exists (
           select 1 from pg_policies p
           where p.schemaname = 'public' and p.tablename = tc.table_name
-            and p.policyname = case tc.class when 'global_write' then 'global_access' else 'global_read' end)
+            and p.policyname = case tc.class
+              when 'global_write' then 'global_access'
+              when 'global_insert_only' then 'global_insert'
+              else 'global_read' end)
         union all
         select tc.table_name, 'write grant on a read-only table'
         from app_private.table_class tc
         where tc.class = 'global_read'
           and has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'insert,update,delete')
+        union all
+        select tc.table_name, 'insert-only table the runtime cannot insert into'
+        from app_private.table_class tc
+        where tc.class = 'global_insert_only'
+          and not has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'insert')
+        union all
+        select tc.table_name, 'insert-only table the runtime can read, update, delete or truncate'
+        from app_private.table_class tc
+        where tc.class = 'global_insert_only'
+          and has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'select,update,delete,truncate,references,trigger')
+        union all
+        select tc.table_name, 'insert-only table with a policy beyond global_owner and global_insert'
+        from app_private.table_class tc
+        join pg_policies p on p.schemaname = 'public' and p.tablename = tc.table_name
+        where tc.class = 'global_insert_only' and p.policyname not in ('global_owner', 'global_insert')
+        union all
+        select tc.table_name, 'insert-only table whose global_insert is not an insert policy of construct_runtime alone'
+        from app_private.table_class tc
+        where tc.class = 'global_insert_only' and not exists (
+          select 1 from pg_policies p
+          where p.schemaname = 'public' and p.tablename = tc.table_name and p.policyname = 'global_insert'
+            and p.cmd = 'INSERT' and p.roles = array['construct_runtime']::name[])
+        union all
+        select tc.table_name, 'insert-only table whose identity sequence gives the runtime more than usage'
+        from app_private.table_class tc
+        where tc.class = 'global_insert_only'
+          and pg_get_serial_sequence(format('public.%I', tc.table_name), 'id') is not null
+          and (not has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', tc.table_name), 'id'), 'usage')
+            or has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', tc.table_name), 'id'), 'select,update'))
         order by 1, 2
       `
       for (const [label, problem] of [
         ['every global table has the policy of its class', 'policy'],
         ['no read-only global table is writable by construct_runtime', 'write grant on a read-only table'],
+        ['every insert-only global table lets construct_runtime insert', 'insert-only table the runtime cannot insert into'],
+        ['no insert-only global table lets construct_runtime read, update, delete or truncate', 'insert-only table the runtime can read, update, delete or truncate'],
+        ['insert-only global tables carry no policy beyond global_owner and global_insert', 'insert-only table with a policy beyond global_owner and global_insert'],
+        ['insert-only global tables have a global_insert policy for construct_runtime alone', 'insert-only table whose global_insert is not an insert policy of construct_runtime alone'],
+        ['insert-only global tables give construct_runtime only usage on their identity sequence', 'insert-only table whose identity sequence gives the runtime more than usage'],
       ]) {
         const rows = globalViolations.filter(row => row.problem === problem)
         report(label, !rows.length, rows.map(row => row.name).join(', '))
       }
+      // Specchio di 'keeps the tenant audit tables append-only for the runtime role': i registri di
+      // tenant sono tabelle di tenant con un privilegio in meno, e l'elenco è esplicito.
+      const appendOnly = await sql`
+        select t.name, 'not a classified tenant table' as problem
+        from unnest(array['tenant_audit_event']) as t(name)
+        where not exists (select 1 from app_private.table_class tc where tc.table_name = t.name and tc.class = 'tenant')
+        union all
+        select t.name, 'the runtime cannot select and insert'
+        from unnest(array['tenant_audit_event']) as t(name)
+        where not has_table_privilege('construct_runtime', format('public.%I', t.name), 'select')
+           or not has_table_privilege('construct_runtime', format('public.%I', t.name), 'insert')
+        union all
+        select t.name, 'the runtime can update, delete or truncate'
+        from unnest(array['tenant_audit_event']) as t(name)
+        where has_table_privilege('construct_runtime', format('public.%I', t.name), 'update,delete,truncate')
+        union all
+        select t.name, 'the identity sequence gives the runtime other than usage'
+        from unnest(array['tenant_audit_event']) as t(name)
+        where pg_get_serial_sequence(format('public.%I', t.name), 'id') is null
+           or not has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', t.name), 'id'), 'usage')
+           or has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', t.name), 'id'), 'select,update')
+        order by 1, 2
+      `
+      report('tenant audit tables are append-only for construct_runtime', !appendOnly.length,
+        appendOnly.map(row => `${row.name} (${row.problem})`).join(', '))
     }
   } finally {
     await sql.end({ timeout: 5 })

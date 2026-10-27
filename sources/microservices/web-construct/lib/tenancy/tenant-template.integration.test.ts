@@ -15,10 +15,11 @@ import type { TenantId } from './tenant-id'
  */
 const DEFAULT = defaultTestTenant()
 
-// Le tabelle di tenant che la copia riproduce, e quelle che salta apposta (persone e appartenenze).
+// Le tabelle di tenant che la copia riproduce, e quelle che salta apposta (persone, appartenenze e
+// il registro delle modifiche: un tenant nuovo parte con il registro vuoto, 0057).
 const COPIED = ['menu_entry', 'menu_entry_tag', 'role', 'role_permission', 'role_functionality', 'app_theme',
   'tenant_settings'] as const
-const ALL_TENANT_TABLES = [...COPIED, 'user_role', 'tenant_membership'] as const
+const ALL_TENANT_TABLES = [...COPIED, 'user_role', 'tenant_membership', 'tenant_audit_event'] as const
 
 let template: TenantId
 let copy: TenantId
@@ -70,7 +71,8 @@ async function countsOf(tenantId: TenantId): Promise<Record<string, number>> {
       (select count(*)::int from public.app_theme) as app_theme,
       (select count(*)::int from public.tenant_settings) as tenant_settings,
       (select count(*)::int from public.user_role) as user_role,
-      (select count(*)::int from public.tenant_membership) as tenant_membership
+      (select count(*)::int from public.tenant_membership) as tenant_membership,
+      (select count(*)::int from public.tenant_audit_event) as tenant_audit_event
   `), tenantId)
   return rows[0]
 }
@@ -92,7 +94,8 @@ async function fingerprintOf(tenantId: TenantId): Promise<Record<string, string 
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.app_theme t) as app_theme,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_settings t) as tenant_settings,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.user_role t) as user_role,
-      (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_membership t) as tenant_membership
+      (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_membership t) as tenant_membership,
+      (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_audit_event t) as tenant_audit_event
   `), tenantId)
   return rows[0]
 }
@@ -186,6 +189,8 @@ describeIntegration('tenant template', () => {
     expect(copyCounts.menu_entry).toBeGreaterThan(0)
     expect(copyCounts.tenant_membership).toBe(0)
     expect(copyCounts.user_role).toBe(0)
+    // Il registro non si copia: un tenant nuovo parte vuoto (0057).
+    expect(copyCounts.tenant_audit_event).toBe(0)
   }, 15_000)
 
   it('a copy has the same content as the template once ids are mapped', async () => {

@@ -32,7 +32,9 @@ describeIntegration('database runtime boundary', () => {
     }>(sql`
       select c.relname as "tableName", a.attname as "columnName",
         format_type(a.atttypid, a.atttypmod) as "sqlType", a.attnotnull as "notNull",
-        (defaults.adbin is not null) as "hasDefault"
+        -- A column generated as identity has no pg_attrdef row, but Drizzle models it (and the
+        -- database fills it) as having a default.
+        (defaults.adbin is not null or a.attidentity <> '') as "hasDefault"
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
       join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
@@ -395,12 +397,76 @@ describeIntegration('database runtime boundary', () => {
       where tc.class <> 'tenant' and not exists (
         select 1 from pg_policies p
         where p.schemaname = 'public' and p.tablename = tc.table_name
-          and p.policyname = case tc.class when 'global_write' then 'global_access' else 'global_read' end)
+          and p.policyname = case tc.class
+            when 'global_write' then 'global_access'
+            when 'global_insert_only' then 'global_insert'
+            else 'global_read' end)
       union all
       select tc.table_name, 'write grant on a read-only table'
       from app_private.table_class tc
       where tc.class = 'global_read'
         and has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'insert,update,delete')
+      union all
+      select tc.table_name, 'insert-only table the runtime cannot insert into'
+      from app_private.table_class tc
+      where tc.class = 'global_insert_only'
+        and not has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'insert')
+      union all
+      select tc.table_name, 'insert-only table the runtime can read, update, delete or truncate'
+      from app_private.table_class tc
+      where tc.class = 'global_insert_only'
+        and has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'select,update,delete,truncate,references,trigger')
+      union all
+      select tc.table_name, 'insert-only table with a policy beyond global_owner and global_insert'
+      from app_private.table_class tc
+      join pg_policies p on p.schemaname = 'public' and p.tablename = tc.table_name
+      where tc.class = 'global_insert_only' and p.policyname not in ('global_owner', 'global_insert')
+      union all
+      select tc.table_name, 'insert-only table whose global_insert is not an insert policy of construct_runtime alone'
+      from app_private.table_class tc
+      where tc.class = 'global_insert_only' and not exists (
+        select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = tc.table_name and p.policyname = 'global_insert'
+          and p.cmd = 'INSERT' and p.roles = array['construct_runtime']::name[])
+      union all
+      select tc.table_name, 'insert-only table whose identity sequence gives the runtime more than usage'
+      from app_private.table_class tc
+      where tc.class = 'global_insert_only'
+        and pg_get_serial_sequence(format('public.%I', tc.table_name), 'id') is not null
+        and (not has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', tc.table_name), 'id'), 'usage')
+          or has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', tc.table_name), 'id'), 'select,update'))
+      order by 1, 2
+    `))
+    expect(violations).toEqual([])
+  })
+
+  /**
+   * Un registro di tenant è una tabella di tenant come le altre (stesse policy, controllate sopra)
+   * con un privilegio in meno: il ruolo dell'app inserisce e legge, mai modifica né cancella
+   * (specifica 2026-10-26, MT5-DEC-15). L'elenco è esplicito e controllato qui e in
+   * `db.mjs boundary-check`: una tabella di tenant nuova che dovesse essere solo accodabile va
+   * aggiunta in entrambi.
+   */
+  it('keeps the tenant audit tables append-only for the runtime role', async () => {
+    const violations = await withGlobal(tx => tx.execute<{ name: string; problem: string }>(sql`
+      select t.name, 'not a classified tenant table' as problem
+      from unnest(array['tenant_audit_event']) as t(name)
+      where not exists (select 1 from app_private.table_class tc where tc.table_name = t.name and tc.class = 'tenant')
+      union all
+      select t.name, 'the runtime cannot select and insert'
+      from unnest(array['tenant_audit_event']) as t(name)
+      where not has_table_privilege('construct_runtime', format('public.%I', t.name), 'select')
+         or not has_table_privilege('construct_runtime', format('public.%I', t.name), 'insert')
+      union all
+      select t.name, 'the runtime can update, delete or truncate'
+      from unnest(array['tenant_audit_event']) as t(name)
+      where has_table_privilege('construct_runtime', format('public.%I', t.name), 'update,delete,truncate')
+      union all
+      select t.name, 'the identity sequence gives the runtime other than usage'
+      from unnest(array['tenant_audit_event']) as t(name)
+      where pg_get_serial_sequence(format('public.%I', t.name), 'id') is null
+         or not has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', t.name), 'id'), 'usage')
+         or has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', t.name), 'id'), 'select,update')
       order by 1, 2
     `))
     expect(violations).toEqual([])
