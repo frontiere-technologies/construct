@@ -375,6 +375,42 @@ Indirizzo assegnato: a.localhost al tenant acme (non principale)
 - `test-tenant-create --host …` e `test-tenant-host-add` fanno lo stesso sul database di prova usa
   e getta.
 
+### Amministratori di piattaforma (`db.mjs platform-admin-add` e `platform-admin-remove`)
+
+L'amministratore di piattaforma è una qualità dell'account (`users.is_platform_admin`), non di un
+tenant. Il **primo** si nomina con un comando, una volta sola; gli altri li nomina o li toglie un
+amministratore di piattaforma dalla console (specifica 2026-10-26, MT5-DEC-2, MT5-DEC-23):
+
+```bash
+set -a && . ./sources/devops/db/operator.env && set +a
+node sources/devops/db/db.mjs platform-admin-add --email capo@frontiere.io
+node sources/devops/db/db.mjs platform-admin-remove --email capo@frontiere.io
+```
+
+```
+Amministratore di piattaforma: capo@frontiere.io (account nuovo)
+Link per impostare la password (valido 48 ore): https://construct.example.it/set-password?token=…
+```
+
+- `platform-admin-add` crea l'account se manca. Un account senza password riceve il link per
+  impostarla, valido 48 ore, **verso `AUTH_URL`** (l'indirizzo principale: la piattaforma non è in
+  nessun tenant) e stampato sul terminale, mai scritto altrove; un account che ha già la password
+  non riceve nessun link. Si rifiuta un account disattivato a livello globale.
+- `platform-admin-remove` **rifiuta di togliere l'ultimo** amministratore attivo (uscita 1, nulla
+  cambia): la piattaforma non resta senza nessuno. Due rimozioni insieme non possono passare
+  entrambe.
+- Nominare chi lo è già, o togliere l'attributo a chi non lo ha, non cambia nulla, esce con 0 e non
+  scrive nel registro.
+- `test-platform-admin-add` e `test-platform-admin-remove` fanno lo stesso sul database di prova usa
+  e getta.
+
+**Registro dei comandi (MT5-DEC-22).** `tenant-create`, `tenant-host-add` (con `--primary` due
+voci: `tenant.host.add` e `tenant.host.primary`) e i due comandi qui sopra scrivono una voce in
+`platform_audit_event` nella stessa transazione della modifica, con veste `command`, nessuna persona
+(`actor_user_id` nullo) e `actor_email` uguale all'utente del sistema operativo che ha lanciato il
+comando (se il sistema non lo dà, `USER` o `LOGNAME`, altrimenti vuoto). I dettagli non contengono
+mai password, token o link. Il registro della piattaforma si legge solo dalla console.
+
 Limiti noti (specifiche 2026-10-20 e 2026-10-21, §5.3):
 
 - **I tenant creati così si usano dal pezzo 4 della multi-tenancy.** Il primo amministratore entra

@@ -17,10 +17,12 @@ import {
   applyPendingMigrations,
   discoverMigrations,
   parseApplyArguments,
+  parsePlatformAdminArguments,
   parseTenantCreateArguments,
   parseTenantDeleteArguments,
   parseTenantHostArguments,
   parseTenantMemberArguments,
+  recordCommandAudit,
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
@@ -851,6 +853,15 @@ async function runTenantCreate(connectionUrl, { slug, name, admin, host }) {
       if (Number(activeAdmins) === 0) {
         throw new Error('Il primo amministratore non è attivo: account disattivato a livello globale. Nessun tenant creato.')
       }
+      // Il registro della piattaforma (MT5-DEC-22), nella stessa transazione: se un controllo
+      // sopra annulla la creazione, la voce non c'è. Né il token né il link ci entrano (MT5-RISK-4).
+      await recordCommandAudit(tx, {
+        tenantId,
+        operation: 'tenant.create',
+        objectType: 'tenant',
+        objectId: tenantId,
+        details: { slug, name, firstAdmin: admin, ...(host ? { host } : {}) },
+      })
       return { tenantId, existed, invitationToken: registered.invitationToken }
     })
 
@@ -920,8 +931,146 @@ async function runTenantHostAdd(connectionUrl, { slug, host, primary }) {
         }
       }
       await tx`insert into public.tenant_host (host, id_tenant, is_primary) values (${host}, ${found.id}, ${primary})`
+      // Il registro della piattaforma (MT5-DEC-22), nella stessa transazione: una voce per
+      // l'indirizzo aggiunto, e una in più se lo si rende principale.
+      await recordCommandAudit(tx, {
+        tenantId: found.id,
+        operation: 'tenant.host.add',
+        objectType: 'tenant_host',
+        objectId: host,
+        details: { slug, host, primary },
+      })
+      if (primary) {
+        await recordCommandAudit(tx, {
+          tenantId: found.id,
+          operation: 'tenant.host.primary',
+          objectType: 'tenant_host',
+          objectId: host,
+          details: { slug, host },
+        })
+      }
     })
     console.log(`Indirizzo assegnato: ${host} al tenant ${slug} (${primary ? 'principale' : 'non principale'})`)
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
+/**
+ * Nomina un amministratore di piattaforma (specifica 2026-10-26, MT5-DEC-2, MT5-DEC-23): imposta
+ * `users.is_platform_admin`, creando l'account se manca. Il comando gira come construct_owner, il
+ * solo che può cambiare quell'attributo (il trigger `users_platform_admin_guard`, 0057), in una
+ * transazione sola con la voce del registro. Un account nuovo non ha password: riceve, come il
+ * primo amministratore di tenant-create (`register_tenant_admin`, 0051), un invito di 48 ore già
+ * consegnato (gli inviti precedenti non usati si sostituiscono), il cui link si stampa verso
+ * `AUTH_URL`, l'indirizzo principale: la piattaforma non è in nessun tenant. Il link si stampa e
+ * non si scrive da nessun'altra parte, registro compreso. Un account già amministratore non cambia
+ * e non lascia voci. Un account disattivato a livello globale si rifiuta, come in tenant-create.
+ */
+async function runPlatformAdminAdd(connectionUrl, { email }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    const result = await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const [{ existed }] = await tx`select exists (select 1 from public.users where email = ${email}) as existed`
+      await tx`insert into public.users (email, auth_provider) values (${email}, 'credentials') on conflict (email) do nothing`
+      const [account] = await tx`
+        select id::text as id, password_hash is not null as "hasPassword", is_platform_admin as "isAdmin", id_user_status as status
+        from public.users where email = ${email} for update
+      `
+      if (Number(account.status) !== 2) {
+        throw new Error(`L'account ${email} è disattivato a livello globale: riattivalo prima di nominarlo. Nessuna modifica.`)
+      }
+      if (account.isAdmin) return { changed: false }
+      await tx`update public.users set is_platform_admin = true where id = ${account.id}`
+      let invitationToken = null
+      if (!account.hasPassword) {
+        const now = new Date()
+        invitationToken = (await tx`select gen_random_uuid()::text as token`)[0].token
+        await tx`
+          update public.password_set_tokens set superseded_at = ${now}
+          where user_id = ${account.id} and purpose = 'invitation' and used_at is null and superseded_at is null
+        `
+        await tx`
+          insert into public.password_set_tokens (user_id, token, expires_at, purpose, delivery_status, delivery_attempted_at, delivered_at)
+          values (${account.id}, ${invitationToken}, ${new Date(now.getTime() + 48 * 3_600_000)}, 'invitation', 'sent', ${now}, ${now})
+        `
+      }
+      await recordCommandAudit(tx, {
+        operation: 'platform.admin.add',
+        objectType: 'user',
+        objectId: account.id,
+        details: { email, accountCreated: !existed },
+      })
+      return { changed: true, existed, invitationToken }
+    })
+
+    if (!result.changed) {
+      console.log(`${email} è già amministratore di piattaforma: nessuna modifica`)
+      return
+    }
+    console.log(`Amministratore di piattaforma: ${email} (${result.existed ? 'account esistente' : 'account nuovo'})`)
+    if (result.invitationToken) {
+      const baseUrl = tenantLinkBase(process.env.AUTH_URL ?? '')
+      console.log(`Link per impostare la password (valido 48 ore): ${baseUrl}/set-password?token=${result.invitationToken}`)
+      if (!baseUrl) console.log("AUTH_URL non impostata: anteponi l'indirizzo del sito.")
+    }
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
+/**
+ * Toglie l'attributo di amministratore di piattaforma (MT5-DEC-2). Rifiuta di togliere l'ultimo
+ * amministratore attivo: la piattaforma non resterebbe senza nessuno. Il conteggio e la modifica
+ * stanno nella stessa transazione, e il conteggio blocca le righe degli amministratori (`for
+ * update`, sempre nello stesso ordine): due rimozioni insieme si mettono in fila, e la seconda,
+ * dopo l'attesa, rilegge chi è ancora amministratore e vede che è l'ultimo. Togliere l'attributo a
+ * chi non lo ha non cambia nulla e non lascia voci.
+ */
+async function runPlatformAdminRemove(connectionUrl, { email }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    const changed = await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const admins = await tx`
+        select id::text as id, email, id_user_status as status
+        from public.users where is_platform_admin order by id for update
+      `
+      const target = admins.find(row => row.email === email)
+      if (!target) {
+        const [account] = await tx`select id from public.users where email = ${email}`
+        if (!account) throw new Error(`Nessun account con l'email ${email}`)
+        return false
+      }
+      const othersActive = admins.filter(row => row.id !== target.id && Number(row.status) === 2).length
+      if (othersActive === 0) {
+        throw new Error(`Non si toglie l'ultimo amministratore di piattaforma (${email}): nomina prima un altro amministratore. Nessuna modifica.`)
+      }
+      await tx`update public.users set is_platform_admin = false where id = ${target.id}`
+      await recordCommandAudit(tx, {
+        operation: 'platform.admin.remove',
+        objectType: 'user',
+        objectId: target.id,
+        details: { email },
+      })
+      return true
+    })
+    console.log(changed
+      ? `Amministratore di piattaforma tolto: ${email}`
+      : `${email} non è amministratore di piattaforma: nessuna modifica`)
   } finally {
     await sql.end({ timeout: 5 })
   }
@@ -1070,6 +1219,8 @@ const supported = new Set([
   'provision-runtime-role',
   'query',
   'schema-check',
+  'platform-admin-add',
+  'platform-admin-remove',
   'schema-write',
   'tenant-create',
   'tenant-host-add',
@@ -1077,6 +1228,8 @@ const supported = new Set([
   'test-query',
   'test-reset-e2e',
   'test-delete-user',
+  'test-platform-admin-add',
+  'test-platform-admin-remove',
   'test-tenant-create',
   'test-tenant-host-add',
   'test-tenant-member-add',
@@ -1084,7 +1237,7 @@ const supported = new Set([
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | provision-platform-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...]')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | provision-platform-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | platform-admin-add --email <email> | platform-admin-remove --email <email> | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-platform-admin-add --email <email> | test-platform-admin-remove --email <email> | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...]')
   process.exit(2)
 }
 
@@ -1102,6 +1255,10 @@ try {
   else if (command === 'test-tenant-create') await runTenantCreate(testMigrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
   else if (command === 'tenant-host-add') await runTenantHostAdd(migrationDatabaseUrl(), parseTenantHostArguments(commandArguments))
   else if (command === 'test-tenant-host-add') await runTenantHostAdd(testMigrationDatabaseUrl(), parseTenantHostArguments(commandArguments))
+  else if (command === 'platform-admin-add') await runPlatformAdminAdd(migrationDatabaseUrl(), parsePlatformAdminArguments(commandArguments))
+  else if (command === 'test-platform-admin-add') await runPlatformAdminAdd(testMigrationDatabaseUrl(), parsePlatformAdminArguments(commandArguments))
+  else if (command === 'platform-admin-remove') await runPlatformAdminRemove(migrationDatabaseUrl(), parsePlatformAdminArguments(commandArguments))
+  else if (command === 'test-platform-admin-remove') await runPlatformAdminRemove(testMigrationDatabaseUrl(), parsePlatformAdminArguments(commandArguments))
   else if (command === 'test-tenant-member-add') await runTestTenantMemberAdd(testMigrationDatabaseUrl(), parseTenantMemberArguments(commandArguments))
   else if (command === 'test-tenant-delete') await runTestTenantDelete(testMigrationDatabaseUrl(), parseTenantDeleteArguments(commandArguments))
   else await runDatabaseCommand(command, argument)

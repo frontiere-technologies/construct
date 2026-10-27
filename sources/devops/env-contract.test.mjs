@@ -57,6 +57,10 @@ const NOT_CONFIGURED_BY_HAND = {
   // Auth.js v4 spelling, read only as a fallback for AUTH_URL. Documenting it
   // would invite people to set the deprecated name.
   NEXTAUTH_URL: 'legacy alias read as a fallback for AUTH_URL — do not document',
+  // Set by the login shell. db.mjs reads them only as a fallback for the operating-system user it
+  // records in the platform audit log (migration-lib.mjs, commandActorEmail).
+  USER: 'set by the login shell, never by a file',
+  LOGNAME: 'set by the login shell, never by a file',
   NEXT_PHASE: 'set by the Next CLI (phase-production-build during next build), never by a file',
   // A one-off switch typed on the command line when a THEME-2 batch lowers the
   // raw-colour baseline. Documenting it in a template would suggest leaving it
