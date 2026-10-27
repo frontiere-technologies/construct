@@ -236,8 +236,8 @@ it('language and translation writes go to the platform audit, not to a tenant au
   - `addPlatformAdmin(email: string): Promise<{ ok: true; invited: boolean }>`, `removePlatformAdmin(userId: string): Promise<{ ok: true }>` (`'use server'`, `requirePlatformAdmin`, rifiuto dell'ultimo, registro della piattaforma, email d'invito verso l'indirizzo principale per un account nuovo);
   - la console ha un suo layout con la sezione "Piattaforma" (Tenant, Amministratori, Registro, Lingue, Traduzioni) e, se la persona è membro di un tenant sull'indirizzo, un collegamento per tornarci.
 
-- [ ] **Step 1–4:** test unitari dei componenti, d'integrazione del servizio (nessun dato di tenant oltre ai conteggi e alle email degli amministratori; il modello in cima), della rotta (403 a chi non è piattaforma, 404 su indirizzo dedicato), delle azioni; `test:i18n-keys`.
-- [ ] **Step 5: Commit** — `feat(platform): console shell, tenant list and platform admins`
+- [✅] **Step 1–4:** test unitari dei componenti, d'integrazione del servizio (nessun dato di tenant oltre ai conteggi e alle email degli amministratori; il modello in cima), della rotta (403 a chi non è piattaforma, 404 su indirizzo dedicato), delle azioni; `test:i18n-keys`.
+- [✅] **Step 5: Commit** — `feat(platform): console shell, tenant list and platform admins`
 
 ---
 
