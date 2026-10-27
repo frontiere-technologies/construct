@@ -18,6 +18,9 @@ export default defineConfig({
     // Integration specs hit a real database and are opted into explicitly
     // (npm run test:integration), so a plain `npm test` needs no DATABASE_URL.
     exclude: ['**/node_modules/**', '**/*.integration.test.ts'],
+    // Un `localStorage` in memoria per i file jsdom quando quello dell'ambiente non funziona
+    // (Node 26): vedi il commento in vitest.setup.ts.
+    setupFiles: ['./vitest.setup.ts'],
   },
   resolve: {
     alias: { '@': resolve(__dirname, '.') },
