@@ -272,9 +272,8 @@ async function provisionServiceLogin({ label, userVariable, passwordVariable, gr
       : `grant ${groupRole} to "${username}"`)
     // Verifica dopo la concessione, solo per il login che non eredita (quello di piattaforma, MT5-RISK-1):
     // l'appartenenza esiste con le opzioni volute (da PostgreSQL 16 sono per appartenenza, e un
-    // `grant` già presente poteva averle diverse), e nessun ruolo può diventare il login. L'unica
-    // appartenenza ammessa in quel verso è quella che PostgreSQL 16 dà a chi crea il ruolo, con la
-    // sola opzione admin (né ereditarietà né set): da PostgreSQL 15 in giù nessuna riga è ammessa.
+    // `grant` già presente poteva averle diverse), e nessun ruolo può diventare il login (sotto, la
+    // sola appartenenza in quel verso che si ammette).
     if (!inheritsGroup) {
       if (version >= 160000) {
         const wrongOption = await sql`
@@ -289,16 +288,32 @@ async function provisionServiceLogin({ label, userVariable, passwordVariable, gr
           throw new Error(`the ${label} login ${username} is a member of ${groupRole} with the wrong options (expected inherit false, set true)`)
         }
       }
+      // Ogni riga con il login come ruolo concesso. Da PostgreSQL 16 solo una è ammessa: quella che
+      // PostgreSQL stesso registra per chi ha creato il ruolo (verificato: member = chi crea, grantor =
+      // il superutente di bootstrap, oid 10, con la sola opzione admin, senza inherit né set). Qualunque
+      // altra, anche con inherit e set falsi, è una strada: chi ha ADMIN sul login può concedersi
+      // `with set true` e da lì passare a construct_owner. Prima della 16 nessuna riga è ammessa.
+      // to_jsonb: le colonne delle opzioni non esistono prima della 16, e la sonda non deve nominarle.
       const reverse = await sql`
-        select member.rolname as member
+        select member.rolname as member, membership.admin_option as admin,
+          to_jsonb(membership) ->> 'inherit_option' as inherit_option,
+          to_jsonb(membership) ->> 'set_option' as set_option,
+          membership.grantor::int8 as grantor,
+          (${version >= 160000}
+            and member.rolname = current_user
+            and membership.admin_option
+            and to_jsonb(membership) ->> 'inherit_option' = 'false'
+            and to_jsonb(membership) ->> 'set_option' = 'false'
+            and membership.grantor = 10) as creator_grant
         from pg_auth_members membership
         join pg_roles login on login.oid = membership.roleid
         join pg_roles member on member.oid = membership.member
         where login.rolname = ${username}
-          and (${version < 160000} or to_jsonb(membership) ->> 'inherit_option' = 'true' or to_jsonb(membership) ->> 'set_option' = 'true')
       `
-      if (reverse.length) {
-        throw new Error(`the ${label} login ${username} has members (${reverse.map(row => row.member).join(', ')}): no role may be a member of it`)
+      const foreign = reverse.filter(row => !row.creator_grant)
+      if (foreign.length) {
+        const described = foreign.map(row => `${row.member} (admin ${row.admin}, inherit ${row.inherit_option ?? 'n/a'}, set ${row.set_option ?? 'n/a'}, grantor ${row.grantor})`)
+        throw new Error(`the ${label} login ${username} has members: ${described.join('; ')}: only the automatic grant to its creator (admin only) is allowed`)
       }
     }
     console.log(`provisioned limited ${label} login ${username}`)
