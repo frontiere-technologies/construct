@@ -219,8 +219,8 @@ it('language and translation writes go to the platform audit, not to a tenant au
 **Interfaces:**
 - Produces: `platform-admin-add --email <email>` e `platform-admin-remove --email <email>` (più `test-*`): crea l'account se manca (link per la password verso `AUTH_URL`, stampato), imposta l'attributo, rifiuta di togliere l'ultimo; `tenant-create`, `tenant-host-add` e i nuovi comandi scrivono `platform_audit_event` con `actor_kind = 'command'`, `actor_email` = utente del sistema operativo se disponibile.
 
-- [ ] **Step 1–4:** test del parser (`parsePlatformAdminArguments`), test d'integrazione dei comandi (attributo, account nuovo con link, ultimo non rimovibile, voce nel registro della piattaforma con veste `command`); `npm run test:migrations`, integrazione.
-- [ ] **Step 5: Commit** — `feat(db): platform-admin commands and command audit rows`
+- [✅] **Step 1–4:** test del parser (`parsePlatformAdminArguments`), test d'integrazione dei comandi (attributo, account nuovo con link, ultimo non rimovibile, voce nel registro della piattaforma con veste `command`); `npm run test:migrations`, integrazione.
+- [✅] **Step 5: Commit** — `feat(db): platform-admin commands and command audit rows`
 
 ---
 
