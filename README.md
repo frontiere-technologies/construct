@@ -549,7 +549,35 @@ node sources/devops/db/db.mjs test-tenant-member-add --slug e2e-b --email <email
 node sources/devops/db/db.mjs test-tenant-delete --slug e2e-a
 ```
 
-`test-tenant-member-add` gives the person an active membership (creating the account if missing): the base role only, or also the tenant administrator role with `--admin`. `test-tenant-delete` removes every row of the tenant from the tenant tables, its addresses and the tenant itself; a tenant that does not exist is not an error, and the default tenant and the template are refused. `test-reset-e2e` also clears the last used tenant of the two E2E accounts.
+`test-tenant-member-add` gives the person an active membership (creating the account if missing): the base role only, or also the tenant administrator role with `--admin`. `test-tenant-delete` removes every row of the tenant from the tenant tables, its addresses and the tenant itself; a tenant that does not exist is not an error, and the default tenant and the template are refused. `--slug` can be repeated to remove several tenants in one transaction (one process and one connection instead of one per tenant). `test-reset-e2e` also clears the last used tenant of the two E2E accounts.
+
+### Test in locale con Postgres in Docker
+
+Facoltativo: il database di test predefinito resta quello remoto su Supabase. Con un Postgres sul Mac l'integrazione passa da minuti a circa 30 secondi. Il database si prepara come nel job `database-and-e2e` di `.github/workflows/quality.yml`: stessa immagine (`postgres:17`), tabella `users` di prima delle migrazioni, `test-apply`, login limitato `construct_app` con `provision-runtime-role` e i due account E2E. Serve Docker Desktop acceso.
+
+```bash
+sources/devops/db/local-test-db.sh up       # avvia e prepara (si può rilanciare)
+sources/devops/db/local-test-db.sh reset    # cancella tutto e riparte da zero
+sources/devops/db/local-test-db.sh status   # stato del container e del database
+sources/devops/db/local-test-db.sh down     # ferma e cancella
+```
+
+Il container ascolta su `127.0.0.1:55432`, non sulla 5432, così non si scontra con un Postgres di Homebrew. I dati stanno in memoria (`tmpfs`): dopo un riavvio di Docker il database è vuoto e basta rilanciare `up`. Le credenziali, solo locali, sono in `sources/devops/db/local-test.env` (nel repository di proposito): le variabili esportate da quel file vincono su `.env.test.local`, `operator.env` e `sources/tests/e2e/.env.test`. I due account E2E sono `TEST_EMAIL` e `TEST_EMAIL_USER` di `sources/tests/e2e/.env.test`: se li cambi, rilancia `up`.
+
+Integrazione:
+
+```bash
+cd sources/microservices/web-construct
+npm run test:integration:local
+```
+
+E2E: avvia l'app con la configurazione `web-construct-e2e-local` di `.claude/launch.json` (porta 3000, login di prova attivo, `DATABASE_URL` sul login limitato locale), poi dalla radice del repository:
+
+```bash
+set -a && . sources/devops/db/local-test.env && set +a && caffeinate -dims uv run pytest sources/tests/e2e
+```
+
+Integrazione ed E2E usano lo stesso database: non farli girare insieme.
 
 ## Adding application pages
 

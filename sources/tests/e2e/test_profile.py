@@ -8,8 +8,8 @@ def profile_page(logged_in_page, base_url):
     return logged_in_page
 
 
-def test_profile_navigation_from_sidebar(logged_in_page, test_email):
-    page = logged_in_page
+def test_profile_navigation_from_sidebar(home_page, test_email):
+    page = home_page
     l1 = page.locator("aside").first
     ensure_l1_expanded(page, l1)
 

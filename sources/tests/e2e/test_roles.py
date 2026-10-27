@@ -28,8 +28,13 @@ def _create_role(page, base_url, name):
     return page.url
 
 
-def _delete_role(page, base_url, name):
+def _delete_role(page, base_url, name, recheck_after_reload=False):
     """Delete a role via the column filter + row menu + confirm modal, then assert it's gone.
+
+    The modal closes only after the server action has answered, and the grid then refreshes
+    its rows: the row disappearing in place is the check every caller gets. Searching again
+    from a fresh page load (a navigation plus a grid filter) proves the deletion persisted;
+    test_create_rename_delete_role asks for it, the cleanups elsewhere need not pay for it.
 
     Deletion is confirmed via a custom ConfirmModal (not a native browser dialog).
     This used to re-query "Elimina" by role/name twice, which worked here because
@@ -45,8 +50,10 @@ def _delete_role(page, base_url, name):
     row_menu.click()
     page.get_by_role("menuitem", name="Elimina").click()  # row-menu item -> opens ConfirmModal
     confirm_modal(page, "Elimina")
-    _search(page, base_url, name)
     expect(_rows(page).filter(has_text=name)).to_have_count(0)
+    if recheck_after_reload:
+        _search(page, base_url, name)
+        expect(_rows(page).filter(has_text=name)).to_have_count(0)
 
 
 def _report_cleanup_failure(message: str) -> None:
@@ -167,7 +174,7 @@ def test_create_rename_delete_role(logged_in_page, base_url):
     # Wait for the heading to reflect the rename (retrying assertion)
     expect(page.locator("h1")).to_contain_text(renamed)
 
-    _delete_role(page, base_url, renamed)
+    _delete_role(page, base_url, renamed, recheck_after_reload=True)
 
 
 def test_toggle_permission_persists(logged_in_page, base_url):
@@ -515,6 +522,11 @@ def test_deleted_functionality_disappears_from_roles(logged_in_page, base_url):
     # `_delete_functionality(cat)` only in the body would leave cat permanently
     # orphaned: the very "unreachable orphaned row" symptom this test exists to
     # catch, reproduced on the test's own failure path.
+    #
+    # When the body reaches its end, cat is gone from the menu and from the Roles tree, and the
+    # safety net is skipped: it would only wait out its 5 s presence check on a row that cannot
+    # appear. On any earlier failure it still runs.
+    cat_deleted = False
     try:
         _create_category(page, base_url, cat)
         detail_url = _create_role(page, base_url, role_name)
@@ -526,6 +538,8 @@ def test_deleted_functionality_disappears_from_roles(logged_in_page, base_url):
 
         nav(page, detail_url)
         expect(page.get_by_text(cat, exact=True)).to_have_count(0)
+        cat_deleted = True
     finally:
         _safe_delete_role(page, base_url, role_name)
-        _safe_delete_functionality(page, base_url, cat)
+        if not cat_deleted:
+            _safe_delete_functionality(page, base_url, cat)

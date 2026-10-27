@@ -390,12 +390,22 @@ test('test-tenant-member-add requires --slug and --email and accepts --admin', (
 })
 
 test('test-tenant-delete requires --slug and refuses the default tenant', () => {
-  assert.deepEqual(parseTenantDeleteArguments(['--slug', 'e2e-a']), { slug: 'e2e-a' })
+  assert.deepEqual(parseTenantDeleteArguments(['--slug', 'e2e-a']), { slugs: ['e2e-a'] })
   assert.throws(() => parseTenantDeleteArguments([]), /--slug/)
   assert.throws(() => parseTenantDeleteArguments(['--slug']), /--slug/)
-  assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', '--slug', 'e2e-b']), /--slug/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', '--slug']), /--slug/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', '--slug', 'e2e-a']), /due volte/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug=e2e-a']), /--slug e2e-a/)
   assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', '--admin']), /--admin/)
   assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', 'extra']), /extra/)
   assert.throws(() => parseTenantDeleteArguments(['--slug', 'Ab']), /slug/)
   assert.throws(() => parseTenantDeleteArguments(['--slug', 'default']), /predefinito/)
+  assert.throws(() => parseTenantDeleteArguments(['--slug', 'e2e-a', '--slug', 'default']), /predefinito/)
+})
+
+test('test-tenant-delete takes --slug more than once, in the order given', () => {
+  assert.deepEqual(
+    parseTenantDeleteArguments(['--slug', 'e2e-a', '--slug', 'e2e-b', '--slug', 'e2e-c']),
+    { slugs: ['e2e-a', 'e2e-b', 'e2e-c'] },
+  )
 })

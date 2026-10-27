@@ -258,6 +258,23 @@ def run_db(*args: str, env: dict | None = None) -> str:
     return result.stdout
 
 
+def run_sql(query: str) -> str:
+    """Run SQL on the test database through `db.mjs test-query`, in the default tenant.
+
+    One subprocess and one connection per call, so put every statement a setup or a teardown needs
+    in one string: `test-query` runs it with the simple protocol, which accepts several statements
+    separated by `;`, all in one transaction. Connects as TEST_DATABASE_URL (in CI the job's
+    superuser, which ignores row-level security: filter on the tenant explicitly where it matters).
+    """
+    result = subprocess.run(
+        ["node", "sources/devops/db/db.mjs", "test-query", query],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"test-query failed: {query}\nstdout: {result.stdout}\nstderr: {result.stderr}")
+    return result.stdout
+
+
 def delete_e2e_tenants() -> None:
     """Remove the tenants test_tenants.py creates; idempotent (a missing tenant is not an error).
 
@@ -265,6 +282,7 @@ def delete_e2e_tenants() -> None:
     (Ctrl-C, Mac sleep) leaves them behind, and "E2E C" answers on the main address: in the next run
     TEST_EMAIL would have two tenants there and every login of every earlier file would land on
     /select-tenant, with nothing pointing at the cause. Hence also at the start of each session.
+
+    One db.mjs call for the three: `--slug` repeats, and they go in one transaction.
     """
-    for slug in E2E_TENANT_SLUGS:
-        run_db("test-tenant-delete", "--slug", slug)
+    run_db("test-tenant-delete", *(arg for slug in E2E_TENANT_SLUGS for arg in ("--slug", slug)))

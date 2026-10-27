@@ -3,7 +3,7 @@ import re
 import subprocess
 from pathlib import Path
 from playwright.sync_api import expect
-from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows, confirm_modal
+from helpers import nav, open_column_filter as _open_column_filter, grid_rows as _rows, confirm_modal, run_sql
 
 
 def test_users_list_loads(logged_in_page, base_url):
@@ -37,6 +37,69 @@ def test_manage_roles_opens_and_lists_roles(logged_in_page, base_url):
     expect(page.get_by_test_id("save-roles")).to_be_visible()
     reg = page.get_by_test_id("role-checkbox-0")
     expect(reg).to_be_disabled()
+
+
+ASSIGNABLE_ROLE = "zzz_e2e_assegnabile"
+ROLE_TYPE_SERVICE = 2
+
+
+def _assignments(email: str, role: str) -> int:
+    """Quante volte `role` è assegnato a `email` (0 o 1), letto dal database."""
+    out = run_sql(
+        "select count(*)::int as n from user_role ur join users u on u.id = ur.user_id "
+        f"join role r on r.id_role = ur.id_role where u.email = '{email}' and r.description = '{role}'"
+    )
+    found = re.search(r"│\s*0\s*│\s*(\d+)\s*│", out)
+    assert found, out
+    return int(found.group(1))
+
+
+def _open_manage_roles(page, base_url, email: str):
+    """'Gestisci ruoli' sulla riga di `email`, filtrata prima per email: la griglia carica a blocchi."""
+    nav(page, f"{base_url}/user-management")
+    _open_column_filter(page, "email")
+    page.locator('.ag-filter input[type="text"]').first.fill(email)
+    page.get_by_role("button", name="Applica").click()
+    row = _rows(page).filter(has_text=email)
+    expect(row).to_have_count(1)
+    row.locator('[data-testid^="row-menu"]').click()
+    page.get_by_text("Gestisci ruoli", exact=True).first.click()
+    expect(page.get_by_test_id("save-roles")).to_be_visible()
+
+
+def _save_roles(page) -> None:
+    page.get_by_test_id("save-roles").click()
+    expect(page.get_by_test_id("save-roles")).to_have_count(0)
+
+
+def test_manage_roles_saves_an_assignment(logged_in_page, base_url, test_email_user):
+    """Gestisci ruoli salva davvero: spuntato e salvato, il ruolo è assegnato (nel database e alla
+    riapertura); tolto e salvato, non lo è più. Un ruolo di servizio vuoto, creato e tolto qui."""
+    page = logged_in_page
+    run_sql(
+        f"delete from role where description = '{ASSIGNABLE_ROLE}';"
+        f"insert into role (description, id_role_type) values ('{ASSIGNABLE_ROLE}', {ROLE_TYPE_SERVICE})"
+    )
+    try:
+        out = run_sql(f"select id_role::int as id from role where description = '{ASSIGNABLE_ROLE}'")
+        found = re.search(r"│\s*0\s*│\s*(\d+)\s*│", out)
+        assert found, out
+        checkbox_id = f"role-checkbox-{found.group(1)}"
+
+        _open_manage_roles(page, base_url, test_email_user)
+        expect(page.get_by_test_id(checkbox_id)).not_to_be_checked()
+        page.get_by_test_id(checkbox_id).check()
+        _save_roles(page)
+        assert _assignments(test_email_user, ASSIGNABLE_ROLE) == 1
+
+        _open_manage_roles(page, base_url, test_email_user)
+        expect(page.get_by_test_id(checkbox_id)).to_be_checked()
+        page.get_by_test_id(checkbox_id).uncheck()
+        _save_roles(page)
+        assert _assignments(test_email_user, ASSIGNABLE_ROLE) == 0
+    finally:
+        # Cancellare il ruolo toglie anche l'assegnazione, se il test si è fermato a metà.
+        run_sql(f"delete from role where description = '{ASSIGNABLE_ROLE}'")
 
 
 def test_filter_by_status_and_reset(logged_in_page, base_url):

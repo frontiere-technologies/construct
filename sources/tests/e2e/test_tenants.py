@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 import pytest
 from playwright.sync_api import expect
 
-from helpers import E2E_TENANT_SLUGS, do_test_login, grid_rows, nav, run_db as _db
+from helpers import E2E_TENANT_SLUGS, delete_e2e_tenants, do_test_login, grid_rows, nav, run_db as _db
 
 VIEWPORT = {"width": 1440, "height": 900}
 
@@ -112,19 +112,20 @@ def _account_count(email: str) -> int:
 def _cleanup(people: list[str]) -> None:
     """Toglie i tenant e le persone di prova; idempotente, gira prima e dopo i test del file.
 
-    Prima i tenant (con le loro appartenenze), poi gli account, poi l'ultimo tenant usato di
-    TEST_EMAIL (test-reset-e2e). Ogni passo prova anche se uno prima è fallito; gli errori si
-    riportano tutti insieme alla fine.
+    Prima i tenant (con le loro appartenenze, un solo comando per i tre), poi gli account (una sola
+    istruzione), poi l'ultimo tenant usato di TEST_EMAIL (test-reset-e2e): tre lanci di db.mjs
+    invece di sette. Ogni passo prova anche se uno prima è fallito; gli errori si riportano tutti
+    insieme alla fine.
     """
     errors = []
-    for slug in E2E_TENANT_SLUGS:
+    try:
+        delete_e2e_tenants()
+    except Exception as error:  # noqa: BLE001 - si raccolgono e si riportano tutti
+        errors.append(error)
+    if people:  # `in ()` is a syntax error in SQL
         try:
-            _db("test-tenant-delete", "--slug", slug)
-        except Exception as error:  # noqa: BLE001 - si raccolgono e si riportano tutti
-            errors.append(error)
-    for email in people:
-        try:
-            _db("test-delete-user", env={"E2E_REGISTER_EMAIL": email})
+            emails = ", ".join(f"'{email}'" for email in people)
+            _db("test-query", f"delete from users where email in ({emails})")
         except Exception as error:  # noqa: BLE001
             errors.append(error)
     try:

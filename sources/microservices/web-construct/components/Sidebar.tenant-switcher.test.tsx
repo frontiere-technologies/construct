@@ -41,15 +41,10 @@ let root: Root | undefined
 let container: HTMLDivElement | undefined
 
 beforeEach(() => {
-  // Node 26 espone un `localStorage` globale che nasconde quello di jsdom: lo sostituisce una copia.
-  // La colonna parte compressa: qui la si vuole aperta, perché il nome si legga.
-  const store = new Map<string, string>([['sidebarCollapseState', JSON.stringify({ col1: false })]])
-  vi.stubGlobal('localStorage', {
-    getItem: (key: string) => store.get(key) ?? null,
-    setItem: (key: string, value: string) => void store.set(key, value),
-    removeItem: (key: string) => void store.delete(key),
-    clear: () => store.clear(),
-  })
+  // La colonna parte compressa: qui la si vuole aperta, perché il nome si legga. Su Node 26 il
+  // `localStorage` è quello in memoria di vitest.setup.ts.
+  localStorage.clear()
+  localStorage.setItem('sidebarCollapseState', JSON.stringify({ col1: false }))
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     value: () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
