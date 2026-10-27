@@ -991,15 +991,15 @@ async function runPlatformAdminAdd(connectionUrl, { email }) {
       await tx`update public.users set is_platform_admin = true where id = ${account.id}`
       let invitationToken = null
       if (!account.hasPassword) {
-        const now = new Date()
         invitationToken = (await tx`select gen_random_uuid()::text as token`)[0].token
+        // L'orologio è quello del database, come in register_tenant_admin (0051): non quello di chi lancia il comando.
         await tx`
-          update public.password_set_tokens set superseded_at = ${now}
+          update public.password_set_tokens set superseded_at = now()
           where user_id = ${account.id} and purpose = 'invitation' and used_at is null and superseded_at is null
         `
         await tx`
           insert into public.password_set_tokens (user_id, token, expires_at, purpose, delivery_status, delivery_attempted_at, delivered_at)
-          values (${account.id}, ${invitationToken}, ${new Date(now.getTime() + 48 * 3_600_000)}, 'invitation', 'sent', ${now}, ${now})
+          values (${account.id}, ${invitationToken}, now() + interval '48 hours', 'invitation', 'sent', now(), now())
         `
       }
       await recordCommandAudit(tx, {
@@ -1161,6 +1161,10 @@ async function runTestTenantDelete(connectionUrl, { slugs }) {
           await tx`delete from ${tx('public.' + name)} where id_tenant = ${found.id}`
         }
         await tx`delete from public.tenant_host where id_tenant = ${found.id}`
+        // Le voci del registro della piattaforma che nominano il tenant (0057, MT5-DEC-22): chiave
+        // esterna senza ON DELETE, e i comandi di creazione le scrivono. Il comando esiste solo per
+        // il database di prova; il proprietario ha pieno accesso alla tabella.
+        await tx`delete from public.platform_audit_event where id_tenant = ${found.id}`
         await tx`delete from public.tenant where id = ${found.id}`
         deleted.push([slug, true])
       }
@@ -1215,12 +1219,12 @@ const [command, argument, ...extraArguments] = process.argv.slice(2)
 const supported = new Set([
   'apply',
   'boundary-check',
+  'platform-admin-add',
+  'platform-admin-remove',
   'provision-platform-role',
   'provision-runtime-role',
   'query',
   'schema-check',
-  'platform-admin-add',
-  'platform-admin-remove',
   'schema-write',
   'tenant-create',
   'tenant-host-add',

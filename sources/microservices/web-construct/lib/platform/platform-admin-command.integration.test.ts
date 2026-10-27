@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
-import { userInfo } from 'node:os'
-import { resolve } from 'node:path'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir, userInfo } from 'node:os'
+import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { eq, inArray, sql } from 'drizzle-orm'
@@ -94,9 +95,32 @@ async function flaggedAdmins(): Promise<string[]> {
   return rows.map(row => row.id).sort()
 }
 
+/**
+ * ATTENZIONE: questa prova toglie l'attributo a TUTTI gli amministratori di piattaforma del database
+ * di prova condiviso (servono amministratori noti per provare "non si toglie l'ultimo") e li rimette
+ * in `afterAll`. Se l'esecuzione viene uccisa prima, il database resta senza amministratori di
+ * piattaforma: per rimetterli, `bash sources/devops/db/local-test-db.sh reset` (database locale) oppure
+ * `test-platform-admin-add --email <email dell'amministratore E2E>` con l'ambiente di prova caricato.
+ * Per ridurre il rischio, l'elenco di chi c'era si scrive nel file temporaneo qui sotto prima di toccare
+ * il database; il lancio successivo, se lo trova, rimette quegli amministratori prima di cominciare.
+ */
+const RESTORE_FILE = join(tmpdir(), 'construct-platform-admin-command-test-restore.json')
+
+function readRestoreFile(): string[] {
+  try { return JSON.parse(readFileSync(RESTORE_FILE, 'utf8')) as string[] } catch { return [] }
+}
+
+async function restoreAdmins(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  await withOwner(tx => tx.execute(sql`update public.users set is_platform_admin = true where id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)})`))
+}
+
 describeIntegration('db.mjs test-platform-admin-add / test-platform-admin-remove', () => {
   beforeAll(async () => {
+    // Un'esecuzione uccisa ha lasciato il suo elenco: si rimette a posto prima di cominciare.
+    await restoreAdmins(readRestoreFile())
     preexisting = await flaggedAdmins()
+    writeFileSync(RESTORE_FILE, JSON.stringify(preexisting))
     // Per provare "non si toglie l'ultimo" servono amministratori noti: gli altri si rimettono alla fine.
     await clearAdmins()
   }, 30_000)
@@ -109,11 +133,9 @@ describeIntegration('db.mjs test-platform-admin-add / test-platform-admin-remove
           await tx.execute(sql`delete from public.platform_audit_event where object_id in (${sql.join(createdUserIds.map(id => sql`${id}`), sql`, `)})`)
           await tx.execute(sql`update public.users set is_platform_admin = false where id in (${sql.join(createdUserIds.map(id => sql`${id}::uuid`), sql`, `)})`)
         }
-        if (preexisting.length > 0) {
-          const ids = sql.join(preexisting.map(id => sql`${id}::uuid`), sql`, `)
-          await tx.execute(sql`update public.users set is_platform_admin = true where id in (${ids})`)
-        }
       })
+      await restoreAdmins(preexisting)
+      rmSync(RESTORE_FILE, { force: true })
     } catch (error) { errors.push(error) }
     if (createdUserIds.length > 0) {
       try { await withGlobal(tx => tx.delete(users).where(inArray(users.id, createdUserIds))) } catch (error) { errors.push(error) }

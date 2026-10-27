@@ -467,4 +467,27 @@ describeIntegration('db.mjs test-tenant-create', () => {
     expect(invalid.code).toBe(1)
     expect(invalid.stderr).toMatch(/^ERROR: --host non è un indirizzo valido/)
   }, 60_000)
+
+  it('test-tenant-delete removes a tenant that the commands wrote audit rows for', async () => {
+    // test-tenant-create e test-tenant-host-add scrivono voci nel registro della piattaforma con
+    // il tenant nominato (chiave esterna senza ON DELETE): la pulizia dell'E2E deve riuscire lo stesso.
+    const address = email()
+    const ownSlug = slug()
+    const created = await tenantCreate(['--slug', ownSlug, '--name', 'Da cancellare', '--admin', address])
+    expect(created.code, created.stderr).toBe(0)
+    const ownTenant = trackTenant(created.stdout)
+    const id = await userIdOf(address)
+    if (id) createdUserIds.push(id)
+    const added = await tenantHostAdd(['--slug', ownSlug, '--host', hostName(), '--primary'])
+    expect(added.code, added.stderr).toBe(0)
+    expect((await auditRowsOfTenant(ownTenant)).map(row => row.operation)).toEqual(['tenant.create', 'tenant.host.add', 'tenant.host.primary'])
+
+    const deleted = await runCommand('test-tenant-delete', ['--slug', ownSlug], { ...process.env, AUTH_URL })
+    expect(deleted.stderr).toBe('')
+    expect(deleted.code).toBe(0)
+    expect(deleted.stdout.trimEnd().split('\n')).toEqual([`Tenant cancellato: ${ownSlug}`])
+    expect(await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).where(eq(tenant.id, ownTenant)))).toEqual([])
+    expect(await auditRowsOfTenant(ownTenant)).toEqual([])
+    expect(await hostRowsOf(ownTenant)).toEqual([])
+  }, 90_000)
 })

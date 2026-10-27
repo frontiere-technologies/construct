@@ -397,8 +397,9 @@ Link per impostare la password (valido 48 ore): https://construct.example.it/set
   nessun tenant) e stampato sul terminale, mai scritto altrove; un account che ha già la password
   non riceve nessun link. Si rifiuta un account disattivato a livello globale.
 - `platform-admin-remove` **rifiuta di togliere l'ultimo** amministratore attivo (uscita 1, nulla
-  cambia): la piattaforma non resta senza nessuno. Due rimozioni insieme non possono passare
-  entrambe.
+  cambia): la piattaforma non resta senza nessuno. Conta solo chi è attivo: se non resta **un altro
+  amministratore attivo** il comando rifiuta, anche quando esistono amministratori disattivati. Due
+  rimozioni insieme non possono passare entrambe.
 - Nominare chi lo è già, o togliere l'attributo a chi non lo ha, non cambia nulla, esce con 0 e non
   scrive nel registro.
 - `test-platform-admin-add` e `test-platform-admin-remove` fanno lo stesso sul database di prova usa
