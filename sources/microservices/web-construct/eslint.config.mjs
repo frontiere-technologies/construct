@@ -199,9 +199,25 @@ const config = [
   {
     // I file di test: il driver e gli helper di test sono permessi. Viene dopo il blocco di lib/db/,
     // cosi' i test in lib/db/ ereditano questa regola e non quella.
+    // L'identità di piattaforma resta vietata anche ai test fuori da lib/platform/ (e da lib/db/ per il
+    // suo client): il blocco dopo questo la riapre dove serve.
     files: ['**/*.test.ts', '**/*.test.tsx'],
     rules: {
       'no-restricted-imports': ['error', {
+        paths: PLATFORM_PATHS,
+        patterns: [{
+          group: ['../*', '../**'],
+          message: 'Niente risalita nei percorsi relativi: usa l\'alias @/ fra feature, e i relativi (./) solo dentro lo stesso modulo locale.',
+        }],
+      }],
+    },
+  },
+  {
+    // I test dentro lib/platform/ importano withPlatform, e quelli in lib/db/ il client della piattaforma.
+    files: ['lib/platform/**/*.test.ts', 'lib/db/**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [],
         patterns: [{
           group: ['../*', '../**'],
           message: 'Niente risalita nei percorsi relativi: usa l\'alias @/ fra feature, e i relativi (./) solo dentro lo stesso modulo locale.',

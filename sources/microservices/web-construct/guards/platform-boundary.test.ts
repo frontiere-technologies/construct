@@ -10,11 +10,17 @@ import { describe, expect, it } from 'vitest'
  * `lib/platform/**` lo importa. Ogni porta della piattaforma verifica l'amministratore di
  * piattaforma prima di chiamarlo; questa guardia verifica che nessun altro possa raggiungerlo.
  *
- * Regola: nessun file fuori da lib/platform/ nomina `lib/platform/db` o il suo client
+ * Regola 1: nessun file fuori da lib/platform/ nomina `lib/platform/db` o il suo client
  * `lib/db/platform-database`, in nessuna forma (relativo, alias `@/`, `import * as`,
  * `export … from`, `import()`, `require`). I test di integrazione dentro lib/platform/ rientrano
  * nella cartella e passano. Il client sta in lib/db/ come ogni client (solo lì vive il driver), e
  * lo importa solo lib/platform/db.ts: fuori da lib/db/ e lib/platform/ non lo importa nessuno.
+ * Si scandiscono anche i file alla radice del progetto (proxy.ts e simili).
+ *
+ * Regola 2: i nomi dell'identità (`PLATFORM_DATABASE_URL`, `TEST_PLATFORM_DATABASE_URL`,
+ * `resolvePlatformDatabaseUrl`) compaiono, nel codice (non nei commenti), solo in lib/test-database.ts,
+ * lib/db/platform-database.ts e nei file di test. Altrimenti un altro modulo di lib/db/ potrebbe
+ * costruire una seconda porta verso lo stesso login senza importare platform-database.
  *
  * I test in fondo provano il rilevamento su sorgenti in linea: se smettesse di riconoscere una
  * forma, la guardia non fallirebbe più su niente. Un import finto vive in memoria, mai nel repo.
@@ -35,7 +41,13 @@ function sourceFiles(directory: string): string[] {
 
 type SourceFile = { path: string; text: string }
 
-const files: SourceFile[] = SOURCE_ROOTS.flatMap(root => sourceFiles(join(ROOT, root)))
+// Le cartelle sorgente più i file alla radice del progetto (proxy.ts, e domani instrumentation.ts o
+// auth.ts), come guards/session-access.test.ts: un import da lì non passa per nessuna cartella.
+const rootFiles = readdirSync(ROOT)
+  .filter(name => /\.(ts|tsx)$/.test(name) && !name.endsWith('.d.ts') && statSync(join(ROOT, name)).isFile())
+  .map(name => join(ROOT, name))
+
+const files: SourceFile[] = [...SOURCE_ROOTS.flatMap(root => sourceFiles(join(ROOT, root))), ...rootFiles]
   .map(path => ({ path: relative(ROOT, path).split(sep).join('/'), text: readFileSync(path, 'utf8') }))
 
 function moduleSpecifiers(text: string): string[] {
@@ -73,6 +85,25 @@ const importsAny = (modules: Set<string>) => (file: SourceFile) =>
 const importsPlatformDb = importsAny(PLATFORM_MODULES)
 const importsPlatformClient = importsAny(PLATFORM_CLIENT_MODULES)
 
+const PLATFORM_NAMES = ['PLATFORM_DATABASE_URL', 'TEST_PLATFORM_DATABASE_URL', 'resolvePlatformDatabaseUrl']
+const NAME_OWNERS = new Set(['lib/test-database.ts', 'lib/db/platform-database.ts'])
+const isTestFile = (path: string) => /\.test\.tsx?$/.test(path)
+
+/** I nomi dell'identità in un identificatore, una stringa o un pezzo di template; i commenti non contano. */
+function mentionsPlatformNames(text: string): boolean {
+  let found = false
+  const visit = (node: ts.Node) => {
+    const name = ts.isIdentifier(node) ? node.text
+      : (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
+        || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) ? node.text
+        : null
+    if (name !== null && PLATFORM_NAMES.some(platformName => name.includes(platformName))) found = true
+    ts.forEachChild(node, visit)
+  }
+  visit(ts.createSourceFile('x.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX))
+  return found
+}
+
 const insidePlatform = (path: string) => path.startsWith('lib/platform/')
 const insideDb = (path: string) => path.startsWith('lib/db/')
 
@@ -81,12 +112,17 @@ function platformBoundaryOffenders(sources: SourceFile[]): string[] {
   return [
     ...sources.filter(file => !insidePlatform(file.path) && importsPlatformDb(file)),
     ...sources.filter(file => !insidePlatform(file.path) && !insideDb(file.path) && importsPlatformClient(file)),
+    ...sources.filter(file => !NAME_OWNERS.has(file.path) && !isTestFile(file.path) && mentionsPlatformNames(file.text)),
   ].map(file => file.path).sort()
 }
 
 describe('platform boundary', () => {
   it('reaches lib/platform/db only from lib/platform/', () => {
     expect(platformBoundaryOffenders(files)).toEqual([])
+  })
+
+  it('scans the root files of the project too (proxy.ts)', () => {
+    expect(files.some(file => file.path === 'proxy.ts')).toBe(true)
   })
 
   it('sees the platform module and its client in the repository (the rule is not vacuous)', () => {
@@ -137,6 +173,32 @@ describe('platform boundary detectors', () => {
       { path: 'lib/platform/db.integration.test.ts', text: `import { withPlatform } from '@/lib/platform/db'` },
       { path: 'lib/platform/sub/x.ts', text: `import { withPlatform } from '@/lib/platform/db'` },
     ])).toEqual([])
+  })
+
+  it('flags an import from a root file of the project (proxy.ts, instrumentation.ts)', () => {
+    expect(platformBoundaryOffenders([{ path: 'proxy.ts', text: `import { withPlatform } from './lib/platform/db'` }]))
+      .toEqual(['proxy.ts'])
+    expect(platformBoundaryOffenders([{ path: 'instrumentation.ts', text: `import { withPlatform } from '@/lib/platform/db'` }]))
+      .toEqual(['instrumentation.ts'])
+  })
+
+  it('confines the names of the identity: a second door cannot be built without importing the client', () => {
+    const forms = [
+      `const url = process.env.PLATFORM_DATABASE_URL`,
+      `const url = process.env['PLATFORM_DATABASE_URL']`,
+      `const url = process.env.TEST_PLATFORM_DATABASE_URL`,
+      'const url = `${process.env.PLATFORM_DATABASE_URL}`',
+      `import { resolvePlatformDatabaseUrl } from '@/lib/test-database'`,
+      `const url = resolvePlatformDatabaseUrl(process.env)`,
+    ]
+    for (const form of forms) {
+      expect(platformBoundaryOffenders([{ path: 'lib/db/second-door.ts', text: form }]), form).toEqual(['lib/db/second-door.ts'])
+      expect(platformBoundaryOffenders([{ path: 'lib/platform/x.ts', text: form }]), form).toEqual(['lib/platform/x.ts'])
+    }
+    for (const owner of ['lib/test-database.ts', 'lib/db/platform-database.ts', 'lib/db/x.test.ts', 'lib/platform/db.integration.test.ts']) {
+      expect(platformBoundaryOffenders([{ path: owner, text: forms[0] }]), owner).toEqual([])
+    }
+    expect(platformBoundaryOffenders([{ path: 'lib/db/x.ts', text: `// PLATFORM_DATABASE_URL e resolvePlatformDatabaseUrl\nconst a = 1` }])).toEqual([])
   })
 
   it('does not take a neighbour for the module', () => {

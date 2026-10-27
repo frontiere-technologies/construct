@@ -172,11 +172,18 @@ jobs:
       - name: Verify platform provisioning rejects an overprivileged existing login
         run: |
           node sources/devops/db/db.mjs test-query "create role construct_overprivileged_platform login; grant create on schema public to construct_overprivileged_platform;"
-          if MIGRATION_DATABASE_URL="$TEST_DATABASE_URL" \
+          # Qualunque uscita diversa da zero non basta: un errore di connessione non deve contare come
+          # rifiuto. Il messaggio deve essere proprio quello del controllo di provision-platform-role.
+          if output=$(MIGRATION_DATABASE_URL="$TEST_DATABASE_URL" \
             CONSTRUCT_PLATFORM_DB_USER=construct_overprivileged_platform \
             CONSTRUCT_PLATFORM_DB_PASSWORD=ci-platform-password-at-least-24 \
-            node sources/devops/db/db.mjs provision-platform-role; then
+            node sources/devops/db/db.mjs provision-platform-role 2>&1); then
             echo "unsafe existing platform login was accepted"
+            exit 1
+          fi
+          echo "$output"
+          if ! echo "$output" | grep -q "existing platform login has unexpected memberships, ownership, direct grants, or default ACLs"; then
+            echo "the platform login was refused for another reason than the safety check"
             exit 1
           fi
           node sources/devops/db/db.mjs test-query "revoke create on schema public from construct_overprivileged_platform; drop role construct_overprivileged_platform;"

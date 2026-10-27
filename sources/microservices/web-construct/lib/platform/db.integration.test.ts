@@ -154,10 +154,24 @@ describeIntegration('the platform identity', () => {
       select count(*)::text as n from public.role where description = ${marker}`), id)
     expect(Number(found[0].n)).toBe(1)
 
-    // Il tenant non resta sulla connessione: la transazione dopo non ne ha uno.
-    const leftover = await withPlatform(tx => tx.execute<{ value: string | null }>(sql`
-      select nullif(current_setting('app.tenant_id', true), '') as value`))
-    expect(leftover[0].value).toBeNull()
+    // Il tenant e il ruolo non restano sulla connessione: lo si prova sulla stessa connessione, con un
+    // client a una sola connessione che fa le stesse due istruzioni di withPlatform e poi si guarda
+    // intorno. (Con il pool di withPlatform la transazione dopo potrebbe cadere su un'altra.)
+    const raw = postgres(process.env.TEST_PLATFORM_DATABASE_URL!, { prepare: false, max: 1, connect_timeout: 10 })
+    try {
+      await raw.begin(async tx => {
+        await tx`set local role construct_owner`
+        await tx`select set_config('app.tenant_id', ${String(id)}, true)`
+        const [during] = await tx`select current_user::text as who, current_setting('app.tenant_id', true) as tenant`
+        expect(during).toEqual({ who: 'construct_owner', tenant: String(id) })
+      })
+      const [after] = await raw`
+        select current_user::text as who, nullif(current_setting('app.tenant_id', true), '') as tenant`
+      expect(after.who).not.toBe('construct_owner')
+      expect(after.tenant).toBeNull()
+    } finally {
+      await raw.end({ timeout: 5 })
+    }
   }, 30_000)
 
   it('rolls everything back when the function throws', async () => {

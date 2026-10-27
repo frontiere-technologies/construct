@@ -196,7 +196,7 @@ async function runMigrations(connectionUrl, { to } = {}) {
  * Un login già esistente con altre appartenenze, oggetti, privilegi diretti o ACL predefinite viene
  * rifiutato, mai ripulito in silenzio.
  */
-async function provisionServiceLogin({ label, userVariable, passwordVariable, groupRole, inheritsGroup, forbiddenName }) {
+async function provisionServiceLogin({ label, userVariable, passwordVariable, groupRole, inheritsGroup }) {
   const username = process.env[userVariable]
   const password = process.env[passwordVariable]
   if (!username || !/^[a-z_][a-z0-9_]{0,62}$/.test(username)) {
@@ -204,9 +204,6 @@ async function provisionServiceLogin({ label, userVariable, passwordVariable, gr
   }
   if (!password || password.length < 24) {
     throw new Error(`${passwordVariable} must contain at least 24 characters`)
-  }
-  if (username === forbiddenName) {
-    throw new Error(`${userVariable} must be a login role, not ${forbiddenName}`)
   }
   if (username === 'construct_runtime' || username === 'construct_owner') {
     throw new Error(`${userVariable} must be a login role, not ${username}`)
@@ -271,8 +268,39 @@ async function provisionServiceLogin({ label, userVariable, passwordVariable, gr
     // un'appartenenza che esiste già non la cambia: la si dice esplicitamente.
     const [{ version }] = await sql`select current_setting('server_version_num')::int as version`
     await sql.unsafe(version >= 160000
-      ? `grant ${groupRole} to "${username}" with inherit ${inheritsGroup ? 'true' : 'false'}`
+      ? `grant ${groupRole} to "${username}" with inherit ${inheritsGroup ? 'true' : 'false'}${inheritsGroup ? '' : ', set true'}`
       : `grant ${groupRole} to "${username}"`)
+    // Verifica dopo la concessione, solo per il login che non eredita (quello di piattaforma, MT5-RISK-1):
+    // l'appartenenza esiste con le opzioni volute (da PostgreSQL 16 sono per appartenenza, e un
+    // `grant` già presente poteva averle diverse), e nessun ruolo può diventare il login. L'unica
+    // appartenenza ammessa in quel verso è quella che PostgreSQL 16 dà a chi crea il ruolo, con la
+    // sola opzione admin (né ereditarietà né set): da PostgreSQL 15 in giù nessuna riga è ammessa.
+    if (!inheritsGroup) {
+      if (version >= 160000) {
+        const wrongOption = await sql`
+          select 1
+          from pg_auth_members membership
+          join pg_roles member on member.oid = membership.member
+          join pg_roles granted on granted.oid = membership.roleid
+          where member.rolname = ${username} and granted.rolname = ${groupRole}
+            and (membership.inherit_option is not false or membership.set_option is not true)
+        `
+        if (wrongOption.length) {
+          throw new Error(`the ${label} login ${username} is a member of ${groupRole} with the wrong options (expected inherit false, set true)`)
+        }
+      }
+      const reverse = await sql`
+        select member.rolname as member
+        from pg_auth_members membership
+        join pg_roles login on login.oid = membership.roleid
+        join pg_roles member on member.oid = membership.member
+        where login.rolname = ${username}
+          and (${version < 160000} or to_jsonb(membership) ->> 'inherit_option' = 'true' or to_jsonb(membership) ->> 'set_option' = 'true')
+      `
+      if (reverse.length) {
+        throw new Error(`the ${label} login ${username} has members (${reverse.map(row => row.member).join(', ')}): no role may be a member of it`)
+      }
+    }
     console.log(`provisioned limited ${label} login ${username}`)
   } finally {
     await sql.end({ timeout: 5 })
@@ -286,7 +314,6 @@ async function provisionRuntimeRole() {
     passwordVariable: 'CONSTRUCT_RUNTIME_DB_PASSWORD',
     groupRole: 'construct_runtime',
     inheritsGroup: true,
-    forbiddenName: 'construct_runtime',
   })
 }
 
@@ -304,7 +331,6 @@ async function provisionPlatformRole() {
     passwordVariable: 'CONSTRUCT_PLATFORM_DB_PASSWORD',
     groupRole: 'construct_owner',
     inheritsGroup: false,
-    forbiddenName: 'construct_owner',
   })
 }
 
