@@ -5,6 +5,7 @@ import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { defaultTestTenant, tenantIdForTest } from '@/lib/tenancy/testing'
+import { authConfig } from '@/lib/auth.config'
 import { enterTenant, revalidateTokenTenant } from '@/lib/tenancy/token-tenant'
 import { selectAuthorizationSnapshot } from './auth-roles'
 import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from './types'
@@ -25,6 +26,11 @@ vi.mock('next/navigation', async importOriginal => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
   redirect: (url: string) => { throw new Error(`NEXT_REDIRECT:${url}`) },
   notFound: () => { throw new Error('NEXT_NOT_FOUND') },
+}))
+// La lettura per richiesta (cache di React) qui non ha una richiesta: ogni chiamata rilegge, come nel test fra tenant.
+vi.mock('react', async importOriginal => ({
+  ...(await importOriginal<typeof import('react')>()),
+  cache: <T>(fn: T) => fn,
 }))
 
 const { requirePlatformAdmin, requirePlatformAdminPage } = await import('./auth-guard')
@@ -94,6 +100,11 @@ describeIntegration('platform admin guards', () => {
     mocks.session = sessionOf(deactivated.id, 'none')
     await expect(requirePlatformAdmin()).rejects.toThrow('Unauthorized')
 
+    // Una sessione il cui utente non esiste più (cancellato): nessuna riga, nessun amministratore.
+    mocks.session = sessionOf(crypto.randomUUID(), 'none')
+    await expect(requirePlatformAdmin()).rejects.toThrow('Unauthorized')
+    await expect(requirePlatformAdminPage()).rejects.toThrow('NEXT_NOT_FOUND')
+
     // Il token dice ancora "amministratore", ma nel database non lo è più: conta il database.
     const demoted = await createPerson({ platformAdmin: true })
     await withOwner(tx => tx.update(users).set({ isPlatformAdmin: false }).where(eq(users.id, demoted.id)))
@@ -156,6 +167,39 @@ describeIntegration('platform admin attribute in the authorization read', () => 
     // Le richieste successive tengono la persona in `none`, ancora con il flag.
     expect(await revalidateTokenTenant(person.id, token, null)).toMatchObject({ tenantState: 'none', isPlatformAdmin: true })
   })
+
+  it('does not route a platform admin in state none to the console on a dedicated host', async () => {
+    const person = await createPerson({ platformAdmin: true })
+    const dedicated = `zzz-route-${unique()}.example.test`
+    const [created] = await withOwner(tx => tx.insert(tenant)
+      .values({ slug: `zzz-route-${unique()}`.slice(0, 40), name: 'Route dedicated' }).returning({ id: tenant.id }))
+    const dedicatedTenant = tenantIdForTest(created.id)
+    /** Dove porta il proxy una sessione fatta con il token, per la pagina chiesta. */
+    async function destination(token: Awaited<ReturnType<typeof enterTenant>>, pathname: string): Promise<string | true> {
+      const auth = { user: { id: person.id, accountActive: token.accountActive, tenantState: token.tenantState, isPlatformAdmin: token.isPlatformAdmin }, expires: '2099-01-01T00:00:00.000Z' }
+      const nextUrl = new URL(`http://${MAIN_HOST}${pathname}`)
+      const result = await authConfig.callbacks.authorized({ auth, request: { nextUrl } } as unknown as Parameters<NonNullable<typeof authConfig.callbacks.authorized>>[0])
+      return result instanceof Response ? new URL(result.headers.get('location') ?? '').pathname : true
+    }
+    try {
+      await withOwner(tx => tx.execute(sql`
+        insert into public.tenant_host (host, id_tenant, is_primary) values (${dedicated}, ${dedicatedTenant}, true)`))
+      // Sull'indirizzo dedicato la console non esiste (MT5-DEC-3): la persona resta sul messaggio.
+      const onDedicated = await enterTenant(person.id, dedicated, { current: null, firstEntry: true })
+      expect(onDedicated).toMatchObject({ tenantState: 'none', accountActive: true, isPlatformAdmin: false })
+      expect(await revalidateTokenTenant(person.id, onDedicated, dedicated)).toMatchObject({ tenantState: 'none', isPlatformAdmin: false })
+      expect(await destination(onDedicated, '/')).toBe('/no-tenant')
+      expect(await destination(onDedicated, '/no-tenant')).toBe(true)
+      // Sull'indirizzo principale la stessa persona va alla console.
+      const onMain = await enterTenant(person.id, null, { current: null, firstEntry: true })
+      expect(onMain).toMatchObject({ tenantState: 'none', isPlatformAdmin: true })
+      expect(await destination(onMain, '/')).toBe('/platform')
+      // Un token scelto sull'indirizzo principale e presentato su quello dedicato si ricalcola lì.
+      expect(await revalidateTokenTenant(person.id, onMain, dedicated)).toMatchObject({ tenantState: 'none', isPlatformAdmin: false })
+    } finally {
+      await deleteTenantForTest(dedicatedTenant)
+    }
+  }, 30_000)
 
   it('carries the flag in a ready token only for a platform admin who is also a member', async () => {
     const member = await createPerson({ platformAdmin: true, tenantAdmin: true })

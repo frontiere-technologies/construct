@@ -149,6 +149,8 @@ describeIntegration('round-trip budget', () => {
       expect(jwt.roundTrips, jwt.queries.join('\n')).toBeLessThanOrEqual(5)
       expect(revalidated).toMatchObject({ tenantState: 'ready', isPlatformAdmin: true })
       expect(jwt.queries.join('\n')).not.toMatch(/available_tenants|has_deactivated_membership_on_host/)
+      // L'attributo viaggia nell'istruzione dell'autorizzazione: nessuna lettura a parte nel callback jwt.
+      expect(jwt.queries.filter(query => /is_platform_admin/.test(query)), jwt.queries.join('\n')).toHaveLength(1)
 
       let actor: Awaited<ReturnType<typeof resolveActor>> | undefined
       const read = await measure(async () => { actor = await resolveActor(defaultTestTenant(), created.id) })

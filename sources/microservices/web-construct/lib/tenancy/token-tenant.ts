@@ -1,10 +1,11 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { isActiveAccount } from '@/lib/auth-policy'
 import { users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { resolveTenantAuthorization, resolveUserAuthorization } from '@/lib/rbac/auth-roles'
 import { hasDeactivatedMembershipOnHost, listAvailableTenants, resolveHostTenant } from './host-tenants'
 import { ensureDefaultMembership } from './membership'
+import { normalizeHost } from './request-host'
 import { toTenantId } from './tenant-id'
 import { selectTenant, type TenantState } from './tenant-selection'
 
@@ -19,9 +20,10 @@ import { selectTenant, type TenantState } from './tenant-selection'
  * - `accountActive`: in `ready` account e appartenenza attivi nel tenant; in `choose` e `none` solo
  *   l'account globale, così la persona resta riconosciuta e può arrivare alla scelta o al messaggio.
  * - `roleIds`: i ruoli nel tenant, vuoti fuori da `ready`.
- * - `isPlatformAdmin`: l'attributo dell'account (MT5-DEC-1), in ogni stato: serve al proxy per
- *   portare l'amministratore di piattaforma alla console; non è mai una decisione, che ogni porta
- *   della console riprende dal database.
+ * - `isPlatformAdmin`: l'attributo dell'account (MT5-DEC-1): serve al proxy per portare
+ *   l'amministratore di piattaforma alla console; non è mai una decisione, che ogni porta della
+ *   console riprende dal database. Fuori da `ready` vale solo sull'indirizzo principale: la console
+ *   non esiste su un indirizzo dedicato (MT5-DEC-3), dove la persona resta sul messaggio.
  */
 export interface TokenTenant {
   tenantId: number | null
@@ -40,18 +42,30 @@ function isTenantState(value: unknown): value is TenantState {
 }
 
 /** L'ultimo tenant usato (MT4-DEC-6), lo stato globale dell'account e l'attributo di piattaforma, in una lettura. */
-async function readPerson(userId: string): Promise<{ lastTenantId: number | null; status: number | null; isPlatformAdmin: boolean } | undefined> {
+type Person = { lastTenantId: number | null; status: number | null; isPlatformAdmin: boolean; onDedicatedHost: boolean }
+
+async function readPerson(userId: string, host: string | null): Promise<Person | undefined> {
   const [row] = await withGlobal(tx => tx
-    .select({ lastTenantId: users.lastTenantId, status: users.idUserStatus, isPlatformAdmin: users.isPlatformAdmin })
+    .select({
+      lastTenantId: users.lastTenantId,
+      status: users.idUserStatus,
+      isPlatformAdmin: users.isPlatformAdmin,
+      // Come `isDedicatedHost`, ma nella stessa istruzione: nessun viaggio in più.
+      onDedicatedHost: sql<boolean>`exists (select 1 from public.tenant_host h where h.host = ${normalizeHost(host)}::text)`,
+    })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1))
   return row
 }
 
-/** L'attributo di piattaforma vale solo con l'account globale attivo. */
-function platformAdminOf(person: { status: number | null; isPlatformAdmin: boolean } | undefined): boolean {
-  return person !== undefined && person.isPlatformAdmin && isActiveAccount(person.status)
+/**
+ * L'indizio per il proxy fuori da `ready`: l'attributo vale solo con l'account globale attivo e
+ * sull'indirizzo principale. Su un indirizzo dedicato la console risponde 404 (MT5-DEC-3): mandarci
+ * la persona le toglierebbe il messaggio "Non sei configurato" e il suo pulsante di uscita.
+ */
+function platformAdminOf(person: Person | undefined): boolean {
+  return person !== undefined && person.isPlatformAdmin && isActiveAccount(person.status) && !person.onDedicatedHost
 }
 
 /**
@@ -84,7 +98,7 @@ export async function enterTenant(
     const hostTenant = await resolveHostTenant(host)
     await withTenant(hostTenant, tx => ensureDefaultMembership(tx, userId))
   }
-  const [available, person] = await Promise.all([listAvailableTenants(userId, host), readPerson(userId)])
+  const [available, person] = await Promise.all([listAvailableTenants(userId, host), readPerson(userId, host)])
   const selection = selectTenant({
     available,
     lastTenantId: person?.lastTenantId ?? null,
@@ -160,7 +174,7 @@ export async function revalidateTokenTenant(
     }
   }
 
-  const person = await readPerson(userId)
+  const person = await readPerson(userId, host)
   return {
     tenantId: null,
     tenantState: token.tenantState,
