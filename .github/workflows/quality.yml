@@ -5,6 +5,13 @@ on:
     paths:
       - "sources/libraries/**"
       - "sources/microservices/**"
+  # Anche dopo il merge su development: le cache salvate lì (browser di Playwright) sono leggibili da
+  # tutte le pull request, quelle salvate da una pull request solo da quella pull request.
+  push:
+    branches: [development]
+    paths:
+      - "sources/libraries/**"
+      - "sources/microservices/**"
 
 permissions:
   contents: read
@@ -57,6 +64,7 @@ jobs:
         working-directory: .
         run: bash sources/devops/k8s/validate.sh
       - name: Check whitespace in the pull-request diff
+        if: github.event_name == 'pull_request'
         working-directory: .
         run: git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
 
