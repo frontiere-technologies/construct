@@ -122,11 +122,12 @@ def _cleanup(people: list[str]) -> None:
         delete_e2e_tenants()
     except Exception as error:  # noqa: BLE001 - si raccolgono e si riportano tutti
         errors.append(error)
-    try:
-        emails = ", ".join(f"'{email}'" for email in people)
-        _db("test-query", f"delete from users where email in ({emails})")
-    except Exception as error:  # noqa: BLE001
-        errors.append(error)
+    if people:  # `in ()` is a syntax error in SQL
+        try:
+            emails = ", ".join(f"'{email}'" for email in people)
+            _db("test-query", f"delete from users where email in ({emails})")
+        except Exception as error:  # noqa: BLE001
+            errors.append(error)
     try:
         _db("test-reset-e2e")
     except Exception as error:  # noqa: BLE001

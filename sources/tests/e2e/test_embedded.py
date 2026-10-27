@@ -4,6 +4,7 @@ import threading
 import urllib.error
 import urllib.request
 import uuid
+import warnings
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -183,7 +184,11 @@ def embedded_item(admin_module_page, base_url):
         try:
             _delete_functionality(admin_module_page, base_url, name)
         except Exception as e:
-            print(f"cleanup failed for item {name}: {e}")
+            # A module teardown that passes swallows prints: warnings reach the summary
+            # (same reasoning as _report_cleanup_failure in test_roles.py).
+            message = f"cleanup failed for embedded item {name!r}, it may still be in the database: {e}"
+            print(f"[cleanup] {message}")
+            warnings.warn(message)
 
 
 def _open_from_sidebar(page, base_url, item_name):
@@ -213,9 +218,10 @@ def test_embedded_page_renders_iframe_when_allowed(embedded_item, logged_in_page
 def test_embedded_page_redirects_when_not_authorized(embedded_item, logged_in_page, base_url, non_admin_page):
     """A user with no grant on the item cannot reach the embedded page.
 
-    The administrator session is not suitable for this assertion because the
-    Administrator role intentionally retains access to every menu item; it is used
-    only to read the item's address from the sidebar.
+    The administrator session is not suitable for this assertion: the page lets in
+    whoever sees the item in their sidebar menu, and the module grants the item to the
+    Administrator role (see `embedded_item`). Here it is used only to read the item's
+    address from the sidebar; the non-administrator holds no grant on it.
     """
     item_name = embedded_item(PUBLIC_EMBED_URL)
     item_href = _open_from_sidebar(logged_in_page, base_url, item_name).get_attribute("href")
