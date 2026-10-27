@@ -391,6 +391,13 @@ describe('tenant chosen at sign-in (MT4-DEC-4, MT4-DEC-15, MT4-DEC-16)', () => {
     expect(session.user).toMatchObject({ id: USER.id, accountActive: true, tenantState: 'none', tenantId: null, roleIds: [] })
   })
 
+  it('exposes the platform admin attribute of the token in the session, only for an active account', async () => {
+    const none: Token = { userId: USER.id, provider: 'credentials', accountActive: true, roleIds: [], tenantId: null, tenantState: 'none', tenantHost: 'a.localhost', tenantName: null }
+    expect((await sessionOf({ ...none, isPlatformAdmin: true })).user).toMatchObject({ tenantState: 'none', isPlatformAdmin: true })
+    expect((await sessionOf(none)).user).toMatchObject({ isPlatformAdmin: false })
+    expect((await sessionOf({ ...none, accountActive: false, isPlatformAdmin: true })).user).toMatchObject({ isPlatformAdmin: false })
+  })
+
   it('gives the first default membership before listing the tenants of the address (MT2-DEC-12)', async () => {
     const order: string[] = []
     mocks.ensureDefaultMembership.mockImplementation(async () => { order.push('ensure'); return 'active' })

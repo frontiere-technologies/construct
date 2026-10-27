@@ -1,12 +1,16 @@
 import { sql } from 'drizzle-orm'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole } from '@/lib/db/schema'
-import { evaluateAuthorization } from '@/lib/auth-policy'
+import { evaluateAuthorization, isActiveAccount } from '@/lib/auth-policy'
 import { ensureDefaultMembership, isMembershipStatus, type MembershipStatus } from '@/lib/tenancy/membership'
 import { DEFAULT_TENANT_SLUG, type TenantId } from '@/lib/tenancy/tenant-id'
 import type { SystemRoleIds } from '@/lib/tenancy/system-roles'
 
-type UserAuthorization = { accountActive: boolean; roleIds: number[]; isAdmin: boolean }
+/**
+ * `isPlatformAdmin` è un attributo dell'account (MT5-DEC-1): non dipende dal tenant né
+ * dall'appartenenza, ma vale solo con l'account attivo.
+ */
+type UserAuthorization = { accountActive: boolean; roleIds: number[]; isAdmin: boolean; isPlatformAdmin: boolean }
 
 export interface AuthorizationSnapshot {
   userExists: boolean
@@ -27,6 +31,11 @@ export interface AuthorizationSnapshot {
    * pezzo 5 (`GLOBAL_CATALOG_WRITE_CODES` in `actor.ts`).
    */
   tenantIsDefault: boolean
+  /**
+   * L'account è un amministratore di piattaforma (pezzo 5a, MT5-DEC-1): un attributo globale letto
+   * nella stessa istruzione, non una qualità del tenant. Falso se l'utente non esiste.
+   */
+  isPlatformAdmin: boolean
 }
 
 type SnapshotRow = {
@@ -40,6 +49,7 @@ type SnapshotRow = {
   tenant_eligible: boolean | null
   tenant_name: string | null
   tenant_is_default: boolean | null
+  is_platform_admin: boolean | null
 }
 
 /**
@@ -87,7 +97,8 @@ export async function selectAuthorizationSnapshot(
       ${codes} as permission_codes,
       ${tenantEligible} as tenant_eligible,
       ${tenantName} as tenant_name,
-      exists (select 1 from public.tenant t where t.id = app_private.current_tenant_id() and t.slug = ${DEFAULT_TENANT_SLUG}) as tenant_is_default
+      exists (select 1 from public.tenant t where t.id = app_private.current_tenant_id() and t.slug = ${DEFAULT_TENANT_SLUG}) as tenant_is_default,
+      coalesce((select u.is_platform_admin from public.users u where u.id = ${userId}), false) as is_platform_admin
   `)
   if (row.registered === null || row.tenant_admin === null) throw new Error('system roles missing')
   return {
@@ -101,6 +112,7 @@ export async function selectAuthorizationSnapshot(
     tenantEligible: row.tenant_eligible,
     tenantName: row.tenant_name,
     tenantIsDefault: row.tenant_is_default === true,
+    isPlatformAdmin: row.is_platform_admin === true,
   }
 }
 
@@ -113,7 +125,7 @@ export async function selectUserAuthorization(
   // predefinito (MT2-DEC-12), perché il ruolo base esiste solo per chi è membro.
   if (ensureRegisteredRole) await ensureDefaultMembership(tx, userId)
   const snapshot = await selectAuthorizationSnapshot(tx, userId)
-  if (!snapshot.userExists) return evaluateAuthorization(null, null, [], snapshot.system.tenantAdmin)
+  if (!snapshot.userExists) return { ...evaluateAuthorization(null, null, [], snapshot.system.tenantAdmin), isPlatformAdmin: false }
   let roleIds = snapshot.roleIds
   // Il ruolo base si aggiunge solo a chi può agire: account e appartenenza attivi.
   const canAct = evaluateAuthorization(snapshot.status, snapshot.membershipStatus, roleIds, snapshot.system.tenantAdmin).accountActive
@@ -121,7 +133,15 @@ export async function selectUserAuthorization(
     await tx.insert(userRole).values({ userId, idRole: snapshot.system.registered }).onConflictDoNothing()
     roleIds = [...roleIds, snapshot.system.registered].sort((a, b) => a - b)
   }
-  return evaluateAuthorization(snapshot.status, snapshot.membershipStatus, roleIds, snapshot.system.tenantAdmin)
+  return {
+    ...evaluateAuthorization(snapshot.status, snapshot.membershipStatus, roleIds, snapshot.system.tenantAdmin),
+    isPlatformAdmin: platformAdminOf(snapshot),
+  }
+}
+
+/** L'attributo conta solo con l'account globale attivo, a prescindere dal tenant. */
+function platformAdminOf(snapshot: AuthorizationSnapshot): boolean {
+  return snapshot.isPlatformAdmin && isActiveAccount(snapshot.status)
 }
 
 export async function resolveUserAuthorization(
@@ -150,6 +170,6 @@ export async function resolveTenantAuthorization(
     const authorization = snapshot.userExists
       ? evaluateAuthorization(snapshot.status, snapshot.membershipStatus, snapshot.roleIds, snapshot.system.tenantAdmin)
       : evaluateAuthorization(null, null, [], snapshot.system.tenantAdmin)
-    return { ...authorization, tenantEligible: snapshot.tenantEligible === true, tenantName: snapshot.tenantName }
+    return { ...authorization, isPlatformAdmin: platformAdminOf(snapshot), tenantEligible: snapshot.tenantEligible === true, tenantName: snapshot.tenantName }
   })
 }

@@ -180,6 +180,7 @@ describeIntegration('authorization reads', () => {
       accountActive: true,
       roleIds: [system.registered, system.tenantAdmin].sort((a, b) => a - b),
       isAdmin: true,
+      isPlatformAdmin: false,
     })
     const actor = await resolveActor(TENANT, adminUserId)
     expect(actor?.isAdmin).toBe(true)
@@ -187,14 +188,14 @@ describeIntegration('authorization reads', () => {
   })
 
   it('an active user whose role grants read-menu gets that role and that code only', async () => {
-    expect(await authorizationOf(readerUserId)).toEqual({ accountActive: true, roleIds: [readerRoleId], isAdmin: false })
+    expect(await authorizationOf(readerUserId)).toEqual({ accountActive: true, roleIds: [readerRoleId], isAdmin: false, isPlatformAdmin: false })
     const actor = await resolveActor(TENANT, readerUserId)
     expect(actor?.roleIds).toEqual([readerRoleId])
     expect([...(actor?.permissions ?? [])]).toEqual(['read-menu'])
   })
 
   it('an active user without roles has no roles and no permissions', async () => {
-    expect(await authorizationOf(plainUserId)).toEqual({ accountActive: true, roleIds: [], isAdmin: false })
+    expect(await authorizationOf(plainUserId)).toEqual({ accountActive: true, roleIds: [], isAdmin: false, isPlatformAdmin: false })
     const actor = await resolveActor(TENANT, plainUserId)
     expect(actor).not.toBeNull()
     expect(actor?.roleIds).toEqual([])
@@ -203,13 +204,13 @@ describeIntegration('authorization reads', () => {
   })
 
   it('a deactivated administrator is neither active nor admin, and is no actor', async () => {
-    expect(await authorizationOf(deactivatedAdminUserId)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(await authorizationOf(deactivatedAdminUserId)).toEqual({ accountActive: false, roleIds: [], isAdmin: false, isPlatformAdmin: false })
     expect(await resolveActor(TENANT, deactivatedAdminUserId)).toBeNull()
   })
 
   it('an unknown user is neither active nor admin, and is no actor', async () => {
     const unknown = crypto.randomUUID()
-    expect(await authorizationOf(unknown)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(await authorizationOf(unknown)).toEqual({ accountActive: false, roleIds: [], isAdmin: false, isPlatformAdmin: false })
     expect(await resolveActor(TENANT, unknown)).toBeNull()
   })
 
@@ -227,7 +228,7 @@ describeIntegration('authorization reads', () => {
       .where(and(eq(userRole.userId, revokedAdminUserId), eq(userRole.idRole, system.tenantAdmin))))
 
     const after = await authorizationOf(revokedAdminUserId)
-    expect(after).toEqual({ accountActive: true, roleIds: [system.registered], isAdmin: false })
+    expect(after).toEqual({ accountActive: true, roleIds: [system.registered], isAdmin: false, isPlatformAdmin: false })
     const actor = await resolveActor(TENANT, revokedAdminUserId)
     expect(actor?.isAdmin).toBe(false)
     expect([...(actor?.permissions ?? [])]).toEqual([])
@@ -236,11 +237,11 @@ describeIntegration('authorization reads', () => {
   it('ensureRegisteredRole adds the REGISTERED role to an active user and writes the row', async () => {
     expect(await rolesOf(registeredOnlyUserId)).toEqual([])
     expect(await authorizationOf(registeredOnlyUserId, true))
-      .toEqual({ accountActive: true, roleIds: [system.registered], isAdmin: false })
+      .toEqual({ accountActive: true, roleIds: [system.registered], isAdmin: false, isPlatformAdmin: false })
     expect(await rolesOf(registeredOnlyUserId)).toEqual([system.registered])
     // Una seconda chiamata non duplica e non cambia nulla.
     expect(await authorizationOf(registeredOnlyUserId, true))
-      .toEqual({ accountActive: true, roleIds: [system.registered], isAdmin: false })
+      .toEqual({ accountActive: true, roleIds: [system.registered], isAdmin: false, isPlatformAdmin: false })
   })
 
   it('does not write a role when ensureRegisteredRole is off, nor for a deactivated user', async () => {
@@ -248,7 +249,7 @@ describeIntegration('authorization reads', () => {
     await resolveUserAuthorization(TENANT, lone)
     expect(await rolesOf(lone)).toEqual([])
     const off = await createUser(USER_STATUS_DEACTIVATED)
-    expect(await authorizationOf(off, true)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(await authorizationOf(off, true)).toEqual({ accountActive: false, roleIds: [], isAdmin: false, isPlatformAdmin: false })
     expect(await rolesOf(off)).toEqual([])
   })
 
@@ -258,14 +259,14 @@ describeIntegration('authorization reads', () => {
     const inA = await resolveActor(TENANT, bothTenantsUserId)
     expect(inA?.roleIds).toEqual([readerRoleId])
     expect([...(inA?.permissions ?? [])]).toEqual(['read-menu'])
-    expect(await authorizationOf(bothTenantsUserId)).toEqual({ accountActive: true, roleIds: [readerRoleId], isAdmin: false })
+    expect(await authorizationOf(bothTenantsUserId)).toEqual({ accountActive: true, roleIds: [readerRoleId], isAdmin: false, isPlatformAdmin: false })
 
     // Controllo contro un passaggio a vuoto: B ha davvero dei ruoli per questo utente.
     const inB = await resolveActor(otherTenant!, bothTenantsUserId)
     expect(inB?.roleIds).toEqual([otherServiceRoleId])
     expect([...(inB?.permissions ?? [])]).toEqual(['read-users'])
     const authorizationInB = await resolveUserAuthorization(otherTenant!, bothTenantsUserId)
-    expect(authorizationInB).toEqual({ accountActive: true, roleIds: [otherServiceRoleId], isAdmin: false })
+    expect(authorizationInB).toEqual({ accountActive: true, roleIds: [otherServiceRoleId], isAdmin: false, isPlatformAdmin: false })
   })
 
   it('administrator in one tenant is not administrator in another', async () => {
@@ -278,7 +279,7 @@ describeIntegration('authorization reads', () => {
     expect(inB?.roleIds).toEqual([otherRegisteredId])
     expect([...(inB?.permissions ?? [])]).toEqual([])
     expect(await resolveUserAuthorization(otherTenant!, adminInAOnlyUserId))
-      .toEqual({ accountActive: true, roleIds: [otherRegisteredId], isAdmin: false })
+      .toEqual({ accountActive: true, roleIds: [otherRegisteredId], isAdmin: false, isPlatformAdmin: false })
   })
 
   it('a person active in the default tenant and deactivated in B is authorized only in the default tenant', async () => {
@@ -291,13 +292,13 @@ describeIntegration('authorization reads', () => {
   it('a person with no membership in B is not authorized in B', async () => {
     expect((await resolveUserAuthorization(TENANT, activeInAUnknownInBUserId)).accountActive).toBe(true)
     expect(await resolveUserAuthorization(otherTenant!, activeInAUnknownInBUserId))
-      .toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+      .toEqual({ accountActive: false, roleIds: [], isAdmin: false, isPlatformAdmin: false })
   })
 
   it('first sign-in creates the default membership and the base role', async () => {
     const fresh = await createUser(USER_STATUS_ACTIVE)
     expect(await membershipStatusIn(TENANT, fresh)).toBeNull()
-    expect(await authorizationOf(fresh, true)).toEqual({ accountActive: true, roleIds: [system.registered], isAdmin: false })
+    expect(await authorizationOf(fresh, true)).toEqual({ accountActive: true, roleIds: [system.registered], isAdmin: false, isPlatformAdmin: false })
     expect(await membershipStatusIn(TENANT, fresh)).toBe('active')
     expect(await rolesOf(fresh)).toEqual([system.registered])
     expect(await membershipStatusIn(otherTenant!, fresh)).toBeNull()
@@ -305,17 +306,17 @@ describeIntegration('authorization reads', () => {
   })
 
   it('first sign-in creates nothing in the default tenant for a member of B', async () => {
-    expect(await authorizationOf(onlyInBUserId, true)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(await authorizationOf(onlyInBUserId, true)).toEqual({ accountActive: false, roleIds: [], isAdmin: false, isPlatformAdmin: false })
     expect(await membershipStatusIn(TENANT, onlyInBUserId)).toBeNull()
     expect(await rolesOf(onlyInBUserId)).toEqual([])
     // Controllo contro un passaggio a vuoto: in B la persona è attiva e ha il suo ruolo.
     expect(await membershipStatusIn(otherTenant!, onlyInBUserId)).toBe('active')
     expect(await resolveUserAuthorization(otherTenant!, onlyInBUserId))
-      .toEqual({ accountActive: true, roleIds: [otherRegisteredId], isAdmin: false })
+      .toEqual({ accountActive: true, roleIds: [otherRegisteredId], isAdmin: false, isPlatformAdmin: false })
   })
 
   it('first sign-in leaves a deactivated default membership deactivated and adds no role', async () => {
-    expect(await authorizationOf(deactivatedInAUserId, true)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(await authorizationOf(deactivatedInAUserId, true)).toEqual({ accountActive: false, roleIds: [], isAdmin: false, isPlatformAdmin: false })
     expect(await membershipStatusIn(TENANT, deactivatedInAUserId)).toBe('deactivated')
     expect(await rolesOf(deactivatedInAUserId)).toEqual([])
   })
@@ -377,7 +378,7 @@ describeIntegration('tenant in the token, revalidated on every request', () => {
   }
 
   function readyToken(tenantId: TenantId, host: string | null): TokenTenant {
-    return { tenantId, tenantState: 'ready', tenantHost: host, tenantName: null, accountActive: true, roleIds: [] }
+    return { tenantId, tenantState: 'ready', tenantHost: host, tenantName: null, accountActive: true, roleIds: [], isPlatformAdmin: false }
   }
 
   beforeAll(async () => {

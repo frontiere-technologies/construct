@@ -1,6 +1,6 @@
 import { cache } from 'react'
 import { withTenant } from '@/lib/db/tenant-db'
-import { evaluateAuthorization } from '@/lib/auth-policy'
+import { evaluateAuthorization, isActiveAccount } from '@/lib/auth-policy'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { selectAuthorizationSnapshot } from './auth-roles'
 import { PERMISSION_CODES, isPermissionCode, type PermissionCode } from './permission-catalog'
@@ -11,6 +11,8 @@ export interface Actor {
   tenantId: TenantId
   roleIds: number[]
   isAdmin: boolean
+  /** Attributo dell'account (MT5-DEC-1), letto con il resto dell'autorizzazione: non è un permesso del tenant. */
+  isPlatformAdmin: boolean
   permissions: ReadonlySet<PermissionCode>
 }
 
@@ -33,7 +35,7 @@ export const GLOBAL_CATALOG_WRITE_CODES: readonly PermissionCode[] = [
 export function buildActor(
   userId: string,
   tenantId: TenantId,
-  authorization: { accountActive: boolean; roleIds: number[]; isAdmin: boolean },
+  authorization: { accountActive: boolean; roleIds: number[]; isAdmin: boolean; isPlatformAdmin: boolean },
   grantedCodes: string[],
   scope: { defaultTenant: boolean },
 ): Actor | null {
@@ -42,7 +44,14 @@ export function buildActor(
   const permissions = new Set<PermissionCode>(
     scope.defaultTenant ? codes : codes.filter(code => !GLOBAL_CATALOG_WRITE_CODES.includes(code)),
   )
-  return { userId, tenantId, roleIds: authorization.roleIds, isAdmin: authorization.isAdmin, permissions }
+  return {
+    userId,
+    tenantId,
+    roleIds: authorization.roleIds,
+    isAdmin: authorization.isAdmin,
+    isPlatformAdmin: authorization.isPlatformAdmin,
+    permissions,
+  }
 }
 
 export function hasPermission(actor: Actor | null, code: PermissionCode): boolean {
@@ -60,11 +69,14 @@ export const resolveActor = cache(async (tenantId: TenantId, userId: string): Pr
   withTenant(tenantId, async tx => {
     // Stato, ruoli e codici dei permessi in un'istruzione sola (specifica 2026-10-15, §2.2).
     const snapshot = await selectAuthorizationSnapshot(tx, userId, { permissionCodes: true })
-    const authorization = evaluateAuthorization(
-      snapshot.userExists ? snapshot.status : null,
-      snapshot.userExists ? snapshot.membershipStatus : null,
-      snapshot.userExists ? snapshot.roleIds : [],
-      snapshot.system.tenantAdmin,
-    )
+    const authorization = {
+      ...evaluateAuthorization(
+        snapshot.userExists ? snapshot.status : null,
+        snapshot.userExists ? snapshot.membershipStatus : null,
+        snapshot.userExists ? snapshot.roleIds : [],
+        snapshot.system.tenantAdmin,
+      ),
+      isPlatformAdmin: snapshot.isPlatformAdmin && isActiveAccount(snapshot.status),
+    }
     return buildActor(userId, tenantId, authorization, snapshot.permissionCodes, { defaultTenant: snapshot.tenantIsDefault })
   }))

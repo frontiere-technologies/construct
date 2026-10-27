@@ -278,6 +278,8 @@ const nextAuth = NextAuth({
       session.user.tenantState = token.tenantState ?? 'none'
       session.user.tenantId = accountActive && ready ? token.tenantId ?? null : null
       session.user.tenantName = ready ? token.tenantName ?? null : null
+      // Solo un indizio per il menu e il proxy (MT5-DEC-3): la console decide dal database.
+      session.user.isPlatformAdmin = accountActive && token.isPlatformAdmin === true
       return session
     },
   }),
@@ -300,6 +302,7 @@ function applyTokenTenant(token: JWT, tenant: TokenTenant): void {
   token.tenantName = tenant.tenantName
   token.accountActive = tenant.accountActive
   token.roleIds = tenant.roleIds
+  token.isPlatformAdmin = tenant.isPlatformAdmin
 }
 
 // Con AUTH_URL impostata next-auth costruisce ogni indirizzo di ritorno su AUTH_URL anche con

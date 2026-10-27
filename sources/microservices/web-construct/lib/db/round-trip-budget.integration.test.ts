@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { eq, inArray } from 'drizzle-orm'
 import { answersBetween, countRoundTrips, type RecordedStatement, type TripEvent } from '@/lib/db/round-trips'
 import { permission, role, rolePermission, tenantMembership, userRole, users } from '@/lib/db/schema'
+import { closeOwner, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 
@@ -96,6 +97,7 @@ describeIntegration('round-trip budget', () => {
     if (readerRoleId !== undefined) await step(() => withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, readerRoleId))))
     const userIds = [adminUserId, readerUserId].filter(Boolean)
     if (userIds.length > 0) await step(() => withGlobal(tx => tx.delete(users).where(inArray(users.id, userIds))))
+    await step(() => closeOwner())
     const client = await import('@/lib/db/client') as unknown as { __closeCountingClient: () => Promise<void> }
     await step(() => client.__closeCountingClient())
     if (errors.length > 0) throw errors[0]
@@ -126,6 +128,37 @@ describeIntegration('round-trip budget', () => {
     expect(result!.roleIds).toContain(adminRoleId)
     // Nessuna funzione che scorre i tenant a ogni richiesta.
     expect(count.queries.join('\n')).not.toMatch(/available_tenants|has_deactivated_membership_on_host/)
+  })
+
+  // Pezzo 5a (§3.1): l'attributo di piattaforma si legge nella stessa istruzione, senza un viaggio in più.
+  it('the ready path keeps its round-trip caps', async () => {
+    const { withGlobal, withTenant } = await import('@/lib/db/tenant-db')
+    const { revalidateTokenTenant } = await import('@/lib/tenancy/token-tenant')
+    const { resolveActor } = await import('@/lib/rbac/actor')
+    const [created] = await withOwner(tx => tx.insert(users)
+      .values({ email: `zzz_budget_platform_${unique()}@example.test`, idUserStatus: 2, isPlatformAdmin: true })
+      .returning({ id: users.id }))
+    try {
+      await withTenant(defaultTestTenant(), async tx => {
+        await tx.insert(tenantMembership).values({ userId: created.id })
+        await tx.insert(userRole).values({ userId: created.id, idRole: adminRoleId })
+      })
+      const token = { tenantId: defaultTestTenant(), tenantState: 'ready', tenantHost: null, tenantName: null, accountActive: true, roleIds: [] }
+      let revalidated: Awaited<ReturnType<typeof revalidateTokenTenant>> | undefined
+      const jwt = await measure(async () => { revalidated = await revalidateTokenTenant(created.id, token, null) })
+      expect(jwt.roundTrips, jwt.queries.join('\n')).toBeLessThanOrEqual(5)
+      expect(revalidated).toMatchObject({ tenantState: 'ready', isPlatformAdmin: true })
+      expect(jwt.queries.join('\n')).not.toMatch(/available_tenants|has_deactivated_membership_on_host/)
+
+      let actor: Awaited<ReturnType<typeof resolveActor>> | undefined
+      const read = await measure(async () => { actor = await resolveActor(defaultTestTenant(), created.id) })
+      expect(read.roundTrips, read.queries.join('\n')).toBeLessThanOrEqual(5)
+      expect(actor?.isPlatformAdmin).toBe(true)
+      // Una sola lettura dell'utente: nessuna istruzione a parte per l'attributo.
+      expect(read.queries.filter(query => /is_platform_admin/.test(query))).toHaveLength(1)
+    } finally {
+      await withGlobal(tx => tx.delete(users).where(eq(users.id, created.id)))
+    }
   })
 
   it('the jwt callback for a token waiting for a choice costs at most 5 trips', async () => {

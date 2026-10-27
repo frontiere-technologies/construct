@@ -6,11 +6,16 @@ import type { PermissionCode } from './permission-catalog'
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   resolveActor: vi.fn(),
+  resolvePlatformAdmin: vi.fn(),
+  notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
   redirect: vi.fn((url: string) => { throw new Error(`NEXT_REDIRECT ${url}`) }),
 }))
 
 vi.mock('@/lib/auth-session', () => ({ getSession: mocks.getSession }))
-vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))
+vi.mock('next/navigation', () => ({ redirect: mocks.redirect, notFound: mocks.notFound }))
+// Come `./actor`: il modulo vero apre la connessione al database. La decisione vera (attributo,
+// indirizzo dedicato) è provata in platform-guard.integration.test.ts.
+vi.mock('./platform-admin', () => ({ resolvePlatformAdmin: mocks.resolvePlatformAdmin }))
 // Il tenant viene dalla sessione già letta (pezzo 4, §3.1). Il modulo vero importa la sessione e il
 // database: qui una copia della stessa regola, senza connessioni.
 vi.mock('@/lib/tenancy/request-tenant', async () => {
@@ -24,12 +29,15 @@ vi.mock('@/lib/tenancy/request-tenant', async () => {
 // aprire una connessione. `auth-guard` da `./actor` usa solo `resolveActor` e il tipo `Actor`.
 vi.mock('./actor', () => ({ resolveActor: mocks.resolveActor }))
 
-const { requireAdministrator, requireAdministratorPage, requirePagePermission, requirePermission } = await import('./auth-guard')
+const {
+  requireAdministrator, requireAdministratorPage, requirePagePermission, requirePermission,
+  requirePlatformAdmin, requirePlatformAdminPage,
+} = await import('./auth-guard')
 
 const READY_SESSION = { user: { id: 'u1', tenantState: 'ready', tenantId: defaultTestTenant() } }
 
 function actor(codes: PermissionCode[], isAdmin = false): Actor {
-  return { userId: 'u1', tenantId: defaultTestTenant(), roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, permissions: new Set(codes) }
+  return { userId: 'u1', tenantId: defaultTestTenant(), roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, isPlatformAdmin: false, permissions: new Set(codes) }
 }
 
 describe('requirePermission', () => {
@@ -124,5 +132,48 @@ describe('requireAdministrator', () => {
   it('redirects from a page instead of throwing', async () => {
     mocks.resolveActor.mockResolvedValue(actor([]))
     await expect(requireAdministratorPage()).rejects.toThrow('NEXT_REDIRECT /')
+  })
+})
+
+describe('requirePlatformAdmin', () => {
+  const admin = { userId: 'u1', email: 'admin@example.test' }
+
+  beforeEach(() => {
+    mocks.getSession.mockReset().mockResolvedValue(READY_SESSION)
+    mocks.resolvePlatformAdmin.mockReset()
+    mocks.notFound.mockClear()
+    mocks.redirect.mockClear()
+  })
+
+  it.each([
+    { tenantState: 'ready', tenantId: defaultTestTenant() },
+    { tenantState: 'choose', tenantId: null },
+    { tenantState: 'none', tenantId: null },
+  ])('asks the database about the person in state $tenantState, whatever the tenant', async tenant => {
+    mocks.getSession.mockResolvedValue({ user: { id: 'u1', ...tenant, isPlatformAdmin: false } })
+    mocks.resolvePlatformAdmin.mockResolvedValue(admin)
+    // Il flag della sessione non conta: decide la lettura dal database.
+    await expect(requirePlatformAdmin()).resolves.toBe(admin)
+    await expect(requirePlatformAdminPage()).resolves.toBe(admin)
+    expect(mocks.resolvePlatformAdmin).toHaveBeenCalledWith('u1')
+  })
+
+  it('rejects an action when the database does not confirm the attribute', async () => {
+    mocks.resolvePlatformAdmin.mockResolvedValue(null)
+    mocks.getSession.mockResolvedValue({ user: { id: 'u1', tenantState: 'none', tenantId: null, isPlatformAdmin: true } })
+    await expect(requirePlatformAdmin()).rejects.toThrow('Unauthorized')
+  })
+
+  it('answers a page with not-found, not with a redirect', async () => {
+    mocks.resolvePlatformAdmin.mockResolvedValue(null)
+    await expect(requirePlatformAdminPage()).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(mocks.redirect).not.toHaveBeenCalled()
+  })
+
+  it('rejects without a session, without asking the database', async () => {
+    mocks.getSession.mockResolvedValue(null)
+    await expect(requirePlatformAdmin()).rejects.toThrow('Unauthorized')
+    await expect(requirePlatformAdminPage()).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(mocks.resolvePlatformAdmin).not.toHaveBeenCalled()
   })
 })

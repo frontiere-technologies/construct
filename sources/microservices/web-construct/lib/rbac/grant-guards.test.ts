@@ -8,11 +8,11 @@ import {
 } from './grant-guards'
 
 function limited(codes: PermissionCode[]): Actor {
-  return { userId: 'u1', tenantId: defaultTestTenant(), roleIds: [0, 7], isAdmin: false, permissions: new Set(codes) }
+  return { userId: 'u1', tenantId: defaultTestTenant(), roleIds: [0, 7], isAdmin: false, isPlatformAdmin: false, permissions: new Set(codes) }
 }
 // Un id che non è 1: l'amministratore si riconosce dall'id del tenant, non da un id fisso.
 const TENANT_ADMIN_ID = 57
-const admin: Actor = { userId: 'a1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+const admin: Actor = { userId: 'a1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set() }
 
 describe('assertCanGrantPermissions (DEC-6)', () => {
   it('lets an actor grant what it holds', () => {

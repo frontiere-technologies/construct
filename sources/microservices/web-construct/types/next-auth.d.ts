@@ -12,6 +12,8 @@ declare module 'next-auth' {
       tenantState: TenantState
       tenantId: number | null
       tenantName: string | null
+      // Un indizio per il menu e il proxy (pezzo 5a, MT5-DEC-3): ogni porta della console rilegge l'attributo dal database.
+      isPlatformAdmin: boolean
     } & DefaultSession['user']
   }
 }
@@ -27,5 +29,6 @@ declare module 'next-auth/jwt' {
     tenantState?: TenantState
     tenantHost?: string | null
     tenantName?: string | null
+    isPlatformAdmin?: boolean
   }
 }

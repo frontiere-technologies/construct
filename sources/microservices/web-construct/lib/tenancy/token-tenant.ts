@@ -19,6 +19,9 @@ import { selectTenant, type TenantState } from './tenant-selection'
  * - `accountActive`: in `ready` account e appartenenza attivi nel tenant; in `choose` e `none` solo
  *   l'account globale, così la persona resta riconosciuta e può arrivare alla scelta o al messaggio.
  * - `roleIds`: i ruoli nel tenant, vuoti fuori da `ready`.
+ * - `isPlatformAdmin`: l'attributo dell'account (MT5-DEC-1), in ogni stato: serve al proxy per
+ *   portare l'amministratore di piattaforma alla console; non è mai una decisione, che ogni porta
+ *   della console riprende dal database.
  */
 export interface TokenTenant {
   tenantId: number | null
@@ -27,6 +30,7 @@ export interface TokenTenant {
   tenantName: string | null
   accountActive: boolean
   roleIds: number[]
+  isPlatformAdmin: boolean
 }
 
 const TENANT_STATES: readonly TenantState[] = ['ready', 'choose', 'none']
@@ -35,14 +39,19 @@ function isTenantState(value: unknown): value is TenantState {
   return TENANT_STATES.includes(value as TenantState)
 }
 
-/** L'ultimo tenant usato (MT4-DEC-6) e lo stato globale dell'account, in una lettura. */
-async function readPerson(userId: string): Promise<{ lastTenantId: number | null; status: number | null } | undefined> {
+/** L'ultimo tenant usato (MT4-DEC-6), lo stato globale dell'account e l'attributo di piattaforma, in una lettura. */
+async function readPerson(userId: string): Promise<{ lastTenantId: number | null; status: number | null; isPlatformAdmin: boolean } | undefined> {
   const [row] = await withGlobal(tx => tx
-    .select({ lastTenantId: users.lastTenantId, status: users.idUserStatus })
+    .select({ lastTenantId: users.lastTenantId, status: users.idUserStatus, isPlatformAdmin: users.isPlatformAdmin })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1))
   return row
+}
+
+/** L'attributo di piattaforma vale solo con l'account globale attivo. */
+function platformAdminOf(person: { status: number | null; isPlatformAdmin: boolean } | undefined): boolean {
+  return person !== undefined && person.isPlatformAdmin && isActiveAccount(person.status)
 }
 
 /**
@@ -90,6 +99,7 @@ export async function enterTenant(
       tenantName: null,
       accountActive: isActiveAccount(person?.status),
       roleIds: [],
+      isPlatformAdmin: platformAdminOf(person),
     }
   }
   const authorization = await resolveUserAuthorization(selection.tenantId, userId, options.firstEntry)
@@ -100,6 +110,7 @@ export async function enterTenant(
     tenantName: available.find(tenant => tenant.tenantId === selection.tenantId)?.name ?? null,
     accountActive: authorization.accountActive,
     roleIds: authorization.roleIds,
+    isPlatformAdmin: authorization.isPlatformAdmin,
   }
 }
 
@@ -145,6 +156,7 @@ export async function revalidateTokenTenant(
       tenantName: authorization.tenantName,
       accountActive: true,
       roleIds: authorization.roleIds,
+      isPlatformAdmin: authorization.isPlatformAdmin,
     }
   }
 
@@ -156,6 +168,7 @@ export async function revalidateTokenTenant(
     tenantName: null,
     accountActive: isActiveAccount(person?.status),
     roleIds: [],
+    isPlatformAdmin: platformAdminOf(person),
   }
 }
 
@@ -211,5 +224,6 @@ export async function updateTokenTenant(
     tenantName: chosen.name,
     accountActive: authorization.accountActive,
     roleIds: authorization.roleIds,
+    isPlatformAdmin: authorization.isPlatformAdmin,
   }
 }

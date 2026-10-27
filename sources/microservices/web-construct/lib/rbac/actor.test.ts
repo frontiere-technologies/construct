@@ -3,7 +3,7 @@ import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { buildActor, hasPermission } from './actor'
 import { PERMISSION_CODES } from './permission-catalog'
 
-const active = { accountActive: true, roleIds: [0, 7], isAdmin: false }
+const active = { accountActive: true, roleIds: [0, 7], isAdmin: false, isPlatformAdmin: false }
 // Il tenant dell'attore è il predefinito (slug 'default') o un altro.
 const IN_DEFAULT = { defaultTenant: true }
 const ELSEWHERE = { defaultTenant: false }
@@ -25,14 +25,14 @@ describe('buildActor', () => {
   })
 
   it('gives the Administrator every catalog code, with or without rows (DEC-5)', () => {
-    const actor = buildActor('u1', defaultTestTenant(), { accountActive: true, roleIds: [0, 1], isAdmin: true }, [], IN_DEFAULT)
+    const actor = buildActor('u1', defaultTestTenant(), { accountActive: true, roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false }, [], IN_DEFAULT)
     expect(actor && [...actor.permissions].sort()).toEqual([...PERMISSION_CODES].sort())
   })
 
   // Fino al pezzo 5 i cataloghi globali di lingue e traduzioni si scrivono solo dal tenant
   // predefinito (MT2-DEC-11; specifica 2026-10-21, §5.3).
   it('outside the default tenant the Administrator gets every code except the global catalog writes', () => {
-    const actor = buildActor('u1', defaultTestTenant(), { accountActive: true, roleIds: [0, 1], isAdmin: true }, [], ELSEWHERE)
+    const actor = buildActor('u1', defaultTestTenant(), { accountActive: true, roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false }, [], ELSEWHERE)
     expect(actor && [...actor.permissions].sort())
       .toEqual(PERMISSION_CODES.filter(code => !CATALOG_WRITES.includes(code)).sort())
     expect(actor?.isAdmin).toBe(true)
@@ -49,7 +49,16 @@ describe('buildActor', () => {
   })
 
   it('returns no actor for a deactivated account, whatever its roles grant', () => {
-    expect(buildActor('u1', defaultTestTenant(), { accountActive: false, roleIds: [], isAdmin: false }, ['read-menu'], IN_DEFAULT)).toBeNull()
+    expect(buildActor('u1', defaultTestTenant(), { accountActive: false, roleIds: [], isAdmin: false, isPlatformAdmin: false }, ['read-menu'], IN_DEFAULT)).toBeNull()
+  })
+})
+
+describe('buildActor and the platform admin attribute', () => {
+  it('carries the attribute without turning it into a tenant permission', () => {
+    const actor = buildActor('u1', defaultTestTenant(), { ...active, isPlatformAdmin: true }, ['read-menu'], ELSEWHERE)
+    expect(actor?.isPlatformAdmin).toBe(true)
+    expect(actor && [...actor.permissions]).toEqual(['read-menu'])
+    expect(buildActor('u1', defaultTestTenant(), active, [], IN_DEFAULT)?.isPlatformAdmin).toBe(false)
   })
 })
 

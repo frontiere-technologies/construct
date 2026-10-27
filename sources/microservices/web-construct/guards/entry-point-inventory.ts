@@ -17,7 +17,7 @@ import ts from 'typescript'
 /**
  * Da dove arriva ogni dichiarazione. Conta il nome **importato da qui**, non il nome: una funzione
  * locale o un import da un altro modulo che si chiami `requirePermission` non è la dichiarazione.
- * Le quattro `require*` sono asincrone e valgono solo se attese (`await`): senza, il controllo parte
+ * Le `require*` sono asincrone e valgono solo se attese (`await`): senza, il controllo parte
  * ma nessuno aspetta il suo esito, e la lettura che segue passa comunque. Le tre `allow*` sono
  * dichiarazioni sincrone senza esito da aspettare.
  */
@@ -27,6 +27,8 @@ const DECLARATION_MODULES: Record<string, Record<string, 'awaited' | 'sync'>> = 
     requirePagePermission: 'awaited',
     requireAdministrator: 'awaited',
     requireAdministratorPage: 'awaited',
+    requirePlatformAdmin: 'awaited',
+    requirePlatformAdminPage: 'awaited',
   },
   '@/lib/rbac/access-declarations': {
     allowSelfService: 'sync',
