@@ -1,0 +1,33 @@
+# The disposable Postgres for local integration and E2E runs. Driven by local-test-db.sh; see the
+# README section "Test in locale con Postgres in Docker". Same image major and same superuser as
+# the database-and-e2e job in .github/workflows/quality.yml.
+#
+# Kept apart from compose.yaml at the repository root on purpose: that file runs only the web app
+# against Supabase (docs-contract.test.mjs checks it has no database service).
+#
+# tmpfs, not a named volume: the data lives in the Docker VM's memory. Every start is a fresh
+# cluster, like the CI service container, so `reset` costs a few seconds and a forgotten volume can
+# never carry yesterday's schema into today's run; it is also faster than a disk-backed volume.
+# The price: a restart of Docker Desktop or of the container empties it, and `local-test-db.sh up`
+# prepares it again.
+name: construct-local-test
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: construct_test
+    ports:
+      # Loopback only, and not 5432: never clashes with a Homebrew Postgres.
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      # Over TCP: during initialisation the image runs a temporary server on the Unix socket only,
+      # which a socket check would report as ready before the real server is up.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d construct_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 60

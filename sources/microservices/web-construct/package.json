@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "I18N_INTEGRATION_DB=1 vitest run -c vitest.integration.config.ts",
+    "test:integration:local": "set -a && . ../../devops/db/local-test.env && set +a && npm run test:integration",
     "test:migrations": "node --test ../../devops/db/migration-lib.test.mjs",
     "test:docs-contract": "node --test ../../devops/docs-contract.test.mjs",
     "test:i18n-keys": "node --test ../../devops/i18n-key-inventory.test.mjs",
