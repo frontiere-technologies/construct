@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 from playwright.sync_api import expect
 
-from helpers import nav, l1_btn, ensure_l1_expanded, grid_rows, open_column_filter, do_test_login, confirm_modal
+from helpers import nav, l1_btn, ensure_l1_expanded, confirm_modal, run_sql
 
 # Public endpoint with no frame-blocking response headers, needed because the
 # embeddability check rejects private and loopback hosts to prevent SSRF.
@@ -138,182 +138,87 @@ def _delete_functionality(page, base_url, name):
     expect(page.get_by_text(name, exact=True)).to_have_count(0)
 
 
-def _perm_tree_row(page, text):
-    """The tree row on the /roles-permissions/[roleId] page whose label is `text`.
+@pytest.fixture(scope="module")
+def admin_module_page(browser, admin_storage_state):
+    """An admin page that lives as long as the module, to create the embedded items
+    once and delete them after the last test."""
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900}, storage_state=admin_storage_state)
+    yield ctx.new_page()
+    ctx.close()
 
-    Unlike the /functionalities tree, PermissionsTree renders NavigationTree
-    without a `dnd` config, so no `[data-testid="drag-handle"]` exists there at
-    all — every row instead always renders a `[data-testid="perm-toggle"]`
-    (via `renderTrailing`), so that's the reliable discriminator here.
+
+@pytest.fixture(scope="module")
+def embedded_item(admin_module_page, base_url):
+    """Factory: the name of an EMBEDDED_PAGE menu item pointing at `link`, created the
+    first time a test asks for that link and deleted at the end of the module.
+
+    A menu entry shows only when one of the person's roles holds it (sidebar-adapter.ts,
+    DEC-18), administrators included, so the item is granted to the Administrator role
+    of the default tenant, with SQL: the grant is not what these tests are about, and a
+    system role cannot be edited from the interface. No throwaway role, no assignment,
+    no fresh login: the token's roles are re-read on every request (lib/auth.ts, the
+    `jwt` callback), and test_permissions.py::test_revocation_takes_effect_without_new_login
+    proves it end to end. Deleting the item removes the grant (on delete cascade).
+    The non-administrator, who holds no grant on the item, is the one the authorization
+    assertion needs.
     """
-    return page.locator("div").filter(has_text=text).filter(
-        has=page.locator('[data-testid="perm-toggle"]')
-    ).last
+    created = {}  # link -> item name
 
+    def _get(link):
+        if link not in created:
+            name = f"E2E Embed {uuid.uuid4().hex[:8]}"
+            _create_embedded_functionality(admin_module_page, base_url, name, link)
+            created[link] = name
+            run_sql(
+                "insert into role_functionality (id_role, id_menu_entry) "
+                "select r.id_role, m.id_menu_entry from role r, menu_entry m "
+                "where r.id_tenant = app_private.current_tenant_id() and r.system_key = 'TENANT_ADMIN' "
+                f"and m.id_tenant = app_private.current_tenant_id() and m.name = '{name}'"
+            )
+        return created[link]
 
-def _create_role(page, base_url, name):
-    """Create a SERVICE (editable) role via the UI. Returns its numeric id."""
-    nav(page, f"{base_url}/roles-permissions")
-    page.get_by_role("button", name="Nuovo ruolo").click()
-    page.get_by_placeholder("Nome ruolo").fill(name)
-    page.get_by_role("button", name="Salva").click()
-    page.wait_for_url("**/roles-permissions/**", timeout=15_000)
-    return int(page.url.rstrip("/").rsplit("/", 1)[-1])
+    yield _get
 
-
-def _search_role(page, base_url, name):
-    nav(page, f"{base_url}/roles-permissions")
-    open_column_filter(page, "description")
-    page.locator('.ag-filter input[type="text"]').first.fill(name)
-    page.get_by_role("button", name="Applica").click()
-    page.wait_for_load_state("networkidle")
-
-
-def _delete_role(page, base_url, name):
-    _search_role(page, base_url, name)
-    row = grid_rows(page).filter(has_text=name)
-    expect(row).to_be_visible()
-    row_menu = row.locator('[data-testid^="row-menu"]')
-    row_menu.click()
-    page.get_by_role("menuitem", name="Elimina").click()  # voce di menu
-    page.get_by_role("button", name="Elimina").click()  # conferma nel dialogo
-    _search_role(page, base_url, name)
-    expect(grid_rows(page).filter(has_text=name)).to_have_count(0)
-
-
-def _grant_item_to_role(page, base_url, role_id, item_name):
-    nav(page, f"{base_url}/roles-permissions/{role_id}")
-    row = _perm_tree_row(page, item_name)
-    row.scroll_into_view_if_needed()
-    row.locator('[data-testid="perm-toggle"]').click()
-    save_btn = page.get_by_role("button", name="Salva")
-    page.evaluate(
-        """() => {
-            const originalFetch = window.fetch.bind(window);
-            window.fetch = async (...args) => {
-                await new Promise(resolve => setTimeout(resolve, 750));
-                return originalFetch(...args);
-            };
-        }"""
-    )
-    save_btn.click()
-    expect(save_btn).to_be_disabled()
-    expect(save_btn).to_be_enabled()
-
-
-def _set_role_checkbox(page, base_url, test_email, role_id, checked):
-    """Open 'Gestisci ruoli' for the row matching test_email and check/uncheck role_id.
-
-    The Users grid uses AG Grid's infinite row model, so `test_email`'s row isn't
-    necessarily among the first block loaded — filter the dedicated email column
-    first so the exact account is loaded before opening its row menu.
-    """
-    nav(page, f"{base_url}/user-management")
-    open_column_filter(page, "email")
-    page.locator('.ag-filter input[type="text"]').first.fill(test_email)
-    page.get_by_role("button", name="Applica").click()
-    page.wait_for_load_state("networkidle")
-    row = grid_rows(page).filter(has_text=test_email)
-    row_menu = row.locator('[data-testid^="row-menu"]')
-    row_menu.click()
-    page.get_by_text("Gestisci ruoli", exact=True).first.click()
-    checkbox = page.get_by_test_id(f"role-checkbox-{role_id}")
-    if checked:
-        checkbox.check()
-    else:
-        checkbox.uncheck()
-    page.get_by_test_id("save-roles").click()
-    expect(page.get_by_test_id("save-roles")).to_have_count(0)
-
-
-@pytest.fixture
-def embedded_item_page(logged_in_page, base_url, browser, test_email):
-    """Factory fixture: given a target link, creates a throwaway role + EMBEDDED_PAGE
-    item, grants the item to the role, assigns the role to the test admin account,
-    then logs in a *fresh* browser context (role membership is baked into the
-    session JWT at sign-in and never refreshed, so verifying authorization requires
-    a login that happens after the grant). Returns (item_name, fresh_page).
-    Cleans up the role assignment, item, and role, and closes the fresh context.
-    """
-    created_roles = []  # (role_name, role_id)
-    created_items = []  # item_name
-    checked_role_ids = []  # role_id whose checkbox was set on the test user
-    created_contexts = []  # browser contexts
-
-    def _make(link):
-        page = logged_in_page
-        suffix = uuid.uuid4().hex[:8]
-        role_name = f"E2E Embed Role {suffix}"
-        item_name = f"E2E Embed {suffix}"
-
-        role_id = _create_role(page, base_url, role_name)
-        created_roles.append((role_name, role_id))
-
-        _create_embedded_functionality(page, base_url, item_name, link)
-        created_items.append(item_name)
-
-        _grant_item_to_role(page, base_url, role_id, item_name)
-
-        _set_role_checkbox(page, base_url, test_email, role_id, checked=True)
-        checked_role_ids.append(role_id)
-
-        ctx = browser.new_context(viewport={"width": 1440, "height": 900})
-        created_contexts.append(ctx)
-        fresh_page = ctx.new_page()
-        do_test_login(fresh_page, base_url, test_email)
-
-        return item_name, fresh_page
-
-    yield _make
-
-    for ctx in created_contexts:
+    for name in created.values():
         try:
-            ctx.close()
+            _delete_functionality(admin_module_page, base_url, name)
         except Exception as e:
-            print(f"cleanup failed for context {ctx}: {e}")
-    for role_id in checked_role_ids:
-        try:
-            _set_role_checkbox(logged_in_page, base_url, test_email, role_id, checked=False)
-        except Exception as e:
-            print(f"cleanup failed for role checkbox {role_id}: {e}")
-    for item_name in created_items:
-        try:
-            _delete_functionality(logged_in_page, base_url, item_name)
-        except Exception as e:
-            print(f"cleanup failed for item {item_name}: {e}")
-    for role_name, role_id in created_roles:
-        try:
-            _delete_role(logged_in_page, base_url, role_name)
-        except Exception as e:
-            print(f"cleanup failed for role {role_name} ({role_id}): {e}")
+            print(f"cleanup failed for item {name}: {e}")
 
 
-def test_embedded_page_renders_iframe_when_allowed(embedded_item_page):
+def _open_from_sidebar(page, base_url, item_name):
+    """Land on the home page (after the item exists, so the sidebar lists it) and
+    return the item's L1 entry."""
+    nav(page, f"{base_url}/")
+    l1 = page.locator("aside").first
+    ensure_l1_expanded(page, l1)
+    return l1_btn(l1, item_name)
+
+
+def test_embedded_page_renders_iframe_when_allowed(embedded_item, logged_in_page, base_url):
     # The embeddability check intentionally rejects private/loopback targets to
     # prevent SSRF, so the positive E2E case must use a public origin. Confirm that
     # origin is actually serving and framable before asserting anything about the
     # application: otherwise a third-party outage reads as an application failure.
     _require_embeddable_target(PUBLIC_EMBED_URL)
-    item_name, page = embedded_item_page(PUBLIC_EMBED_URL)
-    l1 = page.locator("aside").first
-    ensure_l1_expanded(page, l1)
-    l1_btn(l1, item_name).click()
+    item_name = embedded_item(PUBLIC_EMBED_URL)
+    page = logged_in_page
+    _open_from_sidebar(page, base_url, item_name).click()
     page.wait_for_url("**/embedded/**", timeout=10_000)
     expect(page.locator('[data-testid="embedded-iframe"]')).to_be_visible()
     expect(page.locator('[data-testid="embedded-iframe"]')).to_have_attribute("src", PUBLIC_EMBED_URL)
     expect(page.locator("aside").first).to_be_visible()
 
 
-def test_embedded_page_redirects_when_not_authorized(embedded_item_page, base_url, non_admin_page):
-    """A user without the throwaway role cannot reach the embedded item.
+def test_embedded_page_redirects_when_not_authorized(embedded_item, logged_in_page, base_url, non_admin_page):
+    """A user with no grant on the item cannot reach the embedded page.
 
-    The shared administrator session is not suitable for this assertion because
-    the Administrator role intentionally retains access to every menu item.
+    The administrator session is not suitable for this assertion because the
+    Administrator role intentionally retains access to every menu item; it is used
+    only to read the item's address from the sidebar.
     """
-    item_name, fresh_page = embedded_item_page(PUBLIC_EMBED_URL)
-    l1 = fresh_page.locator("aside").first
-    ensure_l1_expanded(fresh_page, l1)
-    item_href = l1_btn(l1, item_name).get_attribute("href")
+    item_name = embedded_item(PUBLIC_EMBED_URL)
+    item_href = _open_from_sidebar(logged_in_page, base_url, item_name).get_attribute("href")
     assert item_href and item_href.startswith("/embedded/")
 
     non_admin_page.goto(f"{base_url}{item_href}")
@@ -326,12 +231,11 @@ def test_embedded_page_redirects_when_not_authorized(embedded_item_page, base_ur
     assert non_admin_page.url.rstrip("/") == base_url.rstrip("/")
 
 
-def test_embedded_page_shows_fallback_when_private_target_is_blocked(embedded_item_page, probe_server):
+def test_embedded_page_shows_fallback_when_private_target_is_blocked(embedded_item, logged_in_page, base_url, probe_server):
     url = f"{probe_server}/blocked"
-    item_name, page = embedded_item_page(url)
-    l1 = page.locator("aside").first
-    ensure_l1_expanded(page, l1)
-    l1_btn(l1, item_name).click()
+    item_name = embedded_item(url)
+    page = logged_in_page
+    _open_from_sidebar(page, base_url, item_name).click()
     page.wait_for_url("**/embedded/**", timeout=10_000)
     notice = page.locator('[data-testid="embedded-blocked-open-new-tab"]')
     expect(notice).to_be_visible()

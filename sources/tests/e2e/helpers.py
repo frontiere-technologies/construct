@@ -258,6 +258,23 @@ def run_db(*args: str, env: dict | None = None) -> str:
     return result.stdout
 
 
+def run_sql(query: str) -> str:
+    """Run SQL on the test database through `db.mjs test-query`, in the default tenant.
+
+    One subprocess and one connection per call, so put every statement a setup or a teardown needs
+    in one string: `test-query` runs it with the simple protocol, which accepts several statements
+    separated by `;`, all in one transaction. Connects as TEST_DATABASE_URL (in CI the job's
+    superuser, which ignores row-level security: filter on the tenant explicitly where it matters).
+    """
+    result = subprocess.run(
+        ["node", "sources/devops/db/db.mjs", "test-query", query],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"test-query failed: {query}\nstdout: {result.stdout}\nstderr: {result.stderr}")
+    return result.stdout
+
+
 def delete_e2e_tenants() -> None:
     """Remove the tenants test_tenants.py creates; idempotent (a missing tenant is not an error).
 
