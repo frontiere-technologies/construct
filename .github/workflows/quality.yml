@@ -192,6 +192,17 @@ jobs:
         run: npm run test:integration
         working-directory: sources/microservices/web-construct
       - run: uv sync --locked
+      - name: Read the Playwright version pinned by uv.lock
+        id: playwright-version
+        run: echo "version=$(uv run python -c 'import importlib.metadata as m; print(m.version("playwright"))')" >> "$GITHUB_OUTPUT"
+      - name: Cache the Playwright browsers
+        # Solo i browser scaricati: le librerie di sistema le installa comunque
+        # `--with-deps` qui sotto, che con la cache piena salta il download di
+        # Chromium (lo trova già nella cartella) e fa solo la parte apt.
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
       - run: uv run playwright install --with-deps chromium
       - name: Resolve the tenant subdomains used by test_tenants.py
         # Chromium manda già *.localhost al computer locale, ma le richieste fatte
@@ -216,7 +227,7 @@ jobs:
           exit 1
       - name: Run browser E2E tests
         run: |
-          if uv run pytest sources/tests/e2e; then
+          if uv run pytest sources/tests/e2e --durations=25; then
             exit 0
           fi
           echo "::group::Next.js server log"
