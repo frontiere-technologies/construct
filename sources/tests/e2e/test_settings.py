@@ -52,8 +52,8 @@ def _restore(page, base_url):
     assert _font_size(page) == "100%"
 
 
-def test_settings_is_linked_from_the_user_panel(logged_in_page, base_url):
-    page = logged_in_page
+def test_settings_is_linked_from_the_user_panel(home_page):
+    page = home_page
     page.locator('[data-testid="sidebar-account-button"]').click()
     panel = page.locator("#sidebar-user-panel")
     expect(panel.locator('[data-testid="language-switcher"]')).to_have_count(0)

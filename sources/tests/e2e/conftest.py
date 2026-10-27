@@ -95,7 +95,9 @@ def test_email_user():
 def browser():
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
-        b = p.chromium.launch(headless=headless, slow_mo=50)
+        # The 50 ms pause per action is only there to let a human follow a headed run; headless
+        # it was ~50 ms × every click, fill and goto of the suite, waiting on nothing.
+        b = p.chromium.launch(headless=headless, slow_mo=0 if headless else 50)
         yield b
         b.close()
 
@@ -131,23 +133,32 @@ def non_admin_storage_state(browser, base_url, test_email_user):
 
 
 @pytest.fixture
-def logged_in_page(browser, base_url, admin_storage_state):
+def logged_in_page(browser, admin_storage_state):
     """Authenticated admin page, reusing the session-scoped login's storage
     state so each test starts a fresh (isolated) but already-logged-in context.
-    Lands on `/`, matching do_test_login's end state (tests rely on this)."""
+
+    It stays on about:blank: the test navigates where it needs to. Loading `/`
+    here cost a full home render for the ~85 tests that go elsewhere straight
+    away; the ones that really start from the home page use `home_page`."""
     ctx = browser.new_context(viewport={"width": 1440, "height": 900}, storage_state=admin_storage_state)
     p = ctx.new_page()
-    nav(p, f"{base_url}/")
     yield p
     ctx.close()
 
 
 @pytest.fixture
-def non_admin_page(browser, base_url, non_admin_storage_state):
+def home_page(logged_in_page, base_url):
+    """The authenticated admin page on `/`, matching do_test_login's end state:
+    for the tests that start from the home page (sidebar, account panel)."""
+    nav(logged_in_page, f"{base_url}/")
+    return logged_in_page
+
+
+@pytest.fixture
+def non_admin_page(browser, non_admin_storage_state):
     """Authenticated non-admin page, reusing the session-scoped login's storage state.
-    Lands on `/`, matching do_test_login's end state (tests rely on this)."""
+    Stays on about:blank like `logged_in_page`: the test navigates where it needs to."""
     ctx = browser.new_context(viewport={"width": 1440, "height": 900}, storage_state=non_admin_storage_state)
     p = ctx.new_page()
-    nav(p, f"{base_url}/")
     yield p
     ctx.close()
