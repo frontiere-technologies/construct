@@ -97,7 +97,7 @@ di amministrazione, inventario degli ingressi, modello. Chi esegue un task la le
   - `ensure_default_membership` (`create or replace`, corpo in 0054): ritorna `null` per un amministratore di piattaforma (MT5-DEC-23).
 - Produces (Drizzle): `users.isPlatformAdmin`, `tenantSettings.supportUntil|supportGrantedBy|supportGrantedAt`, `tenantAuditEvent`, `platformAuditEvent`; `'read-tenant-audit'` in `PERMISSION_CODES`.
 
-- [ ] **Step 1: Test che falliscono**
+- [✅] **Step 1: Test che falliscono**
 
 ```ts
 it('the runtime role can insert and select tenant_audit_event but never update or delete it', …) // 42501
@@ -108,10 +108,10 @@ it('ensure_default_membership creates nothing for a platform admin', …)
 it('TENANT_ADMIN holds read-tenant-audit in default, template and a fresh copy', …)
 ```
 
-- [ ] **Step 2: Verifica che falliscano** — `npm run test:integration -- lib/audit/audit-schema.integration.test.ts`; Expected: FAIL (relazioni mancanti).
-- [ ] **Step 3: Migrazione 0057, Drizzle, catalogo, contratto e `boundary-check`**
-- [ ] **Step 4: Applica e verifica** — `test-apply`, `schema-write`, `schema-check`; `npm run test:integration -- lib/audit lib/tenancy lib/schema-contract.integration.test.ts`; `boundary-check` sul database di prova; Expected: PASS.
-- [ ] **Step 5: Commit** — `feat(platform): platform admin attribute, audit tables and support consent`
+- [✅] **Step 2: Verifica che falliscano** — `npm run test:integration -- lib/audit/audit-schema.integration.test.ts`; Expected: FAIL (relazioni mancanti).
+- [✅] **Step 3: Migrazione 0057, Drizzle, catalogo, contratto e `boundary-check`**
+- [✅] **Step 4: Applica e verifica** — `test-apply`, `schema-write`, `schema-check`; `npm run test:integration -- lib/audit lib/tenancy lib/schema-contract.integration.test.ts`; `boundary-check` sul database di prova; Expected: PASS.
+- [✅] **Step 5: Commit** — `feat(platform): platform admin attribute, audit tables and support consent`
 
 ---
 
