@@ -1,6 +1,8 @@
 'use server'
 
 import { and, eq, sql } from 'drizzle-orm'
+import { auditActorOf } from '@/lib/audit/audit-types'
+import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { withGlobal, withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole, users } from '@/lib/db/schema'
@@ -81,6 +83,9 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
       if (isNotAMember(err)) throw new Error(NOT_A_MEMBER_MESSAGE)
       throw new Error(`Failed to assign roles: ${err instanceof Error ? err.message : String(err)}`)
     }
+    await recordTenantAudit(tx, auditActorOf(actor), {
+      operation: 'member.roles', objectType: 'user', objectId: userId, details: { roleIds: finalRoleIds },
+    })
   })
 }
 
@@ -114,6 +119,10 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
       if (isNotAMember(err)) throw new Error(NOT_A_MEMBER_MESSAGE)
       throw new Error(`Failed to update status: ${err instanceof Error ? err.message : String(err)}`)
     }
+    await recordTenantAudit(tx, auditActorOf(actor), {
+      operation: 'member.status', objectType: 'user', objectId: userId,
+      details: { status: status === USER_STATUS_ACTIVE ? MEMBERSHIP_ACTIVE : MEMBERSHIP_DEACTIVATED },
+    })
   })
 }
 
@@ -136,7 +145,13 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
   // `prepareInvitation` crea l'account se manca e ritorna `null` quando ha già una password.
   const invitation = await prepareInvitation(normalizedEmail, actor.userId)
   const userId = invitation?.userId ?? await findUserIdByEmail(normalizedEmail)
-  await withTenant(actor.tenantId, tx => addTenantMember(tx, userId))
+  await withTenant(actor.tenantId, async tx => {
+    // Una persona già membro non cambia niente: niente voce (la voce racconta una modifica).
+    if (!(await addTenantMember(tx, userId))) return
+    await recordTenantAudit(tx, auditActorOf(actor), {
+      operation: 'member.add', objectType: 'user', objectId: userId, details: { invited: invitation !== null },
+    })
+  })
 
   if (invitation) {
     // L'appartenenza c'è già: l'invito porta la persona a un tenant a cui può accedere.

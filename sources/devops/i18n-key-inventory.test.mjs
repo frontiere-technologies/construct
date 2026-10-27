@@ -178,16 +178,27 @@ function referencedKeys(keyPattern) {
  * a real key named `language.something` inside a component would still fail.
  * When a new audit event is added the guard fails and forces a line here, which
  * is the intended friction — the list is meant to be read, not grown. Revisit it
- * if it ever passes a dozen entries.
+ * if it ever passes a dozen entries (the audit operation codes count as one: a list of files).
  */
+const AUDIT_OPERATION = /^(role|menu|member|theme|settings|support|tenant|platform|language|translation)\./
+const AUDIT_OPERATION_FILES = [
+  'lib/audit/audit-types.ts',
+  'lib/rbac/roles-actions.ts',
+  'lib/rbac/navigation-actions.ts',
+  'lib/rbac/users-actions.ts',
+  'lib/tenancy/membership.ts',
+  'lib/tenancy/tenant-settings-actions.ts',
+  'lib/theme-actions.ts',
+  'app/api/admin/send-invite/route.ts',
+  'lib/i18n/language-actions.ts',
+  'lib/i18n/translation-actions.ts',
+]
 const NOT_A_KEY = [
   // Structured-log field names for pino, not user-facing copy.
   { file: 'lib/logger.ts', pattern: /^err\./, why: 'pino error serialiser fields' },
-  // i18n audit event names. Same shape as a key, emitted into the log stream.
-  { file: 'lib/i18n/language-actions.ts', pattern: /^language\./, why: 'audit event names' },
-  { file: 'lib/i18n/translation-actions.ts', pattern: /^translation_(key|value)\./, why: 'audit event names' },
-  // The log message of the same audit events, built as a template: `i18n.${event}`.
-  { file: 'lib/i18n/audit.ts', pattern: /^i18n\./, why: 'audit log message template' },
+  // The stable operation codes of the audit log (lib/audit/audit-types.ts): same shape as a key,
+  // written into the audit tables, never shown through t(). One entry per file that names one.
+  ...AUDIT_OPERATION_FILES.map(file => ({ file, pattern: AUDIT_OPERATION, why: 'audit operation code' })),
   // Tenant context: a Postgres setting name and a sequence name, not copy.
   { file: 'lib/db/tenant-db.ts', pattern: /^app\.tenant_id$/, why: 'name of the Postgres setting that carries the tenant' },
   { file: 'lib/db/testing.ts', pattern: /^app\.tenant_id$/, why: 'name of the Postgres setting that carries the tenant' },

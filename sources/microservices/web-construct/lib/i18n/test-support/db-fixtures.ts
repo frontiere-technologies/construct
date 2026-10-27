@@ -6,6 +6,13 @@ import { appLanguage, translationKey } from '@/lib/db/schema'
 /** Every row these tests create carries this prefix so cleanup is unambiguous. */
 export const TEST_PREFIX = 'zzz_i18n_test_'
 
+/**
+ * Un id di persona valido (uuid) per gli attori finti dei test: il registro delle modifiche scrive
+ * `actor_user_id` come uuid, quindi un id come 'test' non è più accettato. Le fabbriche di `vi.mock` (sollevate sopra gli import)
+ * ripetono il valore come testo.
+ */
+export const TEST_ACTOR_ID = '00000000-0000-4000-8000-0000000000a1'
+
 export const describeIntegration =
   process.env.I18N_INTEGRATION_DB === '1' ? describe : describe.skip
 

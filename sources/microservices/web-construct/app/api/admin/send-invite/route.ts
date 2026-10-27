@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { auditActorOf } from '@/lib/audit/audit-types'
+import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { createLogger } from '@/lib/logger'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { deniedActor } from '@/lib/rbac/route-denial'
@@ -28,7 +30,13 @@ export async function POST(req: NextRequest) {
 
   let invitation
   try {
-    invitation = await prepareInvitation(email, actor.userId)
+    // Il token e la voce del registro nascono nella stessa transazione, nel tenant di chi invita.
+    invitation = await prepareInvitation(email, actor.userId, {
+      tenantId: actor.tenantId,
+      record: (tx, prepared) => recordTenantAudit(tx, auditActorOf(actor), {
+        operation: 'member.invite', objectType: 'user', objectId: prepared.userId, details: { expiresAt: prepared.expiresAt },
+      }),
+    })
   } catch (err) {
     log.error({ err }, 'failed to prepare invite token')
     return NextResponse.json({ error: 'Errore interno.' }, { status: 500 })

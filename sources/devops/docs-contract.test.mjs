@@ -9,15 +9,14 @@ function read(path) {
   return readFileSync(resolve(root, path), 'utf8')
 }
 
-test('i18n events are documented as best-effort diagnostics, not a durable audit system', () => {
-  const contract = [
-    read('sources/microservices/web-construct/lib/i18n/audit.ts'),
-    read('docs/superpowers/specs/2026-07-28-i18n-system-design.md'),
-  ].join('\n')
-  assert.doesNotMatch(contract, /audit trail|durable audit trail|append-only audit/i)
-  assert.match(contract, /best-effort diagnostic/i)
-  assert.match(contract, /retention/i)
-  assert.match(contract, /redact/i)
+test('i18n writes go to the durable platform audit, not to a diagnostic log', () => {
+  const app = 'sources/microservices/web-construct'
+  assert.ok(!existsSync(resolve(root, `${app}/lib/i18n/audit.ts`)), 'lib/i18n/audit.ts (the best-effort log) must stay removed')
+  for (const file of ['language-actions.ts', 'translation-actions.ts']) {
+    const source = read(`${app}/lib/i18n/${file}`)
+    assert.match(source, /recordPlatformAudit/, `${file} must write the platform audit`)
+    assert.doesNotMatch(source, /auditI18n/, `${file} must not use the old diagnostic log`)
+  }
 })
 
 test('operations documentation assigns backup, restore, and log retention responsibilities', () => {

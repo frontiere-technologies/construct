@@ -2,10 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
+import { auditActorOf } from '@/lib/audit/audit-types'
+import { recordPlatformAudit } from '@/lib/audit/platform-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { withGlobal, type GlobalTx } from '@/lib/db/tenant-db'
 import { appLanguage } from '@/lib/db/schema'
-import { auditI18n } from './audit'
 import { invalidateDictionary, refreshLanguageVersions } from './dictionary-service'
 import {
   assertCanDeactivate, assertCanDelete, assertCanSetDefault,
@@ -57,7 +58,7 @@ async function loadRow(tx: GlobalTx, id: number) {
 }
 
 export async function createLanguage(input: LanguageInput): Promise<ActionResult> {
-  await requirePermission('manage-languages')
+  const actor = await requirePermission('manage-languages')
   const parsed = languageInputSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
@@ -65,15 +66,20 @@ export async function createLanguage(input: LanguageInput): Promise<ActionResult
     // isDefault is not part of the input on purpose: promoting a language is a
     // separate, atomic operation (setDefaultLanguage). Accepting it here would
     // be exactly the mass-assignment hole §13.3 warns about.
-    const [created] = await withGlobal(tx => tx.insert(appLanguage).values({
-      code: parsed.data.code,
-      locale: parsed.data.locale,
-      name: parsed.data.name,
-      nativeName: parsed.data.nativeName,
-      isActive: parsed.data.isActive,
-      isDefault: false,
-    }).returning({ id: appLanguage.idLanguage }))
-    await auditI18n('language.create', { languageId: Number(created.id), code: parsed.data.code })
+    await withGlobal(async tx => {
+      const [created] = await tx.insert(appLanguage).values({
+        code: parsed.data.code,
+        locale: parsed.data.locale,
+        name: parsed.data.name,
+        nativeName: parsed.data.nativeName,
+        isActive: parsed.data.isActive,
+        isDefault: false,
+      }).returning({ id: appLanguage.idLanguage })
+      // La voce è nella stessa transazione della modifica (MT5-DEC-15) e va nel registro della piattaforma (MT5-DEC-24).
+      await recordPlatformAudit(tx, auditActorOf(actor), {
+        operation: 'language.create', objectType: 'language', objectId: Number(created.id), details: { code: parsed.data.code },
+      })
+    })
   } catch (err) {
     return { error: describe(err, 'Impossibile creare la lingua.') }
   }
@@ -83,7 +89,7 @@ export async function createLanguage(input: LanguageInput): Promise<ActionResult
 }
 
 export async function updateLanguage(id: number, input: LanguageInput): Promise<ActionResult> {
-  await requirePermission('manage-languages')
+  const actor = await requirePermission('manage-languages')
   const parsed = languageInputSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
@@ -98,12 +104,14 @@ export async function updateLanguage(id: number, input: LanguageInput): Promise<
         nativeName: parsed.data.nativeName,
         isActive: parsed.data.isActive,
       }).where(eq(appLanguage.idLanguage, id))
+      await recordPlatformAudit(tx, auditActorOf(actor), {
+        operation: 'language.update', objectType: 'language', objectId: id,
+        details: {
+          before: { code: row.code, locale: row.locale, name: row.name, nativeName: row.nativeName, isActive: row.isActive },
+          after: parsed.data,
+        },
+      })
       return row
-    })
-    await auditI18n('language.update', {
-      languageId: id,
-      before: { code: row.code, locale: row.locale, name: row.name, nativeName: row.nativeName, isActive: row.isActive },
-      after: parsed.data,
     })
     invalidateDictionary(row.code)
     invalidateDictionary(parsed.data.code)
@@ -115,15 +123,17 @@ export async function updateLanguage(id: number, input: LanguageInput): Promise<
 }
 
 export async function setLanguageActive(id: number, isActive: boolean): Promise<ActionResult> {
-  await requirePermission('manage-languages')
+  const actor = await requirePermission('manage-languages')
   try {
     const row = await withGlobal(async tx => {
       const row = await loadRow(tx, id)
       if (!isActive) assertCanDeactivate({ isDefault: row.isDefault, isActive: row.isActive, usageCount: 0 })
       await tx.update(appLanguage).set({ isActive }).where(eq(appLanguage.idLanguage, id))
+      await recordPlatformAudit(tx, auditActorOf(actor), {
+        operation: 'language.active', objectType: 'language', objectId: id, details: { code: row.code, isActive },
+      })
       return row
     })
-    await auditI18n(isActive ? 'language.activate' : 'language.deactivate', { languageId: id, code: row.code })
     invalidateDictionary(row.code)
   } catch (err) {
     return { error: describe(err, 'Impossibile aggiornare lo stato della lingua.') }
@@ -133,18 +143,19 @@ export async function setLanguageActive(id: number, isActive: boolean): Promise<
 }
 
 export async function setDefaultLanguage(id: number): Promise<ActionResult> {
-  await requirePermission('manage-languages')
+  const actor = await requirePermission('manage-languages')
   try {
-    const row = await withGlobal(async tx => {
+    await withGlobal(async tx => {
       const row = await loadRow(tx, id)
       assertCanSetDefault({ isDefault: row.isDefault, isActive: row.isActive, usageCount: 0 })
       // Single statement, single transaction: the old default is cleared and the
       // new one set inside one plpgsql body, so the "exactly one default"
       // invariant is never observable as violated (§2.3).
       await tx.execute(sql`select public.set_default_language(${id})`)
-      return row
+      await recordPlatformAudit(tx, auditActorOf(actor), {
+        operation: 'language.default', objectType: 'language', objectId: id, details: { code: row.code },
+      })
     })
-    await auditI18n('language.set_default', { languageId: id, code: row.code })
     invalidateDictionary()
   } catch (err) {
     return { error: describe(err, 'Impossibile impostare la lingua predefinita.') }
@@ -154,7 +165,7 @@ export async function setDefaultLanguage(id: number): Promise<ActionResult> {
 }
 
 export async function deleteLanguage(id: number): Promise<ActionResult> {
-  await requirePermission('manage-languages')
+  const actor = await requirePermission('manage-languages')
   try {
     const row = await withGlobal(async tx => {
       const row = await loadRow(tx, id)
@@ -162,9 +173,11 @@ export async function deleteLanguage(id: number): Promise<ActionResult> {
       // translation_value cascades; users.id_language is ON DELETE SET NULL, so
       // anyone who had picked this language falls back to the default (§6.2).
       await tx.delete(appLanguage).where(eq(appLanguage.idLanguage, id))
+      await recordPlatformAudit(tx, auditActorOf(actor), {
+        operation: 'language.delete', objectType: 'language', objectId: id, details: { code: row.code },
+      })
       return row
     })
-    await auditI18n('language.delete', { languageId: id, code: row.code })
     invalidateDictionary(row.code)
   } catch (err) {
     return { error: describe(err, 'Impossibile eliminare la lingua.') }

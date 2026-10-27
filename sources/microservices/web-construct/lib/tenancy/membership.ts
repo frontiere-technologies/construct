@@ -1,4 +1,5 @@
 import { eq, sql } from 'drizzle-orm'
+import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
@@ -49,12 +50,25 @@ export async function tenantMemberEmail(tenantId: TenantId, userId: string): Pro
  * appartiene a nessun tenant. Ritorna lo stato dell'appartenenza dopo la chiamata, oppure `null`
  * quando non ne esiste una; non riattiva mai un'appartenenza disattivata. La logica vive in
  * `public.join_by_registration` (0054).
+ *
+ * Se l'appartenenza nasce adesso, la voce `member.join` del registro del tenant si scrive nella
+ * stessa transazione (MT5-DEC-15); chi si registra è la persona che agisce (veste `person`, email
+ * dall'account). Una persona già membro non cambia niente e non lascia voce: per saperlo la
+ * funzione SQL non basta (risponde `active` in entrambi i casi), quindi si legge prima l'appartenenza.
  */
 export async function joinTenantByRegistration(userId: string, tenantId: TenantId): Promise<MembershipStatus | null> {
   return withTenant(tenantId, async tx => {
+    const [existing] = await tx.select({ status: tenantMembership.status }).from(tenantMembership)
+      .where(eq(tenantMembership.userId, userId)).limit(1)
     const [row] = await tx.execute<{ status: string | null }>(
       sql`select public.join_by_registration(${userId}::uuid) as status`)
-    return isMembershipStatus(row?.status) ? row.status : null
+    const status = isMembershipStatus(row?.status) ? row.status : null
+    if (!existing && status === MEMBERSHIP_ACTIVE) {
+      await recordTenantAudit(tx, { userId, email: null, kind: 'person' }, {
+        operation: 'member.join', objectType: 'user', objectId: userId,
+      })
+    }
+    return status
   })
 }
 

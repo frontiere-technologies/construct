@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   set: vi.fn(),
   withTenant: vi.fn(),
   logError: vi.fn(),
+  audit: vi.fn(),
 }))
 
 vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdministrator: mocks.requireAdministrator }))
@@ -15,6 +16,7 @@ vi.mock('@/lib/db/tenant-db', () => ({
     return fn({ update: () => ({ set: (values: unknown) => ({ returning: () => mocks.set(values) }) }) })
   },
 }))
+vi.mock('@/lib/audit/tenant-audit', () => ({ recordTenantAudit: mocks.audit }))
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: mocks.logError }) }))
 
 const { saveAppTheme } = await import('./theme-actions')
@@ -40,6 +42,7 @@ describe('saveAppTheme', () => {
     mocks.set.mockReset().mockResolvedValue([{ id: 1 }])
     mocks.withTenant.mockReset()
     mocks.logError.mockReset()
+    mocks.audit.mockReset().mockResolvedValue(undefined)
   })
 
   it('refuses anyone requireAdministrator refuses', async () => {
@@ -146,9 +149,16 @@ describe('saveAppTheme', () => {
     expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'failed' })
   })
 
+  it('writes the theme.save audit row in the same transaction as the update', async () => {
+    await saveAppTheme(theme('#123456'))
+    expect(mocks.audit).toHaveBeenCalledOnce()
+    expect(mocks.audit.mock.calls[0][2]).toMatchObject({ operation: 'theme.save', objectType: 'app_theme', details: { primaryColor: '#123456' } })
+  })
+
   it('reports failure when no row was updated', async () => {
     mocks.set.mockResolvedValue([])
     expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'failed' })
     expect(mocks.logError).toHaveBeenCalledOnce()
+    expect(mocks.audit).not.toHaveBeenCalled()
   })
 })

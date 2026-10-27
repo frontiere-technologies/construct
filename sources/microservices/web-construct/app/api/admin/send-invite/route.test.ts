@@ -59,7 +59,8 @@ describe('POST /api/admin/send-invite', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ ok: true })
     expect(tenantMemberEmail).toHaveBeenCalledWith(TENANT_A, 'user-1')
-    expect(prepareInvitation).toHaveBeenCalledWith('persona@esempio.test', 'admin-a')
+    // Il token nasce nella transazione del tenant di chi invita, con la voce del registro.
+    expect(prepareInvitation).toHaveBeenCalledWith('persona@esempio.test', 'admin-a', expect.objectContaining({ tenantId: TENANT_A }))
     expect(sendInvitationEmail).toHaveBeenCalledOnce()
     // Il link parte dall'indirizzo del tenant di chi invita (MT4-DEC-12).
     expect(sendInvitationEmail).toHaveBeenCalledWith(expect.objectContaining({ tokenId: 'token-1' }), TENANT_A)

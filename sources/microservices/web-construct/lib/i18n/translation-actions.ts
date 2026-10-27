@@ -2,10 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, eq, sql } from 'drizzle-orm'
+import { auditActorOf } from '@/lib/audit/audit-types'
+import { recordPlatformAudit } from '@/lib/audit/platform-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { withGlobal } from '@/lib/db/tenant-db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
-import { auditI18n } from './audit'
 import { invalidateDictionary, refreshLanguageVersions } from './dictionary-service'
 import { isValidNamespace, isValidTranslationKey } from './key-format'
 import {
@@ -72,18 +73,25 @@ function validateKeyInput(input: TranslationKeyInput): string | null {
 }
 
 export async function createTranslationKey(input: TranslationKeyInput): Promise<KeyActionResult> {
-  await requirePermission('manage-translation-keys')
+  const actor = await requirePermission('manage-translation-keys')
   const invalid = validateKeyInput(input)
   if (invalid) return { error: invalid }
 
   try {
-    const [created] = await withGlobal(tx => tx.insert(translationKey).values({
-      key: input.key.trim(),
-      description: input.description?.trim() || null,
-      namespace: input.namespace.trim(),
-      module: input.module?.trim() || null,
-    }).returning({ id: translationKey.idTranslationKey }))
-    await auditI18n('translation_key.create', { keyId: Number(created.id), key: input.key.trim() })
+    const created = await withGlobal(async tx => {
+      const [row] = await tx.insert(translationKey).values({
+        key: input.key.trim(),
+        description: input.description?.trim() || null,
+        namespace: input.namespace.trim(),
+        module: input.module?.trim() || null,
+      }).returning({ id: translationKey.idTranslationKey })
+      // La voce è nella stessa transazione della modifica (MT5-DEC-15) e va nel registro della piattaforma (MT5-DEC-24).
+      await recordPlatformAudit(tx, auditActorOf(actor), {
+        operation: 'translation.key.create', objectType: 'translation_key', objectId: Number(row.id),
+        details: { key: input.key.trim() },
+      })
+      return row
+    })
     // A brand-new key has no values yet, so no cached dictionary is actually
     // stale — the statement-level trigger on translation_key already bumps
     // every `dictionary_version`. Only this pod's version cache needs
@@ -101,7 +109,7 @@ export async function createTranslationKey(input: TranslationKeyInput): Promise<
 }
 
 export async function deleteTranslationKey(id: number): Promise<{ error: string | null }> {
-  await requirePermission('manage-translation-keys')
+  const actor = await requirePermission('manage-translation-keys')
   try {
     const row = await withGlobal(async tx => {
       const [found] = await tx.select({ key: translationKey.key }).from(translationKey)
@@ -109,10 +117,12 @@ export async function deleteTranslationKey(id: number): Promise<{ error: string 
       if (!found) return null
       // translation_value rows cascade — the FK is ON DELETE CASCADE.
       await tx.delete(translationKey).where(eq(translationKey.idTranslationKey, id))
+      await recordPlatformAudit(tx, auditActorOf(actor), {
+        operation: 'translation.key.delete', objectType: 'translation_key', objectId: id, details: { key: found.key },
+      })
       return found
     })
     if (!row) return { error: 'Chiave non trovata.' }
-    await auditI18n('translation_key.delete', { keyId: id, key: row.key })
     invalidateDictionary()
     revalidatePath('/', 'layout')
     return { error: null }
@@ -131,7 +141,7 @@ export async function deleteTranslationKey(id: number): Promise<{ error: string 
  * single language leaves every other language untouched too.
  */
 export async function saveTranslations(input: SaveTranslationsInput): Promise<SaveTranslationsResult> {
-  await requirePermission('edit-translations')
+  const actor = await requirePermission('edit-translations')
 
   if (input.values.length > MAX_BULK_VALUES) {
     return { ok: false, error: `Troppe traduzioni in un solo salvataggio (max ${MAX_BULK_VALUES}).` }
@@ -330,6 +340,15 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
           .set({ updatedAt: sql`now()` })
           .where(eq(translationKey.idTranslationKey, input.keyId))
       }
+
+      // Una voce sola per salvataggio, e solo se qualcosa è cambiato davvero: i valori toccati
+      // (le lingue, non i testi) e se i metadati della chiave sono cambiati.
+      if (metadataChanged || touchedCodes.size > 0) {
+        await recordPlatformAudit(tx, auditActorOf(actor), {
+          operation: 'translation.save', objectType: 'translation_key', objectId: input.keyId,
+          details: { key: keyRow.key, languages: [...touchedCodes], metadataChanged },
+        })
+      }
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -342,7 +361,6 @@ export async function saveTranslations(input: SaveTranslationsInput): Promise<Sa
     return { ok: false, error: `Impossibile salvare le traduzioni. ${message}` }
   }
 
-  await auditI18n('translation_value.save', { keyId: input.keyId, languages: [...touchedCodes] })
   // Only the languages actually written are dropped from the cache (§11.3).
   for (const code of touchedCodes) invalidateDictionary(code)
   revalidatePath('/', 'layout')

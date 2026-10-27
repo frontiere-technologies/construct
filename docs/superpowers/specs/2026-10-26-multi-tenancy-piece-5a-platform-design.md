@@ -92,7 +92,7 @@ Il pezzo 5b (dopo) porterà funzioni concesse per tenant, limiti, esportazione e
 
 ### 1.3 Criteri di successo
 
-- [ ] ID=MT5-OK-1, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=Nessuna modifica senza voce nel registro, Fix description=Ogni azione e rotta che modifica dati di tenant o della piattaforma scrive la sua voce nella stessa transazione; un test fallisce se compare un ingresso che modifica dati senza registro.
+- [✅] ID=MT5-OK-1, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=Nessuna modifica senza voce nel registro, Fix description=Ogni azione e rotta che modifica dati di tenant o della piattaforma scrive la sua voce nella stessa transazione; un test fallisce se compare un ingresso che modifica dati senza registro.
 - [ ] ID=MT5-OK-2, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=La piattaforma non vede dentro i tenant, Fix description=Senza un permesso di assistenza valido, l'amministratore di piattaforma non legge né modifica dati di un tenant (salvo il modello) e non legge il registro dei tenant; con il permesso, entra solo nel tenant che l'ha concesso e solo fino alla scadenza.
 - [ ] ID=MT5-OK-3, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Ciclo di vita dalla console, Fix description=Creare un tenant (con email al primo amministratore), sospenderlo, riattivarlo, archiviarlo, ripristinarlo, gestirne indirizzi e amministratori, tutto dalla console e con le voci nel registro della piattaforma.
 - [ ] ID=MT5-OK-4, Severity=High, Complexity=Low, Priority=P1, Estimate=hours, Title=Il registro del tenant è del tenant, Fix description=L'amministratore di A vede le voci di A (comprese quelle della piattaforma in assistenza) e mai quelle di B o della piattaforma su altri tenant.
@@ -229,8 +229,8 @@ del primo amministratore di piattaforma, con conferma del proprietario, dopo il 
 
 - [ ] ID=MT5-RISK-1, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=Identità di piattaforma troppo potente, Fix description=Un utente del database membro di `construct_owner` dentro l'app è un rischio se usato fuori dalla console: un controllo automatico deve impedire ogni import fuori dal modulo della piattaforma, e ogni porta deve verificare l'amministratore di piattaforma prima di aprire una transazione.
 - [ ] ID=MT5-RISK-2, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Assistenza che dura oltre il permesso, Fix description=La rivalidazione a ogni richiesta deve far uscire subito a scadenza, revoca o sospensione; test con il tempo che scorre.
-- [ ] ID=MT5-RISK-3, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Registro che manca su una porta, Fix description=Senza inventario, una porta nuova dimenticherebbe la voce; il test di MT5-OK-1 lo impedisce.
-- [ ] ID=MT5-RISK-4, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Dati sensibili nel registro, Fix description=I dettagli non devono contenere password, token o testi d'invito; controllo nei test.
+- [✅] ID=MT5-RISK-3, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Registro che manca su una porta, Fix description=Senza inventario, una porta nuova dimenticherebbe la voce; il test di MT5-OK-1 lo impedisce.
+- [✅] ID=MT5-RISK-4, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Dati sensibili nel registro, Fix description=I dettagli non devono contenere password, token o testi d'invito; controllo nei test.
 
 ### 5.3 Limiti noti
 

@@ -8,7 +8,7 @@ import { cleanupTestData, describeIntegration, unique } from './test-support/db-
 // neither exists in a Vitest process, so both are stubbed. The authorization
 // path itself is covered by the E2E suite, which drives a real session.
 vi.mock('@/lib/rbac/auth-guard', () => {
-  const admin = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+  const admin = { userId: '00000000-0000-4000-8000-0000000000a1', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
   return {
     requirePermission: async () => admin,
     requireAdministrator: async () => admin,

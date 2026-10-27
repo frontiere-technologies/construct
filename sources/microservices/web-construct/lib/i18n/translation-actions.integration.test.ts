@@ -9,7 +9,7 @@ import { cleanupTestData, describeIntegration, testKey, unique } from './test-su
 // revalidatePath() are session-/request-bound and don't exist in a Vitest
 // process. The authorization path itself is covered by the E2E suite.
 vi.mock('@/lib/rbac/auth-guard', () => {
-  const admin = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+  const admin = { userId: '00000000-0000-4000-8000-0000000000a1', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
   return {
     requirePermission: async () => admin,
     requireAdministrator: async () => admin,
