@@ -164,7 +164,7 @@ it('TENANT_ADMIN holds read-tenant-audit in default, template and a fresh copy',
   - `type PlatformActor = { userId: string; email: string }`; `requirePlatformAdmin(): Promise<PlatformActor>` (azioni e rotte; errore come `requirePermission`) e `requirePlatformAdminPage(): Promise<PlatformActor>` (pagine; `notFound()` se non ammesso), in `lib/rbac/auth-guard.ts`: rileggono l'attributo dal database (non dal token), funzionano in ogni stato del tenant, rifiutano su un indirizzo dedicato; dichiarati in `DECLARATION_MODULES`;
   - instradamento: `/platform` e sottopagine ammesse a un amministratore di piattaforma in ogni stato del tenant sull'indirizzo principale; in stato `none` un amministratore di piattaforma ha come casa `/platform` invece di `/no-tenant`.
 
-- [ ] **Step 1: Test**
+- [✅] **Step 1: Test**
 
 ```ts
 it('requirePlatformAdmin refuses a tenant admin who is not platform admin', …)
@@ -174,8 +174,8 @@ it('a platform admin in state none is routed to /platform, others to /no-tenant'
 it('the ready path keeps its round-trip caps', …)
 ```
 
-- [ ] **Step 2–4:** focalizzati, poi `npx vitest run lib guards` e `npm run test:integration -- lib/rbac lib/db/round-trip-budget.integration.test.ts`.
-- [ ] **Step 5: Commit** — `feat(rbac): platform admin attribute in authorization, guards and routing`
+- [✅] **Step 2–4:** focalizzati, poi `npx vitest run lib guards` e `npm run test:integration -- lib/rbac lib/db/round-trip-budget.integration.test.ts`.
+- [✅] **Step 5: Commit** — `feat(rbac): platform admin attribute in authorization, guards and routing`
 
 ---
 
