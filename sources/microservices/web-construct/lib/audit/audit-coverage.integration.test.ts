@@ -22,7 +22,7 @@ import { addUserByEmail, setUserStatus, updateUserRoles } from '@/lib/rbac/users
 import { saveAppTheme } from '@/lib/theme-actions'
 import { POST as sendInvite } from '@/app/api/admin/send-invite/route'
 import { POST as register } from '@/app/api/auth/register/route'
-import { resolveUserAuthorization } from '@/lib/rbac/auth-roles'
+import { enterTenant } from '@/lib/tenancy/token-tenant'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { setSelfRegistration } from '@/lib/tenancy/tenant-settings-actions'
 import { defaultTestTenant, tenantIdForTest } from '@/lib/tenancy/testing'
@@ -629,9 +629,9 @@ describeIntegration('every door that writes records its audit row in the same tr
     await withOwner(tx => tx.update(tenantSettings).set({ selfRegistration: true }), DEFAULT)
     try {
       const before = await tenantRows(DEFAULT)
-      // Quello che fa il callback jwt al primo accesso: appartenenza e ruolo base, nella stessa transazione delle righe.
-      const first = await resolveUserAuthorization(DEFAULT, newcomer.id, true)
-      expect(first.accountActive).toBe(true)
+      // L'ingresso vero del callback jwt al primo accesso (due transazioni: l'appartenenza, poi il ruolo base).
+      const first = await enterTenant(newcomer.id, null, { current: null, firstEntry: true })
+      expect(first).toMatchObject({ tenantState: 'ready', accountActive: true })
       const written = (await tenantRows(DEFAULT)).filter(row => !before.some(old => old.id === row.id))
       expect(written.map(row => row.operation)).toEqual(['member.join', 'member.roles'])
       for (const row of written) {
@@ -643,7 +643,7 @@ describeIntegration('every door that writes records its audit row in the same tr
 
       // Il secondo accesso non crea niente, quindi non scrive niente.
       const afterFirst = await tenantRows(DEFAULT)
-      await resolveUserAuthorization(DEFAULT, newcomer.id, true)
+      await enterTenant(newcomer.id, null, { current: null, firstEntry: true })
       expect(await tenantRows(DEFAULT)).toEqual(afterFirst)
     } finally {
       await withOwner(tx => tx.update(tenantSettings).set({ selfRegistration: settings.on }), DEFAULT)

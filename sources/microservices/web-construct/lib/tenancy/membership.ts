@@ -21,11 +21,25 @@ export function isMembershipStatus(value: unknown): value is MembershipStatus {
  * non appartiene a un altro tenant. Ritorna lo stato dell'appartenenza dopo la chiamata, oppure
  * `null` quando non ne esiste una. Non riattiva mai un'appartenenza disattivata. La logica vive
  * nella funzione SQL, in un solo viaggio.
+ *
+ * Se l'appartenenza nasce adesso, la voce `member.join` del registro del tenant si scrive qui, nella
+ * stessa transazione (MT5-DEC-14 esclude l'evento di accesso, non le righe di tenant che crea): chi
+ * crea la riga è l'unico a scrivere la voce, e una chiamata dopo la trova già e non scrive niente.
+ * Per saperlo senza un viaggio in più la stessa istruzione legge se l'appartenenza esisteva: la
+ * sottoselect usa l'istantanea dell'istruzione, che non vede quanto la funzione inserisce. Nel caso
+ * comune (appartenenza già presente) non c'è nessuna scrittura.
  */
 export async function ensureDefaultMembership(tx: TenantTx, userId: string): Promise<MembershipStatus | null> {
-  const [row] = await tx.execute<{ status: string | null }>(
-    sql`select public.ensure_default_membership(${userId}::uuid) as status`)
-  return isMembershipStatus(row?.status) ? row.status : null
+  const [row] = await tx.execute<{ status: string | null; existed: boolean }>(
+    sql`select public.ensure_default_membership(${userId}::uuid) as status,
+      exists (select 1 from public.tenant_membership m where m.user_id = ${userId}::uuid) as existed`)
+  const status = isMembershipStatus(row?.status) ? row.status : null
+  if (status === MEMBERSHIP_ACTIVE && row && !row.existed) {
+    await recordTenantAudit(tx, { userId, email: null, kind: 'person' }, {
+      operation: 'member.join', objectType: 'user', objectId: userId, details: { via: 'first_sign_in' },
+    })
+  }
+  return status
 }
 
 /**
