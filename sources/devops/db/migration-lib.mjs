@@ -197,15 +197,24 @@ export function parseTenantMemberArguments(args) {
   }
 }
 
-// test-tenant-delete (solo database di prova, E2E dei tenant): cancella un tenant di prova con
-// tutte le sue righe. Il predefinito si rifiuta già qui; il modello, che si riconosce solo dal
-// database, lo rifiuta il comando.
+// test-tenant-delete (solo database di prova, E2E dei tenant): cancella uno o più tenant di prova
+// con tutte le loro righe, in una transazione sola. `--slug` si ripete, una volta per tenant: gli E2E
+// ne tolgono tre a ogni pulizia, e ogni lancio di db.mjs costa un processo e una connessione. Lo
+// stesso slug due volte è un errore. Il predefinito si rifiuta già qui; il modello, che si
+// riconosce solo dal database, lo rifiuta il comando.
 export function parseTenantDeleteArguments(args) {
-  const values = collectFlags(args, ['--slug'])
-  if (!values.has('--slug')) throw new Error('Manca --slug: test-tenant-delete --slug <slug>')
-  const slug = parseSlugOption(values.get('--slug'))
-  if (slug === 'default') throw new Error('Il tenant predefinito non si cancella')
-  return { slug }
+  const slugs = []
+  // A coppie: ogni coppia passa da collectFlags, che dà gli stessi errori degli altri comandi
+  // (argomento non previsto, --slug senza valore, --slug=valore).
+  for (let index = 0; index < args.length; index += 2) {
+    const values = collectFlags(args.slice(index, index + 2), ['--slug'])
+    const slug = parseSlugOption(values.get('--slug'))
+    if (slug === 'default') throw new Error('Il tenant predefinito non si cancella')
+    if (slugs.includes(slug)) throw new Error(`--slug ${slug} compare due volte`)
+    slugs.push(slug)
+  }
+  if (!slugs.length) throw new Error('Manca --slug: test-tenant-delete --slug <slug> [--slug <slug> ...]')
+  return { slugs }
 }
 
 export async function applyPendingMigrations(adapter, migrations, { to } = {}) {

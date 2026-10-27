@@ -282,6 +282,7 @@ def delete_e2e_tenants() -> None:
     (Ctrl-C, Mac sleep) leaves them behind, and "E2E C" answers on the main address: in the next run
     TEST_EMAIL would have two tenants there and every login of every earlier file would land on
     /select-tenant, with nothing pointing at the cause. Hence also at the start of each session.
+
+    One db.mjs call for the three: `--slug` repeats, and they go in one transaction.
     """
-    for slug in E2E_TENANT_SLUGS:
-        run_db("test-tenant-delete", "--slug", slug)
+    run_db("test-tenant-delete", *(arg for slug in E2E_TENANT_SLUGS for arg in ("--slug", slug)))

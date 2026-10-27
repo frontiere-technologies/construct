@@ -740,7 +740,7 @@ async function runTestTenantMemberAdd(connectionUrl, { slug, email, admin }) {
  * di `tenant`. Rifiuta il predefinito e il modello. Un tenant che non c'è non è un errore: la pulizia
  * dell'E2E gira anche quando la creazione si è fermata a metà, e di nuovo all'esecuzione dopo.
  */
-async function runTestTenantDelete(connectionUrl, { slug }) {
+async function runTestTenantDelete(connectionUrl, { slugs }) {
   const sql = postgres(connectionUrl, {
     prepare: false,
     max: 1,
@@ -749,25 +749,35 @@ async function runTestTenantDelete(connectionUrl, { slug }) {
     onnotice: notice => console.log(`NOTICE: ${notice.message}`),
   })
   try {
-    const deleted = await sql.begin(async tx => {
+    // Tutti gli slug in una transazione: un rifiuto (il modello) non lascia a metà gli altri.
+    const outcomes = await sql.begin(async tx => {
       await tx`set local role construct_owner`
-      const [found] = await tx`select id::text as id, slug, is_template as "isTemplate" from public.tenant where slug = ${slug}`
-      if (!found) return false
-      if (found.slug === 'default' || found.isTemplate) {
-        throw new Error(`Il tenant ${slug} non si cancella: il predefinito e il modello vivono in ogni database`)
-      }
-      // La RLS forzata vale anche per il proprietario (MTF-DEC-4): il tenant va impostato.
-      await tx`select set_config('app.tenant_id', ${found.id}, true)`
       const tables = await tx`select table_name as name from app_private.table_class where class = 'tenant' order by table_name`
-      // Le chiavi esterne fra tabelle di tenant sono tutte in cascata: l'ordine non conta.
-      for (const { name } of tables) {
-        await tx`delete from ${tx('public.' + name)} where id_tenant = ${found.id}`
+      const deleted = []
+      for (const slug of slugs) {
+        const [found] = await tx`select id::text as id, slug, is_template as "isTemplate" from public.tenant where slug = ${slug}`
+        if (!found) {
+          deleted.push([slug, false])
+          continue
+        }
+        if (found.slug === 'default' || found.isTemplate) {
+          throw new Error(`Il tenant ${slug} non si cancella: il predefinito e il modello vivono in ogni database`)
+        }
+        // La RLS forzata vale anche per il proprietario (MTF-DEC-4): il tenant va impostato.
+        await tx`select set_config('app.tenant_id', ${found.id}, true)`
+        // Le chiavi esterne fra tabelle di tenant sono tutte in cascata: l'ordine non conta.
+        for (const { name } of tables) {
+          await tx`delete from ${tx('public.' + name)} where id_tenant = ${found.id}`
+        }
+        await tx`delete from public.tenant_host where id_tenant = ${found.id}`
+        await tx`delete from public.tenant where id = ${found.id}`
+        deleted.push([slug, true])
       }
-      await tx`delete from public.tenant_host where id_tenant = ${found.id}`
-      await tx`delete from public.tenant where id = ${found.id}`
-      return true
+      return deleted
     })
-    console.log(deleted ? `Tenant cancellato: ${slug}` : `Nessun tenant ${slug}: niente da cancellare`)
+    for (const [slug, deleted] of outcomes) {
+      console.log(deleted ? `Tenant cancellato: ${slug}` : `Nessun tenant ${slug}: niente da cancellare`)
+    }
   } finally {
     await sql.end({ timeout: 5 })
   }
@@ -831,7 +841,7 @@ const supported = new Set([
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug>')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...]')
   process.exit(2)
 }
 

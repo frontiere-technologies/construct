@@ -6,30 +6,16 @@ Funzionalita' a un utente senza permettergli di creare, modificare o eliminare v
 Il ruolo si crea e si cancella con SQL diretto sul database di test, non dall'interfaccia: la
 concessione e' il dato in prova, non il modo di farla.
 """
-import subprocess
-from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
 from playwright.sync_api import expect
 
-from helpers import grid_rows, nav
+from helpers import grid_rows, nav, run_sql
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 ROLE_NAME = "zzz_e2e_sola_lettura"
 ROLE_TYPE_SERVICE = 2
-
-
-def _sql(query: str) -> None:
-    try:
-        subprocess.run(
-            ["node", "sources/devops/db/db.mjs", "test-query", query],
-            cwd=REPO_ROOT, check=True, capture_output=True, text=True,
-        )
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(
-            f"test-query failed: {query}\nstdout: {e.stdout}\nstderr: {e.stderr}"
-        ) from e
+READER_CODES = ("read-menu", "read-roles", "read-languages")
 
 
 def _assert_sent_home(page, base_url) -> None:
@@ -38,37 +24,44 @@ def _assert_sent_home(page, base_url) -> None:
     assert urlparse(page.url).path == "/"
 
 
-def _grant(code: str, role: str = ROLE_NAME) -> None:
-    _sql(
+# Le istruzioni si scrivono come testo e si mandano insieme: ogni `run_sql` e' un processo node e
+# una connessione nuova, quindi una preparazione o una pulizia e' una chiamata sola.
+
+def _grant(code: str, role: str = ROLE_NAME) -> str:
+    return (
         "insert into role_permission (id_role, id_permission) "
         f"select r.id_role, p.id_permission from role r, permission p "
-        f"where r.description = '{role}' and p.code = '{code}' on conflict do nothing"
+        f"where r.description = '{role}' and p.code = '{code}' on conflict do nothing;"
     )
 
 
-def _revoke(code: str) -> None:
-    _sql(
+def _revoke(code: str) -> str:
+    return (
         "delete from role_permission "
         f"where id_role = (select id_role from role where description = '{ROLE_NAME}') "
-        f"and id_permission = (select id_permission from permission where code = '{code}')"
+        f"and id_permission = (select id_permission from permission where code = '{code}');"
     )
 
 
-@pytest.fixture
+def _create_role_for(email: str, role: str, codes) -> str:
+    """Il ruolo di servizio `role`, assegnato a `email`, con le concessioni `codes`."""
+    return (
+        f"insert into role (description, id_role_type) values ('{role}', {ROLE_TYPE_SERVICE});"
+        "insert into user_role (user_id, id_role) "
+        f"select u.id, r.id_role from users u, role r where u.email = '{email}' and r.description = '{role}';"
+        + "".join(_grant(code, role) for code in codes)
+    )
+
+
+@pytest.fixture(scope="module")
 def read_only_role(test_email_user):
-    _sql(f"delete from role where description = '{ROLE_NAME}'")
-    _sql(f"insert into role (description, id_role_type) values ('{ROLE_NAME}', {ROLE_TYPE_SERVICE})")
+    """Il lettore, una volta per il modulo: nessun test lo cambia, tranne quello della revoca, che
+    rimette la concessione tolta prima di finire."""
+    run_sql(f"delete from role where description = '{ROLE_NAME}';" + _create_role_for(test_email_user, ROLE_NAME, READER_CODES))
     try:
-        _sql(
-            "insert into user_role (user_id, id_role) "
-            f"select u.id, r.id_role from users u, role r "
-            f"where u.email = '{test_email_user}' and r.description = '{ROLE_NAME}'"
-        )
-        for code in ("read-menu", "read-roles", "read-languages"):
-            _grant(code)
         yield
     finally:
-        _sql(f"delete from role where description = '{ROLE_NAME}'")
+        run_sql(f"delete from role where description = '{ROLE_NAME}'")
 
 
 def test_reader_sees_functionalities_without_edit_controls(non_admin_page, base_url, read_only_role):
@@ -108,9 +101,13 @@ def test_reader_without_read_users_is_kept_out(non_admin_page, base_url, read_on
 def test_revocation_takes_effect_without_new_login(non_admin_page, base_url, read_only_role):
     nav(non_admin_page, f"{base_url}/functionalities")
     assert "/functionalities" in non_admin_page.url
-    _revoke("read-menu")
-    nav(non_admin_page, f"{base_url}/functionalities")
-    _assert_sent_home(non_admin_page, base_url)
+    run_sql(_revoke("read-menu"))
+    try:
+        nav(non_admin_page, f"{base_url}/functionalities")
+        _assert_sent_home(non_admin_page, base_url)
+    finally:
+        # Il ruolo e' del modulo: i test dopo questo lo vogliono intero.
+        run_sql(_grant("read-menu"))
 
 
 def test_administrator_still_sees_edit_controls(logged_in_page, base_url):
@@ -147,24 +144,21 @@ def delegated_manager(test_email_user):
     """Un gestore delegato: assegna ruoli e concede permessi, ma solo quelli che ha (DEC-6, DEC-29).
 
     Accanto, un ruolo di servizio vuoto su cui provare la pagina di dettaglio.
+
+    Il lettore di `read_only_role` (del modulo) puo' essere ancora assegnato alla stessa persona:
+    aggiunge soltanto read-languages ai codici del gestore, e nessuna verifica qui sotto ne dipende
+    (l'Amministratore e manage-menu restano fuori dalla sua portata, il ruolo vuoto e read-menu dentro).
     """
     roles = f"('{MANAGER_ROLE}', '{TARGET_ROLE}')"
-    _sql(f"delete from role where description in {roles}")
-    _sql(
-        "insert into role (description, id_role_type) values "
-        f"('{MANAGER_ROLE}', {ROLE_TYPE_SERVICE}), ('{TARGET_ROLE}', {ROLE_TYPE_SERVICE})"
+    run_sql(
+        f"delete from role where description in {roles};"
+        + _create_role_for(test_email_user, MANAGER_ROLE, MANAGER_CODES)
+        + f"insert into role (description, id_role_type) values ('{TARGET_ROLE}', {ROLE_TYPE_SERVICE});"
     )
     try:
-        _sql(
-            "insert into user_role (user_id, id_role) "
-            f"select u.id, r.id_role from users u, role r "
-            f"where u.email = '{test_email_user}' and r.description = '{MANAGER_ROLE}'"
-        )
-        for code in MANAGER_CODES:
-            _grant(code, MANAGER_ROLE)
         yield
     finally:
-        _sql(f"delete from role where description in {roles}")
+        run_sql(f"delete from role where description in {roles}")
 
 
 def _role_id(page, base_url, name: str) -> int:

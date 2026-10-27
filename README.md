@@ -549,7 +549,7 @@ node sources/devops/db/db.mjs test-tenant-member-add --slug e2e-b --email <email
 node sources/devops/db/db.mjs test-tenant-delete --slug e2e-a
 ```
 
-`test-tenant-member-add` gives the person an active membership (creating the account if missing): the base role only, or also the tenant administrator role with `--admin`. `test-tenant-delete` removes every row of the tenant from the tenant tables, its addresses and the tenant itself; a tenant that does not exist is not an error, and the default tenant and the template are refused. `test-reset-e2e` also clears the last used tenant of the two E2E accounts.
+`test-tenant-member-add` gives the person an active membership (creating the account if missing): the base role only, or also the tenant administrator role with `--admin`. `test-tenant-delete` removes every row of the tenant from the tenant tables, its addresses and the tenant itself; a tenant that does not exist is not an error, and the default tenant and the template are refused. `--slug` can be repeated to remove several tenants in one transaction (one process and one connection instead of one per tenant). `test-reset-e2e` also clears the last used tenant of the two E2E accounts.
 
 ### Test in locale con Postgres in Docker
 
