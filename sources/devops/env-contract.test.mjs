@@ -162,7 +162,7 @@ test('every variable the code reads is documented in a template', () => {
  * exact reason — it used to sit in .env.test.local, which put an owner-level
  * connection string in the E2E application's environment.
  */
-const OPERATOR_CREDENTIAL = /^(TEST_)?(MIGRATION_DATABASE_URL|CONSTRUCT_RUNTIME_DB_)/
+const OPERATOR_CREDENTIAL = /^(TEST_)?(MIGRATION_DATABASE_URL|CONSTRUCT_(RUNTIME|PLATFORM)_DB_)/
 
 test('operator credentials appear only in the operator template', () => {
   // The Next template says it in prose; this makes it enforceable. Putting a

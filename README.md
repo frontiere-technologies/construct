@@ -216,6 +216,45 @@ outside the boundary:
 node sources/devops/db/db.mjs boundary-check
 ```
 
+### Identità di piattaforma
+
+La console di piattaforma (creare tenant, indirizzi, sospensioni) scrive `tenant`, `tenant_host` e
+crea tenant dal modello: tabelle che il ruolo dell'app (`construct_runtime`) può solo leggere, e la
+regola del pezzo 1 vieta le funzioni `security definer`. Per questo esiste un'identità di database
+separata, `construct_platform`: un login **membro di `construct_owner` con `NOINHERIT`**, senza
+`BYPASSRLS`, superutente, `createrole` né `createdb`. Da solo non ha alcun privilegio: la usa solo
+`withPlatform` (`sources/microservices/web-construct/lib/platform/db.ts`), che apre una transazione e
+come prima istruzione fa `set local role construct_owner` (e, se serve, imposta il tenant, perché la
+RLS forzata vale anche per il proprietario). Ogni porta della console verifica che la persona sia
+amministratore di piattaforma **prima** di chiamare `withPlatform`, e `guards/platform-boundary.test.ts`
+fa fallire il test se un file fuori da `lib/platform/` importa quel modulo.
+
+Si crea con l'identità delle migrazioni, dopo le migrazioni (è la `0002` a creare `construct_owner`),
+come il login runtime, e si può rilanciare senza danni; rifiuta un login già esistente con
+appartenenze, oggetti o privilegi in più:
+
+```bash
+export MIGRATION_DATABASE_URL='postgresql://...operator-only...'
+export CONSTRUCT_PLATFORM_DB_USER='construct_platform'
+export CONSTRUCT_PLATFORM_DB_PASSWORD='<at-least-24-random-characters>'
+node sources/devops/db/db.mjs provision-platform-role
+```
+
+Le due variabili `CONSTRUCT_PLATFORM_DB_*` sono credenziali da operatore: vanno solo in
+`sources/devops/db/operator.env`, mai nei file letti da Next. L'app legge invece
+`PLATFORM_DATABASE_URL` (la stringa di connessione di quel login, documentata in
+`.env.template`) ed è **facoltativa**: senza, l'app parte e solo le porte della console rispondono
+con un errore chiaro. Nei test di integrazione al suo posto c'è `TEST_PLATFORM_DATABASE_URL`, con le
+stesse protezioni di `TEST_DATABASE_URL` (database usa-e-getta confermato, diverso da quello di
+sviluppo); `local-test-db.sh up` e il job `database-and-e2e` creano `construct_platform` accanto a
+`construct_app`.
+
+`boundary-check` lo verifica dove esiste: login senza attributi privilegiati, membro solo di
+`construct_owner` con `NOINHERIT`, senza privilegi diretti né oggetti propri, e il login dell'app non
+ne è membro (nemmeno di `construct_owner`). Dove non è configurato e il ruolo non c'è (per esempio un database
+che non ha ancora la console) la sonda lo segnala come `skip` e passa; se
+`CONSTRUCT_PLATFORM_DB_USER` è impostata ma il ruolo manca, fallisce.
+
 ### Migration checksums
 
 Every applied migration is recorded in `public.construct_schema_migration` together with a
@@ -553,7 +592,7 @@ node sources/devops/db/db.mjs test-tenant-delete --slug e2e-a
 
 ### Test in locale con Postgres in Docker
 
-Facoltativo: il database di test predefinito resta quello remoto su Supabase. Con un Postgres sul Mac l'integrazione passa da minuti a circa 30 secondi. Il database si prepara come nel job `database-and-e2e` di `.github/workflows/quality.yml`: stessa immagine (`postgres:17`), tabella `users` di prima delle migrazioni, `test-apply`, login limitato `construct_app` con `provision-runtime-role` e i due account E2E. Serve Docker Desktop acceso.
+Facoltativo: il database di test predefinito resta quello remoto su Supabase. Con un Postgres sul Mac l'integrazione passa da minuti a circa 30 secondi. Il database si prepara come nel job `database-and-e2e` di `.github/workflows/quality.yml`: stessa immagine (`postgres:17`), tabella `users` di prima delle migrazioni, `test-apply`, login limitato `construct_app` con `provision-runtime-role`, l'identità di piattaforma `construct_platform` con `provision-platform-role` (vedi [Identità di piattaforma](#identità-di-piattaforma)) e i due account E2E. Serve Docker Desktop acceso.
 
 ```bash
 sources/devops/db/local-test-db.sh up       # avvia e prepara (si può rilanciare)

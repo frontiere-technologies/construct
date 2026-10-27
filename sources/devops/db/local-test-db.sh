@@ -8,7 +8,8 @@
 #   local-test-db.sh down    destroy the container and its data
 #   local-test-db.sh status  container state and what the database contains
 #
-# Credentials come from local-test.env next to this file; the two E2E accounts from the
+# Credentials come from local-test.env next to this file (the runtime login construct_app and the
+# platform login construct_platform); the two E2E accounts from the
 # environment or, failing that, from sources/tests/e2e/.env.test (the same lookup conftest.py does).
 set -euo pipefail
 
@@ -85,6 +86,16 @@ prepare() {
     CONSTRUCT_RUNTIME_DB_PASSWORD="${BASH_REMATCH[2]}" \
     node "$repo_root/sources/devops/db/db.mjs" provision-runtime-role
 
+  # Same shape, for the platform identity: NOINHERIT member of construct_owner (construct_owner is
+  # created by migration 0002 as well, so this follows the migrations too).
+  [[ "$TEST_PLATFORM_DATABASE_URL" =~ ^postgresql://([^:@/]+):([^@]+)@ ]] \
+    || die "TEST_PLATFORM_DATABASE_URL in $env_file must carry user and password"
+  log "provision-platform-role (${BASH_REMATCH[1]})"
+  MIGRATION_DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" \
+    CONSTRUCT_PLATFORM_DB_USER="${BASH_REMATCH[1]}" \
+    CONSTRUCT_PLATFORM_DB_PASSWORD="${BASH_REMATCH[2]}" \
+    node "$repo_root/sources/devops/db/db.mjs" provision-platform-role
+
   local admin user
   admin="$(e2e_value TEST_EMAIL)"
   user="$(e2e_value TEST_EMAIL_USER)"
@@ -134,6 +145,7 @@ status() {
   fi
   log "migrations applied: $(psql_super "select count(*) from construct_schema_migration where completed_at is not null")"
   log "runtime login construct_app: $(psql_super "select case when exists (select 1 from pg_roles where rolname = 'construct_app') then 'present' else 'missing' end")"
+  log "platform login construct_platform: $(psql_super "select case when exists (select 1 from pg_roles where rolname = 'construct_platform') then 'present' else 'missing' end")"
   log "users: $(psql_super "select count(*) from users")"
 }
 

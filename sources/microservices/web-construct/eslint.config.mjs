@@ -11,6 +11,14 @@ const TESTING_PATHS = [
   { name: '@/lib/db/testing', message: 'Gli helper di lib/db/testing scrivono come proprietario, fuori dal confine del tenant: si importano solo nei file di test.' },
 ]
 
+// L'identità di piattaforma (specifica 2026-10-26, §2.2, MT5-RISK-1): membro di construct_owner, la
+// apre solo lib/platform/db.ts. La guardia vera è guards/platform-boundary.test.ts; questa regola
+// la segnala mentre si scrive.
+const PLATFORM_PATHS = [
+  { name: '@/lib/platform/db', message: 'L\'identità di piattaforma (withPlatform) si importa solo da lib/platform/: ogni porta della console controlla prima l\'amministratore di piattaforma.' },
+  { name: '@/lib/db/platform-database', message: 'Il client dell\'identità di piattaforma lo importa solo lib/platform/db.ts.' },
+]
+
 const config = [
   ...coreWebVitals,
   ...typescript,
@@ -64,6 +72,7 @@ const config = [
           { name: 'drizzle-orm/postgres-js', message: 'Il driver si usa solo in lib/db/: passa da withTenant o withGlobal (@/lib/db/tenant-db).' },
           { name: '@/lib/db/client', message: 'Il client si usa solo in lib/db/: passa da withTenant o withGlobal (@/lib/db/tenant-db).' },
           ...TESTING_PATHS,
+          ...PLATFORM_PATHS,
         ],
         patterns: [{
           group: ['../*', '../**'],
@@ -160,7 +169,26 @@ const config = [
     files: ['lib/db/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', {
-        paths: TESTING_PATHS,
+        paths: [...TESTING_PATHS, ...PLATFORM_PATHS.filter(path => path.name !== '@/lib/db/platform-database')],
+        patterns: [{
+          group: ['../*', '../**'],
+          message: 'Niente risalita nei percorsi relativi: usa l\'alias @/ fra feature, e i relativi (./) solo dentro lo stesso modulo locale.',
+        }],
+      }],
+    },
+  },
+  {
+    // Il modulo della piattaforma: importa il client dell'identità e se stesso (nei sottomoduli), ma
+    // né il driver né gli helper di test.
+    files: ['lib/platform/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [
+          { name: 'postgres', message: 'Il driver si usa solo in lib/db/: passa da withPlatform (@/lib/platform/db).' },
+          { name: 'drizzle-orm/postgres-js', message: 'Il driver si usa solo in lib/db/: passa da withPlatform (@/lib/platform/db).' },
+          { name: '@/lib/db/client', message: 'Il client si usa solo in lib/db/: passa da withPlatform (@/lib/platform/db).' },
+          ...TESTING_PATHS,
+        ],
         patterns: [{
           group: ['../*', '../**'],
           message: 'Niente risalita nei percorsi relativi: usa l\'alias @/ fra feature, e i relativi (./) solo dentro lo stesso modulo locale.',

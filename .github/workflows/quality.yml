@@ -169,6 +169,27 @@ jobs:
           CONSTRUCT_RUNTIME_DB_USER=construct_app \
           CONSTRUCT_RUNTIME_DB_PASSWORD=construct-app-ci-runtime-password \
           node sources/devops/db/db.mjs provision-runtime-role
+      - name: Verify platform provisioning rejects an overprivileged existing login
+        run: |
+          node sources/devops/db/db.mjs test-query "create role construct_overprivileged_platform login; grant create on schema public to construct_overprivileged_platform;"
+          if MIGRATION_DATABASE_URL="$TEST_DATABASE_URL" \
+            CONSTRUCT_PLATFORM_DB_USER=construct_overprivileged_platform \
+            CONSTRUCT_PLATFORM_DB_PASSWORD=ci-platform-password-at-least-24 \
+            node sources/devops/db/db.mjs provision-platform-role; then
+            echo "unsafe existing platform login was accepted"
+            exit 1
+          fi
+          node sources/devops/db/db.mjs test-query "revoke create on schema public from construct_overprivileged_platform; drop role construct_overprivileged_platform;"
+      - name: Provision the platform login used by the integration suite
+        # L'identità di piattaforma (specifica 2026-10-26, §2.2): NOINHERIT membro di
+        # construct_owner, creato dalla 0002 come construct_runtime, quindi anche questo
+        # passo gira dopo le migrazioni. La password deve combaciare con quella di
+        # TEST_PLATFORM_DATABASE_URL nel passo "Run database integration tests".
+        run: |
+          MIGRATION_DATABASE_URL="$TEST_DATABASE_URL" \
+          CONSTRUCT_PLATFORM_DB_USER=construct_platform \
+          CONSTRUCT_PLATFORM_DB_PASSWORD=construct-platform-ci-password \
+          node sources/devops/db/db.mjs provision-platform-role
       - name: Verify legacy administrators survived migration
         run: >-
           node sources/devops/db/db.mjs test-query
@@ -197,6 +218,8 @@ jobs:
         # fixture, ruoli e semi con db.mjs test-query.
         env:
           TEST_DATABASE_URL: postgresql://construct_app:construct-app-ci-runtime-password@127.0.0.1:5432/construct_test
+          # Il login di piattaforma: l'unico altro che la suite apre (lib/platform/db.ts).
+          TEST_PLATFORM_DATABASE_URL: postgresql://construct_platform:construct-platform-ci-password@127.0.0.1:5432/construct_test
         run: npm run test:integration
         working-directory: sources/microservices/web-construct
       - run: uv sync --locked

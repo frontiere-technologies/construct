@@ -188,17 +188,28 @@ async function runMigrations(connectionUrl, { to } = {}) {
   }
 }
 
-async function provisionRuntimeRole() {
-  const username = process.env.CONSTRUCT_RUNTIME_DB_USER
-  const password = process.env.CONSTRUCT_RUNTIME_DB_PASSWORD
+/**
+ * Un login di servizio per l'app, creato o riallineato da zero ogni volta (idempotente). Il ruolo
+ * runtime e quello di piattaforma hanno la stessa forma e differiscono in due cose: il ruolo di cui
+ * il login è l'unico membro (`construct_runtime` o `construct_owner`) e se lo eredita (il login
+ * runtime sì, quello di piattaforma NO: senza `set local role` non ha alcun privilegio, §2.2).
+ * Un login già esistente con altre appartenenze, oggetti, privilegi diretti o ACL predefinite viene
+ * rifiutato, mai ripulito in silenzio.
+ */
+async function provisionServiceLogin({ label, userVariable, passwordVariable, groupRole, inheritsGroup, forbiddenName }) {
+  const username = process.env[userVariable]
+  const password = process.env[passwordVariable]
   if (!username || !/^[a-z_][a-z0-9_]{0,62}$/.test(username)) {
-    throw new Error('CONSTRUCT_RUNTIME_DB_USER must be a valid PostgreSQL role name')
+    throw new Error(`${userVariable} must be a valid PostgreSQL role name`)
   }
   if (!password || password.length < 24) {
-    throw new Error('CONSTRUCT_RUNTIME_DB_PASSWORD must contain at least 24 characters')
+    throw new Error(`${passwordVariable} must contain at least 24 characters`)
   }
-  if (username === 'construct_runtime') {
-    throw new Error('CONSTRUCT_RUNTIME_DB_USER must be a login role, not construct_runtime')
+  if (username === forbiddenName) {
+    throw new Error(`${userVariable} must be a login role, not ${forbiddenName}`)
+  }
+  if (username === 'construct_runtime' || username === 'construct_owner') {
+    throw new Error(`${userVariable} must be a login role, not ${username}`)
   }
 
   const sql = postgres(migrationDatabaseUrl(), { prepare: false, connect_timeout: 30, idle_timeout: 5 })
@@ -210,7 +221,7 @@ async function provisionRuntimeRole() {
         from pg_auth_members membership
         join pg_roles member on member.oid = membership.member
         join pg_roles granted on granted.oid = membership.roleid
-        where member.rolname = ${username} and granted.rolname <> 'construct_runtime'
+        where member.rolname = ${username} and granted.rolname <> ${groupRole}
       `
       const ownedObjects = await sql`
         select 'database' as kind from pg_database d join pg_roles r on r.oid = d.datdba where r.rolname = ${username}
@@ -249,20 +260,52 @@ async function provisionRuntimeRole() {
         limit 1
       `
       if (unexpectedMemberships.length || ownedObjects.length || directGrants.length || directAclGrants.length) {
-        throw new Error('existing runtime login has unexpected memberships, ownership, direct grants, or default ACLs')
+        throw new Error(`existing ${label} login has unexpected memberships, ownership, direct grants, or default ACLs`)
       }
     }
     const passwordLiteral = password.replaceAll("'", "''")
-    if (exists.length) {
-      await sql.unsafe(`alter role "${username}" login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls password '${passwordLiteral}'`)
-    } else {
-      await sql.unsafe(`create role "${username}" login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls password '${passwordLiteral}'`)
-    }
-    await sql.unsafe(`grant construct_runtime to "${username}"`)
-    console.log(`provisioned limited runtime login ${username}`)
+    const inheritance = inheritsGroup ? 'inherit' : 'noinherit'
+    const verb = exists.length ? 'alter' : 'create'
+    await sql.unsafe(`${verb} role "${username}" login ${inheritance} nosuperuser nocreatedb nocreaterole noreplication nobypassrls password '${passwordLiteral}'`)
+    // Da PostgreSQL 16 l'ereditarietà è anche un'opzione della singola appartenenza, e un `grant` su
+    // un'appartenenza che esiste già non la cambia: la si dice esplicitamente.
+    const [{ version }] = await sql`select current_setting('server_version_num')::int as version`
+    await sql.unsafe(version >= 160000
+      ? `grant ${groupRole} to "${username}" with inherit ${inheritsGroup ? 'true' : 'false'}`
+      : `grant ${groupRole} to "${username}"`)
+    console.log(`provisioned limited ${label} login ${username}`)
   } finally {
     await sql.end({ timeout: 5 })
   }
+}
+
+async function provisionRuntimeRole() {
+  await provisionServiceLogin({
+    label: 'runtime',
+    userVariable: 'CONSTRUCT_RUNTIME_DB_USER',
+    passwordVariable: 'CONSTRUCT_RUNTIME_DB_PASSWORD',
+    groupRole: 'construct_runtime',
+    inheritsGroup: true,
+    forbiddenName: 'construct_runtime',
+  })
+}
+
+/**
+ * L'identità di piattaforma (specifica 2026-10-26, §2.2, MT5-RISK-1): il login con cui la console
+ * scrive `tenant`, `tenant_host` e crea tenant dal modello. Membro di construct_owner con NOINHERIT:
+ * da solo non ha alcun privilegio, e solo `withPlatform` (lib/platform/db.ts) passa a construct_owner
+ * con `set local role`. Senza BYPASSRLS, senza superutente, senza createrole né createdb. Come il
+ * login runtime si crea dopo le migrazioni (construct_owner lo crea la 0002) e si può rilanciare.
+ */
+async function provisionPlatformRole() {
+  await provisionServiceLogin({
+    label: 'platform',
+    userVariable: 'CONSTRUCT_PLATFORM_DB_USER',
+    passwordVariable: 'CONSTRUCT_PLATFORM_DB_PASSWORD',
+    groupRole: 'construct_owner',
+    inheritsGroup: false,
+    forbiddenName: 'construct_owner',
+  })
 }
 
 /**
@@ -285,7 +328,9 @@ async function provisionRuntimeRole() {
  * function), and how the tenant boundary is closed (every table classified, row level
  * security forced; on every tenant table id_tenant, its foreign key and default, both
  * tenant policies, the leading index and the composite keys; on every global table the
- * policy and grants of its class). The tenant and global probes are the same queries as
+ * policy and grants of its class). Where the platform identity (construct_platform) exists,
+ * it is held to its own shape too: a NOINHERIT member of construct_owner and nothing else, no
+ * privileged attribute, no direct grant, owns nothing; and the connection is never a member of it. The tenant and global probes are the same queries as
  * the contract test, copied: the two are deliberate duplicates in two runtimes and will
  * drift if edited apart. Change one, change the other: the contract test is
  * lib/schema-contract.integration.test.ts.
@@ -357,6 +402,89 @@ async function boundaryCheck() {
       'construct_owner exists without BYPASSRLS, login and superuser',
       Boolean(ownerRole) && !ownerRole.rolbypassrls && !ownerRole.rolcanlogin && !ownerRole.rolsuper,
     )
+    // L'identità di piattaforma (specifica 2026-10-26, §2.2, MT5-RISK-1) esiste solo dove è stata
+    // configurata: dove non lo è e il ruolo non c'è, la sonda lo dice e passa; dove c'è (o dove
+    // CONSTRUCT_PLATFORM_DB_USER la dà per configurata) si pretende tutto, e il login dell'app non
+    // ne è mai membro. Per nome attraverso pg_roles, come sopra: nessun cast a regrole.
+    const platformConfigured = Boolean(process.env.CONSTRUCT_PLATFORM_DB_USER)
+    const platformName = process.env.CONSTRUCT_PLATFORM_DB_USER || 'construct_platform'
+    const [platformRole] = await sql`
+      select oid::int8 as oid, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
+      from pg_roles where rolname = ${platformName}
+    `
+    if (!platformRole) {
+      if (platformConfigured) report(`the platform identity ${platformName} exists`, false, 'configured but absent: run provision-platform-role')
+      else console.log('  skip  the platform identity: not configured and absent (no console on this database)')
+    } else {
+      const platformAttributes = ['rolsuper', 'rolcreatedb', 'rolcreaterole', 'rolreplication', 'rolbypassrls']
+        .filter(attribute => platformRole[attribute])
+      report(
+        'the platform identity is a login without privileged role attributes',
+        platformRole.rolcanlogin && !platformAttributes.length,
+        platformRole.rolcanlogin ? platformAttributes.join(', ') : 'it cannot log in',
+      )
+      // Da PostgreSQL 16 l'ereditarietà è un'opzione dell'appartenenza (inherit_option); prima è
+      // l'attributo del ruolo. to_jsonb lascia la sonda valida su entrambe.
+      const platformMemberships = await sql`
+        select distinct granted.rolname as granted,
+          coalesce((to_jsonb(membership) ->> 'inherit_option')::boolean, member.rolinherit) as inherits
+        from pg_auth_members membership
+        join pg_roles member on member.oid = membership.member
+        join pg_roles granted on granted.oid = membership.roleid
+        where member.rolname = ${platformName}
+        order by granted.rolname
+      `
+      const platformGranted = [...new Set(platformMemberships.map(row => row.granted))]
+      report(
+        'the platform identity is a member of construct_owner and nothing else',
+        platformGranted.length === 1 && platformGranted[0] === 'construct_owner',
+        platformGranted.join(', ') || '(no memberships)',
+      )
+      report(
+        'the platform identity does not inherit construct_owner (NOINHERIT: no privileges before set local role)',
+        platformMemberships.length > 0 && platformMemberships.every(row => row.inherits === false),
+        platformMemberships.filter(row => row.inherits !== false).map(row => row.granted).join(', '),
+      )
+      // Dal catalogo e non da information_schema: quest'ultimo mostra solo i privilegi che chi si
+      // collega può vedere, e il login dell'app non vede quelli di un altro ruolo.
+      const platformDirect = await sql`
+        select 'table' as source from pg_class c cross join lateral aclexplode(c.relacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'column' from pg_attribute a cross join lateral aclexplode(a.attacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'routine' from pg_proc p cross join lateral aclexplode(p.proacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'schema' from pg_namespace n cross join lateral aclexplode(n.nspacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'database' from pg_database d cross join lateral aclexplode(d.datacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'default' from pg_default_acl x cross join lateral aclexplode(x.defaclacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'owns table' from pg_class c where c.relowner = ${platformRole.oid}::oid
+        union all select 'owns function' from pg_proc p where p.proowner = ${platformRole.oid}::oid
+        union all select 'owns schema' from pg_namespace n where n.nspowner = ${platformRole.oid}::oid
+      `
+      const platformDirectCounts = [...platformDirect.reduce((counts, row) => {
+        counts.set(row.source, (counts.get(row.source) ?? 0) + 1)
+        return counts
+      }, new Map())].map(([source, count]) => `${source}×${count}`)
+      report('the platform identity holds no direct grants and owns nothing', !platformDirect.length, platformDirectCounts.join(', '))
+    }
+    // Il login dell'app non diventa mai construct_owner né l'identità di piattaforma, nemmeno per via
+    // indiretta (pg_has_role segue le catene di appartenenza).
+    const reachable = await sql`
+      select r.rolname as name
+      from pg_roles r
+      where r.rolname = any(${['construct_owner', platformName]}::name[]) and r.rolname <> current_user
+        and pg_has_role(current_user, r.oid, 'MEMBER')
+      order by 1
+    `
+    report(
+      'the connection is a member of neither construct_owner nor the platform identity',
+      !reachable.length,
+      reachable.map(row => row.name).join(', '),
+    )
+
     // Il proprietario si cerca per nome attraverso pg_roles e non con un cast a regrole: il cast
     // fa abortire l'intero comando dove construct_owner non esiste ancora, e la sonda deve
     // invece dire FAIL.
@@ -897,6 +1025,7 @@ const [command, argument, ...extraArguments] = process.argv.slice(2)
 const supported = new Set([
   'apply',
   'boundary-check',
+  'provision-platform-role',
   'provision-runtime-role',
   'query',
   'schema-check',
@@ -914,7 +1043,7 @@ const supported = new Set([
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...]')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | provision-platform-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...]')
   process.exit(2)
 }
 
@@ -926,6 +1055,7 @@ try {
   else if (command === 'apply') await runMigrations(migrationDatabaseUrl(), parseApplyArguments(commandArguments))
   else if (command === 'boundary-check') await boundaryCheck()
   else if (command === 'provision-runtime-role') await provisionRuntimeRole()
+  else if (command === 'provision-platform-role') await provisionPlatformRole()
   else if (command === 'test-apply') await runMigrations(testMigrationDatabaseUrl(), parseApplyArguments(commandArguments))
   else if (command === 'tenant-create') await runTenantCreate(migrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
   else if (command === 'test-tenant-create') await runTenantCreate(testMigrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
