@@ -659,6 +659,29 @@ describeIntegration('support access only with the tenant consent (MT5-DEC-10, MT
       await wakeUp(second.parked, second.tenant)
     }, 90_000)
 
+    it('the tenant stops seeing support in progress when the person is no longer an active platform admin, and the token stops too', async () => {
+      const { tenant, parked } = await enterAndPark('dormant-actor')
+      const setAccount = (values: { isPlatformAdmin?: boolean; idUserStatus?: number }) =>
+        withOwner(tx => tx.update(users).set(values).where(eq(users.id, platformAdmin.id)))
+      try {
+        // Esce dal browser senza «Esci», e poi perde l'attributo: l'ingresso resta nel registro, ma nessuno è più dentro.
+        await setAccount({ isPlatformAdmin: false })
+        expect(await withTenant(tenant, tx => readSupportInProgress(tx))).toBe(false)
+        mocks.who = platformAdmin
+        mocks.token = { ...parked }
+        expect((await nextRequest()).tenantState).not.toBe('support')
+        // Riavuto l'attributo con la stessa voce ancora aperta, la porta e le impostazioni dicono di nuovo la stessa cosa.
+        await setAccount({ isPlatformAdmin: true })
+        expect(await withTenant(tenant, tx => readSupportInProgress(tx))).toBe(true)
+
+        // Un account disattivato a livello globale vale come chi ha perso l'attributo.
+        await setAccount({ idUserStatus: 1 })
+        expect(await withTenant(tenant, tx => readSupportInProgress(tx))).toBe(false)
+      } finally {
+        await setAccount({ isPlatformAdmin: true, idUserStatus: 2 })
+      }
+    }, 60_000)
+
     it('extending the consent during support ends support at the next request; entering again works', async () => {
       const { tenant, admin } = await enterAndPark('extend')
       const live = { ...mocks.token }

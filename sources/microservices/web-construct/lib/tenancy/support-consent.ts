@@ -42,6 +42,10 @@ export async function readSupportConsent(tx: ConsentTx): Promise<{ until: string
  * - Nessuna uscita della stessa persona dopo di lei, e nessuna revoca né cambio di stato del tenant
  *   (`support.revoke`, `tenant.status`) dopo di lei: chiudono l'ingresso anche se nessuna richiesta
  *   della piattaforma è passata nel frattempo, e un token rimasto fermo non riprende più.
+ * - Chi è entrato è ancora un amministratore di piattaforma con l'account attivo: chi ha chiuso il
+ *   browser senza «Esci» e poi ha perso l'attributo (o l'account) non è più dentro, e le impostazioni
+ *   del tenant non devono dirlo per una settimana. È la stessa condizione che il token controlla
+ *   (`supportConditionsHold`), qui nella regola unica: un'istruzione sola, nessun viaggio in più.
  *
  * Gli alias `e`, `s`, `t` sono quelli delle istruzioni che la usano.
  */
@@ -52,6 +56,10 @@ const ENTRY_STILL_OPEN = sql`(
     where x.id_tenant = e.id_tenant and x.id > e.id
       and ((x.operation = 'support.exit' and x.actor_user_id = e.actor_user_id)
         or x.operation in ('support.revoke', 'tenant.status'))
+  )
+  and exists (
+    select 1 from public.users u
+    where u.id = e.actor_user_id and u.is_platform_admin and u.id_user_status = ${ACTIVE_USER_STATUS}
   )
 )`
 
