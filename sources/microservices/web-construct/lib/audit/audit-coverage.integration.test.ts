@@ -825,4 +825,3 @@ describeIntegration('every door that writes records its audit row in the same tr
     for (const { token } of tokens) expect(serialized).not.toContain(token)
   })
 })
-
