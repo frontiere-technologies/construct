@@ -385,6 +385,18 @@ describe('TenantDetail: support', () => {
     expect(load).not.toHaveBeenCalled()
   })
 
+  // Fix round 1: il permesso revocato fra il clic e l'aggiornamento della sessione. L'azione è riuscita a
+  // metà (la sessione non è in assistenza): niente home del tenant, l'errore generico.
+  it('an entry that did not reach the support state shows the error and stays on the page', async () => {
+    enter.mockResolvedValue({ state: 'none' })
+    render(CONSENT)
+    await click(need('platform.support.enter'))
+    type(dialog().querySelector('textarea')!, 'motivo')
+    await click(need('platform.support.enter_submit'))
+    expect(alertText()).toBe('platform.support.enter_error')
+    expect(load).not.toHaveBeenCalled()
+  })
+
   it.each(['suspended', 'archived'] as const)('in a %s tenant the consent does not open the door', status => {
     render({ ...CONSENT, status })
     expect(need('platform.support.enter').disabled).toBe(true)

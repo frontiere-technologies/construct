@@ -131,6 +131,17 @@ describe('ProtectedLayout', () => {
     expect(props.tenantSwitcher).toBeUndefined()
   })
 
+  // Fix round 1: anche se la persona della piattaforma è membro del tenant assistito, in assistenza
+  // non si cambia tenant dal selettore (il callback jwt lo ignorerebbe): si esce dalla fascia.
+  it('hides the tenant switcher in support state, also when the supported tenant is one of the person\'s own', async () => {
+    mocks.listAvailableTenants.mockResolvedValue([
+      { tenantId: tenantIdForTest(7), name: 'Acme', isAdmin: false },
+      { tenantId: tenantIdForTest(9), name: 'Beta', isAdmin: true },
+    ])
+    mocks.session = { user: { id: 'u1', roleIds: [1], tenantState: 'support', tenantName: 'Acme', supportUntil: null } }
+    expect((await renderLayout()).tenantSwitcher).toBeUndefined()
+  })
+
   it('renders no banner outside support', async () => {
     mocks.listAvailableTenants.mockResolvedValue([])
     mocks.session = { user: { id: 'u1', roleIds: [1], tenantState: 'ready' } }

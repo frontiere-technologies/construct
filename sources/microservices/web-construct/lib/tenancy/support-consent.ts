@@ -33,29 +33,46 @@ export async function readSupportConsent(tx: ConsentTx): Promise<{ until: string
 }
 
 /**
+ * La regola unica che dice se una voce d'ingresso `e` (`support.enter`) è ancora aperta, nel tenant
+ * `t` con le impostazioni `s` (MT5-RISK-2). La usano sia il token e l'attore (`selectSupportAccess`)
+ * sia la pagina delle impostazioni (`readSupportInProgress`), così non possono dire cose diverse.
+ *
+ * - Appartiene al permesso in corso: scritta dopo la sua concessione. Un permesso nuovo (anche solo
+ *   allungato) chiude gli ingressi di prima: chi era dentro esce e rientra con una voce nuova. Il
+ *   modello non ha permesso e non ha questa condizione.
+ * - Nessuna uscita della stessa persona dopo di lei, e nessuna revoca né cambio di stato del tenant
+ *   (`support.revoke`, `tenant.status`) dopo di lei: chiudono l'ingresso anche se nessuna richiesta
+ *   della piattaforma è passata nel frattempo, e un token rimasto fermo non riprende più.
+ *
+ * Gli alias `e`, `s`, `t` sono quelli delle istruzioni che la usano.
+ */
+const ENTRY_STILL_OPEN = sql`(
+  (t.is_template or e.occurred_at >= s.support_granted_at)
+  and not exists (
+    select 1 from public.tenant_audit_event x
+    where x.id_tenant = e.id_tenant and x.id > e.id
+      and ((x.operation = 'support.exit' and x.actor_user_id = e.actor_user_id)
+        or x.operation in ('support.revoke', 'tenant.status'))
+  )
+)`
+
+/**
  * Se c'è un'assistenza in corso nel tenant della transazione, per la pagina delle impostazioni
- * (§3.4): un ingresso della piattaforma senza un'uscita della stessa persona dopo di lui, né una
- * revoca né un cambio di stato del tenant (che fanno uscire), mentre il permesso vale. Lo si legge
- * dal registro del tenant, che il tenant vede. L'ingresso conta solo se è di questo permesso (dopo
- * la sua concessione) o se la scadenza che riportava non è ancora passata: chi chiude il browser
- * senza uscire non lascia un'assistenza «in corso» per sempre. È un'indicazione per chi guarda,
- * non un controllo: le porte decidono con la rivalidazione del token.
+ * (§3.4): un ingresso della piattaforma ancora aperto secondo `ENTRY_STILL_OPEN`, mentre il permesso
+ * vale. Lo si legge dal registro del tenant, che il tenant vede. Chi chiude il browser senza uscire
+ * resta «in corso» fino alla scadenza o a un permesso nuovo, come per la porta: le due letture
+ * seguono la stessa regola.
  */
 export async function readSupportInProgress(tx: TenantTx): Promise<boolean> {
   const [row] = await tx.execute<{ in_progress: boolean }>(sql`
     select exists (
       select 1
-      from public.tenant_settings s
-      join public.tenant_audit_event e on e.id_tenant = s.id_tenant
-      where s.id_tenant = app_private.current_tenant_id() and s.support_until > now()
+      from public.tenant t
+      join public.tenant_settings s on s.id_tenant = t.id
+      join public.tenant_audit_event e on e.id_tenant = t.id
+      where t.id = app_private.current_tenant_id() and s.support_until > now()
         and e.operation = 'support.enter' and e.actor_kind = 'platform'
-        and (e.occurred_at >= s.support_granted_at or (e.details->>'until')::timestamptz > now())
-        and not exists (
-          select 1 from public.tenant_audit_event x
-          where x.id_tenant = e.id_tenant and x.id > e.id
-            and ((x.operation = 'support.exit' and x.actor_user_id = e.actor_user_id)
-              or x.operation in ('support.revoke', 'tenant.status'))
-        )
+        and ${ENTRY_STILL_OPEN}
     ) as in_progress`)
   return row?.in_progress === true
 }
@@ -76,7 +93,7 @@ export interface SupportAccess {
   mainAddress: boolean
   /** Il ruolo TENANT_ADMIN del tenant: i permessi dell'assistenza (MT5-DEC-12) e il menu. */
   tenantAdminRoleId: number | null
-  /** Solo con `entry`: l'ultima voce d'ingresso o d'uscita di questa persona nel tenant è un ingresso. */
+  /** Solo con `entry`: l'ultimo ingresso di questa persona nel tenant è ancora aperto (`ENTRY_STILL_OPEN`). */
   entryOpen: boolean
   /** Solo con `entry`: quell'ingresso è appena stato scritto (l'azione `startSupport`). */
   entryRecent: boolean
@@ -109,11 +126,12 @@ type AccessRow = {
  * tenant. La RLS limita impostazioni, ruoli e registro al tenant della transazione. `null` se il
  * tenant non esiste.
  *
- * Con `entry` legge anche l'ultima voce d'ingresso o d'uscita di questa persona nel registro del
- * tenant: il token entra in assistenza solo subito dopo la voce d'ingresso di `startSupport`, e ci
- * resta solo finché quella voce non ha un'uscita dopo di sé. Così un aggiornamento della sessione
- * scritto dal client non apre un'assistenza senza la sua voce, e la copia di un token di assistenza
- * smette di valere quando la persona esce. Senza `entry` (la console, nella sua transazione) il
+ * Con `entry` legge anche l'ultimo ingresso di questa persona nel registro del tenant: il token
+ * entra in assistenza solo subito dopo la voce d'ingresso di `startSupport`, e ci resta solo finché
+ * quella voce è aperta (`ENTRY_STILL_OPEN`: stesso permesso, nessuna uscita, revoca o cambio di
+ * stato dopo di lei). Così un aggiornamento della sessione scritto dal client non apre
+ * un'assistenza senza la sua voce, e un token di assistenza (anche una copia, o uno rimasto fermo)
+ * non vale più dopo l'uscita, una revoca, un cambio di stato o un permesso nuovo. Senza `entry` (la console, nella sua transazione) il
  * registro del tenant non si legge.
  */
 export async function selectSupportAccess(
@@ -122,13 +140,14 @@ export async function selectSupportAccess(
   host: string | null,
   options: { entry?: boolean } = {},
 ): Promise<SupportAccess | null> {
+  // L'ultimo ingresso della persona nel tenant: è aperto secondo la regola unica, ed è recente?
   const entry = options.entry
     ? sql`(
-        select e.operation = 'support.enter' as open, e.occurred_at > now() - ${ENTRY_WINDOW}::interval as recent,
+        select ${ENTRY_STILL_OPEN} as open, e.occurred_at > now() - ${ENTRY_WINDOW}::interval as recent,
           e.details->>'reason' as reason
         from public.tenant_audit_event e
         where e.id_tenant = t.id and e.actor_user_id = ${userId}::uuid and e.actor_kind = 'platform'
-          and e.operation in ('support.enter', 'support.exit')
+          and e.operation = 'support.enter'
         order by e.id desc
         limit 1
       )`

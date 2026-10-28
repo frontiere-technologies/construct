@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { eq, inArray, sql } from 'drizzle-orm'
 import { role, tenantMembership, tenantSettings, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
@@ -38,6 +38,7 @@ vi.mock('react', async importOriginal => ({
 }))
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ info: () => undefined, warn: () => undefined, error: () => undefined }) }))
 vi.mock('@/lib/auth-session', () => ({ getSession: async () => sessionNow() }))
+vi.mock('@/lib/mailer', () => ({ sendEmail: async () => undefined }))
 vi.mock('@/lib/auth', () => ({
   auth: async () => sessionNow(),
   // Come Auth.js: il callback jwt con trigger 'update' riceve il carico, poi la sessione si rilegge dal token.
@@ -56,6 +57,11 @@ const { requirePermission } = await import('@/lib/rbac/auth-guard')
 const { resolveRequestTenant } = await import('@/lib/tenancy/request-tenant')
 const { chooseTenant } = await import('@/lib/tenancy/tenant-actions')
 const { getTenantForPlatform } = await import('./tenant-service')
+const { setTenantStatus } = await import('./tenant-actions')
+const { addUserByEmail, setUserStatus, updateUserRoles } = await import('@/lib/rbac/users-actions')
+const { POST: sendInvite } = await import('@/app/api/admin/send-invite/route')
+const { readSupportInProgress } = await import('@/lib/tenancy/support-consent')
+const { NextRequest } = await import('next/server')
 
 const MAIN = 'localhost:3000'
 const createdTenants: TenantId[] = []
@@ -123,6 +129,15 @@ async function seedAdmin(tenantId: TenantId, label: string): Promise<Person> {
   return person
 }
 
+/** Una persona che esiste già diventa membro semplice del tenant (ruolo base). */
+async function addMember(tenantId: TenantId, person: Person): Promise<void> {
+  await withTenant(tenantId, async tx => {
+    const system = await getSystemRoleIds(tx)
+    await tx.insert(tenantMembership).values({ userId: person.id, status: 'active' })
+    await tx.insert(userRole).values({ userId: person.id, idRole: system.registered })
+  })
+}
+
 /** Il permesso concesso come lo concede l'amministratore del tenant, con la sua sessione vera. */
 async function grantAs(admin: Person, duration: '1h' | '1d' | '1w' = '1d') {
   const before = { who: mocks.who, token: mocks.token }
@@ -139,6 +154,11 @@ const expireConsent = (tenantId: TenantId) =>
 
 const setStatus = (tenantId: TenantId, status: 'active' | 'suspended') =>
   withOwner(tx => tx.execute(sql`update public.tenant set status = ${status} where id = ${tenantId}`))
+
+/** Un cambio di stato con l'azione vera della console (stato e voce `tenant.status`), come la persona della sessione. */
+async function setPlatformTenantStatus(tenantId: TenantId, status: 'active' | 'suspended'): Promise<void> {
+  expect(await setTenantStatus(Number(tenantId), status)).toEqual({ ok: true })
+}
 
 const setPlatformAdmin = (userId: string, on: boolean) =>
   withOwner(tx => tx.update(users).set({ isPlatformAdmin: on }).where(eq(users.id, userId)))
@@ -460,4 +480,114 @@ describeIntegration('support access only with the tenant consent (MT5-DEC-10, MT
     mocks.token = { ...outside }
     expect((await updateTokenTenant(platformAdmin.id, mocks.token, hostNow(), { user: { supportTenantId: Number(tenant) } })).tenantState).not.toBe('support')
   }, 60_000)
+
+  // Fix round 1: una voce d'ingresso vale solo per il permesso in corso. Revoca, scadenza e cambi di
+  // stato del tenant la chiudono anche se nessuna richiesta è passata nel frattempo, e un permesso
+  // nuovo non riapre un token rimasto fermo: la piattaforma rientra e scrive un ingresso nuovo.
+  describe('a dormant support token does not resume under a later grant', () => {
+    async function enterAndPark(label: string) {
+      const tenant = await seedTenant(label)
+      const admin = await seedAdmin(tenant, `${label}-admin`)
+      await grantAs(admin)
+      await signIn(platformAdmin)
+      expect(await startSupport(Number(tenant), 'sessione dimenticata')).toEqual({ state: 'support' })
+      expect((await nextRequest()).tenantState).toBe('support')
+      expect(await withTenant(tenant, tx => readSupportInProgress(tx))).toBe(true)
+      // Il cookie resta fermo: nessuna richiesta fino alla fine.
+      return { tenant, admin, parked: { ...mocks.token } }
+    }
+    async function wakeUp(parked: Record<string, unknown>, tenant: TenantId) {
+      mocks.who = platformAdmin
+      mocks.token = { ...parked }
+      expect(await nextRequest()).toMatchObject({ tenantState: 'none', tenantId: null, tenantNoneReason: 'support_ended' })
+      await expect(requirePermission('read-menu')).rejects.toThrow('Unauthorized')
+      // Le impostazioni del tenant e la porta dicono la stessa cosa: nessuna assistenza in corso.
+      expect(await withTenant(tenant, tx => readSupportInProgress(tx))).toBe(false)
+    }
+
+    it('revoke, then a new grant', async () => {
+      const { tenant, admin, parked } = await enterAndPark('dormant-revoke')
+      await signIn(admin)
+      expect(await revokeSupportConsent()).toEqual({ ok: true })
+      await grantAs(admin, '1w')
+      await wakeUp(parked, tenant)
+    }, 60_000)
+
+    it('natural expiry, then a new grant', async () => {
+      const { tenant, admin, parked } = await enterAndPark('dormant-expiry')
+      await expireConsent(tenant)
+      await grantAs(admin, '1w')
+      await wakeUp(parked, tenant)
+    }, 60_000)
+
+    it('suspension and reactivation, with the consent still valid and with a new grant', async () => {
+      const first = await enterAndPark('dormant-suspend')
+      await setPlatformTenantStatus(first.tenant, 'suspended')
+      await setPlatformTenantStatus(first.tenant, 'active')
+      await wakeUp(first.parked, first.tenant)
+
+      const second = await enterAndPark('dormant-suspend-grant')
+      await setPlatformTenantStatus(second.tenant, 'suspended')
+      await setPlatformTenantStatus(second.tenant, 'active')
+      await grantAs(second.admin, '1w')
+      await wakeUp(second.parked, second.tenant)
+    }, 90_000)
+
+    it('extending the consent during support ends support at the next request; entering again works', async () => {
+      const { tenant, admin } = await enterAndPark('extend')
+      const live = { ...mocks.token }
+      await grantAs(admin, '1w')
+      mocks.token = live
+      expect(await nextRequest()).toMatchObject({ tenantState: 'none', tenantNoneReason: 'support_ended' })
+      // Un ingresso nuovo, sotto il permesso nuovo, con la sua voce.
+      await nextRequest()
+      expect(await startSupport(Number(tenant), 'di nuovo')).toEqual({ state: 'support' })
+      expect(await nextRequest()).toMatchObject({ tenantState: 'support', supportReason: 'di nuovo' })
+    }, 60_000)
+  })
+
+  // Fix round 1: in assistenza la piattaforma non si dà un accesso che sopravviva al permesso.
+  it('during support the platform admin cannot add, invite or change its own account in the tenant', async () => {
+    const tenant = await seedTenant('self')
+    const admin = await seedAdmin(tenant, 'self-admin')
+    const colleague = await createAccount('self-colleague')
+    await addMember(tenant, colleague)
+    // La seconda amministratrice di piattaforma è anche membro semplice del tenant.
+    await addMember(tenant, otherPlatformAdmin)
+    await grantAs(admin)
+    const system = await withTenant(tenant, tx => getSystemRoleIds(tx))
+    const before = await tenantAuditOf(tenant)
+
+    for (const who of [platformAdmin, otherPlatformAdmin]) {
+      await signIn(who)
+      expect(await startSupport(Number(tenant), 'controllo')).toEqual({ state: 'support' })
+      await nextRequest()
+      await expect(addUserByEmail(who.email)).rejects.toThrow()
+      await expect(updateUserRoles(who.id, [system.tenantAdmin])).rejects.toThrow()
+      await expect(setUserStatus(who.id, 2)).rejects.toThrow()
+      const invite = await sendInvite(new NextRequest('http://localhost:3000/api/admin/send-invite', {
+        method: 'POST', body: JSON.stringify({ userId: who.id }), headers: { 'content-type': 'application/json' },
+      }))
+      expect(invite.status).toBe(403)
+      await endSupport()
+    }
+    // Né appartenenze né ruoli nuovi per le due persone della piattaforma, e nessuna voce oltre ingressi e uscite.
+    const memberships = await withOwner(tx => tx.select({ userId: tenantMembership.userId }).from(tenantMembership)
+      .where(inArray(tenantMembership.userId, [platformAdmin.id, otherPlatformAdmin.id])), tenant)
+    expect(memberships.map(row => row.userId)).toEqual([otherPlatformAdmin.id])
+    const roles = await withOwner(tx => tx.select({ idRole: userRole.idRole }).from(userRole)
+      .where(eq(userRole.userId, otherPlatformAdmin.id)), tenant)
+    expect(roles.map(row => row.idRole)).toEqual([system.registered])
+    expect((await tenantAuditOf(tenant)).slice(before.length).map(row => row.operation))
+      .toEqual(['support.enter', 'support.exit', 'support.enter', 'support.exit'])
+
+    // Sulle altre persone, invece, ha i permessi di un amministratore (MT5-DEC-12).
+    await signIn(platformAdmin)
+    await startSupport(Number(tenant), 'ruoli')
+    await nextRequest()
+    await updateUserRoles(colleague.id, [system.tenantAdmin])
+    const colleagueRoles = await withOwner(tx => tx.select({ idRole: userRole.idRole }).from(userRole)
+      .where(eq(userRole.userId, colleague.id)), tenant)
+    expect(colleagueRoles.map(row => row.idRole).sort()).toEqual([system.registered, system.tenantAdmin].sort())
+  }, 90_000)
 })

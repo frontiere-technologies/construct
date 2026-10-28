@@ -4,6 +4,7 @@ import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { createLogger } from '@/lib/logger'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { deniedActor } from '@/lib/rbac/route-denial'
+import { isSelfInSupport } from '@/lib/rbac/support-guards'
 import { prepareInvitation } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
 import { tenantMemberEmail } from '@/lib/tenancy/membership'
@@ -21,6 +22,8 @@ export async function POST(req: NextRequest) {
   if (!userId || typeof userId !== 'string') {
     return NextResponse.json({ error: 'userId mancante.' }, { status: 400 })
   }
+  // La piattaforma in assistenza non invita il proprio account (un accesso oltre il permesso).
+  if (isSelfInSupport(actor, userId)) return NextResponse.json({ error: 'Non autorizzato.' }, { status: 403 })
 
   // Solo i membri del tenant di chi invita, in qualunque stato: una persona di un altro tenant
   // risponde come un id che non esiste, così la risposta non rivela chi c'è altrove.

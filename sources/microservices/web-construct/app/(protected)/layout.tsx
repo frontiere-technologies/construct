@@ -48,10 +48,12 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   ])
   const menuItems = platformEntry ? [...tenantMenuItems, platformEntry] : tenantMenuItems
   const tenants = availableTenants.map(tenant => ({ id: Number(tenant.tenantId), name: tenant.name }))
-  const current = tenants.find(tenant => tenant.id === Number(tenantId))
+  // In assistenza non si cambia tenant dal selettore (il callback jwt lo ignora): si esce dalla fascia.
+  const inSupport = session?.user?.tenantState === 'support'
+  const current = inSupport ? undefined : tenants.find(tenant => tenant.id === Number(tenantId))
 
   // In assistenza (MT5-DEC-10) la fascia con tenant e scadenza è sempre visibile, su ogni pagina del tenant.
-  const banner = session?.user?.tenantState === 'support'
+  const banner = inSupport && session
     ? <SupportBanner tenantName={session.user.tenantName ?? ''} until={session.user.supportUntil ?? null} />
     : undefined
 

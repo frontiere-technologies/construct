@@ -242,9 +242,15 @@ function SupportDialog({ tenantId, onClose }: { tenantId: number; onClose: () =>
     const trimmed = reason.trim()
     if (!trimmed) { setMissingReason(true); return }
     setBusy(true); setFailed(false)
+    let entered = false
     try {
-      await startSupport(tenantId, trimmed)
+      // La sessione può non arrivare in assistenza anche se l'azione non ha lanciato (un permesso
+      // revocato un attimo prima): allora niente home del tenant, l'errore generico.
+      entered = (await startSupport(tenantId, trimmed)).state === 'support'
     } catch {
+      // Il motivo resta sul server: qui solo il messaggio generico.
+    }
+    if (!entered) {
       setFailed(true)
       setBusy(false)
       return

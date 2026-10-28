@@ -15,6 +15,7 @@ import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { emailSchema, roleIdsSchema, userIdSchema, userStatusSchema } from './action-input-schemas'
 import { assertCanChangeRoles, assertCanChangeStatus, symmetricDifference } from './grant-guards'
 import { currentRoleIds, functionalityIdsForRoles, grantsForRoles } from './grant-service'
+import { refuseSelfInSupport } from './support-guards'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
 import { USER_STATUS_ACTIVE, type UserStatusId } from './types'
 
@@ -55,6 +56,7 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
   if (!userIdSchema.safeParse(userId).success || !roleIdsSchema.safeParse(roleIds).success) {
     throw new Error('Invalid input')
   }
+  refuseSelfInSupport(actor, userId)
   const currentUserId = actor.userId
   await withTenant(actor.tenantId, async tx => {
     const system = await getSystemRoleIds(tx)
@@ -95,6 +97,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
   if (!userIdSchema.safeParse(userId).success || !userStatusSchema.safeParse(status).success) {
     throw new Error('Invalid input')
   }
+  refuseSelfInSupport(actor, userId)
   const currentUserId = actor.userId
   assertStatusChangeAllowed({
     targetUserId: userId,
@@ -148,6 +151,8 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
   const invitation = await withTenant(actor.tenantId, async tx => {
     // Un tenant sospeso o archiviato non manda inviti né aggiunge persone (MT5-DEC-25).
     await assertTenantActive(tx)
+    // In assistenza, non il proprio account: prima di creare token o appartenenze.
+    if (actor.support === true) refuseSelfInSupport(actor, await findUserIdByEmailOrNull(tx, normalizedEmail))
     const prepared = await prepareInvitationIn(tx, normalizedEmail, actor.userId)
     const userId = prepared?.userId ?? await findUserIdByEmail(tx, normalizedEmail)
     const added = await addTenantMember(tx, userId)
@@ -173,8 +178,13 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
   return { ok: true }
 }
 
-async function findUserIdByEmail(tx: AnyTx, email: string): Promise<string> {
+async function findUserIdByEmailOrNull(tx: AnyTx, email: string): Promise<string | null> {
   const [row] = await tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
-  if (!row) throw new Error('Failed to add user: account not found')
-  return row.id
+  return row?.id ?? null
+}
+
+async function findUserIdByEmail(tx: AnyTx, email: string): Promise<string> {
+  const id = await findUserIdByEmailOrNull(tx, email)
+  if (!id) throw new Error('Failed to add user: account not found')
+  return id
 }

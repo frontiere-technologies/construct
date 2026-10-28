@@ -176,10 +176,12 @@ describeIntegration('round-trip budget', () => {
       .values({ email: `zzz_budget_support_${unique()}@example.test`, idUserStatus: 2, isPlatformAdmin: true })
       .returning({ id: users.id }))
     const tenantId = defaultTestTenant()
-    const [previous] = await withOwner(tx => tx.select({ until: tenantSettings.supportUntil }).from(tenantSettings), tenantId)
+    const [previous] = await withOwner(tx => tx.select({ until: tenantSettings.supportUntil, grantedAt: tenantSettings.supportGrantedAt })
+      .from(tenantSettings), tenantId)
     try {
       await withOwner(async tx => {
-        await tx.update(tenantSettings).set({ supportUntil: sql`now() + interval '1 hour'` })
+        // L'ingresso appartiene al permesso in corso: concesso un minuto prima.
+        await tx.update(tenantSettings).set({ supportUntil: sql`now() + interval '1 hour'`, supportGrantedAt: sql`now() - interval '1 minute'` })
         await tx.insert(tenantAuditEvent).values({
           actorUserId: created.id, actorKind: 'platform', operation: 'support.enter', objectType: 'tenant',
           objectId: String(tenantId), details: { reason: 'budget' },
@@ -199,7 +201,7 @@ describeIntegration('round-trip budget', () => {
       expect(actor).toMatchObject({ tenantId, support: true, isAdmin: true })
     } finally {
       await withOwner(async tx => {
-        await tx.update(tenantSettings).set({ supportUntil: previous?.until ?? null })
+        await tx.update(tenantSettings).set({ supportUntil: previous?.until ?? null, supportGrantedAt: previous?.grantedAt ?? null })
         await tx.delete(tenantAuditEvent).where(eq(tenantAuditEvent.actorUserId, created.id))
       }, tenantId)
       await withGlobal(tx => tx.delete(users).where(eq(users.id, created.id)))
