@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -218,6 +219,10 @@ OPERATOR_ENV = REPO_ROOT / "sources" / "devops" / "db" / "operator.env"
 # The tenants test_tenants.py creates (multi-tenancy piece 4). Listed here because conftest.py also
 # removes them at the start of every session: see delete_e2e_tenants.
 E2E_TENANT_SLUGS = ("e2e-a", "e2e-b", "e2e-c")
+# Il tenant che test_platform.py crea dalla console (multi-tenancy piece 5a). Fuori da E2E_TENANT_SLUGS,
+# che test_tenants.py spacchetta in tre nomi; lo cancella come gli altri delete_e2e_tenants.
+E2E_CONSOLE_TENANT_SLUG = "e2e-console"
+E2E_ALL_TENANT_SLUGS = (*E2E_TENANT_SLUGS, E2E_CONSOLE_TENANT_SLUG)
 
 
 def operator_env() -> dict:
@@ -283,6 +288,43 @@ def delete_e2e_tenants() -> None:
     TEST_EMAIL would have two tenants there and every login of every earlier file would land on
     /select-tenant, with nothing pointing at the cause. Hence also at the start of each session.
 
-    One db.mjs call for the three: `--slug` repeats, and they go in one transaction.
+    One db.mjs call for all of them: `--slug` repeats, and they go in one transaction. Also removes
+    the tenant test_platform.py creates from the console, for the same reason.
     """
-    run_db("test-tenant-delete", *(arg for slug in E2E_TENANT_SLUGS for arg in ("--slug", slug)))
+    run_db("test-tenant-delete", *(arg for slug in E2E_ALL_TENANT_SLUGS for arg in ("--slug", slug)))
+
+
+def delete_people(emails: list[str]) -> None:
+    """Delete the accounts with these emails from the test database; idempotent (one statement).
+
+    A platform administrator account goes the same way: its attribute lives on the row. Delete the
+    tenants they belong to first (delete_e2e_tenants), so no membership is left pointing at them.
+    """
+    if not emails:  # `in ()` is a syntax error in SQL
+        return
+    quoted = ", ".join(f"'{email}'" for email in emails)
+    run_sql(f"delete from users where email in ({quoted})")
+
+
+def make_platform_admin(email: str) -> None:
+    """Make `email` a platform administrator on the test database (creates the account if missing).
+
+    Goes through db.mjs `test-platform-admin-add`, the only way besides the console: the attribute
+    cannot be written with the app's own connection. Its standard output has an invitation link
+    with a valid token for a new account, so only the error is ever reported (see run_db).
+    """
+    run_db("test-platform-admin-add", "--email", email)
+
+
+def invitation_delivery_status(email: str) -> str | None:
+    """The delivery status ('pending', 'sent', 'failed') of the newest invitation of `email`, or None.
+
+    How E2E observes an invitation email without an inbox: the app records every attempt on the
+    token (`recordInvitationDelivery`), whatever the mail provider of the environment is.
+    """
+    out = run_sql(
+        "select t.delivery_status as status from password_set_tokens t join users u on u.id = t.user_id "
+        f"where u.email = '{email}' and t.purpose = 'invitation' order by t.created_at desc limit 1"
+    )
+    found = re.search(r"'(\w+)'", out)
+    return found.group(1) if found else None

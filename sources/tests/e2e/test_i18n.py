@@ -12,9 +12,17 @@ from helpers import nav, do_test_login, switch_language, grid_rows as _rows, ope
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
+# Since multi-tenancy piece 5a the language and translation catalogs are global and written only from
+# the platform console (MT5-DEC-17, MT5-DEC-24): the writes below run as a platform administrator
+# (`platform_page`) on /platform/..., and the tenant pages /admin/languages and /admin/translations
+# are read-only (test_tenant_admin_reads_the_catalogs_without_controls). What a tenant person sees
+# of an edit (the dictionary, the profile) is still checked with TEST_EMAIL (`logged_in_page`).
+TRANSLATIONS = "/platform/translations"
+LANGUAGES = "/platform/languages"
+
 
 def _open_translations(page, base_url):
-    nav(page, f"{base_url}/admin/translations")
+    nav(page, f"{base_url}{TRANSLATIONS}")
     # Bilingual on purpose: some tests reach this helper again from inside a
     # `finally` cleanup block *after* switching the page to English mid-test,
     # so the heading may legitimately read "Translations" instead of
@@ -46,7 +54,8 @@ def _filter_by_key(page, key):
         return
 
     def is_filtered_grid_response(response):
-        if not response.url.endswith("/api/i18n/translations-grid"):
+        # The platform console has its own grid route (the tenant one is the same grid, read-only).
+        if not response.url.endswith(("/api/i18n/translations-grid", "/api/platform/translations-grid")):
             return False
         if response.request.method != "POST":
             return False
@@ -89,7 +98,7 @@ def _open_editor(page):
     page.locator('[data-testid^="row-menu"]').first.click()
     page.get_by_role("menuitem", name="Modifica").or_(
         page.get_by_role("menuitem", name="Edit")).click()
-    page.wait_for_url(re.compile(r"/admin/translations/\d+/edit"), timeout=15_000)
+    page.wait_for_url(re.compile(r"/platform/translations/\d+/edit"), timeout=15_000)
     editor = page.locator('[data-testid="translation-editor"]')
     expect(editor).to_be_visible(timeout=15_000)
     return editor
@@ -98,7 +107,7 @@ def _open_editor(page):
 def _expect_back_on_the_list(page, base_url):
     """The save landed and returned. Asserting the URL, not the editor's absence:
     an unmounted form proves nothing about whether the write succeeded."""
-    page.wait_for_url(re.compile(rf"{re.escape(base_url)}/admin/translations(\?.*)?$"), timeout=15_000)
+    page.wait_for_url(re.compile(rf"{re.escape(base_url)}/platform/translations(\?.*)?$"), timeout=15_000)
 
 
 def _restore_save_translation(page, base_url) -> None:
@@ -153,7 +162,7 @@ def _delete_translation_key(page, base_url, key) -> None:
 
 def _delete_language(page, base_url, native_name) -> None:
     try:
-        nav(page, f"{base_url}/admin/languages")
+        nav(page, f"{base_url}{LANGUAGES}")
         row = _rows(page).filter(has_text=native_name)
         if row.count() == 0:
             return
@@ -197,9 +206,13 @@ def _i18n_content_safety_net():
 
 # ---------------------------------------------------------------- §18.1
 
-def test_admin_edits_a_translation_and_the_user_sees_it(logged_in_page, base_url):
-    page = logged_in_page
+def test_admin_edits_a_translation_and_the_user_sees_it(platform_page, logged_in_page, base_url):
+    """The platform administrator edits the global catalog; a tenant person sees it without a re-login."""
+    page = platform_page
+    person = logged_in_page
     marker = f"Save {int(time.time())}"
+    # switch_language reads the origin from the page it is given: start from a real page, not about:blank.
+    nav(person, f"{base_url}/")
 
     try:
         _open_translations(page, base_url)
@@ -212,14 +225,14 @@ def test_admin_edits_a_translation_and_the_user_sees_it(logged_in_page, base_url
         _expect_back_on_the_list(page, base_url)
 
         # The new English value must be visible without a re-login.
-        switch_language(page, "en")
-        nav(page, f"{base_url}/profile")
-        expect(page.get_by_role("button", name=marker)).to_be_visible()
+        switch_language(person, "en")
+        nav(person, f"{base_url}/profile")
+        expect(person.get_by_role("button", name=marker)).to_be_visible()
     finally:
         # Restore, so the suite stays re-runnable and the Italian assertions
         # elsewhere hold, regardless of where the test above failed.
         _restore_save_translation(page, base_url)
-        _safe_switch_language(page, "it")
+        _safe_switch_language(person, "it")
 
 
 def test_language_choice_survives_logout_and_login(browser, base_url, test_email):
@@ -243,14 +256,14 @@ def test_language_choice_survives_logout_and_login(browser, base_url, test_email
         ctx.close()
 
 
-def test_a_missing_english_translation_falls_back_to_italian(logged_in_page, base_url):
-    page = logged_in_page
+def test_a_missing_english_translation_falls_back_to_italian(platform_page, base_url):
+    page = platform_page
     key = f"zzz_e2e.fallback_{int(time.time())}"
 
     try:
         _open_translations(page, base_url)
         page.get_by_role("button", name="Nuova chiave").click()
-        page.wait_for_url(re.compile(r"/admin/translations/create"), timeout=15_000)
+        page.wait_for_url(re.compile(r"/platform/translations/create"), timeout=15_000)
         form = page.locator('[data-testid="translation-editor"]')
         expect(form).to_be_visible(timeout=15_000)
         form.get_by_label("Chiave").fill(key)
@@ -286,14 +299,36 @@ def test_non_admin_cannot_reach_the_i18n_configuration(non_admin_page, base_url)
         assert response.status == 403, f"{path} returned {response.status}"
 
 
+def test_tenant_admin_reads_the_catalogs_without_controls(logged_in_page, base_url):
+    """MT5-DEC-24: a tenant administrator reads languages and translations, and cannot change them."""
+    page = logged_in_page
+    nav(page, f"{base_url}/admin/translations")
+    expect(page.get_by_role("heading", name="Traduzioni")).to_be_visible()
+    expect(_rows(page).first).to_be_visible(timeout=15_000)
+    expect(page.get_by_role("button", name="Nuova chiave")).to_have_count(0)
+    expect(page.locator('[data-testid^="row-menu"]')).to_have_count(0)
+
+    nav(page, f"{base_url}/admin/languages")
+    expect(page.get_by_role("heading", name="Lingue")).to_be_visible()
+    expect(_rows(page).first).to_be_visible(timeout=15_000)
+    expect(page.get_by_role("button", name="Nuova lingua")).to_have_count(0)
+    expect(page.locator('[data-testid^="row-menu"]')).to_have_count(0)
+
+    # The pages that write live only in the console: for a tenant person they do not exist.
+    for path in (TRANSLATIONS, f"{TRANSLATIONS}/create", LANGUAGES):
+        response = page.goto(f"{base_url}{path}")
+        assert response is not None and response.status == 404, f"{path} answered {response and response.status}"
+
+
 # ---------------------------------------------------------------- §18.2
 
-def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, base_url):
-    page = logged_in_page
+def test_deactivating_a_language_removes_it_from_the_switcher(platform_page, logged_in_page, base_url):
+    page = platform_page
+    person = logged_in_page
     code = "nl"
 
     try:
-        nav(page, f"{base_url}/admin/languages")
+        nav(page, f"{base_url}{LANGUAGES}")
         page.get_by_role("button", name="Nuova lingua").click()
         page.get_by_label("Codice").fill(code)
         page.get_by_label("Locale").fill("nl-NL")
@@ -310,18 +345,17 @@ def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, ba
         # with only `en`/`it`, intermittently failing the switcher assertion.
         expect(_rows(page).filter(has_text="Nederlands")).to_be_visible(timeout=10_000)
 
-        page.reload()
-        page.wait_for_load_state("networkidle")
-        nav(page, f"{base_url}/settings")
-        page.locator('[data-testid="language-switcher"]').click()
-        expect(page.locator(f'[data-testid="language-option-{code}"]')).to_be_visible()
+        # The tenant person sees it in the switcher right away (the catalog is global).
+        nav(person, f"{base_url}/settings")
+        person.locator('[data-testid="language-switcher"]').click()
+        expect(person.locator(f'[data-testid="language-option-{code}"]')).to_be_visible()
         # Escape closes the listbox; switch_language() navigates to /settings
         # on its own, so there is no panel state to restore any more.
-        page.keyboard.press("Escape")
+        person.keyboard.press("Escape")
 
         # A user who had picked it falls back to the default once it is deactivated.
-        switch_language(page, code)
-        nav(page, f"{base_url}/admin/languages")
+        switch_language(person, code)
+        nav(page, f"{base_url}{LANGUAGES}")
         row = _rows(page).filter(has_text="Nederlands")
         row.locator('[data-testid^="row-menu"]').click()
         page.get_by_role("menuitem", name="Disattiva").click()
@@ -332,12 +366,12 @@ def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, ba
         # below fires a fresh SSR read that must see it deactivated.
         expect(row.locator('.ag-cell[col-id="isActive"]')).to_have_text("No", timeout=10_000)
 
-        nav(page, f"{base_url}/profile")
-        expect(page.get_by_role("button", name="Salva")).to_be_visible()   # back to Italian
-        nav(page, f"{base_url}/settings")
-        page.locator('[data-testid="language-switcher"]').click()
-        expect(page.locator(f'[data-testid="language-option-{code}"]')).to_have_count(0)
-        page.keyboard.press("Escape")
+        nav(person, f"{base_url}/profile")
+        expect(person.get_by_role("button", name="Salva")).to_be_visible()   # back to Italian
+        nav(person, f"{base_url}/settings")
+        person.locator('[data-testid="language-switcher"]').click()
+        expect(person.locator(f'[data-testid="language-option-{code}"]')).to_have_count(0)
+        person.keyboard.press("Escape")
     finally:
         # Deleting the language also clears any lingering `users.id_language`
         # FK reference to it (ON DELETE SET NULL), so this alone restores both
@@ -345,9 +379,9 @@ def test_deactivating_a_language_removes_it_from_the_switcher(logged_in_page, ba
         _delete_language(page, base_url, "Nederlands")
 
 
-def test_the_language_picker_fills_the_new_language_fields(logged_in_page, base_url):
-    page = logged_in_page
-    nav(page, f"{base_url}/admin/languages")
+def test_the_language_picker_fills_the_new_language_fields(platform_page, base_url):
+    page = platform_page
+    nav(page, f"{base_url}{LANGUAGES}")
     page.get_by_role("button", name="Nuova lingua").click()
     dialog = page.get_by_role("dialog")
 
@@ -370,10 +404,10 @@ def test_the_language_picker_fills_the_new_language_fields(logged_in_page, base_
 
 # ---------------------------------------------------------------- §18.3
 
-def test_concurrent_edits_are_detected_instead_of_overwritten(browser, base_url, admin_storage_state):
-    """Two admins open the same translation; the second save must be refused."""
-    ctx_a = browser.new_context(viewport={"width": 1440, "height": 900}, storage_state=admin_storage_state)
-    ctx_b = browser.new_context(viewport={"width": 1440, "height": 900}, storage_state=admin_storage_state)
+def test_concurrent_edits_are_detected_instead_of_overwritten(browser, base_url, platform_admin_storage_state):
+    """Two platform administrators open the same translation; the second save must be refused."""
+    ctx_a = browser.new_context(viewport={"width": 1440, "height": 900}, storage_state=platform_admin_storage_state)
+    ctx_b = browser.new_context(viewport={"width": 1440, "height": 900}, storage_state=platform_admin_storage_state)
     page_a, page_b = ctx_a.new_page(), ctx_b.new_page()
     winner = f"Winner {int(time.time())}"
 

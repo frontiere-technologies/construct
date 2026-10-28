@@ -105,10 +105,11 @@ const GLOBAL_LANGUAGES_WRITE = `${GLOBAL_LANGUAGES}; scrittura riservata all'amm
 const GLOBAL_TRANSLATIONS_WRITE = `${GLOBAL_TRANSLATIONS}; scrittura riservata all'amministratore di piattaforma (MT5-DEC-17, provata in global-catalog-tenant.integration.test.ts)`
 // Le porte della console (pezzo 5a): non ricevono id di tenant e non leggono righe di tenant; un
 // amministratore di tenant che non è di piattaforma è rifiutato dalla guardia, provato in
-// lib/platform/platform-console.integration.test.ts e lib/platform/platform-admin-actions.integration.test.ts.
+// lib/platform/platform-entry-points.integration.test.ts (tutte le porte dell'inventario, una per una) e
+// lib/platform/platform-console.integration.test.ts.
 // Che nessuna porta della piattaforma esca dai conteggi e dalle email degli amministratori (MT5-OK-2)
 // lo prova lib/platform/tenant-service.integration.test.ts.
-const PLATFORM_DOOR = 'porta della console: riservata all\'amministratore di piattaforma (la guardia lo rilegge dal database), nessun id di tenant in ingresso; dai tenant escono solo conteggi ed email degli amministratori (MT5-OK-2)'
+const PLATFORM_DOOR = 'porta della console: riservata all\'amministratore di piattaforma (la guardia lo rilegge dal database, provato per ogni porta in lib/platform/platform-entry-points.integration.test.ts), nessun id di tenant in ingresso; dai tenant escono solo conteggi ed email degli amministratori (MT5-OK-2)'
 const ANONYMOUS = 'anonima: nessun id di tenant in ingresso; il tenant, dove serve, viene dall\'indirizzo confrontato con il registro (Task 8)'
 
 const EXEMPT: Record<string, string> = {
@@ -869,6 +870,52 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
     await expect(renameRole(bServiceRole, 'ZZZ preso da A')).rejects.toThrow('Unauthorized')
     expect(await fingerprintOfB()).toEqual(before)
   }, 30_000)
+
+  it('a platform admin in support of A, with the consent of A, reaches nothing of B through the tenant doors', async () => {
+    // La persona della piattaforma entra in A con il permesso di A (MT5-OK-2): l'attore è quello
+    // dell'assistenza in A, e gli id di B non esistono per lui, come per l'amministratore di A.
+    const email = `zzz_xt_platform_${unique()}@example.test`
+    const [person] = await withOwner(tx => tx.insert(users)
+      .values({ email, idUserStatus: 2, authProvider: 'credentials', isPlatformAdmin: true }).returning({ id: users.id }))
+    createdUserIds.push(person.id)
+    await withOwner(tx => tx.update(tenantSettings).set({
+      supportUntil: sql`now() + interval '1 hour'`, supportGrantedBy: adminA, supportGrantedAt: sql`now() - interval '1 second'`,
+    }), A)
+    try {
+      const before = await fingerprintOfB()
+      const platformSession = (state: 'none' | 'support', tenantId: number | null) => ({
+        user: { id: person.id, email, accountActive: true, provider: 'credentials', tenantState: state, tenantId, isPlatformAdmin: true },
+        expires: '2099-01-01T00:00:00.000Z',
+      })
+      mocks.session = platformSession('none', null)
+      mocks.unstableUpdate.mockResolvedValue({ user: { tenantState: 'support' } })
+      await expect(startSupport(Number(B), 'senza il permesso di B')).rejects.toThrow('support_not_allowed')
+      expect(await startSupport(Number(A), 'verifica')).toEqual({ state: 'support' })
+      mocks.session = platformSession('support', Number(A))
+
+      // In A, con i permessi di un amministratore: la griglia delle persone è quella di A, senza B.
+      const all = await usersGrid(jsonRequest('/api/rbac/users-grid', { page: 0, size: 100 }))
+      expect(all.status).toBe(200)
+      const body = await all.json() as { users: Array<{ id: string }> }
+      expect(body.users.map(user => user.id).sort()).toEqual([adminA, memberA].sort())
+      expectNoTraceOfB(body)
+      // Gli id di B: persone, ruoli, voci. Rifiutati come per l'amministratore di A, e B resta com'era.
+      await expect(updateUserRoles(bUser, [aSystem.registered])).rejects.toThrow('La persona non fa parte di questo tenant')
+      await expect(setUserStatus(bUser, USER_STATUS_DEACTIVATED)).rejects.toThrow('La persona non fa parte di questo tenant')
+      await expect(renameRole(bServiceRole, 'ZZZ preso dall\'assistenza')).rejects.toThrow()
+      await expect(deleteRole(bServiceRole)).rejects.toThrow()
+      await expect(RoleDetailPage({ params: Promise.resolve({ roleId: String(bServiceRole) }) })).rejects.toThrow('NEXT_NOT_FOUND')
+      expect((await sendInvite(jsonRequest('/api/admin/send-invite', { userId: bUser }))).status).toBe(404)
+      const audit = await tenantAuditGrid(jsonRequest('/api/audit/tenant-grid', { page: 0, size: 200 }))
+      expectNoTraceOfB(await audit.json())
+      // Da dentro l'assistenza la console è chiusa: nemmeno B si apre da lì.
+      await expect(startSupport(Number(B), 'dall\'assistenza')).rejects.toThrow('Unauthorized')
+      // L'ingresso in A ha lasciato le sue voci in A: B (l'impronta) non ne ha.
+      expect(await fingerprintOfB()).toEqual(before)
+    } finally {
+      await withOwner(tx => tx.update(tenantSettings).set({ supportUntil: null, supportGrantedBy: null, supportGrantedAt: null }), A)
+    }
+  }, 60_000)
 
   for (const [key, testCase] of Object.entries(CASES)) {
     it(key, async () => {
