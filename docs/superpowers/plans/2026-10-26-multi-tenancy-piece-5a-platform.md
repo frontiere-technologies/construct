@@ -340,12 +340,12 @@ it('a platform admin without any tenant writes languages and translations from t
 **Interfaces:**
 - Consumes: `test-platform-admin-add` (Task 6), `test-provision-platform-role` (Task 3); la CI deve provvedere l'identità di piattaforma come il ruolo dell'app (aggiorna `.github/workflows/quality.yml` se serve).
 
-- [ ] **Step 1: Test**
+- [✅] **Step 1: Test**
   - ogni porta della piattaforma rifiuta chi non è amministratore di piattaforma e risponde 404 su un indirizzo dedicato (Review Focus #1);
   - senza permesso la piattaforma non legge né scrive dati di un tenant (MT5-OK-2);
   - E2E `test_platform.py`: un amministratore di piattaforma senza tenant arriva sulla console; crea un tenant (l'email d'invito è registrata, non controllata nella casella); lo sospende e un membro vede il messaggio; lo riattiva; l'amministratore del tenant concede l'assistenza, la piattaforma entra con la fascia, modifica un ruolo, esce; l'amministratore del tenant vede la voce nel registro; l'E2E di oggi invariato (MT5-OK-5). Fixture di sessione che pulisce tenant e attributi lasciati da esecuzioni interrotte.
-- [ ] **Step 2: Verifica** — `npm run test:integration` (completo), poi `caffeinate -dims uv run pytest` (completo); Expected: PASS.
-- [ ] **Step 3: Spunta MT5-OK-2, 3, 5 e commit** — `test(platform): entry points, two audit views and console E2E`
+- [✅] **Step 2: Verifica** — `npm run test:integration` (completo), poi `caffeinate -dims uv run pytest` (completo); Expected: PASS.
+- [✅] **Step 3: Spunta MT5-OK-2, 3, 5 e commit** — `test(platform): entry points, two audit views and console E2E`
 
 ---
 
