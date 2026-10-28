@@ -134,7 +134,7 @@ const NO_SUCH_ID = 999_999_999
 
 // Argomenti ben formati: se una guardia non rifiutasse, queste chiamate scriverebbero davvero.
 const DOORS: Record<string, Door> = {
-  'app/api/platform/audit-grid/route.ts#POST': { entry: auditGrid, call: () => auditGrid(gridRequest('/api/platform/audit-grid')) },
+  'app/api/platform/audit-grid/route.ts#POST': { entry: auditGrid, call: () => auditGrid(gridRequest('/api/platform/audit-grid', { page: 0, size: 20, scope: 'tenant', tenantId: Number(target) })) },
   'app/api/platform/languages-grid/route.ts#POST': { entry: languagesGrid, call: () => languagesGrid(gridRequest('/api/platform/languages-grid')) },
   'app/api/platform/tenants-grid/route.ts#POST': { entry: tenantsGrid, call: () => tenantsGrid(gridRequest('/api/platform/tenants-grid')) },
   'app/api/platform/translations-grid/route.ts#POST': { entry: translationsGrid, call: () => translationsGrid(gridRequest('/api/platform/translations-grid')) },
@@ -522,8 +522,8 @@ describeIntegration('the platform does not see inside a tenant without its conse
       expect(serialize(await response.json()), path).not.toContain(MARK)
     }
     // Nemmeno cercando la voce di registro di B per attore, e con il registro del modello.
-    for (const scope of ['platform', 'template'] as const) {
-      const response = await auditGrid(gridRequest('/api/platform/audit-grid', { page: 0, size: 200, scope }))
+    for (const scope of [{ scope: 'platform' }, { scope: 'template' }, { scope: 'tenant', tenantId: Number(tenantB) }]) {
+      const response = await auditGrid(gridRequest('/api/platform/audit-grid', { page: 0, size: 200, ...scope }))
       expect(serialize(await response.json())).not.toContain(MARK)
     }
   }, 60_000)

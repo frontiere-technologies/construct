@@ -5,6 +5,7 @@ import { POST as platformAuditGrid } from '@/app/api/platform/audit-grid/route'
 import { POST as tenantAuditGrid } from '@/app/api/audit/tenant-grid/route'
 import TenantAuditPage from '@/app/(protected)/(admin)/admin/audit/page'
 import PlatformAuditPage from '@/app/platform/audit/page'
+import PlatformTenantPage from '@/app/platform/tenants/[tenantId]/page'
 import { platformAuditEvent, tenantAuditEvent, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
@@ -13,7 +14,7 @@ import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { tenantIdForTest } from '@/lib/tenancy/testing'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { listTenantAudit } from '@/lib/audit/audit-read-service'
-import { listPlatformAudit, listTemplateAudit } from './audit-service'
+import { listPlatformAudit, listPlatformAuditForTenant, listTemplateAudit } from './audit-service'
 import { closePlatform, withPlatform } from './db'
 
 /**
@@ -40,6 +41,7 @@ vi.mock('react', async importOriginal => ({
 }))
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ info: () => undefined, warn: () => undefined, error: () => undefined }) }))
 vi.mock('@/components/audit/AuditTableClient', () => ({ AuditTableClient: () => null }))
+vi.mock('@/components/platform/TenantDetail', () => ({ TenantDetail: () => null }))
 vi.mock('./db', async importOriginal => {
   const actual = await importOriginal<typeof import('./db')>()
   return { ...actual, withPlatform: vi.fn(actual.withPlatform) }
@@ -51,6 +53,7 @@ const MARK_A = `${RUN}a`
 const MARK_B = `${RUN}b`
 const MARK_PLATFORM = `${RUN}p`
 const MARK_TEMPLATE = `${RUN}t`
+const MARK_PLATFORM_A = `${RUN}q`
 
 type Person = { id: string; email: string }
 
@@ -143,6 +146,7 @@ beforeAll(async () => {
   await withOwner(tx => tx.insert(platformAuditEvent).values([
     { actorKind: 'platform', actorEmail: `zzz_${MARK_PLATFORM}@example.test`, operation: 'tenant.create', objectType: 'tenant', objectId: `${MARK_PLATFORM}1`, idTenant: B, details: { name: MARK_PLATFORM } },
     { actorKind: 'platform', actorEmail: `zzz_${MARK_PLATFORM}@example.test`, operation: 'language.create', objectType: 'language', objectId: `${MARK_PLATFORM}2` },
+    { actorKind: 'platform', actorEmail: `zzz_${MARK_PLATFORM_A}@example.test`, operation: 'tenant.update', objectType: 'tenant', objectId: `${MARK_PLATFORM_A}1`, idTenant: A, details: { name: MARK_PLATFORM_A } },
   ]))
 }, 90_000)
 
@@ -258,7 +262,7 @@ describeIntegration('the platform audit view', () => {
 
   it('the platform audit page never returns tenant audit rows except the template', async () => {
     const platform = await listPlatformAudit({ ...ALL, actorSearch: `zzz_${RUN}` })
-    expect(platform.rows.map(row => row.objectId).sort()).toEqual([`${MARK_PLATFORM}1`, `${MARK_PLATFORM}2`])
+    expect(platform.rows.map(row => row.objectId).sort()).toEqual([`${MARK_PLATFORM}1`, `${MARK_PLATFORM}2`, `${MARK_PLATFORM_A}1`])
     const serialized = JSON.stringify(platform)
     // Nemmeno una voce di tenant: né di A, né di B, né del modello.
     expect(serialized).not.toContain(MARK_A)
@@ -292,6 +296,59 @@ describeIntegration('the platform audit view', () => {
     expect(body.rows.map(row => row.objectId)).toEqual([`${MARK_TEMPLATE}1`])
   })
 
+  it('shows the platform events about one tenant, and never those about another or any tenant audit row', async () => {
+    const aboutA = await listPlatformAuditForTenant(Number(A), ALL)
+    expect(aboutA.rows.map(row => row.objectId)).toEqual([`${MARK_PLATFORM_A}1`])
+    expect(aboutA.total).toBe(1)
+    const aboutB = await listPlatformAuditForTenant(Number(B), ALL)
+    expect(aboutB.rows.map(row => row.objectId)).toEqual([`${MARK_PLATFORM}1`])
+    for (const result of [aboutA, aboutB]) {
+      const serialized = JSON.stringify(result)
+      // Né le voci di tenant (di A, di B, del modello), né le voci della piattaforma senza tenant.
+      expect(serialized).not.toContain(MARK_A)
+      expect(serialized).not.toContain(`zzz_${MARK_B}`)
+      expect(serialized).not.toContain(MARK_TEMPLATE)
+      expect(serialized).not.toContain(`${MARK_PLATFORM}2`)
+    }
+    expect(JSON.stringify(aboutA)).not.toContain(`${MARK_PLATFORM}1`)
+    expect(JSON.stringify(aboutB)).not.toContain(MARK_PLATFORM_A)
+    // I filtri valgono sopra quello del tenant.
+    expect((await listPlatformAuditForTenant(Number(B), { ...ALL, operation: 'language.create' })).rows).toEqual([])
+
+    const viaRoute = await platformAuditGrid(gridRequest('/api/platform/audit-grid', { ...ALL, scope: 'tenant', tenantId: Number(A) }))
+    expect(viaRoute.status).toBe(200)
+    expect((await viaRoute.json() as { rows: { objectId: string }[] }).rows.map(row => row.objectId)).toEqual([`${MARK_PLATFORM_A}1`])
+  })
+
+  it('refuses a tenant that does not exist, as a missing tenant', async () => {
+    await expect(listPlatformAuditForTenant(999_999_999, ALL)).rejects.toThrow('tenant_not_found')
+    const viaRoute = await platformAuditGrid(gridRequest('/api/platform/audit-grid', { ...ALL, scope: 'tenant', tenantId: 999_999_999 }))
+    expect(viaRoute.status).toBe(404)
+  })
+
+  it('refuses the tenant listing to everyone who is not a platform admin, before reading tenants or opening the platform identity', async () => {
+    for (const session of [readySession(adminA, A), null]) {
+      mocks.session = session
+      await expect(listPlatformAuditForTenant(Number(A), ALL)).rejects.toThrow('Unauthorized')
+      expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { ...ALL, scope: 'tenant', tenantId: Number(A) }))).status).toBe(403)
+    }
+    expect(withPlatform).not.toHaveBeenCalled()
+    mocks.session = platformSession(platformAdmin)
+    const dedicated = `zzz-audit-${unique()}.example.test`
+    await withOwner(tx => tx.execute(sql`insert into public.tenant_host (host, id_tenant, is_primary) values (${dedicated}, ${B}, true)`))
+    mocks.headers = new Headers({ host: dedicated })
+    expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { ...ALL, scope: 'tenant', tenantId: Number(A) }))).status).toBe(404)
+  })
+
+  it('the tenant page asks for the platform events of that tenant, and the template page for its own audit', async () => {
+    const tenantPage = JSON.stringify(await PlatformTenantPage({ params: Promise.resolve({ tenantId: String(A) }) }))
+    expect(tenantPage).toContain('aria-labelledby":"tenant-events')
+    expect(tenantPage).toContain(JSON.stringify({ scope: 'tenant', tenantId: Number(A) }))
+    const templatePage = JSON.stringify(await PlatformTenantPage({ params: Promise.resolve({ tenantId: String(template) }) }))
+    expect(templatePage).toContain('"scope":"template"')
+    expect(templatePage).not.toContain('"scope":"tenant"')
+  })
+
   it('filters by person, operation and period', async () => {
     const byOperation = await listPlatformAudit({ ...ALL, operation: 'language.create', actorSearch: `zzz_${RUN}` })
     expect(byOperation.rows.map(row => row.objectId)).toEqual([`${MARK_PLATFORM}2`])
@@ -299,7 +356,7 @@ describeIntegration('the platform audit view', () => {
     expect(farPast.rows).toEqual([])
     const today = new Date().toISOString().slice(0, 10)
     const fromToday = await listPlatformAudit({ ...ALL, from: today, actorSearch: `zzz_${RUN}` })
-    expect(fromToday.rows).toHaveLength(2)
+    expect(fromToday.rows).toHaveLength(3)
   })
 
   it('refuses everyone who is not a platform admin, before opening the platform identity', async () => {
@@ -318,7 +375,13 @@ describeIntegration('the platform audit view', () => {
 
   it('answers 404 on a dedicated address and 400 to an invalid body', async () => {
     expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { page: 0, size: 5000 }))).status).toBe(400)
+    // Il tenant si indica con `scope: 'tenant'` e solo con quello.
     expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { ...ALL, scope: 'tenant' }))).status).toBe(400)
+    expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { ...ALL, tenantId: Number(A) }))).status).toBe(400)
+    expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { ...ALL, scope: 'template', tenantId: Number(A) }))).status).toBe(400)
+    expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { ...ALL, scope: 'tenant', tenantId: -1 }))).status).toBe(400)
+    expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { ...ALL, scope: 'tenant', tenantId: '1' }))).status).toBe(400)
+    expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { ...ALL, scope: 'everything' }))).status).toBe(400)
     const dedicated = `zzz-audit-${unique()}.example.test`
     await withOwner(tx => tx.execute(sql`insert into public.tenant_host (host, id_tenant, is_primary) values (${dedicated}, ${A}, true)`))
     mocks.headers = new Headers({ host: dedicated })

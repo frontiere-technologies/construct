@@ -3,7 +3,8 @@ import { auditFilterConditions, auditOrdering, toAuditRow, type AuditColumns } f
 import type { AuditQuery, AuditRow } from '@/lib/audit/audit-grid-query'
 import { platformAuditEvent, tenant, tenantAuditEvent } from '@/lib/db/schema'
 import { requirePlatformAdmin } from '@/lib/rbac/auth-guard'
-import { templateTenantId } from '@/lib/tenancy/platform-tenant'
+import { existingTenantId, templateTenantId } from '@/lib/tenancy/platform-tenant'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
 import { withPlatform } from './db'
 
 const PLATFORM_COLUMNS: AuditColumns = {
@@ -29,8 +30,24 @@ const TEMPLATE_COLUMNS: AuditColumns = {
  */
 export async function listPlatformAudit(query: AuditQuery): Promise<{ rows: AuditRow[]; total: number }> {
   await requirePlatformAdmin()
+  return readPlatformAudit(query, undefined)
+}
 
-  const where = and(...auditFilterConditions(PLATFORM_COLUMNS, query))
+/**
+ * Le voci della piattaforma su un solo tenant (la scheda del tenant, MT5-DEC-6): sempre e solo
+ * `platform_audit_event` con `id_tenant` uguale a quello, mai le voci di tenant. L'id arriva dalla
+ * richiesta: diventa un tenant solo se il registro dei tenant lo conosce, altrimenti lancia
+ * `tenant_not_found`. L'amministratore si verifica prima di leggere i tenant e di aprire la transazione.
+ */
+export async function listPlatformAuditForTenant(rawTenantId: number, query: AuditQuery): Promise<{ rows: AuditRow[]; total: number }> {
+  await requirePlatformAdmin()
+  const tenantKey = await existingTenantId(rawTenantId)
+  return readPlatformAudit(query, tenantKey)
+}
+
+async function readPlatformAudit(query: AuditQuery, onlyTenant: TenantId | undefined): Promise<{ rows: AuditRow[]; total: number }> {
+  const filters = auditFilterConditions(PLATFORM_COLUMNS, query)
+  const where = onlyTenant === undefined ? and(...filters) : and(eq(platformAuditEvent.idTenant, onlyTenant), ...filters)
   return withPlatform(async tx => {
     // Dentro una transazione le letture vanno in serie sulla stessa connessione.
     const page = await tx.select({

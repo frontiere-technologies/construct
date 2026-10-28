@@ -12,7 +12,8 @@ import { requirePlatformAdminPage } from '@/lib/rbac/auth-guard'
  * Un id che non è un numero o non esiste è un 404, come per chi non è amministratore di piattaforma.
  * La scheda del modello mostra anche il suo registro di tenant (MT5-DEC-21): il modello non ha
  * persone né dati di clienti, e quel registro è l'unico di tenant che la console legge senza un
- * permesso di assistenza.
+ * permesso di assistenza. Le altre schede mostrano gli eventi della piattaforma su quel tenant
+ * (sola tabella della piattaforma, mai le voci di tenant).
  */
 export default async function PlatformTenantPage({ params }: { params: Promise<{ tenantId: string }> }) {
   await requirePlatformAdminPage()
@@ -24,11 +25,18 @@ export default async function PlatformTenantPage({ params }: { params: Promise<{
   return (
     <PageContainer title={tenant.name} subtitle={tenant.slug}>
       <TenantDetail tenant={tenant} />
-      {tenant.isTemplate && (
+      {tenant.isTemplate ? (
         <section aria-labelledby="template-audit" className="mt-6">
           <h2 id="template-audit" className="mb-3 text-base font-semibold">{t('audit.title')}</h2>
           <AuditTableClient
             {...parseAuditGridUrlParams({})} endpoint="/api/platform/audit-grid" extraQuery={{ scope: 'template' }} syncUrl={false}
+          />
+        </section>
+      ) : (
+        <section aria-labelledby="tenant-events" className="mt-6">
+          <h2 id="tenant-events" className="mb-3 text-base font-semibold">{t('platform.tenant.detail.events')}</h2>
+          <AuditTableClient
+            {...parseAuditGridUrlParams({})} endpoint="/api/platform/audit-grid" extraQuery={{ scope: 'tenant', tenantId: tenant.id }} syncUrl={false}
           />
         </section>
       )}

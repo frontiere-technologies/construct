@@ -160,6 +160,10 @@ def test_the_tenant_page_and_the_platform_audit_show_the_creation(platform_page,
     # Nessun permesso di assistenza: l'ingresso è chiuso, e la scheda dice perché.
     expect(page.get_by_text("Nessun permesso di assistenza.")).to_be_visible()
     expect(page.get_by_role("button", name="Entra come piattaforma")).to_be_disabled()
+    # Gli eventi della piattaforma su questo tenant (MT5-DEC-6): la creazione, e niente voci di tenant.
+    expect(page.get_by_role("heading", name="Eventi della piattaforma")).to_be_visible()
+    expect(grid_rows(page).filter(has_text="Tenant creato").first).to_be_visible(timeout=15_000)
+    expect(grid_rows(page).filter(has_text="Ruolo creato")).to_have_count(0)
 
     nav(page, f"{base_url}/platform/audit")
     created = grid_rows(page).filter(has_text="Tenant creato").filter(has_text=TENANT_NAME)
