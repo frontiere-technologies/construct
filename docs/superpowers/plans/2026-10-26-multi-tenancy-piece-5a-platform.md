@@ -317,7 +317,7 @@ it('during support the consent actions are refused', …)
   - `listPlatformAudit(query)` (registro della piattaforma, con `withPlatform`, `requirePlatformAdmin`) e, nella scheda del modello, `listTemplateAudit(query)`;
   - `AuditRow = { id: string; occurredAt: string; actorEmail: string | null; actorKind: AuditActorKind; operation: AuditOperation; objectType: string | null; objectId: string | null; details: Record<string, unknown>; tenantId?: number | null }`.
 
-- [ ] **Step 1: Test**
+- [✅] **Step 1: Test**
 
 ```ts
 it('the admin of A sees A audit rows including platform support rows, never B rows', …)
@@ -326,8 +326,8 @@ it('a tenant admin can read languages and translations but every write is refuse
 it('a platform admin without any tenant writes languages and translations from the console', …)
 ```
 
-- [ ] **Step 2–4:** come sopra.
-- [ ] **Step 5: Spunta MT5-OK-4 e commit** — `feat(audit): tenant and platform audit views; global catalogs owned by the platform`
+- [✅] **Step 2–4:** come sopra.
+- [✅] **Step 5: Spunta MT5-OK-4 e commit** — `feat(audit): tenant and platform audit views; global catalogs owned by the platform`
 
 ---
 
