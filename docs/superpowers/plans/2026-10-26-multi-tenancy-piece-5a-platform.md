@@ -354,6 +354,6 @@ it('a platform admin without any tenant writes languages and translations from t
 **Files:**
 - Modify: specifica, `docs/input-specs/multi-tenancy/2026-10-13-multi-tenancy-deferred.md` (DEF-5.1, 5.3, 5.5, 5.6, 2.7 `- [✅]` "fatto nel pezzo 5a"), `docs/input-specs/multi-tenancy/multi-tenancy-roadmap.md` (MT-5.1…5.6, MT-2.7 `[✅]`), `README.md`
 
-- [ ] **Step 1: Controlli completi sul database di prova** — `npx tsc --noEmit && npm run lint && npm run test` e tutti gli script di contratto e `npm audit --omit=dev`; poi `npm run test:integration`; poi l'E2E completo; poi `npm run build` registrando il codice di uscita; `schema-check` e `boundary-check` sul database di prova. Expected: tutto in regola salvo gli 8 fallimenti noti di `Sidebar*`.
-- [ ] **Step 2: Spunte e commit** — `docs(multi-tenancy): tick piece-5a criteria, deferred items and roadmap`
+- [✅] **Step 1: Controlli completi sul database di prova** — `npx tsc --noEmit && npm run lint && npm run test` e tutti gli script di contratto e `npm audit --omit=dev`; poi `npm run test:integration`; poi l'E2E completo; poi `npm run build` registrando il codice di uscita; `schema-check` e `boundary-check` sul database di prova. Expected: tutto in regola salvo gli 8 fallimenti noti di `Sidebar*`.
+- [✅] **Step 2: Spunte e commit** — `docs(multi-tenancy): tick piece-5a criteria, deferred items and roadmap`
 - [ ] **Step 3: Dopo il merge, FERMATI e chiedi al proprietario** prima di toccare il database di sviluppo. Con un sì esplicito: `provision-platform-role` (con le credenziali in `operator.env` e `PLATFORM_DATABASE_URL` nell'app), `apply` delle migrazioni 0057 e successive, `platform-admin-add --email` per il proprietario, `boundary-check`; poi riavvio dell'app e prova della console.

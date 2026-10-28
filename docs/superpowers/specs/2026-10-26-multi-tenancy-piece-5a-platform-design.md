@@ -227,7 +227,7 @@ del primo amministratore di piattaforma, con conferma del proprietario, dopo il 
 
 ### 5.2 Rischi
 
-- [ ] ID=MT5-RISK-1, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=Identità di piattaforma troppo potente, Fix description=Un utente del database membro di `construct_owner` dentro l'app è un rischio se usato fuori dalla console: un controllo automatico deve impedire ogni import fuori dal modulo della piattaforma, e ogni porta deve verificare l'amministratore di piattaforma prima di aprire una transazione.
+- [✅] ID=MT5-RISK-1, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=Identità di piattaforma troppo potente, Fix description=Un utente del database membro di `construct_owner` dentro l'app è un rischio se usato fuori dalla console: un controllo automatico deve impedire ogni import fuori dal modulo della piattaforma, e ogni porta deve verificare l'amministratore di piattaforma prima di aprire una transazione.
 - [✅] ID=MT5-RISK-2, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Assistenza che dura oltre il permesso, Fix description=La rivalidazione a ogni richiesta deve far uscire subito a scadenza, revoca o sospensione; test con il tempo che scorre.
 - [✅] ID=MT5-RISK-3, Severity=Medium, Complexity=Medium, Priority=P1, Estimate=hours, Title=Registro che manca su una porta, Fix description=Senza inventario, una porta nuova dimenticherebbe la voce; il test di MT5-OK-1 lo impedisce.
 - [✅] ID=MT5-RISK-4, Severity=Medium, Complexity=Low, Priority=P1, Estimate=minutes, Title=Dati sensibili nel registro, Fix description=I dettagli non devono contenere password, token o testi d'invito; controllo nei test.

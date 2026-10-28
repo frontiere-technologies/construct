@@ -37,7 +37,7 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
 | [✅] | MT-2.4 | 2 | Tenant modello e creazione | Modello copiato in ogni tenant nuovo; comando `db.mjs tenant-create`. | P1 | days | PR #86 | |
 | [ ] | MT-2.5 | 2 | Lingue e traduzioni per tenant | Lingue attive e traduzioni personalizzate per tenant. | P2 | days | DEF-2.4 | Oggi globali, modificabili solo dal predefinito |
 | [ ] | MT-2.6 | 2 | Raccolta di temi per tenant | Più temi con nome, uno attivo. | P3 | days | DEF-2.5 | Oggi un tema per tenant |
-| [ ] | MT-2.7 | 2 | Eliminare il ruolo 2 | Togliere "Tenant Super Administrator", ruolo senza logica. | P2 | minutes | DEF-2.7 | Insieme all'amministratore di piattaforma (5a) |
+| [✅] | MT-2.7 | 2 | Eliminare il ruolo 2 | Togliere "Tenant Super Administrator", ruolo senza logica. | P2 | minutes | DEF-2.7 | Insieme all'amministratore di piattaforma (5a) |
 | [ ] | MT-3.1 | 3 | Identità per provider | Tabella `user_identity` (provider, issuer, subject), non solo email. | P0 | days | DEF-3.1 | |
 | [ ] | MT-3.2 | 3 | Inviti per tenant | Appartenenza "invitato", accettazione, risposta sempre neutra. | P0 | days | DEF-3.2 | |
 | [ ] | MT-3.3 | 3 | Decisione sul reset della password | Password unica: decidere se un reset da un tenant vale per tutti. | P1 | minutes | DEF-3.3, MT-DEC-07 | Decisione del proprietario |
@@ -51,12 +51,12 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
 | [✅] | MT-4.5 | 4 | Link e pagine prima dell'accesso | Tema e link nelle email dal tenant dell'indirizzo, mai dall'intestazione `Host`. | P0 | hours | PR #87 | |
 | [✅] | MT-4.6 | 4 | Test fra tenant su ogni ingresso | 63 ingressi provati con i dati di un altro tenant; fallisce se ne compare uno nuovo senza caso. | P0 | days | PR #87 | |
 | [ ] | MT-4.7 | 4 | Cache per singolo tenant | Svuotare la cache delle pagine solo per il tenant che cambia. | P3 | hours | DEF-4.5 | Oggi si svuota per tutti |
-| [~] | MT-5.1 | 5a | Amministratore di piattaforma | Attributo dell'account, non del tenant; il primo da comando, gli altri dalla console. | P0 | days | DEF-5.1, MT-DEC-03 | Specifica in corso |
-| [ ] | MT-5.2 | 5a | Console: elenco e creazione dei tenant | Griglia dei tenant, "Nuovo tenant" con nome, slug, indirizzo e primo amministratore invitato per email. | P0 | days | DEF-5.3 | Sostituisce `tenant-create` da comando |
-| [ ] | MT-5.3 | 5a | Console: scheda del tenant | Stato (attivo, sospeso, archiviato), indirizzi, amministratori, reinvio dell'invito. | P0 | days | DEF-5.3 | |
-| [ ] | MT-5.4 | 5a | Accesso di assistenza | "Entra come piattaforma" con motivo, durata limitata e fascia visibile; permette di modificare il modello dall'app. | P1 | days | DEF-5.5 | |
-| [ ] | MT-5.5 | 5a | Registro delle operazioni | Tabella `audit_event` scritta nella stessa transazione della modifica. | P1 | days | DEF-5.6 | |
-| [ ] | MT-5.6 | 5a | Cataloghi comuni alla piattaforma | Lingue e traduzioni modificabili dall'amministratore di piattaforma, non più dal solo predefinito. | P1 | hours | final review pezzo 4 | |
+| [✅] | MT-5.1 | 5a | Amministratore di piattaforma | Attributo dell'account, non del tenant; il primo da comando, gli altri dalla console. | P0 | days | DEF-5.1, MT-DEC-03 | Fatto nel pezzo 5a |
+| [✅] | MT-5.2 | 5a | Console: elenco e creazione dei tenant | Griglia dei tenant, "Nuovo tenant" con nome, slug, indirizzo e primo amministratore invitato per email. | P0 | days | DEF-5.3 | Sostituisce `tenant-create` da comando |
+| [✅] | MT-5.3 | 5a | Console: scheda del tenant | Stato (attivo, sospeso, archiviato), indirizzi, amministratori, reinvio dell'invito. | P0 | days | DEF-5.3 | |
+| [✅] | MT-5.4 | 5a | Accesso di assistenza | "Entra come piattaforma" con motivo, durata limitata e fascia visibile; permette di modificare il modello dall'app. | P1 | days | DEF-5.5 | |
+| [✅] | MT-5.5 | 5a | Registro delle operazioni | Tabella `audit_event` scritta nella stessa transazione della modifica. | P1 | days | DEF-5.6 | |
+| [✅] | MT-5.6 | 5a | Cataloghi comuni alla piattaforma | Lingue e traduzioni modificabili dall'amministratore di piattaforma, non più dal solo predefinito. | P1 | hours | final review pezzo 4 | |
 | [ ] | MT-5.7 | 5b | Funzioni concesse per tenant | Quali aree dell'app un tenant può usare, rispettate nei controlli e nel database. | P1 | days | DEF-5.2, DEF-5.4, MT-DEC-04 | Decisione del proprietario |
 | [ ] | MT-5.8 | 5b | Interruttore delle funzioni di tenant | Spegnere console e selettore per un'applicazione derivata con un solo tenant. | P2 | hours | DEF-5.7 | |
 | [ ] | MT-5.9 | 5b | Limiti per tenant | Tempo massimo delle query, quote su utenti, ruoli, voci di menu. | P2 | days | DEF-5.8 | |

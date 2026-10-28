@@ -401,7 +401,8 @@ Link per impostare la password (valido 48 ore): https://construct.example.it/set
   amministratore attivo** il comando rifiuta, anche quando esistono amministratori disattivati. Due
   rimozioni insieme non possono passare entrambe.
 - Nominare chi lo è già, o togliere l'attributo a chi non lo ha, non cambia nulla, esce con 0 e non
-  scrive nel registro.
+  scrive nel registro. (Dalla console, nominare di nuovo chi è già amministratore ma **senza password**
+  manda invece un invito nuovo: vedi "Console di piattaforma".)
 - `test-platform-admin-add` e `test-platform-admin-remove` fanno lo stesso sul database di prova usa
   e getta.
 
@@ -417,10 +418,36 @@ Limiti noti (specifiche 2026-10-20 e 2026-10-21, §5.3):
 - **I tenant creati così si usano dal pezzo 4 della multi-tenancy.** Il primo amministratore entra
   dal browser: dall'indirizzo dedicato del tenant (`--host`), oppure dall'indirizzo principale con
   la pagina di scelta o il selettore della barra laterale.
-- **Il modello si modifica solo via SQL**, finché il pezzo 5 non permetterà alla piattaforma, e
-  solo a lei, di sceglierlo come tenant corrente.
-- **Lingue e traduzioni si modificano solo dal tenant predefinito** fino al pezzo 5: sono cataloghi
-  globali (MT2-DEC-11), e negli altri tenant anche l'amministratore li legge soltanto.
+- **Il modello si modifica dalla console di piattaforma** (pezzo 5a, MT5-DEC-11): la piattaforma lo
+  sceglie come tenant corrente senza permesso di assistenza, e solo lei. Resta modificabile anche via SQL.
+- **Lingue e traduzioni si modificano dalla console di piattaforma** (pezzo 5a, MT5-DEC-17, 24): sono
+  cataloghi globali (MT2-DEC-11), e negli altri tenant anche l'amministratore li legge soltanto.
+
+### Console di piattaforma (sezione "Piattaforma")
+
+Dal pezzo 5a la piattaforma si governa dal browser, sull'**indirizzo principale** (su un indirizzo
+dedicato le pagine e le rotte della piattaforma rispondono 404, MT5-DEC-3), solo con un account
+amministratore di piattaforma. Il database della console è il login `construct_platform`
+(`PLATFORM_DATABASE_URL`, vedi "Identità di piattaforma"). Specifica: `docs/superpowers/specs/2026-10-26-multi-tenancy-piece-5a-platform-design.md`.
+
+- **La voce "Piattaforma" della barra laterale** compare solo a chi è amministratore di piattaforma, e
+  **dopo che la sessione è stata ricalcolata**: chi viene nominato mentre è già dentro deve accedere di nuovo
+  per vedere la voce.
+- **Amministratori di piattaforma dalla console.** Nominare di nuovo un amministratore che **non ha
+  una password** (anche un account solo SSO) non è un no-op: manda un **invito nuovo** (i token
+  precedenti decadono) e scrive `platform.admin.invite` nel registro. Chi ha già la password non
+  cambia e non lascia voci.
+- **Assistenza.** L'amministratore di un tenant concede il permesso dalle impostazioni del tenant; con
+  il permesso valido la piattaforma entra dall'indirizzo principale ("Entra come piattaforma", con
+  motivo e durata). **Per tutta la durata del permesso l'amministratore di piattaforma ha il pieno
+  potere di `TENANT_ADMIN` di quel tenant** (MT5-DEC-12): può invitare persone e cambiare i ruoli,
+  tranne le modifiche al **proprio** account. Ogni modifica si scrive nel registro del tenant con
+  veste "platform" (attore reale e per conto di).
+- **Un amministratore di piattaforma può farsi amministratore di un tenant** dalla console (lo
+  consente MT5-DEC-1): l'operazione si scrive in **entrambi i registri**, quello della piattaforma e
+  quello del tenant.
+- **In assistenza la console è chiusa.** Finché si è in un tenant la sezione "Piattaforma" non è
+  raggiungibile: si preme prima "Esci" dalla fascia di assistenza, poi si torna alla console.
 
 ## Local Docker with Supabase
 
