@@ -2,7 +2,7 @@
 
 ## Findings and recommendations summary
 
-Construct supplies a hardened, reusable Kubernetes baseline and a production example. A derived application must replace the example domain, image digest, resource requests, replica target, TLS secret, mail provider, database endpoints, and recovery objectives before deployment. Runtime pods receive only the least-privilege `DATABASE_URL`; the administrative `MIGRATION_DATABASE_URL` is scoped to the migration operator or one-shot job.
+Construct supplies a hardened, reusable Kubernetes baseline and a production example. A derived application must replace the example domain, image digest, resource requests, replica target, TLS secret, mail provider, database endpoints, and recovery objectives before deployment. Runtime pods receive only the two least-privilege logins, `DATABASE_URL` (the tenant runtime) and `PLATFORM_DATABASE_URL` (the platform console identity, `construct_platform`); the administrative `MIGRATION_DATABASE_URL` is scoped to the migration operator or one-shot job.
 
 ## Environment-specific inputs
 
@@ -10,6 +10,7 @@ Construct supplies a hardened, reusable Kubernetes baseline and a production exa
 - [ ] ID=PROD-2, Title=External URL, Action=Replace `construct.example.com`, configure DNS and TLS, and set the identical HTTPS origin in `AUTH_URL`.
 - [ ] ID=PROD-3, Title=Capacity, Action=Set replicas, disruption policy, and CPU/memory requests from the derived application's measured load and availability target.
 - [ ] ID=PROD-4, Title=Runtime database identity, Action=Provision a dedicated LOGIN role that inherits only `construct_runtime` and create the runtime `DATABASE_URL` from it.
+- [ ] ID=PROD-4A, Title=Platform database identity, Action=Provision the `construct_platform` LOGIN role with `provision-platform-role` (after `apply`, which creates `construct_owner`) and create `PLATFORM_DATABASE_URL` from it; never use the migration identity there. Without it the app starts and only the platform console answers with an error.
 - [ ] ID=PROD-5, Title=Migration identity, Action=Store `MIGRATION_DATABASE_URL` separately from runtime secrets and expose it only to the migration operation.
 - [ ] ID=PROD-6, Title=Observability, Action=Route stdout/stderr to the chosen log platform and configure retention, access controls, alerts, and redaction checks.
 
@@ -29,6 +30,9 @@ node sources/devops/db/db.mjs apply
 CONSTRUCT_RUNTIME_DB_USER=construct_app \
 CONSTRUCT_RUNTIME_DB_PASSWORD='<secret-store-value-at-least-24-characters>' \
   node sources/devops/db/db.mjs provision-runtime-role
+CONSTRUCT_PLATFORM_DB_USER=construct_platform \
+CONSTRUCT_PLATFORM_DB_PASSWORD='<secret-store-value-at-least-24-characters>' \
+  node sources/devops/db/db.mjs provision-platform-role
 bash sources/devops/k8s/validate.sh
 kubectl kustomize sources/devops/k8s/overlays/production-example
 ```
@@ -37,7 +41,8 @@ kubectl kustomize sources/devops/k8s/overlays/production-example
 
 - [ ] ID=PROD-11, Title=Apply migrations, Action=Run the migration command once with the administrative secret and retain its migration/version output.
 - [ ] ID=PROD-11A, Title=Migration job isolation, Action=If using `sources/devops/k8s/migrations/job.example.yaml`, copy it into the derived overlay, bind its operator-only secret, run it as a one-shot Job, inspect completion/logs, and delete the Job; never add that secret to the Deployment.
-- [ ] ID=PROD-12, Title=Create runtime secret, Action=Create `web-construct-runtime-secret` with only runtime configuration and the limited `DATABASE_URL`; never include `MIGRATION_DATABASE_URL`.
+- [ ] ID=PROD-11B, Title=Provision the platform identity, Action=Right after `apply` (and the runtime role), run `provision-platform-role` with the migration identity and the `CONSTRUCT_PLATFORM_DB_*` operator credentials; it refuses an existing login that has extra memberships, objects or privileges.
+- [ ] ID=PROD-12, Title=Create runtime secret, Action=Create `web-construct-runtime-secret` with only runtime configuration, the limited `DATABASE_URL` and `PLATFORM_DATABASE_URL` (see `sources/devops/k8s/dev/secret.env.example`); never include `MIGRATION_DATABASE_URL` or any `CONSTRUCT_*_DB_*` operator credential.
 - [ ] ID=PROD-13, Title=Apply overlay, Action=Apply the reviewed derived production overlay and wait for its rolling rollout.
 
 ```bash
@@ -48,8 +53,17 @@ kubectl apply -k sources/devops/k8s/overlays/production-example
 kubectl rollout status deployment/web-construct -n construct --timeout=5m
 ```
 
+Then, from the operator's shell (migration identity and `AUTH_URL` from the secret store):
+
+```bash
+node sources/devops/db/db.mjs platform-admin-add --email '<first-platform-admin-address>'
+node sources/devops/db/db.mjs boundary-check
+```
+
 ## Post-deployment verification
 
+- [ ] ID=PROD-13A, Title=First platform administrator, Action=Once the rollout is ready, run `platform-admin-add --email <address>` with the migration identity and `AUTH_URL` set to the main address: it prints the set-password link (valid 48 hours, printed and never written to the audit log). If the link expires or is lost, run the same command again: an administrator who still has no password gets a fresh link, and the console does the same when an administrator adds that email again. An administrator who already has a password is left unchanged.
+- [ ] ID=PROD-13B, Title=Privilege boundary, Action=Run `node sources/devops/db/db.mjs boundary-check` (read-only) with the operator environment and record that the runtime and platform logins stay inside their boundaries.
 - [ ] ID=PROD-14, Title=Liveness, Action=Verify `/api/health/live` returns HTTP 200 from the external route.
 - [ ] ID=PROD-15, Title=Readiness, Action=Verify `/api/health/ready` returns HTTP 200 and every desired pod is Ready.
 - [ ] ID=PROD-16, Title=Authentication, Action=Verify one configured provider, account deactivation, and administrator demotion behavior.
@@ -71,6 +85,6 @@ Database restore is intentionally provider-specific. Document the exact Supabase
 
 ## Credential rotation
 
-- [ ] ID=PROD-22, Title=Runtime rotation, Action=Create a new limited login/password, update the runtime secret, roll pods, verify readiness, then revoke the old login.
+- [ ] ID=PROD-22, Title=Runtime rotation, Action=Create a new limited login/password, update the runtime secret, roll pods, verify readiness, then revoke the old login. Do the same for the platform login behind `PLATFORM_DATABASE_URL`.
 - [ ] ID=PROD-23, Title=Migration rotation, Action=Rotate the administrative database password in its operator-only secret store and verify migration connectivity without copying it into runtime configuration.
 - [ ] ID=PROD-24, Title=Application secrets, Action=Rotate `AUTH_SECRET`, OIDC, mail, and TLS credentials according to provider-specific session and overlap requirements.
