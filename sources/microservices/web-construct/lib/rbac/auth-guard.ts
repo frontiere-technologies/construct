@@ -57,10 +57,18 @@ export async function requireAdministratorPage(): Promise<Actor> {
 /**
  * La sessione di chi chiede la console. Il tenant non conta (la console funziona in ogni stato:
  * `ready`, `choose`, `none`) e il flag della sessione nemmeno: l'attributo si rilegge dal database.
+ *
+ * Con una sessione in assistenza la console è chiusa (pezzo 5a, controllore, fix 1 del Task 10): in
+ * assistenza ogni modifica deve finire nel registro del tenant assistito, e le azioni della
+ * console (cataloghi globali, stati dei tenant) non ci passano. Lo stato si legge dalla sessione di
+ * questa richiesta, cioè dal token appena rivalidato dal server, mai da un dato del client. Solo
+ * l'uscita (`requireSupportExit`) la vuole in assistenza.
  */
-async function currentPlatformAdmin(): Promise<PlatformActor | null> {
-  const userId = (await getSession())?.user?.id
-  if (!userId) return null
+async function currentPlatformAdmin(inSupport: boolean): Promise<PlatformActor | null> {
+  const session = await getSession()
+  const userId = session?.user?.id
+  if (!session || !userId) return null
+  if (isSupportSession(session) !== inSupport) return null
   return resolvePlatformAdmin(userId)
 }
 
@@ -70,14 +78,25 @@ async function currentPlatformAdmin(): Promise<PlatformActor | null> {
  * qualunque porta della piattaforma (`withPlatform`). Su un indirizzo dedicato rifiuta.
  */
 export async function requirePlatformAdmin(): Promise<PlatformActor> {
-  const admin = await currentPlatformAdmin()
+  const admin = await currentPlatformAdmin(false)
+  if (!admin) throw new Error('Unauthorized')
+  return admin
+}
+
+/**
+ * Il controllo dell'uscita dall'assistenza, che è l'unica porta della console che la vuole: la
+ * persona è amministratore di piattaforma (riletto dal database, indirizzo principale) **e** la
+ * sessione è in assistenza. Fuori dall'assistenza rifiuta, come ogni altra porta rifiuta dentro.
+ */
+export async function requireSupportExit(): Promise<PlatformActor> {
+  const admin = await currentPlatformAdmin(true)
   if (!admin) throw new Error('Unauthorized')
   return admin
 }
 
 /** Per le pagine della console: chi non è ammesso, o è su un indirizzo dedicato, vede un 404. */
 export async function requirePlatformAdminPage(): Promise<PlatformActor> {
-  const admin = await currentPlatformAdmin()
+  const admin = await currentPlatformAdmin(false)
   if (!admin) notFound()
   return admin
 }

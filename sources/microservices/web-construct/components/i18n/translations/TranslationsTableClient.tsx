@@ -33,7 +33,7 @@ interface Props {
   canManageKeys: boolean
   /** Where the grid's rows come from: the tenant's read-only route by default, the console's in the console. */
   gridEndpoint?: string
-  /** Where the create and edit pages live: they are in the console, so only the console passes it. */
+  /** Where the create and edit pages live: in the console. Without it (the tenant's read-only list) there are no write links. */
   basePath?: string
 }
 
@@ -58,9 +58,14 @@ export function TranslationsTableClient(props: Props) {
   const datasource = useMemo(() => createTranslationsDatasource(props.gridEndpoint), [props.gridEndpoint])
   const refresh = () => { router.refresh(); gridApiRef.current?.refreshInfiniteCache() }
 
+  // Le pagine di modifica stanno nella console: senza `basePath` (l'elenco di sola lettura del tenant) non ci sono collegamenti.
+  const basePath = props.basePath
+  const canEditHere = props.canEdit && Boolean(basePath)
+  const canCreateHere = props.canManageKeys && Boolean(basePath)
+
   const columnDefs = useMemo<ColDef<TranslationRowDto>[]>(() => [
-    ...(props.canEdit || props.canManageKeys ? [actionsColumnDef<TranslationRowDto>(row => [
-      ...(props.canEdit ? [{ label: t('common.actions.edit'), onClick: () => router.push(translationEditHref(row.id, sp.toString(), props.basePath)) }] : []),
+    ...(canEditHere || props.canManageKeys ? [actionsColumnDef<TranslationRowDto>(row => [
+      ...(canEditHere ? [{ label: t('common.actions.edit'), onClick: () => router.push(translationEditHref(row.id, sp.toString(), basePath!)) }] : []),
       ...(props.canManageKeys ? [{ label: t('common.actions.delete'), onClick: () => setDeleting(row) }] : []),
     ])] : []),
     {
@@ -109,7 +114,7 @@ export function TranslationsTableClient(props: Props) {
       colId: 'updatedAt', headerName: t('translation.updated_at'), sortable: true, ...TRANSLATION_DATE_FILTER, width: 160,
       valueGetter: p => p.data ? fmt.dateTime(p.data.updatedAt) : '',
     },
-  ], [t, fmt, languages, props.namespaces, props.modules, props.canEdit, props.canManageKeys, props.basePath, router, sp])
+  ], [t, fmt, languages, props.namespaces, props.modules, canEditHere, basePath, props.canManageKeys, router, sp])
 
   const columnLabels = useMemo(() => [
     { colId: 'key', label: t('translation.key') },
@@ -141,8 +146,8 @@ export function TranslationsTableClient(props: Props) {
           () => setParam(translationsFilterModelToSearchParams({}, languages.map(language => language.code))),
         )}
       >
-        {props.canManageKeys && (
-          <Button size="sm" data-testid="create-translation-key" onClick={() => router.push(translationCreateHref(sp.toString(), props.basePath))}>
+        {canCreateHere && (
+          <Button size="sm" data-testid="create-translation-key" onClick={() => router.push(translationCreateHref(sp.toString(), basePath!))}>
             {t('translation.actions.create')}
           </Button>
         )}

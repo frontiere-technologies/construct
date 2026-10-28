@@ -29,6 +29,7 @@ const DECLARATION_MODULES: Record<string, Record<string, 'awaited' | 'sync'>> = 
     requireAdministratorPage: 'awaited',
     requirePlatformAdmin: 'awaited',
     requirePlatformAdminPage: 'awaited',
+    requireSupportExit: 'awaited',
   },
   '@/lib/rbac/access-declarations': {
     allowSelfService: 'sync',

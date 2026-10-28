@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   listLanguagesPage: vi.fn(),
 }))
 
+// Un guasto si registra: il registro vero scriverebbe nell'uscita dei test.
+vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn() }) }))
 vi.mock('@/lib/rbac/auth-guard', () => ({ requirePermission: mocks.requirePermission }))
 vi.mock('@/lib/i18n/language-service', () => ({ listLanguagesPage: mocks.listLanguagesPage }))
 
@@ -64,5 +66,12 @@ describe('POST /api/i18n/languages-grid', () => {
 
     expect(response.status).toBe(200)
     expect(mocks.listLanguagesPage).toHaveBeenCalledWith(payload)
+  })
+
+  it('answers a failure with a generic message, never with the text of the error', async () => {
+    mocks.listLanguagesPage.mockRejectedValue(new Error('connection to db-internal-host refused'))
+    const response = await POST(request({ page: 0, size: 50 }))
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({ error: 'Errore interno.' })
   })
 })

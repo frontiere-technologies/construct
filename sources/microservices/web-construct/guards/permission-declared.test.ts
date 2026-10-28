@@ -236,7 +236,7 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/i18n/user-language-actions.ts#setPreferredLanguage': 'allowSelfService',
   'lib/platform/platform-admin-actions.ts#addPlatformAdmin': 'requirePlatformAdmin',
   'lib/platform/platform-admin-actions.ts#removePlatformAdmin': 'requirePlatformAdmin',
-  'lib/platform/support-actions.ts#endSupport': 'requirePlatformAdmin',
+  'lib/platform/support-actions.ts#endSupport': 'requireSupportExit',
   'lib/platform/support-actions.ts#startSupport': 'requirePlatformAdmin',
   'lib/platform/tenant-actions.ts#addTenantAdmin': 'requirePlatformAdmin',
   'lib/platform/tenant-actions.ts#addTenantHost': 'requirePlatformAdmin',

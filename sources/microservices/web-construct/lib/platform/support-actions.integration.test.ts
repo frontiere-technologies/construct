@@ -7,6 +7,7 @@ import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { tenantIdForTest } from '@/lib/tenancy/testing'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
+import { appLanguage, tenant as tenantTable, translationKey } from '@/lib/db/schema'
 import { closePlatform } from './db'
 
 /**
@@ -51,6 +52,12 @@ vi.mock('@/lib/auth', () => ({
 
 const { revalidateTokenTenant, enterTenant, updateTokenTenant, sessionTenantOf } = await import('@/lib/tenancy/token-tenant')
 const { startSupport, endSupport } = await import('./support-actions')
+const { createLanguage } = await import('@/lib/i18n/language-actions')
+const { createTranslationKey } = await import('@/lib/i18n/translation-actions')
+const { addPlatformAdmin } = await import('./platform-admin-actions')
+const { requirePlatformAdmin, requirePlatformAdminPage } = await import('@/lib/rbac/auth-guard')
+const { POST: platformAuditGrid } = await import('@/app/api/platform/audit-grid/route')
+const { POST: tenantAuditGrid } = await import('@/app/api/audit/tenant-grid/route')
 const { grantSupportConsent, revokeSupportConsent } = await import('@/lib/tenancy/support-consent-actions')
 const { createRole } = await import('@/lib/rbac/roles-actions')
 const { requirePermission } = await import('@/lib/rbac/auth-guard')
@@ -138,6 +145,115 @@ async function addMember(tenantId: TenantId, person: Person): Promise<void> {
   })
 }
 
+// Fix round 1 del Task 10: la console è chiusa in assistenza. Una persona della piattaforma in
+// assistenza agisce nel tenant, e quelle modifiche vanno nel registro del tenant; le azioni della
+// console (cataloghi globali compresi) non scrivono in nessun registro del tenant, quindi non
+// passano di lì. Per uscire c'è `endSupport`, con la sua guardia.
+describeIntegration('the console is closed during support', () => {
+  const gridRequest = (path: string, body: unknown) => new NextRequest(`http://localhost:3000${path}`, {
+    method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' },
+  })
+
+  async function inSupport(label: string): Promise<TenantId> {
+    const tenant = await seedTenant(label)
+    const admin = await seedAdmin(tenant, `${label}-admin`)
+    await grantAs(admin)
+    await signIn(platformAdmin)
+    expect(await startSupport(Number(tenant), 'verifica')).toEqual({ state: 'support' })
+    expect((await nextRequest()).tenantState).toBe('support')
+    return tenant
+  }
+
+  it('refuses a catalog write, and the catalog does not change', async () => {
+    await inSupport('closed-catalog')
+    const code = unique().slice(-3).replace(/[0-9]/g, d => String.fromCharCode(97 + Number(d)))
+    const keysBefore = (await withGlobal(tx => tx.select({ id: translationKey.idTranslationKey }).from(translationKey))).length
+    const languagesBefore = (await withGlobal(tx => tx.select({ id: appLanguage.idLanguage }).from(appLanguage))).length
+
+    await expect(createLanguage({ code, locale: `${code}-ZZ`, name: `zzz_i18n_test_${code}`, nativeName: `zzz_i18n_test_${code}`, isActive: true }))
+      .rejects.toThrow('Unauthorized')
+    await expect(createTranslationKey({ key: `zzz_i18n_test_closed${unique()}.label`, description: null, namespace: 'zzz_i18n_test', module: null }))
+      .rejects.toThrow('Unauthorized')
+
+    expect((await withGlobal(tx => tx.select({ id: appLanguage.idLanguage }).from(appLanguage))).length).toBe(languagesBefore)
+    expect((await withGlobal(tx => tx.select({ id: translationKey.idTranslationKey }).from(translationKey))).length).toBe(keysBefore)
+  }, 60_000)
+
+  it('refuses the console actions, the console pages and the console grids', async () => {
+    const victim = await seedTenant('closed-victim')
+    await inSupport('closed-actions')
+
+    await expect(setTenantStatus(Number(victim), 'suspended')).rejects.toThrow('Unauthorized')
+    const [row] = await withGlobal(tx => tx.select({ status: tenantTable.status }).from(tenantTable).where(eq(tenantTable.id, victim)))
+    expect(row.status).toBe('active')
+    await expect(addPlatformAdmin(`zzz_closed_${unique()}@example.test`)).rejects.toThrow('Unauthorized')
+    await expect(requirePlatformAdmin()).rejects.toThrow('Unauthorized')
+    // Le pagine della console rispondono 404, la rotta 403.
+    await expect(requirePlatformAdminPage()).rejects.toThrow()
+    expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { page: 0, size: 10 }))).status).toBe(403)
+  }, 60_000)
+
+  it('refuses to start support from inside support, and writes nothing', async () => {
+    const tenant = await inSupport('closed-start')
+    const other = await seedTenant('closed-start-other')
+    const before = await tenantAuditOf(tenant)
+    await expect(startSupport(Number(other), 'dal di dentro')).rejects.toThrow('Unauthorized')
+    expect(await tenantAuditOf(tenant)).toEqual(before)
+    expect(await tenantAuditOf(other)).toEqual([])
+    expect(await nextRequest()).toMatchObject({ tenantState: 'support', tenantId: Number(tenant) })
+  }, 60_000)
+
+  it('still lets the platform admin leave, and the console works again right after', async () => {
+    const tenant = await inSupport('closed-exit')
+    expect(await endSupport()).toMatchObject({ state: 'none' })
+    expect((await tenantAuditOf(tenant)).map(row => row.operation)).toEqual(['support.grant', 'support.enter', 'support.exit'])
+    await nextRequest()
+    await expect(requirePlatformAdmin()).resolves.toMatchObject({ userId: platformAdmin.id })
+    await expect(requirePlatformAdminPage()).resolves.toMatchObject({ userId: platformAdmin.id })
+  }, 60_000)
+
+  it('refuses endSupport outside support, and to anyone who is not a platform admin', async () => {
+    const tenant = await seedTenant('closed-exit-outside')
+    await signIn(platformAdmin)
+    const before = await tenantAuditOf(tenant)
+    await expect(endSupport()).rejects.toThrow('Unauthorized')
+    const plain = await createAccount('closed-plain')
+    await signIn(plain)
+    await expect(endSupport()).rejects.toThrow('Unauthorized')
+    expect(await tenantAuditOf(tenant)).toEqual(before)
+  }, 60_000)
+
+  it('outside support the console works as before', async () => {
+    await signIn(platformAdmin)
+    await expect(requirePlatformAdmin()).resolves.toMatchObject({ userId: platformAdmin.id })
+    expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { page: 0, size: 10 }))).status).toBe(200)
+  }, 30_000)
+
+  // Una sessione di assistenza vera passa dalla rotta del registro del tenant e vede solo il tenant assistito.
+  it('the tenant audit grid serves a support session only the rows of the supported tenant', async () => {
+    const supported = await seedTenant('closed-audit-a')
+    const adminA = await seedAdmin(supported, 'closed-audit-a-admin')
+    await grantAs(adminA)
+    const other = await seedTenant('closed-audit-b')
+    const marker = `zzzsupportmark${unique()}`
+    await withOwner(tx => tx.execute(sql`insert into public.tenant_audit_event (actor_kind, actor_email, operation, object_type, object_id)
+      values ('person', ${`zzz_${marker}@example.test`}, 'role.create', 'role', ${marker})`), other)
+    await signIn(platformAdmin)
+    await startSupport(Number(supported), 'registro')
+    await nextRequest()
+
+    const response = await tenantAuditGrid(gridRequest('/api/audit/tenant-grid', { page: 0, size: 200 }))
+    expect(response.status).toBe(200)
+    const body = await response.json() as { rows: { operation: string; actorKind: string }[]; total: number }
+    expect(JSON.stringify(body)).not.toContain(marker)
+    // L'ingresso in assistenza è lì, con la veste della piattaforma; le altre voci sono tutte del tenant assistito.
+    expect(body.rows.find(row => row.operation === 'support.enter')).toMatchObject({ actorKind: 'platform' })
+    const own = await tenantAuditOf(supported)
+    expect(body.total).toBe(own.length)
+  }, 60_000)
+})
+
+
 /** Il permesso concesso come lo concede l'amministratore del tenant, con la sua sessione vera. */
 async function grantAs(admin: Person, duration: '1h' | '1d' | '1w' = '1d') {
   const before = { who: mocks.who, token: mocks.token }
@@ -157,7 +273,13 @@ const setStatus = (tenantId: TenantId, status: 'active' | 'suspended') =>
 
 /** Un cambio di stato con l'azione vera della console (stato e voce `tenant.status`), come la persona della sessione. */
 async function setPlatformTenantStatus(tenantId: TenantId, status: 'active' | 'suspended'): Promise<void> {
+  // La console è chiusa in assistenza: il cambio lo fa la piattaforma con una sessione fuori dall'assistenza
+  // (come `grantAs` per l'amministratore del tenant), e il token fermo della prova torna com'era.
+  const before = { who: mocks.who, token: mocks.token }
+  await signIn(platformAdmin)
   expect(await setTenantStatus(Number(tenantId), status)).toEqual({ ok: true })
+  mocks.who = before.who
+  mocks.token = before.token
 }
 
 const setPlatformAdmin = (userId: string, on: boolean) =>

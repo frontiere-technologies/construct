@@ -27,10 +27,10 @@ function withFrom(path: string, listSearch: string): string {
   return from ? `${path}?${new URLSearchParams({ from }).toString()}` : path
 }
 
-export function translationEditHref(keyId: number, listSearch: string, basePath: string = TRANSLATIONS_LIST_PATH): string {
+export function translationEditHref(keyId: number, listSearch: string, basePath: string): string {
   return withFrom(`${basePath}/${keyId}/edit`, listSearch)
 }
 
-export function translationCreateHref(listSearch: string, basePath: string = TRANSLATIONS_LIST_PATH): string {
+export function translationCreateHref(listSearch: string, basePath: string): string {
   return withFrom(`${basePath}/create`, listSearch)
 }

@@ -17,6 +17,8 @@ import { platformEntryItem } from './platform-menu'
 export async function platformMenuEntry(session: Session | null): Promise<MenuItem | null> {
   const userId = session?.user?.id
   if (!userId || session?.user?.isPlatformAdmin !== true) return null
+  // In assistenza la console è chiusa: niente voce, e nessuna lettura per deciderlo.
+  if (session.user.tenantState === 'support') return null
   const admin = await resolvePlatformAdmin(userId)
   if (!admin) return null
   const { t } = await getI18n()

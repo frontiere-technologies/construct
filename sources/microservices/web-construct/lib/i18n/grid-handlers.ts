@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
+import { createLogger } from '@/lib/logger'
 import { listLanguagesPage, listActiveLanguages } from './language-service'
 import { languagesGridQuerySchema } from './languages-grid-query-schema'
 import { listTranslations } from './translation-service'
 import { translationsGridQuerySchema } from './translations-grid-query-schema'
+
+const log = createLogger('i18n-grid')
 
 /**
  * Le risposte delle due griglie dei cataloghi (lingue e traduzioni), condivise dalla rotta del
@@ -20,7 +23,9 @@ export async function answerLanguagesGrid(req: Request): Promise<NextResponse> {
   try {
     return NextResponse.json(await listLanguagesPage(parsed.data))
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Errore interno.' }, { status: 500 })
+    // Un guasto non esce mai col suo testo: si registra qui, e chi chiede riceve un messaggio generico.
+    log.error({ err }, 'failed to list the languages')
+    return NextResponse.json({ error: 'Errore interno.' }, { status: 500 })
   }
 }
 
@@ -47,6 +52,7 @@ export async function answerTranslationsGrid(req: Request): Promise<NextResponse
 
     return NextResponse.json(await listTranslations(parsed.data))
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Errore interno.' }, { status: 500 })
+    log.error({ err }, 'failed to list the translations')
+    return NextResponse.json({ error: 'Errore interno.' }, { status: 500 })
   }
 }

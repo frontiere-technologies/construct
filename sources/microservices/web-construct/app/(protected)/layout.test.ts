@@ -142,6 +142,15 @@ describe('ProtectedLayout', () => {
     expect((await renderLayout()).tenantSwitcher).toBeUndefined()
   })
 
+  // La console è chiusa in assistenza (fix round 1 del Task 10): niente voce "Piattaforma", e nessuna lettura per decidere.
+  it('adds no Platform entry in support state, even for a confirmed platform admin, and reads nothing for it', async () => {
+    mocks.listAvailableTenants.mockResolvedValue([])
+    mocks.resolvePlatformAdmin.mockResolvedValue({ userId: 'u1', email: 'p@example.test' })
+    mocks.session = { user: { id: 'u1', roleIds: [1], tenantState: 'support', tenantName: 'Acme', supportUntil: null, isPlatformAdmin: true } }
+    expect((await renderLayout()).menuItems).toEqual([{ id: 1 }])
+    expect(mocks.resolvePlatformAdmin).not.toHaveBeenCalled()
+  })
+
   it('renders no banner outside support', async () => {
     mocks.listAvailableTenants.mockResolvedValue([])
     mocks.session = { user: { id: 'u1', roleIds: [1], tenantState: 'ready' } }

@@ -5,13 +5,13 @@ import { recordPlatformAudit } from '@/lib/audit/platform-audit'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { unstable_update } from '@/lib/auth'
 import { getSession } from '@/lib/auth-session'
-import { requirePlatformAdmin, type PlatformActor } from '@/lib/rbac/auth-guard'
+import { requirePlatformAdmin, requireSupportExit, type PlatformActor } from '@/lib/rbac/auth-guard'
 import { existingTenantId } from '@/lib/tenancy/platform-tenant'
 import { readRequestHost } from '@/lib/tenancy/request-host'
 import { selectSupportAccess, supportConditionsHold } from '@/lib/tenancy/support-consent'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
 import type { TenantState } from '@/lib/tenancy/tenant-selection'
-import { enterTenant, withPlatform, type PlatformTx } from './db'
+import { withPlatform, type PlatformTx } from './db'
 import { reasonSchema, tenantIdArgSchema } from './tenant-action-schemas'
 
 /**
@@ -48,12 +48,12 @@ function parseReason(reason: unknown): string {
 }
 
 /**
- * Entra in assistenza nel tenant. Nella transazione, prima di scrivere, rilegge con l'istruzione
+ * Entra in assistenza nel tenant. Da una sessione già in assistenza la guardia rifiuta (la console è
+ * chiusa in assistenza): per passare a un altro tenant si esce prima. Nella transazione, prima di scrivere, rilegge con l'istruzione
  * della rivalidazione: permesso valido (o il modello, MT5-DEC-11), tenant attivo, attributo e
  * account, indirizzo principale (MT5-DEC-19). Se manca qualcosa non scrive niente e lancia. Scrive
  * `support.enter` nei due registri, con il motivo e la scadenza del permesso (che alla scadenza
- * naturale basta: non si scrive un'uscita, MT5-DEC-20). Se la persona era già in assistenza in un
- * altro tenant, nella stessa transazione ne scrive l'uscita.
+ * naturale basta: non si scrive un'uscita, MT5-DEC-20).
  *
  * Poi chiede al callback jwt di entrare: il callback ci crede solo perché trova questa voce
  * d'ingresso appena scritta, e ricontrolla tutto il resto da sé.
@@ -64,20 +64,10 @@ export async function startSupport(tenantId: number, reason: string): Promise<{ 
   const text = parseReason(reason)
   const tenantKey = await existingTenantId(id)
   const host = await readRequestHost()
-  const session = await getSession()
-  const previousId = session?.user?.tenantState === 'support' && typeof session.user.tenantId === 'number' && session.user.tenantId !== id
-    ? session.user.tenantId
-    : null
-  const previous = previousId === null ? null : await existingTenantId(previousId)
 
   await withPlatform(async tx => {
     const access = await selectSupportAccess(tx, actor.userId, host)
     if (!supportConditionsHold(access)) throw new Error('support_not_allowed')
-    if (previous !== null) {
-      await enterTenant(tx, previous)
-      await recordBoth(tx, actor, previous, { operation: 'support.exit', objectType: 'tenant', objectId: previous })
-      await enterTenant(tx, tenantKey)
-    }
     await recordBoth(tx, actor, tenantKey, {
       operation: 'support.enter', objectType: 'tenant', objectId: tenantKey,
       details: { reason: text, until: access.until, template: access.isTemplate },
@@ -90,11 +80,12 @@ export async function startSupport(tenantId: number, reason: string): Promise<{ 
 
 /**
  * Esce dall'assistenza (la fascia, «Esci»): `support.exit` nei due registri, poi il token si
- * ricalcola come un accesso e il client carica la console. Fuori dall'assistenza (anche se è appena
- * finita da sola, alla scadenza o alla revoca) non scrive niente.
+ * ricalcola come un accesso e il client carica la console. È l'unica porta della console che la
+ * guardia (`requireSupportExit`) vuole in assistenza: fuori dall'assistenza (anche se è appena
+ * finita da sola, alla scadenza o alla revoca) rifiuta e non scrive niente.
  */
 export async function endSupport(): Promise<{ state: TenantState }> {
-  const actor = await requirePlatformAdmin()
+  const actor = await requireSupportExit()
   const session = await getSession()
   const current = session?.user?.tenantState === 'support' && typeof session.user.tenantId === 'number' ? session.user.tenantId : null
   if (current === null) return { state: session?.user?.tenantState ?? 'none' }
