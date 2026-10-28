@@ -2,7 +2,6 @@ import { sql, type SQL } from 'drizzle-orm'
 import type { PlatformAuditTx } from '@/lib/audit/audit-types'
 import { ACTIVE_USER_STATUS } from '@/lib/auth-policy'
 import type { TenantTx } from '@/lib/db/tenant-db'
-import { DEFAULT_TENANT_SLUG } from './tenant-id'
 
 /**
  * Il permesso di assistenza e l'accesso di assistenza (specifica 2026-10-26, §2.3, §3.2,
@@ -81,7 +80,6 @@ export async function readSupportInProgress(tx: TenantTx): Promise<boolean> {
 export interface SupportAccess {
   tenantName: string
   isTemplate: boolean
-  isDefault: boolean
   tenantActive: boolean
   /** La scadenza del permesso se vale ancora (mai per il modello, che non ne ha bisogno). */
   until: string | null
@@ -107,7 +105,6 @@ const ENTRY_WINDOW = '2 minutes'
 type AccessRow = {
   tenant_name: string
   is_template: boolean
-  is_default: boolean
   tenant_active: boolean
   until: string | null
   consent_valid: boolean
@@ -156,7 +153,6 @@ export async function selectSupportAccess(
     select
       t.name as tenant_name,
       t.is_template,
-      t.slug = ${DEFAULT_TENANT_SLUG} as is_default,
       t.status = 'active' as tenant_active,
       ${isoTimestamp(sql`s.support_until`)} as until,
       coalesce(s.support_until > now(), false) as consent_valid,
@@ -177,7 +173,6 @@ export async function selectSupportAccess(
   return {
     tenantName: row.tenant_name,
     isTemplate: row.is_template,
-    isDefault: row.is_default,
     tenantActive: row.tenant_active,
     until: row.is_template ? null : (row.consent_valid ? row.until : null),
     consentValid: row.consent_valid,

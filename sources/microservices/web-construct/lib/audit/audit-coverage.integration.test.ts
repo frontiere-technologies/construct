@@ -93,10 +93,14 @@ const EXEMPT: Record<string, string> = {
   'app/api/auth/change-password/route.ts#POST': PASSWORD,
   'app/api/auth/forgot-password/route.ts#POST': `${PASSWORD}; scrive solo il token di recupero`,
   'app/api/auth/set-password/route.ts#POST': `${PASSWORD}; consuma il token d'invito o di recupero`,
+  'app/api/audit/tenant-grid/route.ts#POST': READ,
   'app/api/i18n/languages-grid/route.ts#POST': READ,
   'app/api/i18n/preferences/language/route.ts#PUT': PERSONAL,
   'app/api/i18n/translations-grid/route.ts#POST': READ,
+  'app/api/platform/audit-grid/route.ts#POST': READ,
+  'app/api/platform/languages-grid/route.ts#POST': READ,
   'app/api/platform/tenants-grid/route.ts#POST': READ,
+  'app/api/platform/translations-grid/route.ts#POST': READ,
   'app/api/rbac/roles-grid/route.ts#POST': READ,
   'app/api/rbac/users-grid/route.ts#POST': READ,
   'lib/appearance-actions.ts#saveAppearance': PERSONAL,
@@ -254,8 +258,8 @@ interface AuditCase {
   /** L'export vero: confrontato con l'inventario. */
   entry: unknown
   sink: 'tenant' | 'platform'
-  /** Chi riesce: l'amministratore di A (predefinito), l'amministratore del tenant predefinito, l'amministratore di piattaforma o la persona che si registra. */
-  as?: 'adminA' | 'catalogAdmin' | 'platformAdmin' | 'self'
+  /** Chi riesce: l'amministratore di A (predefinito), l'amministratore di piattaforma o la persona che si registra. */
+  as?: 'adminA' | 'platformAdmin' | 'self'
   /** La veste scritta nella voce: la persona del tenant (predefinita) o la piattaforma (console). */
   kind?: 'person' | 'platform'
   /** Prepara lo stato prima della chiamata che riesce. */
@@ -382,7 +386,7 @@ const CASES: Record<string, AuditCase> = {
     actor: async () => ({ id: await userIdOf(state.registeredEmail), email: state.registeredEmail }),
   },
   'lib/i18n/language-actions.ts#createLanguage': {
-    entry: createLanguage, sink: 'platform', as: 'catalogAdmin',
+    entry: createLanguage, sink: 'platform', as: 'platformAdmin', kind: 'platform',
     run: async () => {
       state.languageCode = unique().slice(-3).replace(/[0-9]/g, d => String.fromCharCode(97 + Number(d)))
       expect(await createLanguage(languageInput())).toEqual({ error: null })
@@ -392,12 +396,12 @@ const CASES: Record<string, AuditCase> = {
     expected: [{ operation: 'language.create', objectType: 'language', objectId: () => state.languageId }],
   },
   'lib/i18n/language-actions.ts#updateLanguage': {
-    entry: updateLanguage, sink: 'platform', as: 'catalogAdmin',
+    entry: updateLanguage, sink: 'platform', as: 'platformAdmin', kind: 'platform',
     run: async () => { expect(await updateLanguage(state.languageId, languageInput({ name: `zzz_i18n_test_${state.languageCode}_b` }))).toEqual({ error: null }) },
     expected: [{ operation: 'language.update', objectType: 'language', objectId: () => state.languageId }],
   },
   'lib/i18n/language-actions.ts#setDefaultLanguage': {
-    entry: setDefaultLanguage, sink: 'platform', as: 'catalogAdmin',
+    entry: setDefaultLanguage, sink: 'platform', as: 'platformAdmin', kind: 'platform',
     // Il predefinito di prima si rimette subito: due cambi, due voci.
     run: async () => {
       expect(await setDefaultLanguage(state.languageId)).toEqual({ error: null })
@@ -409,17 +413,17 @@ const CASES: Record<string, AuditCase> = {
     ],
   },
   'lib/i18n/language-actions.ts#setLanguageActive': {
-    entry: setLanguageActive, sink: 'platform', as: 'catalogAdmin',
+    entry: setLanguageActive, sink: 'platform', as: 'platformAdmin', kind: 'platform',
     run: async () => { expect(await setLanguageActive(state.languageId, false)).toEqual({ error: null }) },
     expected: [{ operation: 'language.active', objectType: 'language', objectId: () => state.languageId }],
   },
   'lib/i18n/language-actions.ts#deleteLanguage': {
-    entry: deleteLanguage, sink: 'platform', as: 'catalogAdmin',
+    entry: deleteLanguage, sink: 'platform', as: 'platformAdmin', kind: 'platform',
     run: async () => { expect(await deleteLanguage(state.languageId)).toEqual({ error: null }) },
     expected: [{ operation: 'language.delete', objectType: 'language', objectId: () => state.languageId }],
   },
   'lib/i18n/translation-actions.ts#createTranslationKey': {
-    entry: createTranslationKey, sink: 'platform', as: 'catalogAdmin',
+    entry: createTranslationKey, sink: 'platform', as: 'platformAdmin', kind: 'platform',
     run: async () => {
       const created = await createTranslationKey({ key: testKey(`k${unique()}.label`), description: null, namespace: 'zzz_i18n_test', module: null })
       expect(created.error).toBeNull()
@@ -428,7 +432,7 @@ const CASES: Record<string, AuditCase> = {
     expected: [{ operation: 'translation.key.create', objectType: 'translation_key', objectId: () => state.keyId }],
   },
   'lib/i18n/translation-actions.ts#saveTranslations': {
-    entry: saveTranslations, sink: 'platform', as: 'catalogAdmin',
+    entry: saveTranslations, sink: 'platform', as: 'platformAdmin', kind: 'platform',
     run: async () => {
       const result = await saveTranslations({
         keyId: state.keyId, keyVersion: 1, description: null, namespace: 'zzz_i18n_test', module: null,
@@ -439,7 +443,7 @@ const CASES: Record<string, AuditCase> = {
     expected: [{ operation: 'translation.save', objectType: 'translation_key', objectId: () => state.keyId }],
   },
   'lib/i18n/translation-actions.ts#deleteTranslationKey': {
-    entry: deleteTranslationKey, sink: 'platform', as: 'catalogAdmin',
+    entry: deleteTranslationKey, sink: 'platform', as: 'platformAdmin', kind: 'platform',
     run: async () => { expect(await deleteTranslationKey(state.keyId)).toEqual({ error: null }) },
     expected: [{ operation: 'translation.key.delete', objectType: 'translation_key', objectId: () => state.keyId }],
   },
@@ -670,8 +674,8 @@ describeIntegration('every door that writes records its audit row in the same tr
       expect(await rowsOf(c.sink), 'a refused call left an audit row').toEqual(before)
 
       // Riuscita: voci attese, nello stesso ordine, scritte da chi ha agito.
-      const signedIn = c.as === 'catalogAdmin' ? catalogAdmin : c.as === 'platformAdmin' ? platformAdmin : adminA
-      mocks.session = sessionOf(signedIn, c.as === 'catalogAdmin' ? DEFAULT : A)
+      const signedIn = c.as === 'platformAdmin' ? platformAdmin : adminA
+      mocks.session = sessionOf(signedIn, A)
       await c.arrange?.()
       const lastId = (await rowsOf(c.sink)).reduce((max, row) => Math.max(max, row.id), 0)
       await c.run()
@@ -745,7 +749,7 @@ describeIntegration('every door that writes records its audit row in the same tr
   })
 
   it('language and translation writes go to the platform audit, not to a tenant audit', async () => {
-    mocks.session = sessionOf(catalogAdmin, DEFAULT)
+    mocks.session = sessionOf(platformAdmin, A)
     const defaultBefore = await tenantRows(DEFAULT)
     const platformBefore = await platformRows()
     const created = await createTranslationKey({ key: testKey(`k${unique()}.label`), description: null, namespace: 'zzz_i18n_test', module: null })
@@ -754,7 +758,8 @@ describeIntegration('every door that writes records its audit row in the same tr
 
     const written = (await platformRows()).slice(platformBefore.length)
     expect(written.map(row => row.operation)).toEqual(['translation.key.create', 'translation.key.delete'])
-    expect(written.every(row => row.actorKind === 'person' && row.actorUserId === catalogAdmin.id)).toBe(true)
+    // L'amministratore di piattaforma agisce come piattaforma, con il proprio account (MT5-DEC-14, MT5-DEC-24).
+    expect(written.every(row => row.actorKind === 'platform' && row.actorUserId === platformAdmin.id && row.actorEmail === platformAdmin.email)).toBe(true)
     // Nessun tenant toccato: le righe della piattaforma per lingue e traduzioni non portano un tenant.
     expect(written.map(row => row.idTenant)).toEqual([null, null])
     // Il registro del tenant dell'attore non cambia: le lingue e le traduzioni non sono dati di tenant.

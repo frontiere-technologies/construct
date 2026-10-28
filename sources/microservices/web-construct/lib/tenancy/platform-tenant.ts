@@ -26,3 +26,14 @@ export async function existingTenantId(raw: number): Promise<TenantId> {
 export function createdTenantId(raw: number): TenantId {
   return toTenantId(raw)
 }
+
+/**
+ * Il `TenantId` del modello (MT5-DEC-21), per chi ne legge il registro dalla console. Il modello è
+ * uno solo (indice unico su `is_template`). Lo chiama chi ha già verificato l'amministratore di
+ * piattaforma. Se il modello manca lancia, come per un tenant che non esiste.
+ */
+export async function templateTenantId(): Promise<TenantId> {
+  const [row] = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).where(eq(tenant.isTemplate, true)).limit(1))
+  if (!row) throw new Error('tenant_not_found')
+  return toTenantId(row.id)
+}

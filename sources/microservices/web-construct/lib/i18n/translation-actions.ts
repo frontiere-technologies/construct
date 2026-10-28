@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, sql } from 'drizzle-orm'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordPlatformAudit } from '@/lib/audit/platform-audit'
-import { requirePermission } from '@/lib/rbac/auth-guard'
+import { requirePlatformAdmin } from '@/lib/rbac/auth-guard'
 import { withGlobal } from '@/lib/db/tenant-db'
 import { appLanguage, translationKey, translationValue } from '@/lib/db/schema'
 import { invalidateDictionary, refreshLanguageVersions } from './dictionary-service'
@@ -73,7 +73,7 @@ function validateKeyInput(input: TranslationKeyInput): string | null {
 }
 
 export async function createTranslationKey(input: TranslationKeyInput): Promise<KeyActionResult> {
-  const actor = await requirePermission('manage-translation-keys')
+  const actor = await requirePlatformAdmin()
   const invalid = validateKeyInput(input)
   if (invalid) return { error: invalid }
 
@@ -109,7 +109,7 @@ export async function createTranslationKey(input: TranslationKeyInput): Promise<
 }
 
 export async function deleteTranslationKey(id: number): Promise<{ error: string | null }> {
-  const actor = await requirePermission('manage-translation-keys')
+  const actor = await requirePlatformAdmin()
   try {
     const row = await withGlobal(async tx => {
       const [found] = await tx.select({ key: translationKey.key }).from(translationKey)
@@ -141,7 +141,7 @@ export async function deleteTranslationKey(id: number): Promise<{ error: string 
  * single language leaves every other language untouched too.
  */
 export async function saveTranslations(input: SaveTranslationsInput): Promise<SaveTranslationsResult> {
-  const actor = await requirePermission('edit-translations')
+  const actor = await requirePlatformAdmin()
 
   if (input.values.length > MAX_BULK_VALUES) {
     return { ok: false, error: `Troppe traduzioni in un solo salvataggio (max ${MAX_BULK_VALUES}).` }

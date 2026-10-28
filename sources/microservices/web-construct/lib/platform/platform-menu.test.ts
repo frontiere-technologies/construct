@@ -8,7 +8,7 @@ const t = (key: string) => `«${key}»`
  * MT5-DEC-3). La voce non viene dal menu del tenant, che è un dato di tenant.
  */
 describe('buildPlatformMenu', () => {
-  it('has a Platform section with Tenants and Administrators, and nothing else for now', () => {
+  it('has a Platform section with Tenants, Administrators, Audit, Languages and Translations', () => {
     const items = buildPlatformMenu(t, { backToTenant: false })
     const section = items.find(item => item.parentId === null && item.type === 'container')
     expect(section).toMatchObject({ label: '«platform.nav.section»', position: 'main', visible: true, active: true })
@@ -16,6 +16,9 @@ describe('buildPlatformMenu', () => {
     expect(children.map(item => [item.label, item.route])).toEqual([
       ['«platform.nav.tenants»', '/platform'],
       ['«platform.nav.admins»', '/platform/admins'],
+      ['«platform.nav.audit»', '/platform/audit'],
+      ['«platform.nav.languages»', '/platform/languages'],
+      ['«platform.nav.translations»', '/platform/translations'],
     ])
   })
 

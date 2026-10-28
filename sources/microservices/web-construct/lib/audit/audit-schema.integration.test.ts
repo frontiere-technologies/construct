@@ -355,4 +355,22 @@ describeIntegration('audit tables, platform admin and support consent', () => {
       where r.system_key = 'REGISTERED' and p.code = 'read-tenant-audit'`))
     expect(rows).toEqual([])
   })
+
+  // La voce di menu «Registro» (0062, MT5-DEC-16): righe di tenant, quindi in ogni tenant.
+  it('has the Audit log menu entry in default, template and a fresh copy, granted to TENANT_ADMIN only, next to the tenant settings', async () => {
+    for (const tenantId of [DEFAULT, template, copy, other]) {
+      const rows = await withTenant(tenantId, tx => tx.execute<{ name: string; id_parent: string | null; order_position: number; roles: string[]; settings_order: number }>(sql`
+        select m.name, m.id_parent::text as id_parent, m.order_position,
+          coalesce(array_agg(distinct r.system_key) filter (where r.id_role is not null), '{}') as roles,
+          (select s.order_position from public.menu_entry s where s.functionality_link = 'admin/tenant-settings' and s.id_parent is not distinct from m.id_parent) as settings_order
+        from public.menu_entry m
+        left join public.role_functionality rf on rf.id_tenant = m.id_tenant and rf.id_menu_entry = m.id_menu_entry
+        left join public.role r on r.id_tenant = rf.id_tenant and r.id_role = rf.id_role
+        where m.functionality_link = 'admin/audit'
+        group by m.id_menu_entry`))
+      expect(rows, String(tenantId)).toHaveLength(1)
+      expect(rows[0].roles, String(tenantId)).toEqual(['TENANT_ADMIN'])
+      expect(rows[0].order_position, String(tenantId)).toBe(rows[0].settings_order + 1)
+    }
+  })
 })

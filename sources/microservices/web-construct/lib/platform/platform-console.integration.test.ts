@@ -42,6 +42,7 @@ vi.mock('@/components/Layout', () => ({ Layout: () => null }))
 vi.mock('@/components/platform/TenantsTableClient', () => ({ TenantsTableClient: () => null }))
 vi.mock('@/components/platform/PlatformAdmins', () => ({ PlatformAdmins: () => null }))
 vi.mock('@/components/platform/TenantDetail', () => ({ TenantDetail: () => null }))
+vi.mock('@/components/audit/AuditTableClient', () => ({ AuditTableClient: () => null }))
 vi.mock('@/lib/platform/db', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/platform/db')>()
   return { ...actual, withPlatform: vi.fn(actual.withPlatform) }
@@ -206,7 +207,9 @@ describeIntegration('the console pages and layout', () => {
     }
     const without = await menuOf(platformAdmin)
     expect(without.some(item => item.route === '/')).toBe(false)
-    expect(without.map(item => item.route).filter(Boolean)).toEqual(['/platform', '/platform/admins'])
+    expect(without.map(item => item.route).filter(Boolean)).toEqual([
+      '/platform', '/platform/admins', '/platform/audit', '/platform/languages', '/platform/translations',
+    ])
 
     const withTenantMenu = await menuOf(platformAdminWithTenant)
     expect(withTenantMenu.some(item => item.route === '/')).toBe(true)
@@ -225,9 +228,21 @@ describeIntegration('the tenant page', () => {
 
   it('renders the tenant of the id for a platform admin, with its data for the detail component', async () => {
     mocks.session = sessionOf(platformAdmin)
-    const element = await pageOf('1') as unknown as { props: { title: string; subtitle: string; children: { props: { tenant: { id: number; slug: string } } } } }
+    const element = await pageOf('1') as unknown as { props: { title: string; subtitle: string; children: [{ props: { tenant: { id: number; slug: string } } }, unknown] } }
     expect(element.props.subtitle).toBe('default')
-    expect(element.props.children.props.tenant).toMatchObject({ id: 1, slug: 'default' })
+    expect(element.props.children[0].props.tenant).toMatchObject({ id: 1, slug: 'default' })
+    // Il registro di tenant non sta sotto la scheda di un tenant che non è il modello (MT5-OK-2).
+    expect(element.props.children[1]).toBe(false)
+  })
+
+  it('shows the audit of the template, and only there, under the template page', async () => {
+    mocks.session = sessionOf(platformAdmin)
+    const [row] = await withGlobal(tx => tx.execute<{ id: string }>(sql`select id::text as id from public.tenant where is_template`))
+    type Section = { props: { children: [unknown, { props: { endpoint: string; extraQuery: unknown; syncUrl: boolean } }] } }
+    const element = await pageOf(row.id) as unknown as { props: { children: [unknown, Section] } }
+    expect(element.props.children[1].props.children[1].props).toMatchObject({
+      endpoint: '/api/platform/audit-grid', extraQuery: { scope: 'template' }, syncUrl: false,
+    })
   })
 
   it.each(['999999999', 'abc', '0', '-3', '1.5', '', '1e3', '99999999999999999999'])('is a 404 for the id %j', async id => {

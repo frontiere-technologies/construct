@@ -50,7 +50,7 @@ interface Props {
  * arriva e il testo è sempre quello generico (i rifiuti previsti hanno il loro messaggio, perché le
  * azioni li restituiscono come risultato). Chi decide è il server: i bottoni spenti dicono solo
  * perché. L'assistenza (MT5-DEC-10, MT5-DEC-11): lo stato del permesso del tenant e l'ingresso,
- * con un motivo scritto; il modello si apre sempre. Gli eventi della piattaforma arrivano con il Task 10.
+ * con un motivo scritto; il modello si apre sempre. Il registro del modello sta sotto la sua scheda (la pagina), non qui.
  */
 export function TenantDetail({ tenant }: Props) {
   const { t, fmt } = useI18n()

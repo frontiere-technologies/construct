@@ -5,7 +5,7 @@ import type { AuditActor } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { evaluateAuthorization, isActiveAccount } from '@/lib/auth-policy'
 import { ensureDefaultMembership, isMembershipStatus, type MembershipStatus } from '@/lib/tenancy/membership'
-import { DEFAULT_TENANT_SLUG, type TenantId } from '@/lib/tenancy/tenant-id'
+import type { TenantId } from '@/lib/tenancy/tenant-id'
 import type { SystemRoleIds } from '@/lib/tenancy/system-roles'
 
 /**
@@ -29,11 +29,6 @@ export interface AuthorizationSnapshot {
   /** Solo con `host`: il nome del tenant della transazione, per la sessione. */
   tenantName: string | null
   /**
-   * Il tenant della transazione è il predefinito: solo lì si scrivono i cataloghi globali fino al
-   * pezzo 5 (`GLOBAL_CATALOG_WRITE_CODES` in `actor.ts`).
-   */
-  tenantIsDefault: boolean
-  /**
    * L'account è un amministratore di piattaforma (pezzo 5a, MT5-DEC-1): un attributo globale letto
    * nella stessa istruzione, non una qualità del tenant. Falso se l'utente non esiste.
    */
@@ -50,7 +45,6 @@ type SnapshotRow = {
   permission_codes: string[] | null
   tenant_eligible: boolean | null
   tenant_name: string | null
-  tenant_is_default: boolean | null
   is_platform_admin: boolean | null
 }
 
@@ -99,7 +93,6 @@ export async function selectAuthorizationSnapshot(
       ${codes} as permission_codes,
       ${tenantEligible} as tenant_eligible,
       ${tenantName} as tenant_name,
-      exists (select 1 from public.tenant t where t.id = app_private.current_tenant_id() and t.slug = ${DEFAULT_TENANT_SLUG}) as tenant_is_default,
       coalesce((select u.is_platform_admin from public.users u where u.id = ${userId}), false) as is_platform_admin
   `)
   if (row.registered === null || row.tenant_admin === null) throw new Error('system roles missing')
@@ -113,7 +106,6 @@ export async function selectAuthorizationSnapshot(
     permissionCodes: row.permission_codes ?? [],
     tenantEligible: row.tenant_eligible,
     tenantName: row.tenant_name,
-    tenantIsDefault: row.tenant_is_default === true,
     isPlatformAdmin: row.is_platform_admin === true,
   }
 }

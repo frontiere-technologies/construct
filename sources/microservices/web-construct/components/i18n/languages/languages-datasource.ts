@@ -8,7 +8,7 @@ import {
   type LanguagesGridFilterModel, type LanguagesGridSortItem,
 } from '@/lib/i18n/languages-grid-query'
 
-export function createLanguagesDatasource(): IDatasource {
+export function createLanguagesDatasource(endpoint: string = '/api/i18n/languages-grid'): IDatasource {
   return {
     getRows(params: IGetRowsParams) {
       const query = buildLanguagesGridQuery(
@@ -17,7 +17,7 @@ export function createLanguagesDatasource(): IDatasource {
         params.sortModel as LanguagesGridSortItem[],
         params.filterModel as LanguagesGridFilterModel,
       )
-      fetch('/api/i18n/languages-grid', {
+      fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(query),

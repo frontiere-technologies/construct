@@ -19,6 +19,8 @@ interface TranslationKeyFormSharedProps {
   modules: string[]
   /** The list's query string, restored on Annulla and after Salva. */
   from: string
+  /** The translations list the form goes back to: the console's, since the tenant's is read-only. */
+  basePath?: string
 }
 
 /**
@@ -84,7 +86,7 @@ export function TranslationKeyForm(props: TranslationKeyFormProps) {
     { namespace: string; module: string; description: string } | null
   >(null)
 
-  const listHref = translationsListHref(from)
+  const listHref = translationsListHref(from, props.basePath)
 
   const namespaceBaseline = createdMetadata?.namespace ?? row?.namespace ?? ''
   const moduleBaseline = createdMetadata?.module ?? row?.module ?? ''

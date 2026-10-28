@@ -14,9 +14,10 @@ import ThemePage from '@/app/(protected)/(admin)/admin/theme/page'
 import EmbeddedItemPage from '@/app/(protected)/embedded/[itemId]/page'
 import SelectTenantPage from '@/app/select-tenant/page'
 import { POST as sendInvite } from '@/app/api/admin/send-invite/route'
+import { POST as tenantAuditGrid } from '@/app/api/audit/tenant-grid/route'
 import { POST as rolesGrid } from '@/app/api/rbac/roles-grid/route'
 import { POST as usersGrid } from '@/app/api/rbac/users-grid/route'
-import { appTheme, menuEntry, role, roleFunctionality, tenantMembership, tenantSettings, userRole, users } from '@/lib/db/schema'
+import { appTheme, menuEntry, role, roleFunctionality, tenantAuditEvent, tenantMembership, tenantSettings, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
@@ -96,11 +97,12 @@ interface CrossTenantCase {
 const PERSONAL = 'preferenze personali: agisce solo sulla riga globale della persona della sessione, senza id e senza righe di tenant'
 const GLOBAL_LANGUAGES = 'catalogo globale delle lingue (MT2-DEC-11, DEF-2.4): gli id sono di righe globali, non esistono righe di B da chiedere'
 const GLOBAL_TRANSLATIONS = 'catalogo globale delle traduzioni (MT2-DEC-11, DEF-2.4): gli id sono di righe globali, non esistono righe di B da chiedere'
-// Le scritture dei cataloghi globali: fino al pezzo 5 le può fare solo un attore del tenant
-// predefinito (§5.3); il rifiuto per gli altri tenant è provato in
-// lib/i18n/global-catalog-tenant.integration.test.ts.
-const GLOBAL_LANGUAGES_WRITE = `${GLOBAL_LANGUAGES}; scrittura riservata al tenant predefinito fino al pezzo 5 (provata in global-catalog-tenant.integration.test.ts)`
-const GLOBAL_TRANSLATIONS_WRITE = `${GLOBAL_TRANSLATIONS}; scrittura riservata al tenant predefinito fino al pezzo 5 (provata in global-catalog-tenant.integration.test.ts)`
+// Le scritture dei cataloghi globali sono dell'amministratore di piattaforma (MT5-DEC-17,
+// MT5-DEC-24): nessun amministratore di tenant può farle, e l'amministratore di piattaforma le
+// fa dalla console senza un tenant. Il rifiuto per gli attori dei tenant e la scrittura dalla
+// console sono provati in lib/i18n/global-catalog-tenant.integration.test.ts.
+const GLOBAL_LANGUAGES_WRITE = `${GLOBAL_LANGUAGES}; scrittura riservata all'amministratore di piattaforma (MT5-DEC-17, provata in global-catalog-tenant.integration.test.ts)`
+const GLOBAL_TRANSLATIONS_WRITE = `${GLOBAL_TRANSLATIONS}; scrittura riservata all'amministratore di piattaforma (MT5-DEC-17, provata in global-catalog-tenant.integration.test.ts)`
 // Le porte della console (pezzo 5a): non ricevono id di tenant e non leggono righe di tenant; un
 // amministratore di tenant che non è di piattaforma è rifiutato dalla guardia, provato in
 // lib/platform/platform-console.integration.test.ts e lib/platform/platform-admin-actions.integration.test.ts.
@@ -110,10 +112,9 @@ const PLATFORM_DOOR = 'porta della console: riservata all\'amministratore di pia
 const ANONYMOUS = 'anonima: nessun id di tenant in ingresso; il tenant, dove serve, viene dall\'indirizzo confrontato con il registro (Task 8)'
 
 const EXEMPT: Record<string, string> = {
-  'app/(protected)/(admin)/admin/languages/page.tsx#default': GLOBAL_LANGUAGES,
-  'app/(protected)/(admin)/admin/translations/[keyId]/edit/page.tsx#default': GLOBAL_TRANSLATIONS_WRITE,
-  'app/(protected)/(admin)/admin/translations/create/page.tsx#default': GLOBAL_TRANSLATIONS_WRITE,
-  'app/(protected)/(admin)/admin/translations/page.tsx#default': GLOBAL_TRANSLATIONS,
+  'app/(protected)/(admin)/admin/audit/page.tsx#default': 'non riceve id e non legge righe di tenant: disegna la griglia, che carica le righe da app/api/audit/tenant-grid/route.ts (ha il suo caso qui sotto)',
+  'app/(protected)/(admin)/admin/languages/page.tsx#default': `${GLOBAL_LANGUAGES}; sola lettura per i tenant (MT5-DEC-24)`,
+  'app/(protected)/(admin)/admin/translations/page.tsx#default': `${GLOBAL_TRANSLATIONS}; sola lettura per i tenant (MT5-DEC-24)`,
   'app/(protected)/[...slug]/page.tsx#default': 'la home per qualunque percorso: non riceve id e non legge righe di tenant (il menu lo disegna il layout)',
   'app/(protected)/page.tsx#default': 'la home: non riceve id e non legge righe di tenant (il menu lo disegna il layout)',
   'app/(protected)/profile/page.tsx#default': PERSONAL,
@@ -132,10 +133,18 @@ const EXEMPT: Record<string, string> = {
   'app/api/i18n/preferences/language/route.ts#GET': PERSONAL,
   'app/api/i18n/preferences/language/route.ts#PUT': PERSONAL,
   'app/api/i18n/translations-grid/route.ts#POST': GLOBAL_TRANSLATIONS,
+  'app/api/platform/audit-grid/route.ts#POST': `${PLATFORM_DOOR}; legge solo il registro della piattaforma e quello del modello, mai quello di un altro tenant (provato in lib/platform/audit-views.integration.test.ts)`,
+  'app/api/platform/languages-grid/route.ts#POST': `${PLATFORM_DOOR}; ${GLOBAL_LANGUAGES}`,
   'app/api/platform/tenants-grid/route.ts#POST': PLATFORM_DOOR,
+  'app/api/platform/translations-grid/route.ts#POST': `${PLATFORM_DOOR}; ${GLOBAL_TRANSLATIONS}`,
   'app/no-tenant/page.tsx#default': 'il messaggio "non configurato": legge solo lo stato della sessione, nessun id e nessuna riga di tenant',
   'app/platform/admins/page.tsx#default': PLATFORM_DOOR,
+  'app/platform/audit/page.tsx#default': PLATFORM_DOOR,
+  'app/platform/languages/page.tsx#default': `${PLATFORM_DOOR}; ${GLOBAL_LANGUAGES}`,
   'app/platform/page.tsx#default': PLATFORM_DOOR,
+  'app/platform/translations/[keyId]/edit/page.tsx#default': `${PLATFORM_DOOR}; ${GLOBAL_TRANSLATIONS}`,
+  'app/platform/translations/create/page.tsx#default': `${PLATFORM_DOOR}; ${GLOBAL_TRANSLATIONS}`,
+  'app/platform/translations/page.tsx#default': `${PLATFORM_DOOR}; ${GLOBAL_TRANSLATIONS}`,
   'lib/appearance-actions.ts#saveAppearance': PERSONAL,
   'lib/i18n/language-actions.ts#createLanguage': GLOBAL_LANGUAGES_WRITE,
   'lib/i18n/language-actions.ts#deleteLanguage': GLOBAL_LANGUAGES_WRITE,
@@ -584,6 +593,23 @@ const CASES: Record<string, CrossTenantCase> = {
       expect(await byRole.json()).toEqual({ users: [], total: 0 })
     },
   },
+  'app/api/audit/tenant-grid/route.ts#POST': {
+    entry: tenantAuditGrid,
+    run: async () => {
+      // A ha la sua voce, B la sua (con il segno): per A c'è la prima (e le voci che gli altri casi
+      // hanno scritto per A), mai quella di B, nemmeno cercando il segno.
+      const all = await tenantAuditGrid(jsonRequest('/api/audit/tenant-grid', { page: 0, size: 200, sort: 'occurredAt', direction: 'ASC' }))
+      expect(all.status).toBe(200)
+      const allBody = await all.json() as { rows: Array<{ operation: string; objectId: string | null }>; total: number }
+      const objectIds = allBody.rows.map(row => row.objectId)
+      expect(objectIds).toContain('a-audit')
+      expect(objectIds).not.toContain('b-audit')
+      expectNoTraceOfB(allBody)
+
+      const byActor = await tenantAuditGrid(jsonRequest('/api/audit/tenant-grid', { page: 0, size: 100, actorSearch: MARK_B }))
+      expect(await byActor.json()).toEqual({ rows: [], total: 0 })
+    },
+  },
   'app/api/rbac/roles-grid/route.ts#POST': {
     entry: rolesGrid,
     run: async () => {
@@ -792,6 +818,15 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
       ])
       await tx.update(appTheme).set({ primaryColor: B_THEME_COLOR })
     })
+
+    // Una voce di registro per tenant: quella di B porta il segno nell'email di chi ha agito.
+    await withOwner(tx => tx.insert(tenantAuditEvent).values({
+      actorKind: 'person', actorEmail: `zzz_a_${unique()}@example.test`, operation: 'role.create', objectType: 'role', objectId: 'a-audit',
+    }), A)
+    await withOwner(tx => tx.insert(tenantAuditEvent).values({
+      actorKind: 'person', actorEmail: `zzz_${MARK_B}@example.test`, operation: 'role.create', objectType: 'role', objectId: 'b-audit',
+      details: { name: MARK_B },
+    }), B)
 
     const bRoles = await withOwner(tx => tx.select({ id: role.idRole }).from(role), B)
     bRoleIds = bRoles.map(row => row.id)

@@ -6,8 +6,8 @@ import type { MenuItem } from '@/types/menu'
  * non ne fa parte e si aggiunge qui, a mano, solo per gli amministratori di piattaforma. Gli id non
  * sono numeri, come quelli del menu dei tenant, quindi non si confondono con una riga di `menu_entry`.
  *
- * La sezione ha oggi Tenant e Amministratori; Registro, Lingue e Traduzioni si aggiungono con le
- * loro pagine.
+ * La sezione ha Tenant, Amministratori, Registro (MT5-DEC-16), Lingue e Traduzioni (MT5-DEC-17,
+ * MT5-DEC-24).
  */
 type Translate = (key: string) => string
 
@@ -33,6 +33,18 @@ export function buildPlatformMenu(t: Translate, options: { backToTenant: boolean
     {
       ...base, id: `${SECTION_ID}-admins`, parentId: SECTION_ID, label: t('platform.nav.admins'), icon: 'Users',
       route: '/platform/admins', type: 'link', order: 2, position: 'main',
+    },
+    {
+      ...base, id: `${SECTION_ID}-audit`, parentId: SECTION_ID, label: t('platform.nav.audit'), icon: 'ScrollText',
+      route: '/platform/audit', type: 'link', order: 3, position: 'main',
+    },
+    {
+      ...base, id: `${SECTION_ID}-languages`, parentId: SECTION_ID, label: t('platform.nav.languages'), icon: 'Languages',
+      route: '/platform/languages', type: 'link', order: 4, position: 'main',
+    },
+    {
+      ...base, id: `${SECTION_ID}-translations`, parentId: SECTION_ID, label: t('platform.nav.translations'), icon: 'BookA',
+      route: '/platform/translations', type: 'link', order: 5, position: 'main',
     },
   ]
   if (options.backToTenant) {

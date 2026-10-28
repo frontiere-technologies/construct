@@ -31,6 +31,10 @@ interface Props {
   modules: string[]
   canEdit: boolean
   canManageKeys: boolean
+  /** Where the grid's rows come from: the tenant's read-only route by default, the console's in the console. */
+  gridEndpoint?: string
+  /** Where the create and edit pages live: they are in the console, so only the console passes it. */
+  basePath?: string
 }
 
 const textFilter = {
@@ -51,12 +55,12 @@ export function TranslationsTableClient(props: Props) {
   const [gridApi, setGridApi] = useState<GridApi<TranslationRowDto> | null>(null)
   const gridApiRef = useRef<GridApi<TranslationRowDto> | null>(null)
 
-  const datasource = useMemo(() => createTranslationsDatasource(), [])
+  const datasource = useMemo(() => createTranslationsDatasource(props.gridEndpoint), [props.gridEndpoint])
   const refresh = () => { router.refresh(); gridApiRef.current?.refreshInfiniteCache() }
 
   const columnDefs = useMemo<ColDef<TranslationRowDto>[]>(() => [
     ...(props.canEdit || props.canManageKeys ? [actionsColumnDef<TranslationRowDto>(row => [
-      ...(props.canEdit ? [{ label: t('common.actions.edit'), onClick: () => router.push(translationEditHref(row.id, sp.toString())) }] : []),
+      ...(props.canEdit ? [{ label: t('common.actions.edit'), onClick: () => router.push(translationEditHref(row.id, sp.toString(), props.basePath)) }] : []),
       ...(props.canManageKeys ? [{ label: t('common.actions.delete'), onClick: () => setDeleting(row) }] : []),
     ])] : []),
     {
@@ -105,7 +109,7 @@ export function TranslationsTableClient(props: Props) {
       colId: 'updatedAt', headerName: t('translation.updated_at'), sortable: true, ...TRANSLATION_DATE_FILTER, width: 160,
       valueGetter: p => p.data ? fmt.dateTime(p.data.updatedAt) : '',
     },
-  ], [t, fmt, languages, props.namespaces, props.modules, props.canEdit, props.canManageKeys, router, sp])
+  ], [t, fmt, languages, props.namespaces, props.modules, props.canEdit, props.canManageKeys, props.basePath, router, sp])
 
   const columnLabels = useMemo(() => [
     { colId: 'key', label: t('translation.key') },
@@ -138,7 +142,7 @@ export function TranslationsTableClient(props: Props) {
         )}
       >
         {props.canManageKeys && (
-          <Button size="sm" data-testid="create-translation-key" onClick={() => router.push(translationCreateHref(sp.toString()))}>
+          <Button size="sm" data-testid="create-translation-key" onClick={() => router.push(translationCreateHref(sp.toString(), props.basePath))}>
             {t('translation.actions.create')}
           </Button>
         )}

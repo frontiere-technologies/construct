@@ -12,6 +12,8 @@ vi.mock('@/lib/rbac/auth-guard', () => {
   const admin = { userId: '00000000-0000-4000-8000-0000000000a1', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
   return {
     requirePermission: async () => admin,
+    // Le scritture dei cataloghi sono dell'amministratore di piattaforma (MT5-DEC-17).
+    requirePlatformAdmin: async () => ({ userId: admin.userId, email: 'platform-admin@example.test' }),
     requireAdministrator: async () => admin,
   }
 })

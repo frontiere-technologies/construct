@@ -26,33 +26,21 @@ export interface Actor {
 }
 
 /**
- * I permessi che scrivono i cataloghi globali di lingue e traduzioni (pezzo 2, MT2-DEC-11): una
- * scrittura cambia le righe di tutti i tenant. Finché il pezzo 5 non porta il ruolo della
- * piattaforma valgono solo per gli attori del tenant predefinito (specifica 2026-10-21, §5.3); in
- * ogni altro tenant mancano, quindi azioni, pagine e pulsanti rispondono come a chi non li ha.
- */
-export const GLOBAL_CATALOG_WRITE_CODES: readonly PermissionCode[] = [
-  'manage-languages', 'edit-translations', 'manage-translation-keys',
-]
-
-/**
  * L'unico posto dove vive l'eccezione dell'Amministratore (DEC-5): riceve tutti i codici del
  * catalogo, anche quelli che un rilascio ha appena aggiunto e che nessuno gli ha ancora concesso.
- * Un account disattivato non è un attore, qualunque cosa concedano i suoi ruoli. Fuori dal tenant
- * predefinito nessuno, Amministratore compreso, riceve `GLOBAL_CATALOG_WRITE_CODES`.
+ * Un account disattivato non è un attore, qualunque cosa concedano i suoi ruoli. I cataloghi
+ * globali di lingue e traduzioni non c'entrano più coi permessi del tenant: le scritture sono
+ * dell'amministratore di piattaforma (MT5-DEC-17), e nessuna regola distingue il tenant predefinito.
  */
 export function buildActor(
   userId: string,
   tenantId: TenantId,
   authorization: { accountActive: boolean; roleIds: number[]; isAdmin: boolean; isPlatformAdmin: boolean },
   grantedCodes: string[],
-  scope: { defaultTenant: boolean },
 ): Actor | null {
   if (!authorization.accountActive) return null
   const codes = authorization.isAdmin ? PERMISSION_CODES : grantedCodes.filter(isPermissionCode)
-  const permissions = new Set<PermissionCode>(
-    scope.defaultTenant ? codes : codes.filter(code => !GLOBAL_CATALOG_WRITE_CODES.includes(code)),
-  )
+  const permissions = new Set<PermissionCode>(codes)
   return {
     userId,
     tenantId,
@@ -87,7 +75,7 @@ export const resolveActor = cache(async (tenantId: TenantId, userId: string): Pr
       ),
       isPlatformAdmin: snapshot.isPlatformAdmin && isActiveAccount(snapshot.status),
     }
-    return buildActor(userId, tenantId, authorization, snapshot.permissionCodes, { defaultTenant: snapshot.tenantIsDefault })
+    return buildActor(userId, tenantId, authorization, snapshot.permissionCodes)
   }))
 
 /**
@@ -109,7 +97,6 @@ export const resolveSupportActor = cache(async (tenantId: TenantId, userId: stri
     tenantId,
     { accountActive: true, roleIds: [access.tenantAdminRoleId], isAdmin: true, isPlatformAdmin: true },
     [],
-    { defaultTenant: access.isDefault },
   )
   return actor && { ...actor, support: true }
 })

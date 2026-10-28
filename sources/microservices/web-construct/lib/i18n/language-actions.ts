@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordPlatformAudit } from '@/lib/audit/platform-audit'
-import { requirePermission } from '@/lib/rbac/auth-guard'
+import { requirePlatformAdmin } from '@/lib/rbac/auth-guard'
 import { withGlobal, type GlobalTx } from '@/lib/db/tenant-db'
 import { appLanguage } from '@/lib/db/schema'
 import { invalidateDictionary, refreshLanguageVersions } from './dictionary-service'
@@ -58,7 +58,7 @@ async function loadRow(tx: GlobalTx, id: number) {
 }
 
 export async function createLanguage(input: LanguageInput): Promise<ActionResult> {
-  const actor = await requirePermission('manage-languages')
+  const actor = await requirePlatformAdmin()
   const parsed = languageInputSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
@@ -89,7 +89,7 @@ export async function createLanguage(input: LanguageInput): Promise<ActionResult
 }
 
 export async function updateLanguage(id: number, input: LanguageInput): Promise<ActionResult> {
-  const actor = await requirePermission('manage-languages')
+  const actor = await requirePlatformAdmin()
   const parsed = languageInputSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
@@ -123,7 +123,7 @@ export async function updateLanguage(id: number, input: LanguageInput): Promise<
 }
 
 export async function setLanguageActive(id: number, isActive: boolean): Promise<ActionResult> {
-  const actor = await requirePermission('manage-languages')
+  const actor = await requirePlatformAdmin()
   try {
     const row = await withGlobal(async tx => {
       const row = await loadRow(tx, id)
@@ -143,7 +143,7 @@ export async function setLanguageActive(id: number, isActive: boolean): Promise<
 }
 
 export async function setDefaultLanguage(id: number): Promise<ActionResult> {
-  const actor = await requirePermission('manage-languages')
+  const actor = await requirePlatformAdmin()
   try {
     await withGlobal(async tx => {
       const row = await loadRow(tx, id)
@@ -165,7 +165,7 @@ export async function setDefaultLanguage(id: number): Promise<ActionResult> {
 }
 
 export async function deleteLanguage(id: number): Promise<ActionResult> {
-  const actor = await requirePermission('manage-languages')
+  const actor = await requirePlatformAdmin()
   try {
     const row = await withGlobal(async tx => {
       const row = await loadRow(tx, id)
