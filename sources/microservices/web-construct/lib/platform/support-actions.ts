@@ -81,8 +81,10 @@ export async function startSupport(tenantId: number, reason: string): Promise<{ 
 /**
  * Esce dall'assistenza (la fascia, «Esci»): `support.exit` nei due registri, poi il token si
  * ricalcola come un accesso e il client carica la console. È l'unica porta della console che la
- * guardia (`requireSupportExit`) vuole in assistenza: fuori dall'assistenza (anche se è appena
- * finita da sola, alla scadenza o alla revoca) rifiuta e non scrive niente.
+ * guardia (`requireSupportExit`) accetta in assistenza: a chi è amministratore di piattaforma
+ * fuori dall'assistenza (anche se è appena finita da sola, alla scadenza o alla revoca) risponde con
+ * lo stato della sessione, senza scrivere niente né lanciare, e il client carica la console come
+ * sempre; chi non è amministratore di piattaforma è rifiutato.
  */
 export async function endSupport(): Promise<{ state: TenantState }> {
   const actor = await requireSupportExit()

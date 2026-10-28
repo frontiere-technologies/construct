@@ -62,13 +62,13 @@ export async function requireAdministratorPage(): Promise<Actor> {
  * assistenza ogni modifica deve finire nel registro del tenant assistito, e le azioni della
  * console (cataloghi globali, stati dei tenant) non ci passano. Lo stato si legge dalla sessione di
  * questa richiesta, cioè dal token appena rivalidato dal server, mai da un dato del client. Solo
- * l'uscita (`requireSupportExit`) la vuole in assistenza.
+ * l'uscita (`requireSupportExit`) la accetta in ogni stato.
  */
-async function currentPlatformAdmin(inSupport: boolean): Promise<PlatformActor | null> {
+async function currentPlatformAdmin(support: 'closed' | 'any'): Promise<PlatformActor | null> {
   const session = await getSession()
   const userId = session?.user?.id
   if (!session || !userId) return null
-  if (isSupportSession(session) !== inSupport) return null
+  if (support === 'closed' && isSupportSession(session)) return null
   return resolvePlatformAdmin(userId)
 }
 
@@ -78,25 +78,27 @@ async function currentPlatformAdmin(inSupport: boolean): Promise<PlatformActor |
  * qualunque porta della piattaforma (`withPlatform`). Su un indirizzo dedicato rifiuta.
  */
 export async function requirePlatformAdmin(): Promise<PlatformActor> {
-  const admin = await currentPlatformAdmin(false)
+  const admin = await currentPlatformAdmin('closed')
   if (!admin) throw new Error('Unauthorized')
   return admin
 }
 
 /**
- * Il controllo dell'uscita dall'assistenza, che è l'unica porta della console che la vuole: la
- * persona è amministratore di piattaforma (riletto dal database, indirizzo principale) **e** la
- * sessione è in assistenza. Fuori dall'assistenza rifiuta, come ogni altra porta rifiuta dentro.
+ * Il controllo dell'uscita dall'assistenza, l'unica porta della console che funziona anche in
+ * assistenza: la persona è amministratore di piattaforma (riletto dal database, indirizzo
+ * principale), in qualunque stato sia la sessione. Se l'assistenza è già finita (alla scadenza o
+ * alla revoca) l'uscita non ha niente da fare e `endSupport` risponde senza scrivere; chi non è
+ * amministratore di piattaforma è rifiutato.
  */
 export async function requireSupportExit(): Promise<PlatformActor> {
-  const admin = await currentPlatformAdmin(true)
+  const admin = await currentPlatformAdmin('any')
   if (!admin) throw new Error('Unauthorized')
   return admin
 }
 
 /** Per le pagine della console: chi non è ammesso, o è su un indirizzo dedicato, vede un 404. */
 export async function requirePlatformAdminPage(): Promise<PlatformActor> {
-  const admin = await currentPlatformAdmin(false)
+  const admin = await currentPlatformAdmin('closed')
   if (!admin) notFound()
   return admin
 }

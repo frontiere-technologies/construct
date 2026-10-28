@@ -1,13 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { eq, inArray, sql } from 'drizzle-orm'
-import { role, tenantMembership, tenantSettings, userRole, users } from '@/lib/db/schema'
+import { appLanguage, role, tenant as tenantTable, tenantMembership, tenantSettings, translationKey, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { tenantIdForTest } from '@/lib/tenancy/testing'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
-import { appLanguage, tenant as tenantTable, translationKey } from '@/lib/db/schema'
 import { closePlatform } from './db'
 
 /**
@@ -189,7 +188,7 @@ describeIntegration('the console is closed during support', () => {
     await expect(addPlatformAdmin(`zzz_closed_${unique()}@example.test`)).rejects.toThrow('Unauthorized')
     await expect(requirePlatformAdmin()).rejects.toThrow('Unauthorized')
     // Le pagine della console rispondono 404, la rotta 403.
-    await expect(requirePlatformAdminPage()).rejects.toThrow()
+    await expect(requirePlatformAdminPage()).rejects.toMatchObject({ digest: 'NEXT_HTTP_ERROR_FALLBACK;404' })
     expect((await platformAuditGrid(gridRequest('/api/platform/audit-grid', { page: 0, size: 10 }))).status).toBe(403)
   }, 60_000)
 
@@ -212,15 +211,21 @@ describeIntegration('the console is closed during support', () => {
     await expect(requirePlatformAdminPage()).resolves.toMatchObject({ userId: platformAdmin.id })
   }, 60_000)
 
-  it('refuses endSupport outside support, and to anyone who is not a platform admin', async () => {
+  it('endSupport outside support answers a platform admin without writing, and refuses anyone else', async () => {
     const tenant = await seedTenant('closed-exit-outside')
     await signIn(platformAdmin)
     const before = await tenantAuditOf(tenant)
-    await expect(endSupport()).rejects.toThrow('Unauthorized')
+    const platformBefore = await platformAuditOf(tenant)
+    // Come dopo una scadenza: il client carica la console, senza errore e senza voci nuove.
+    expect(await endSupport()).toMatchObject({ state: 'none' })
+    expect(await tenantAuditOf(tenant)).toEqual(before)
+    expect(await platformAuditOf(tenant)).toEqual(platformBefore)
+
     const plain = await createAccount('closed-plain')
     await signIn(plain)
     await expect(endSupport()).rejects.toThrow('Unauthorized')
     expect(await tenantAuditOf(tenant)).toEqual(before)
+    expect(await platformAuditOf(tenant)).toEqual(platformBefore)
   }, 60_000)
 
   it('outside support the console works as before', async () => {
@@ -252,7 +257,6 @@ describeIntegration('the console is closed during support', () => {
     expect(body.total).toBe(own.length)
   }, 60_000)
 })
-
 
 /** Il permesso concesso come lo concede l'amministratore del tenant, con la sua sessione vera. */
 async function grantAs(admin: Person, duration: '1h' | '1d' | '1w' = '1d') {
