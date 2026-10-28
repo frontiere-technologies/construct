@@ -1,8 +1,9 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { eq, inArray, sql } from 'drizzle-orm'
+import { recordInvitationDelivery } from '@/lib/auth-invitations'
 import { passwordSetTokens, users } from '@/lib/db/schema'
 import { withGlobal } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
@@ -226,6 +227,72 @@ describeIntegration('addPlatformAdmin', () => {
     expect(await auditOf(id)).toEqual([])
     expect(mocks.sendInvite).not.toHaveBeenCalled()
   }, 30_000)
+
+  describe('an administrator who has no password yet (the first link expired, or the email never left)', () => {
+    /** Un invito di prima, già scaduto: l'amministratore c'è ma non ha una password. */
+    async function adminWithExpiredInvitation(label: string) {
+      const email = address(label)
+      const id = await createAccount(email, { password: false, admin: true })
+      const [old] = await withOwner(tx => tx.insert(passwordSetTokens).values({
+        userId: id, token: crypto.randomUUID(), purpose: 'invitation', deliveryStatus: 'sent',
+        expiresAt: new Date(Date.now() - 3_600_000).toISOString(),
+      }).returning({ id: passwordSetTokens.id }))
+      return { email, id, oldTokenId: old.id }
+    }
+    const tokensOf = (userId: string) => withGlobal(tx => tx.select().from(passwordSetTokens).where(eq(passwordSetTokens.userId, userId)))
+
+    it('sends a fresh invitation after the commit, supersedes the old one and writes an invite row', async () => {
+      const { email, id, oldTokenId } = await adminWithExpiredInvitation('reinvite')
+      let seenAtSend: { audit: number; tokens: number } | null = null
+      mocks.sendInvite.mockImplementation(async (invitation: { tokenId: string }) => {
+        // Alla partenza dell'email la transazione è già confermata: la voce e il token si leggono da un'altra connessione.
+        seenAtSend = { audit: (await auditOf(id)).length, tokens: (await tokensOf(id)).length }
+        await recordInvitationDelivery(invitation.tokenId, { ok: true })
+        return { ok: true }
+      })
+
+      expect(await addPlatformAdmin(email)).toEqual({ ok: true, invited: true })
+      expect(seenAtSend).toEqual({ audit: 1, tokens: 2 })
+      expect(mocks.sendInvite).toHaveBeenCalledTimes(1)
+
+      const tokens = await tokensOf(id)
+      const fresh = tokens.find(token => token.id !== oldTokenId)!
+      expect(mocks.sendInvite.mock.calls[0][0]).toMatchObject({ email, userId: id, rawToken: fresh.token, tokenId: fresh.id })
+      expect(fresh).toMatchObject({ purpose: 'invitation', usedAt: null, supersededAt: null, deliveryStatus: 'sent', requestedBy: actor.id })
+      expect(tokens.find(token => token.id === oldTokenId)!.supersededAt).not.toBeNull()
+      expect(await userByEmail(email)).toMatchObject({ id, isPlatformAdmin: true, passwordHash: null })
+
+      const audit = await auditOf(id)
+      expect(audit).toHaveLength(1)
+      expect(audit[0]).toMatchObject({
+        id_tenant: null, actor_user_id: actor.id, actor_email: actor.email, actor_kind: 'platform',
+        operation: 'platform.admin.invite', object_type: 'user', object_id: id,
+      })
+      expect(audit[0].details).toEqual({ email })
+      expect(JSON.stringify(audit[0])).not.toContain(fresh.token)
+    }, 30_000)
+
+    it('says the invitation did not go out when the email cannot be sent, and keeps the row and the new token', async () => {
+      mocks.sendInvite.mockResolvedValue({ ok: false, code: 'email_delivery_failed' })
+      const { email, id } = await adminWithExpiredInvitation('reinvitefail')
+      expect(await addPlatformAdmin(email)).toEqual({ ok: true, invited: false, inviteFailed: true })
+      expect(await tokensOf(id)).toHaveLength(2)
+      expect((await auditOf(id)).map(row => row.operation)).toEqual(['platform.admin.invite'])
+
+      mocks.sendInvite.mockRejectedValue(new Error('smtp down'))
+      expect(await addPlatformAdmin(email)).toEqual({ ok: true, invited: false, inviteFailed: true })
+      expect((await auditOf(id)).map(row => row.operation)).toEqual(['platform.admin.invite', 'platform.admin.invite'])
+    }, 30_000)
+
+    it('leaves no new token when the audit row cannot be written', async () => {
+      const { email, id } = await adminWithExpiredInvitation('reinviterollback')
+      failNextAudit.on = true
+      await expect(addPlatformAdmin(email)).rejects.toThrow('audit write failed')
+      expect(await tokensOf(id)).toHaveLength(1)
+      expect(await auditOf(id)).toEqual([])
+      expect(mocks.sendInvite).not.toHaveBeenCalled()
+    }, 30_000)
+  })
 
   it('refuses a globally deactivated account and changes nothing', async () => {
     const email = address('off')

@@ -971,8 +971,12 @@ async function runTenantHostAdd(connectionUrl, { slug, host, primary }) {
  * primo amministratore di tenant-create (`register_tenant_admin`, 0051), un invito di 48 ore già
  * consegnato (gli inviti precedenti non usati si sostituiscono), il cui link si stampa verso
  * `AUTH_URL`, l'indirizzo principale: la piattaforma non è in nessun tenant. Il link si stampa e
- * non si scrive da nessun'altra parte, registro compreso. Un account già amministratore non cambia
- * e non lascia voci. Un account disattivato a livello globale si rifiuta, come in tenant-create.
+ * non si scrive da nessun'altra parte, registro compreso. Un account già amministratore con una
+ * password non cambia e non lascia voci. Un account già amministratore senza password (il link del
+ * primo invito è scaduto, o l'email della console non è partita) riceve un invito nuovo, con la
+ * voce `platform.admin.invite` nella stessa transazione: è il modo di rientrare, perché toglierlo è
+ * vietato se è l'ultimo e «Password dimenticata» non esiste per un account senza password.
+ * Un account disattivato a livello globale si rifiuta, come in tenant-create.
  */
 async function runPlatformAdminAdd(connectionUrl, { email }) {
   const sql = postgres(connectionUrl, {
@@ -994,8 +998,9 @@ async function runPlatformAdminAdd(connectionUrl, { email }) {
       if (Number(account.status) !== 2) {
         throw new Error(`L'account ${email} è disattivato a livello globale: riattivalo prima di nominarlo. Nessuna modifica.`)
       }
-      if (account.isAdmin) return { changed: false }
-      await tx`update public.users set is_platform_admin = true where id = ${account.id}`
+      if (account.isAdmin && account.hasPassword) return { changed: false }
+      const reinvite = account.isAdmin
+      if (!reinvite) await tx`update public.users set is_platform_admin = true where id = ${account.id}`
       let invitationToken = null
       if (!account.hasPassword) {
         invitationToken = (await tx`select gen_random_uuid()::text as token`)[0].token
@@ -1010,19 +1015,21 @@ async function runPlatformAdminAdd(connectionUrl, { email }) {
         `
       }
       await recordCommandAudit(tx, {
-        operation: 'platform.admin.add',
+        operation: reinvite ? 'platform.admin.invite' : 'platform.admin.add',
         objectType: 'user',
         objectId: account.id,
-        details: { email, accountCreated: !existed },
+        details: reinvite ? { email } : { email, accountCreated: !existed },
       })
-      return { changed: true, existed, invitationToken }
+      return { changed: true, existed, invitationToken, reinvite }
     })
 
     if (!result.changed) {
       console.log(`${email} è già amministratore di piattaforma: nessuna modifica`)
       return
     }
-    console.log(`Amministratore di piattaforma: ${email} (${result.existed ? 'account esistente' : 'account nuovo'})`)
+    console.log(result.reinvite
+      ? `Amministratore di piattaforma: ${email} (già nominato, senza password: invito rinnovato)`
+      : `Amministratore di piattaforma: ${email} (${result.existed ? 'account esistente' : 'account nuovo'})`)
     if (result.invitationToken) {
       const baseUrl = tenantLinkBase(process.env.AUTH_URL ?? '')
       console.log(`Link per impostare la password (valido 48 ore): ${baseUrl}/set-password?token=${result.invitationToken}`)

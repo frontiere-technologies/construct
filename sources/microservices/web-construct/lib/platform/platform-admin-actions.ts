@@ -17,12 +17,18 @@ const log = createLogger('platform-admin-actions')
 /**
  * Nomina un amministratore di piattaforma dalla console (specifica 2026-10-26, MT5-DEC-2,
  * MT5-DEC-23), con le regole di `db.mjs platform-admin-add`: l'account esistente o nuovo si segna in
- * una transazione sola con la voce del registro della piattaforma; un account già amministratore non
- * cambia e non lascia voci; un account disattivato a livello globale si rifiuta. Un account senza
- * password (nuovo, o mai invitato) riceve un invito d'accesso: il token nasce nella stessa
- * transazione, l'email parte dopo il commit verso l'indirizzo principale (la persona non è in
- * nessun tenant) e non entra mai nel registro (MT5-RISK-4). Un invio che fallisce si registra nel
- * log e lascia la nomina com'è: `invited` dice se l'invito è partito e `inviteFailed` che doveva partire e non è partito.
+ * una transazione sola con la voce del registro della piattaforma; un account disattivato a livello
+ * globale si rifiuta. Un account senza password (nuovo, o mai invitato) riceve un invito d'accesso:
+ * il token nasce nella stessa transazione, l'email parte dopo il commit verso l'indirizzo principale
+ * (la persona non è in nessun tenant) e non entra mai nel registro (MT5-RISK-4). Un invio che
+ * fallisce si registra nel log e lascia la nomina com'è: `invited` dice se l'invito è partito e
+ * `inviteFailed` che doveva partire e non è partito.
+ *
+ * Un account già amministratore con una password non cambia e non lascia voci. Un account già
+ * amministratore *senza* password (il link del primo invito è scaduto, o l'email non è partita) è
+ * l'unico modo di rientrare che non passa dal comando: riceve un invito nuovo, con la voce
+ * `platform.admin.invite` nella stessa transazione del token; i token d'invito precedenti si
+ * sostituiscono alla consegna, come per ogni invito.
  */
 export async function addPlatformAdmin(email: string): Promise<{ ok: true; invited: boolean; inviteFailed?: true }> {
   const actor = await requirePlatformAdmin()
@@ -38,7 +44,14 @@ export async function addPlatformAdmin(email: string): Promise<{ ok: true; invit
       .from(users).where(eq(users.email, normalizedEmail)).limit(1).for('update')
     if (!account) throw new Error('Account non trovato')
     if (!isActiveAccount(account.status)) throw new Error("L'account è disattivato: riattivalo prima di nominarlo")
-    if (account.isAdmin) return { changed: false as const }
+    if (account.isAdmin && account.hasPassword) return { changed: false as const }
+    if (account.isAdmin) {
+      const invitation = await prepareInvitationIn(tx, normalizedEmail, actor.userId)
+      await recordPlatformAudit(tx, auditActorOf(actor), {
+        operation: 'platform.admin.invite', objectType: 'user', objectId: account.id, details: { email: normalizedEmail },
+      })
+      return { changed: true as const, invitation }
+    }
 
     await tx.update(users).set({ isPlatformAdmin: true }).where(eq(users.id, account.id))
     const invitation = account.hasPassword ? null : await prepareInvitationIn(tx, normalizedEmail, actor.userId)
@@ -58,7 +71,7 @@ export async function addPlatformAdmin(email: string): Promise<{ ok: true; invit
     log.error({ err }, 'platform administrator invitation email failed')
   }
   // La nomina c'è, l'invito no: la persona non ha una password e «Password dimenticata» non le serve
-  // (per un account senza password non esiste un recupero). La console lo dice, e si riprova togliendola e nominandola di nuovo.
+  // (per un account senza password non esiste un recupero). La console lo dice, e si riprova nominando di nuovo la stessa email.
   return { ok: true, invited: false, inviteFailed: true }
 }
 

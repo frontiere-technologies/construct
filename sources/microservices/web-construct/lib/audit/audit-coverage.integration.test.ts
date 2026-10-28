@@ -454,8 +454,13 @@ const CASES: Record<string, AuditCase> = {
       state.platformAdminEmail = `zzz_audit_padmin_${unique()}@example.test`
       createdEmails.push(state.platformAdminEmail)
       expect(await addPlatformAdmin(state.platformAdminEmail)).toEqual({ ok: true, invited: true })
+      // Nominato e senza ancora una password: nominarlo di nuovo rimanda l'invito e lo scrive (platform.admin.invite).
+      expect(await addPlatformAdmin(state.platformAdminEmail)).toEqual({ ok: true, invited: true })
     },
-    expected: [{ operation: 'platform.admin.add', objectType: 'user', objectId: () => userIdOf(state.platformAdminEmail) }],
+    expected: [
+      { operation: 'platform.admin.add', objectType: 'user', objectId: () => userIdOf(state.platformAdminEmail) },
+      { operation: 'platform.admin.invite', objectType: 'user', objectId: () => userIdOf(state.platformAdminEmail) },
+    ],
   },
   'lib/platform/platform-admin-actions.ts#removePlatformAdmin': {
     entry: removePlatformAdmin, sink: 'platform', as: 'platformAdmin', kind: 'platform',

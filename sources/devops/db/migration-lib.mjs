@@ -251,6 +251,7 @@ export function commandActorEmail(env = process.env, readUser = userInfo) {
 export const COMMAND_AUDIT_OPERATIONS = new Set([
   'platform.admin.add',
   'platform.admin.remove',
+  'platform.admin.invite',
   'tenant.create',
   'tenant.host.add',
   'tenant.host.primary',

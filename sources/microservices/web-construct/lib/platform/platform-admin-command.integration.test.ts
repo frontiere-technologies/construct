@@ -214,6 +214,56 @@ describeIntegration('db.mjs test-platform-admin-add / test-platform-admin-remove
     expect((await userRow(address)).isPlatformAdmin).toBe(true)
   }, 60_000)
 
+  it('adding again an administrator who has no password prints a fresh link, supersedes the old one and writes an invite row', async () => {
+    const address = email()
+    const first = await adminAdd(address)
+    expect(first.code).toBe(0)
+    const account = await userRow(address)
+    createdUserIds.push(account.id)
+    const linkOf = (stdout: string) => /set-password\?token=([0-9a-f-]{36})$/m.exec(stdout)?.[1]
+    const oldToken = linkOf(first.stdout)!
+    expect(oldToken).toBeDefined()
+    // Il link è scaduto: l'orologio è quello del database.
+    await withOwner(tx => tx.execute(sql`update public.password_set_tokens set expires_at = now() - interval '1 hour' where user_id = ${account.id}`))
+
+    const again = await adminAdd(address)
+    expect(again.stderr).toBe('')
+    expect(again.code).toBe(0)
+    const lines = again.stdout.trimEnd().split('\n')
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toBe(`Amministratore di piattaforma: ${address} (già nominato, senza password: invito rinnovato)`)
+    const freshToken = linkOf(again.stdout)!
+    expect(lines[1]).toBe(`Link per impostare la password (valido 48 ore): https://construct.example.test/set-password?token=${freshToken}`)
+    expect(freshToken).not.toBe(oldToken)
+
+    const tokens = await withGlobal(tx => tx.select().from(passwordSetTokens).where(eq(passwordSetTokens.userId, account.id)))
+    expect(tokens).toHaveLength(2)
+    const old = tokens.find(token => token.token === oldToken)!
+    const fresh = tokens.find(token => token.token === freshToken)!
+    expect(old.supersededAt).not.toBeNull()
+    expect(fresh).toMatchObject({ purpose: 'invitation', deliveryStatus: 'sent', usedAt: null, supersededAt: null })
+    const hoursLeft = (new Date(fresh.expiresAt).getTime() - Date.now()) / 3_600_000
+    expect(hoursLeft).toBeGreaterThan(47)
+    expect(hoursLeft).toBeLessThan(49)
+    expect((await userRow(address)).isPlatformAdmin).toBe(true)
+
+    const audit = await auditRowsOf(account.id)
+    expect(audit.map(row => [row.operation, row.actor_kind, row.actor_email, row.actor_user_id])).toEqual([
+      ['platform.admin.add', 'command', OPERATOR, null],
+      ['platform.admin.invite', 'command', OPERATOR, null],
+    ])
+    expect(audit[1]).toMatchObject({ object_type: 'user', object_id: account.id, id_tenant: null })
+    expect(audit[1].details).toEqual({ email: address })
+    expect(JSON.stringify(audit)).not.toContain(oldToken)
+    expect(JSON.stringify(audit)).not.toContain(freshToken)
+
+    // Una volta impostata la password torna un'operazione senza effetto e senza voce.
+    await withOwner(tx => tx.execute(sql`update public.users set password_hash = ${PASSWORD_HASH} where id = ${account.id}`))
+    const done = await adminAdd(address)
+    expect(done.stdout.trimEnd().split('\n')).toEqual([`${address} è già amministratore di piattaforma: nessuna modifica`])
+    expect(await auditRowsOf(account.id)).toHaveLength(2)
+  }, 90_000)
+
   it('refuses a globally deactivated account and changes nothing', async () => {
     const address = email()
     const id = await createAccount(address, { idUserStatus: 1 })
