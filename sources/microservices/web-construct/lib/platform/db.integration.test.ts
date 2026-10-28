@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
 import { withGlobal } from '@/lib/db/tenant-db'
@@ -14,6 +14,20 @@ import { closePlatform, withPlatform } from '@/lib/platform/db'
  * `set local role` non ha alcun privilegio; dopo, scrive i cataloghi che il ruolo dell'app può solo
  * leggere. La RLS forzata vale anche per il proprietario: una scrittura di tenant chiede il tenant.
  */
+// Ogni client costruito dopo questa riga registra le istruzioni che manda: la prova del controllo del
+// login (una volta per pool) conta le istruzioni del pool di piattaforma.
+const sent = vi.hoisted(() => [] as string[])
+vi.mock('@/lib/db/client', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/lib/db/client')>()
+  return {
+    ...actual,
+    createDatabase: (url: string, options: Parameters<typeof actual.createDatabase>[1] = {}) => actual.createDatabase(url, {
+      ...options,
+      onQuery: (query, parameters) => { sent.push(query); options.onQuery?.(query, parameters) },
+    }),
+  }
+})
+
 const createdTenants: TenantId[] = []
 const createdEmails: string[] = []
 
@@ -128,6 +142,48 @@ describeIntegration('the platform identity', () => {
     } finally {
       await raw.end({ timeout: 5 })
     }
+  })
+
+  describe('the login behind PLATFORM_DATABASE_URL', () => {
+    const LOGIN_CHECK = /rolbypassrls/
+    let platformUrl: string | undefined
+
+    beforeAll(() => { platformUrl = process.env.TEST_PLATFORM_DATABASE_URL })
+    afterEach(async () => {
+      process.env.TEST_PLATFORM_DATABASE_URL = platformUrl
+      await closePlatform()
+    })
+
+    it('refuses a pool built with the owner or migration login, on every transaction, before it can do anything', async () => {
+      const ownerUrl = process.env.TEST_MIGRATION_DATABASE_URL
+      if (!ownerUrl) throw new Error('TEST_MIGRATION_DATABASE_URL is missing: this check needs the owner login to point the pool at')
+      process.env.TEST_PLATFORM_DATABASE_URL = ownerUrl
+      await closePlatform()
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        sent.length = 0
+        const failure = await failureFrom(withPlatform(tx => tx.execute(sql`select 1`)))
+        expect(failure.text).toContain('PLATFORM_DATABASE_URL non è il login di piattaforma')
+        // Il difetto non si ricorda come un successo: la richiesta dopo lo rivede.
+        expect(sent.filter(query => LOGIN_CHECK.test(query))).toHaveLength(1)
+        // Nessuna istruzione del chiamante è partita, e il ruolo non è nemmeno cambiato.
+        expect(sent.some(query => /set local role/i.test(query))).toBe(false)
+        expect(sent.some(query => /select 1/.test(query))).toBe(false)
+      }
+    })
+
+    it('lets the platform login through, checking it only on the first transaction of the pool', async () => {
+      await closePlatform()
+      sent.length = 0
+      await withPlatform(tx => tx.execute(sql`select 1`))
+      expect(sent.filter(query => LOGIN_CHECK.test(query))).toHaveLength(1)
+      const firstTrips = sent.length
+      sent.length = 0
+      await withPlatform(tx => tx.execute(sql`select 1`))
+      expect(sent.filter(query => LOGIN_CHECK.test(query))).toHaveLength(0)
+      // Dopo il primo restano solo begin, set local role, la lettura e commit: niente controllo (e niente lettura dei tipi del driver, che è della connessione nuova).
+      expect(sent.length).toBeLessThan(firstTrips)
+      expect(sent.map(query => query.trim().toLowerCase().split(/\s+/).slice(0, 3).join(' '))).toEqual(['begin', 'set local role', 'select 1', 'commit'])
+    })
   })
 
   it('sets the tenant of the transaction only when asked, and only for that transaction', async () => {
