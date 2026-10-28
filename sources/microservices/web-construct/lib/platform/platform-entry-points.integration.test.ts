@@ -284,6 +284,21 @@ describe('the platform doors of the inventory', () => {
     expect(inventory.filter(door => door.kind === 'action').length).toBeGreaterThanOrEqual(15)
   })
 
+  it('declares every page and route under the console paths with a platform guard', () => {
+    // Una pagina o una rotta della console dichiarata con una guardia più debole (o nessuna) non
+    // uscirebbe dall'inventario di sopra: qui si guarda il percorso, non la guardia.
+    const underConsole = listEntryPoints().filter(entry => /^app\/(api\/)?platform\//.test(entry.file))
+    expect(underConsole.filter(entry => entry.kind === 'page').length).toBeGreaterThanOrEqual(8)
+    expect(underConsole.filter(entry => entry.kind === 'route').length).toBeGreaterThanOrEqual(4)
+    const weak = underConsole
+      .filter(entry => {
+        const declared = inspectExports(readFileSync(entry.file, 'utf8'), entry.file).declared[entry.name]
+        return declared === undefined || !PLATFORM_GUARDS.has(declared)
+      })
+      .map(doorKey)
+    expect(weak).toEqual([])
+  })
+
   it('has a call for every platform door, and none for a door that is gone', () => {
     const known = new Set(inventory.map(door => door.key))
     expect(inventory.map(door => door.key).filter(key => !Object.hasOwn(DOORS, key))).toEqual([])
@@ -602,6 +617,13 @@ describeIntegration('the platform does not see inside a tenant without its conse
     mocks.session = sessionOf(platformAdmin, 'support', Number(tenantB))
     await expect(requirePermission('read-users')).rejects.toThrow('Unauthorized')
     // E la lettura dei dati di B con l'identità di piattaforma, senza dire il tenant, è negata dal database.
-    await expect(withPlatform(tx => tx.select({ id: role.idRole }).from(role))).rejects.toThrow()
+    const refusal = await withPlatform(tx => tx.select({ id: role.idRole }).from(role)).then(() => null, (error: unknown) => error)
+    expect(refusal, 'the platform identity read tenant rows without a tenant').not.toBeNull()
+    // Drizzle avvolge l'errore di Postgres: il messaggio vero è nella catena delle cause.
+    const messages: string[] = []
+    for (let current: unknown = refusal; current && typeof current === 'object'; current = (current as { cause?: unknown }).cause) {
+      messages.push(String((current as { message?: unknown }).message))
+    }
+    expect(messages.join('\n')).toContain('tenant context missing')
   }, 60_000)
 })
