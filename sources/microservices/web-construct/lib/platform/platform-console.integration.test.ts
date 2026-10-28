@@ -228,11 +228,15 @@ describeIntegration('the tenant page', () => {
 
   it('renders the tenant of the id for a platform admin, with its data for the detail component', async () => {
     mocks.session = sessionOf(platformAdmin)
-    const element = await pageOf('1') as unknown as { props: { title: string; subtitle: string; children: [{ props: { tenant: { id: number; slug: string } } }, unknown] } }
+    type Section = { props: { children: [unknown, { props: { endpoint: string; extraQuery: unknown; syncUrl: boolean } }] } }
+    const element = await pageOf('1') as unknown as { props: { title: string; subtitle: string; children: [{ props: { tenant: { id: number; slug: string } } }, Section] } }
     expect(element.props.subtitle).toBe('default')
     expect(element.props.children[0].props.tenant).toMatchObject({ id: 1, slug: 'default' })
-    // Il registro di tenant non sta sotto la scheda di un tenant che non è il modello (MT5-OK-2).
-    expect(element.props.children[1]).toBe(false)
+    // Sotto la scheda di un tenant che non è il modello: solo gli eventi della piattaforma su quel tenant,
+    // mai il registro di tenant (MT5-OK-2, MT5-DEC-6).
+    expect(element.props.children[1].props.children[1].props).toMatchObject({
+      endpoint: '/api/platform/audit-grid', extraQuery: { scope: 'tenant', tenantId: 1 }, syncUrl: false,
+    })
   })
 
   it('shows the audit of the template, and only there, under the template page', async () => {
