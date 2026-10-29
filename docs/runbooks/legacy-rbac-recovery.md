@@ -90,12 +90,26 @@ commit;
 
 Replace the email list with the approved administrators (lowercase: the comparison uses `lower(email)`). This is a break-glass procedure: the membership of each listed person is **reactivated** (`status = 'active'`) so that the administrator is usable at once; the global account status (`users.id_user_status`) is never changed here, so a globally deactivated account still fails the final check.
 
+Every change to a membership or to a person's roles leaves a row in the tenant audit log (`public.tenant_audit_event`) **in the same transaction**: `member.add` for a person who had no membership, `member.status` when an existing membership is reactivated, `member.roles` when the `TENANT_ADMIN` role is granted. The rows carry `actor_kind = 'command'` and no person, like the rows written by `db.mjs`; replace `operator@example.com` (in the three audit selects) with who runs the repair, and the email list in all three places where it appears. The `id_tenant` column defaults to the tenant set below.
+
 ```sql
 begin;
 set local role construct_owner;
 lock table public.users, public.tenant_membership, public.user_role in share row exclusive mode;
 
 select set_config('app.tenant_id', (select id::text from public.tenant where slug = 'default'), true);
+
+-- Who is listed and how things stood before the repair: the audit rows below depend on it.
+create temporary table recovery_listed on commit drop as
+select u.id as user_id,
+       m.status as previous_status,
+       exists (
+         select 1 from public.user_role ur
+         where ur.user_id = u.id and ur.id_role = (select id_role from public.role where system_key = 'TENANT_ADMIN')
+       ) as had_admin_role
+from public.users u
+left join public.tenant_membership m on m.user_id = u.id
+where lower(u.email) = any (array['admin@example.com']);
 
 insert into public.tenant_membership (user_id, status)
 select id, 'active' from public.users
@@ -107,6 +121,19 @@ select u.id, (select id_role from public.role where system_key = 'TENANT_ADMIN')
 from public.users u
 where lower(u.email) = any (array['admin@example.com'])
 on conflict (id_tenant, user_id, id_role) do nothing;
+
+-- The matching audit rows, same transaction (the details have the shape the application writes).
+insert into public.tenant_audit_event (actor_kind, actor_email, operation, object_type, object_id, details)
+select 'command', 'operator@example.com', 'member.add', 'user', l.user_id::text, '{"invited": false}'::jsonb
+from recovery_listed l where l.previous_status is null
+union all
+select 'command', 'operator@example.com', 'member.status', 'user', l.user_id::text, '{"status": "active"}'::jsonb
+from recovery_listed l where l.previous_status is not null and l.previous_status <> 'active'
+union all
+select 'command', 'operator@example.com', 'member.roles', 'user', l.user_id::text,
+       jsonb_build_object('roleIds', (select coalesce(jsonb_agg(ur.id_role order by ur.id_role), '[]'::jsonb)
+                                      from public.user_role ur where ur.user_id = l.user_id))
+from recovery_listed l where not l.had_admin_role;
 
 do $$
 begin

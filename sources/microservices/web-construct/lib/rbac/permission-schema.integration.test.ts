@@ -281,9 +281,9 @@ describe('travaso in menu_entry', () => {
     // È irraggiungibile oggi (0001_baseline.sql semina -1 prima), ma solo la metà positiva se
     // ne accorgerebbe: operations, le cinque categorie e i quindici permessi del catalogo che la
     // 0041 ha messo al posto degli otto segnaposto della baseline, più manage-tenant-settings
-    // della 0053: ventidue righe in tutto.
+    // della 0053, più read-tenant-audit della 0057: ventitré righe in tutto.
     const [{ totali }] = await withGlobal(tx => tx.execute(sql`select count(*)::int as totali from public.permission`))
-    expect(totali).toBe(22)
+    expect(totali).toBe(23)
   })
 
   it('non ha più una colonna id_permission su menu_entry (MIG-4)', async () => {

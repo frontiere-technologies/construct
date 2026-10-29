@@ -63,6 +63,9 @@ export const users = pgTable('users', {
   idLanguage: bigint('id_language', { mode: 'number' }).references(() => appLanguage.idLanguage, { onDelete: 'set null' }),
   // L'ultimo tenant in cui la persona ha lavorato (specifica 2026-10-21, §2.3, 0053).
   lastTenantId: bigint('last_tenant_id', { mode: 'number' }).references(() => tenant.id, { onDelete: 'set null' }),
+  // L'amministratore di piattaforma: una qualità dell'account, non un ruolo di tenant (specifica
+  // 2026-10-26, §2.1, MT5-DEC-1, 0057).
+  isPlatformAdmin: boolean('is_platform_admin').notNull().default(false),
 }, (t) => [
   index('users_id_language_idx').on(t.idLanguage),
   index('users_last_tenant_id_idx').on(t.lastTenantId),
@@ -106,7 +109,55 @@ export const tenantSettings = pgTable('tenant_settings', {
   idTenant: bigint('id_tenant', { mode: 'number' }).primaryKey().default(sql`app_private.current_tenant_id()`).references(() => tenant.id),
   selfRegistration: boolean('self_registration').notNull().default(false),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+  // Il permesso di assistenza alla piattaforma (specifica 2026-10-26, §2.3, MT5-DEC-10, 0057): fino a
+  // quando vale, chi l'ha concesso e quando. Nullo o passato = non vale; una copia dal modello parte senza.
+  supportUntil: timestamp('support_until', { withTimezone: true, mode: 'string' }),
+  supportGrantedBy: uuid('support_granted_by').references(() => users.id, { onDelete: 'set null' }),
+  supportGrantedAt: timestamp('support_granted_at', { withTimezone: true, mode: 'string' }),
 })
+
+/**
+ * Il registro delle modifiche del tenant (specifica 2026-10-26, §2.4, MT5-DEC-14, MT5-DEC-15, 0057).
+ * Tabella di tenant: il ruolo dell'app ci inserisce e la legge, mai la modifica né la cancella. Il
+ * tenant è quello della transazione. Persona ed email non hanno chiave esterna: la voce sopravvive
+ * all'account. L'indice del database ordina occurred_at in modo decrescente.
+ */
+export const tenantAuditEvent = pgTable('tenant_audit_event', {
+  id: bigint('id', { mode: 'number' }).generatedAlwaysAsIdentity(),
+  idTenant: tenantIdColumn(),
+  occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+  actorUserId: uuid('actor_user_id'),
+  actorEmail: text('actor_email'),
+  actorKind: text('actor_kind').notNull(),
+  operation: text('operation').notNull(),
+  objectType: text('object_type'),
+  objectId: text('object_id'),
+  details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
+}, (t) => [
+  primaryKey({ columns: [t.idTenant, t.id] }),
+  index('tenant_audit_event_occurred_idx').on(t.idTenant, t.occurredAt.desc()),
+])
+
+/**
+ * Il registro della piattaforma (specifica 2026-10-26, §2.4, MT5-DEC-15, MT5-DEC-22, MT5-DEC-24,
+ * 0057). Globale, classe «solo inserimento»: il ruolo dell'app ci inserisce soltanto, e non può
+ * leggerlo, modificarlo né cancellarlo. Lo legge la piattaforma con la sua identità.
+ */
+export const platformAuditEvent = pgTable('platform_audit_event', {
+  id: bigint('id', { mode: 'number' }).generatedAlwaysAsIdentity().primaryKey(),
+  idTenant: bigint('id_tenant', { mode: 'number' }).references(() => tenant.id),
+  occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+  actorUserId: uuid('actor_user_id'),
+  actorEmail: text('actor_email'),
+  actorKind: text('actor_kind').notNull(),
+  operation: text('operation').notNull(),
+  objectType: text('object_type'),
+  objectId: text('object_id'),
+  details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
+}, (t) => [
+  index('platform_audit_event_occurred_idx').on(t.occurredAt.desc()),
+  index('platform_audit_event_tenant_idx').on(t.idTenant, t.occurredAt.desc()),
+])
 
 /** Il colore principale dell'app: una riga per tenant (0046; era una riga sola, 0031). */
 export const appTheme = pgTable('app_theme', {

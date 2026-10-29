@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
+import { userInfo } from 'node:os'
 import { join } from 'node:path'
 
 const MIGRATION_FILENAME = /^(\d{4})_([a-z0-9_]+)\.sql$/
@@ -215,6 +216,77 @@ export function parseTenantDeleteArguments(args) {
   }
   if (!slugs.length) throw new Error('Manca --slug: test-tenant-delete --slug <slug> [--slug <slug> ...]')
   return { slugs }
+}
+
+// platform-admin-add / platform-admin-remove (specifica 2026-10-26, MT5-DEC-2): l'account si
+// indica per email, normalizzata come la normalizza l'app.
+export function parsePlatformAdminArguments(args) {
+  const values = collectFlags(args, ['--email'])
+  if (!values.has('--email')) throw new Error('Manca --email: platform-admin-add --email <email> | platform-admin-remove --email <email>')
+  return { email: parseEmailOption('--email', values.get('--email')) }
+}
+
+/**
+ * Chi ha lanciato il comando, per il registro della piattaforma (MT5-DEC-22): l'utente del sistema
+ * operativo se c'è, poi USER e LOGNAME dell'ambiente, altrimenti niente. Il valore finisce nella
+ * colonna `actor_email` (la persona può mancare per un comando).
+ */
+export function commandActorEmail(env = process.env, readUser = userInfo) {
+  let name = ''
+  try {
+    name = readUser().username ?? ''
+  } catch {
+    // Nessuna voce per l'utente nel sistema (contenitori, utenti senza passwd): si prova l'ambiente.
+  }
+  for (const candidate of [name, env.USER, env.LOGNAME]) {
+    const trimmed = typeof candidate === 'string' ? candidate.trim() : ''
+    if (trimmed) return trimmed
+  }
+  return null
+}
+
+// I codici delle operazioni che un comando scrive: sono un sottoinsieme di AUDIT_OPERATIONS in
+// lib/audit/audit-types.ts (lo verifica migration-lib.test.mjs). Un codice che non compare qui non
+// si scrive: un refuso resterebbe nel registro per sempre.
+export const COMMAND_AUDIT_OPERATIONS = new Set([
+  'platform.admin.add',
+  'platform.admin.remove',
+  'platform.admin.invite',
+  'tenant.create',
+  'tenant.host.add',
+  'tenant.host.primary',
+])
+
+// Le chiavi dei dettagli che porterebbero un segreto (MT5-RISK-4): specchio di
+// `sanitizeAuditDetails` in lib/audit/audit-types.ts.
+const FORBIDDEN_DETAIL_KEY = /password|token|link|secret/i
+
+function cleanDetails(value) {
+  if (Array.isArray(value)) return value.map(cleanDetails)
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key, inner]) => !FORBIDDEN_DETAIL_KEY.test(key) && inner !== undefined)
+        .map(([key, inner]) => [key, cleanDetails(inner)]),
+    )
+  }
+  return value
+}
+
+/**
+ * Scrive una voce nel registro della piattaforma con veste "command" (MT5-DEC-22), dentro la
+ * transazione `tx` della modifica: se la transazione si annulla, la voce non c'è. `tx` è la
+ * transazione di postgres.js, già `set local role construct_owner` (il proprietario inserisce in
+ * `platform_audit_event`). La persona manca (`actor_user_id` nullo); `actorEmail` è l'utente del
+ * sistema operativo. I dettagli passano dal filtro delle chiavi segrete: il link e il token della
+ * password non ci entrano mai.
+ */
+export async function recordCommandAudit(tx, { tenantId = null, operation, objectType, objectId, details = {} }, actorEmail = commandActorEmail()) {
+  if (!COMMAND_AUDIT_OPERATIONS.has(operation)) throw new Error(`Operazione di registro sconosciuta: ${operation}`)
+  await tx`
+    insert into public.platform_audit_event (id_tenant, actor_user_id, actor_email, actor_kind, operation, object_type, object_id, details)
+    values (${tenantId}, null, ${actorEmail}, 'command', ${operation}, ${objectType}, ${objectId === null ? null : String(objectId)}, ${JSON.stringify(cleanDetails(details))}::text::jsonb)
+  `
 }
 
 export async function applyPendingMigrations(adapter, migrations, { to } = {}) {

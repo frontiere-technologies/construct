@@ -216,6 +216,45 @@ outside the boundary:
 node sources/devops/db/db.mjs boundary-check
 ```
 
+### Identità di piattaforma
+
+La console di piattaforma (creare tenant, indirizzi, sospensioni) scrive `tenant`, `tenant_host` e
+crea tenant dal modello: tabelle che il ruolo dell'app (`construct_runtime`) può solo leggere, e la
+regola del pezzo 1 vieta le funzioni `security definer`. Per questo esiste un'identità di database
+separata, `construct_platform`: un login **membro di `construct_owner` con `NOINHERIT`**, senza
+`BYPASSRLS`, superutente, `createrole` né `createdb`. Da solo non ha alcun privilegio: la usa solo
+`withPlatform` (`sources/microservices/web-construct/lib/platform/db.ts`), che apre una transazione e
+come prima istruzione fa `set local role construct_owner` (e, se serve, imposta il tenant, perché la
+RLS forzata vale anche per il proprietario). Ogni porta della console verifica che la persona sia
+amministratore di piattaforma **prima** di chiamare `withPlatform`, e `guards/platform-boundary.test.ts`
+fa fallire il test se un file fuori da `lib/platform/` importa quel modulo.
+
+Si crea con l'identità delle migrazioni, dopo le migrazioni (è la `0002` a creare `construct_owner`),
+come il login runtime, e si può rilanciare senza danni; rifiuta un login già esistente con
+appartenenze, oggetti o privilegi in più:
+
+```bash
+export MIGRATION_DATABASE_URL='postgresql://...operator-only...'
+export CONSTRUCT_PLATFORM_DB_USER='construct_platform'
+export CONSTRUCT_PLATFORM_DB_PASSWORD='<at-least-24-random-characters>'
+node sources/devops/db/db.mjs provision-platform-role
+```
+
+Le due variabili `CONSTRUCT_PLATFORM_DB_*` sono credenziali da operatore: vanno solo in
+`sources/devops/db/operator.env`, mai nei file letti da Next. L'app legge invece
+`PLATFORM_DATABASE_URL` (la stringa di connessione di quel login, documentata in
+`.env.template`) ed è **facoltativa**: senza, l'app parte e solo le porte della console rispondono
+con un errore chiaro. Nei test di integrazione al suo posto c'è `TEST_PLATFORM_DATABASE_URL`, con le
+stesse protezioni di `TEST_DATABASE_URL` (database usa-e-getta confermato, diverso da quello di
+sviluppo); `local-test-db.sh up` e il job `database-and-e2e` creano `construct_platform` accanto a
+`construct_app`.
+
+`boundary-check` lo verifica dove esiste: login senza attributi privilegiati, membro solo di
+`construct_owner` con `NOINHERIT`, senza privilegi diretti né oggetti propri, e il login dell'app non
+ne è membro (nemmeno di `construct_owner`). Dove non è configurato e il ruolo non c'è (per esempio un database
+che non ha ancora la console) la sonda lo segnala come `skip` e passa; se
+`CONSTRUCT_PLATFORM_DB_USER` è impostata ma il ruolo manca, fallisce.
+
 ### Migration checksums
 
 Every applied migration is recorded in `public.construct_schema_migration` together with a
@@ -336,15 +375,79 @@ Indirizzo assegnato: a.localhost al tenant acme (non principale)
 - `test-tenant-create --host …` e `test-tenant-host-add` fanno lo stesso sul database di prova usa
   e getta.
 
+### Amministratori di piattaforma (`db.mjs platform-admin-add` e `platform-admin-remove`)
+
+L'amministratore di piattaforma è una qualità dell'account (`users.is_platform_admin`), non di un
+tenant. Il **primo** si nomina con un comando, una volta sola; gli altri li nomina o li toglie un
+amministratore di piattaforma dalla console (specifica 2026-10-26, MT5-DEC-2, MT5-DEC-23):
+
+```bash
+set -a && . ./sources/devops/db/operator.env && set +a
+node sources/devops/db/db.mjs platform-admin-add --email capo@frontiere.io
+node sources/devops/db/db.mjs platform-admin-remove --email capo@frontiere.io
+```
+
+```
+Amministratore di piattaforma: capo@frontiere.io (account nuovo)
+Link per impostare la password (valido 48 ore): https://construct.example.it/set-password?token=…
+```
+
+- `platform-admin-add` crea l'account se manca. Un account senza password riceve il link per
+  impostarla, valido 48 ore, **verso `AUTH_URL`** (l'indirizzo principale: la piattaforma non è in
+  nessun tenant) e stampato sul terminale, mai scritto altrove; un account che ha già la password
+  non riceve nessun link. Si rifiuta un account disattivato a livello globale.
+- `platform-admin-remove` **rifiuta di togliere l'ultimo** amministratore attivo (uscita 1, nulla
+  cambia): la piattaforma non resta senza nessuno. Conta solo chi è attivo: se non resta **un altro
+  amministratore attivo** il comando rifiuta, anche quando esistono amministratori disattivati. Due
+  rimozioni insieme non possono passare entrambe.
+- Nominare chi lo è già, o togliere l'attributo a chi non lo ha, non cambia nulla, esce con 0 e non
+  scrive nel registro. (Dalla console, nominare di nuovo chi è già amministratore ma **senza password**
+  manda invece un invito nuovo: vedi "Console di piattaforma".)
+- `test-platform-admin-add` e `test-platform-admin-remove` fanno lo stesso sul database di prova usa
+  e getta.
+
+**Registro dei comandi (MT5-DEC-22).** `tenant-create`, `tenant-host-add` (con `--primary` due
+voci: `tenant.host.add` e `tenant.host.primary`) e i due comandi qui sopra scrivono una voce in
+`platform_audit_event` nella stessa transazione della modifica, con veste `command`, nessuna persona
+(`actor_user_id` nullo) e `actor_email` uguale all'utente del sistema operativo che ha lanciato il
+comando (se il sistema non lo dà, `USER` o `LOGNAME`, altrimenti vuoto). I dettagli non contengono
+mai password, token o link. Il registro della piattaforma si legge solo dalla console.
+
 Limiti noti (specifiche 2026-10-20 e 2026-10-21, §5.3):
 
 - **I tenant creati così si usano dal pezzo 4 della multi-tenancy.** Il primo amministratore entra
   dal browser: dall'indirizzo dedicato del tenant (`--host`), oppure dall'indirizzo principale con
   la pagina di scelta o il selettore della barra laterale.
-- **Il modello si modifica solo via SQL**, finché il pezzo 5 non permetterà alla piattaforma, e
-  solo a lei, di sceglierlo come tenant corrente.
-- **Lingue e traduzioni si modificano solo dal tenant predefinito** fino al pezzo 5: sono cataloghi
-  globali (MT2-DEC-11), e negli altri tenant anche l'amministratore li legge soltanto.
+- **Il modello si modifica dalla console di piattaforma** (pezzo 5a, MT5-DEC-11): la piattaforma lo
+  sceglie come tenant corrente senza permesso di assistenza, e solo lei. Resta modificabile anche via SQL.
+- **Lingue e traduzioni si modificano dalla console di piattaforma** (pezzo 5a, MT5-DEC-17, 24): sono
+  cataloghi globali (MT2-DEC-11), e negli altri tenant anche l'amministratore li legge soltanto.
+
+### Console di piattaforma (sezione "Piattaforma")
+
+Dal pezzo 5a la piattaforma si governa dal browser, sull'**indirizzo principale** (su un indirizzo
+dedicato le pagine e le rotte della piattaforma rispondono 404, MT5-DEC-3), solo con un account
+amministratore di piattaforma. Il database della console è il login `construct_platform`
+(`PLATFORM_DATABASE_URL`, vedi "Identità di piattaforma"). Specifica: `docs/superpowers/specs/2026-10-26-multi-tenancy-piece-5a-platform-design.md`.
+
+- **La voce "Piattaforma" della barra laterale** compare solo a chi è amministratore di piattaforma, e
+  **dopo che la sessione è stata ricalcolata**: chi viene nominato mentre è già dentro deve accedere di nuovo
+  per vedere la voce.
+- **Amministratori di piattaforma dalla console.** Nominare di nuovo un amministratore che **non ha
+  una password** (anche un account solo SSO) non è un no-op: manda un **invito nuovo** (i token
+  precedenti decadono) e scrive `platform.admin.invite` nel registro. Chi ha già la password non
+  cambia e non lascia voci.
+- **Assistenza.** L'amministratore di un tenant concede il permesso dalle impostazioni del tenant; con
+  il permesso valido la piattaforma entra dall'indirizzo principale ("Entra come piattaforma", con
+  motivo e durata). **Per tutta la durata del permesso l'amministratore di piattaforma ha il pieno
+  potere di `TENANT_ADMIN` di quel tenant** (MT5-DEC-12): può invitare persone e cambiare i ruoli,
+  tranne le modifiche al **proprio** account. Ogni modifica si scrive nel registro del tenant con
+  veste "platform" (attore reale e per conto di).
+- **Un amministratore di piattaforma può farsi amministratore di un tenant** dalla console (lo
+  consente MT5-DEC-1): l'operazione si scrive in **entrambi i registri**, quello della piattaforma e
+  quello del tenant.
+- **In assistenza la console è chiusa.** Finché si è in un tenant la sezione "Piattaforma" non è
+  raggiungibile: si preme prima "Esci" dalla fascia di assistenza, poi si torna alla console.
 
 ## Local Docker with Supabase
 
@@ -551,9 +654,11 @@ node sources/devops/db/db.mjs test-tenant-delete --slug e2e-a
 
 `test-tenant-member-add` gives the person an active membership (creating the account if missing): the base role only, or also the tenant administrator role with `--admin`. `test-tenant-delete` removes every row of the tenant from the tenant tables, its addresses and the tenant itself; a tenant that does not exist is not an error, and the default tenant and the template are refused. `--slug` can be repeated to remove several tenants in one transaction (one process and one connection instead of one per tenant). `test-reset-e2e` also clears the last used tenant of the two E2E accounts.
 
+`test_platform.py` (multi-tenancy piece 5a) tests the platform console. Its platform administrator is a dedicated account, `e2e-platform-admin@<domain of TEST_EMAIL>`, belonging to no tenant: with the attribute on `TEST_EMAIL` every other test would run as someone who also sees the console. The `platform_admin_email` fixture in `conftest.py` makes it with `test-platform-admin-add` and the session fixture deletes it (and the "E2E Console" tenant the file creates on `e2e-console.localhost`, and its first administrator) at the start and at the end of every run, idempotently, like the tenants above. The translation and language writes of `test_i18n.py` run as that administrator on `/platform/...`, since the catalogs are global and no tenant administrator can write them. The app needs `PLATFORM_DATABASE_URL` for the console (the `construct_platform` login, never an owner string): the `web-construct-e2e-local` configuration and the `database-and-e2e` job pass it; for the remote test database add it to the environment of the `web-construct-e2e` start command yourself. The invitation email sent when the console creates a tenant is not read from an inbox: the test checks that the attempt was recorded on the token (`delivery_status`), whatever the mail provider of the environment is.
+
 ### Test in locale con Postgres in Docker
 
-Facoltativo: il database di test predefinito resta quello remoto su Supabase. Con un Postgres sul Mac l'integrazione passa da minuti a circa 30 secondi. Il database si prepara come nel job `database-and-e2e` di `.github/workflows/quality.yml`: stessa immagine (`postgres:17`), tabella `users` di prima delle migrazioni, `test-apply`, login limitato `construct_app` con `provision-runtime-role` e i due account E2E. Serve Docker Desktop acceso.
+Facoltativo: il database di test predefinito resta quello remoto su Supabase. Con un Postgres sul Mac l'integrazione passa da minuti a circa 30 secondi. Il database si prepara come nel job `database-and-e2e` di `.github/workflows/quality.yml`: stessa immagine (`postgres:17`), tabella `users` di prima delle migrazioni, `test-apply`, login limitato `construct_app` con `provision-runtime-role`, l'identità di piattaforma `construct_platform` con `provision-platform-role` (vedi [Identità di piattaforma](#identità-di-piattaforma)) e i due account E2E. Serve Docker Desktop acceso.
 
 ```bash
 sources/devops/db/local-test-db.sh up       # avvia e prepara (si può rilanciare)

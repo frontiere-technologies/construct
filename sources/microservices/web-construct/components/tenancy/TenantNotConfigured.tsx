@@ -19,8 +19,12 @@ import { loadPage } from './load-page'
  * indirizzo dedicato come `a.localhost` il proxy vedrebbe l'indirizzo principale, ricalcolerebbe il
  * tenant lì e mostrerebbe di nuovo questo messaggio, con il cookie già giusto. Senza tenant non si
  * carica niente: il messaggio resta.
+ *
+ * Con `suspended` (l'unico tenant della persona sull'indirizzo è sospeso o archiviato, MT5-DEC-7,
+ * MT5-DEC-8) il testo è «Questo spazio è sospeso. Contatta il tuo amministratore.»; «Riprova» resta,
+ * perché la riattivazione si scopre ricalcolando il tenant.
  */
-export function TenantNotConfigured() {
+export function TenantNotConfigured({ suspended = false }: { suspended?: boolean }) {
   const { t } = useI18n()
   const { signOut } = useAuth()
   const [pending, startTransition] = useTransition()
@@ -34,7 +38,7 @@ export function TenantNotConfigured() {
 
   return (
     <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-xl border border-border bg-card p-8 text-center text-card-foreground shadow-sm">
-      <p data-testid="no-tenant-message" className="text-base font-medium">{t('tenancy.none.message')}</p>
+      <p data-testid="no-tenant-message" className="text-base font-medium">{t(suspended ? 'tenancy.suspended.message' : 'tenancy.none.message')}</p>
       <div className="flex flex-wrap justify-center gap-3">
         <Button type="button" variant="outline" disabled={pending} onClick={handleRetry}>
           {t('errors.retry')}

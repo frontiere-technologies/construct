@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { answersBetween, countRoundTrips, type RecordedStatement, type TripEvent } from '@/lib/db/round-trips'
-import { permission, role, rolePermission, tenantMembership, userRole, users } from '@/lib/db/schema'
+import { permission, role, rolePermission, tenantAuditEvent, tenantMembership, tenantSettings, userRole, users } from '@/lib/db/schema'
+import { closeOwner, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 
@@ -26,6 +27,9 @@ vi.mock('@/lib/db/client', async importOriginal => {
   })
   return { ...actual, db: database, __closeCountingClient: close }
 })
+
+// L'attore in assistenza legge l'indirizzo della richiesta (pezzo 5a, Task 9): quello principale.
+vi.mock('next/headers', () => ({ headers: async () => new Headers({ host: 'localhost:3000' }) }))
 
 // Utenti e ruoli di prova condivisi dai tetti (anche dei compiti successivi): creati in beforeAll,
 // fuori da ogni misura, e cancellati in afterAll (solo queste righe, per id).
@@ -96,6 +100,7 @@ describeIntegration('round-trip budget', () => {
     if (readerRoleId !== undefined) await step(() => withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, readerRoleId))))
     const userIds = [adminUserId, readerUserId].filter(Boolean)
     if (userIds.length > 0) await step(() => withGlobal(tx => tx.delete(users).where(inArray(users.id, userIds))))
+    await step(() => closeOwner())
     const client = await import('@/lib/db/client') as unknown as { __closeCountingClient: () => Promise<void> }
     await step(() => client.__closeCountingClient())
     if (errors.length > 0) throw errors[0]
@@ -126,6 +131,81 @@ describeIntegration('round-trip budget', () => {
     expect(result!.roleIds).toContain(adminRoleId)
     // Nessuna funzione che scorre i tenant a ogni richiesta.
     expect(count.queries.join('\n')).not.toMatch(/available_tenants|has_deactivated_membership_on_host/)
+  })
+
+  // Pezzo 5a (§3.1): l'attributo di piattaforma si legge nella stessa istruzione, senza un viaggio in più.
+  it('the ready path keeps its round-trip caps', async () => {
+    const { withGlobal, withTenant } = await import('@/lib/db/tenant-db')
+    const { revalidateTokenTenant } = await import('@/lib/tenancy/token-tenant')
+    const { resolveActor } = await import('@/lib/rbac/actor')
+    const [created] = await withOwner(tx => tx.insert(users)
+      .values({ email: `zzz_budget_platform_${unique()}@example.test`, idUserStatus: 2, isPlatformAdmin: true })
+      .returning({ id: users.id }))
+    try {
+      await withTenant(defaultTestTenant(), async tx => {
+        await tx.insert(tenantMembership).values({ userId: created.id })
+        await tx.insert(userRole).values({ userId: created.id, idRole: adminRoleId })
+      })
+      const token = { tenantId: defaultTestTenant(), tenantState: 'ready', tenantHost: null, tenantName: null, accountActive: true, roleIds: [] }
+      let revalidated: Awaited<ReturnType<typeof revalidateTokenTenant>> | undefined
+      const jwt = await measure(async () => { revalidated = await revalidateTokenTenant(created.id, token, null) })
+      expect(jwt.roundTrips, jwt.queries.join('\n')).toBeLessThanOrEqual(5)
+      expect(revalidated).toMatchObject({ tenantState: 'ready', isPlatformAdmin: true })
+      expect(jwt.queries.join('\n')).not.toMatch(/available_tenants|has_deactivated_membership_on_host/)
+      // L'attributo viaggia nell'istruzione dell'autorizzazione: nessuna lettura a parte nel callback jwt.
+      expect(jwt.queries.filter(query => /is_platform_admin/.test(query)), jwt.queries.join('\n')).toHaveLength(1)
+
+      let actor: Awaited<ReturnType<typeof resolveActor>> | undefined
+      const read = await measure(async () => { actor = await resolveActor(defaultTestTenant(), created.id) })
+      expect(read.roundTrips, read.queries.join('\n')).toBeLessThanOrEqual(5)
+      expect(actor?.isPlatformAdmin).toBe(true)
+      // Una sola lettura dell'utente: nessuna istruzione a parte per l'attributo.
+      expect(read.queries.filter(query => /is_platform_admin/.test(query))).toHaveLength(1)
+    } finally {
+      await withGlobal(tx => tx.delete(users).where(eq(users.id, created.id)))
+    }
+  })
+
+  // Pezzo 5a, Task 9 (MT5-RISK-2): la rivalidazione di un token di assistenza e l'attore in assistenza
+  // controllano permesso, stato del tenant, attributo, indirizzo e voce d'ingresso in un'istruzione sola.
+  it('the support path costs at most 5 trips for the jwt callback and for the actor', async () => {
+    const { withGlobal } = await import('@/lib/db/tenant-db')
+    const { revalidateTokenTenant } = await import('@/lib/tenancy/token-tenant')
+    const { resolveSupportActor } = await import('@/lib/rbac/actor')
+    const [created] = await withOwner(tx => tx.insert(users)
+      .values({ email: `zzz_budget_support_${unique()}@example.test`, idUserStatus: 2, isPlatformAdmin: true })
+      .returning({ id: users.id }))
+    const tenantId = defaultTestTenant()
+    const [previous] = await withOwner(tx => tx.select({ until: tenantSettings.supportUntil, grantedAt: tenantSettings.supportGrantedAt })
+      .from(tenantSettings), tenantId)
+    try {
+      await withOwner(async tx => {
+        // L'ingresso appartiene al permesso in corso: concesso un minuto prima.
+        await tx.update(tenantSettings).set({ supportUntil: sql`now() + interval '1 hour'`, supportGrantedAt: sql`now() - interval '1 minute'` })
+        await tx.insert(tenantAuditEvent).values({
+          actorUserId: created.id, actorKind: 'platform', operation: 'support.enter', objectType: 'tenant',
+          objectId: String(tenantId), details: { reason: 'budget' },
+        })
+      }, tenantId)
+      const token = { tenantId, tenantState: 'support', tenantHost: null, tenantName: null, accountActive: true, roleIds: [], isPlatformAdmin: true }
+      let revalidated: Awaited<ReturnType<typeof revalidateTokenTenant>> | undefined
+      const jwt = await measure(async () => { revalidated = await revalidateTokenTenant(created.id, token, null) })
+      expect(jwt.roundTrips, jwt.queries.join('\n')).toBeLessThanOrEqual(5)
+      expect(revalidated).toMatchObject({ tenantState: 'support', tenantId, supportReason: 'budget' })
+      expect(revalidated!.roleIds).toEqual([adminRoleId])
+      expect(jwt.queries.join('\n')).not.toMatch(/available_tenants|has_deactivated_membership_on_host/)
+
+      let actor: Awaited<ReturnType<typeof resolveSupportActor>> | undefined
+      const read = await measure(async () => { actor = await resolveSupportActor(tenantId, created.id) })
+      expect(read.roundTrips, read.queries.join('\n')).toBeLessThanOrEqual(5)
+      expect(actor).toMatchObject({ tenantId, support: true, isAdmin: true })
+    } finally {
+      await withOwner(async tx => {
+        await tx.update(tenantSettings).set({ supportUntil: previous?.until ?? null, supportGrantedAt: previous?.grantedAt ?? null })
+        await tx.delete(tenantAuditEvent).where(eq(tenantAuditEvent.actorUserId, created.id))
+      }, tenantId)
+      await withGlobal(tx => tx.delete(users).where(eq(users.id, created.id)))
+    }
   })
 
   it('the jwt callback for a token waiting for a choice costs at most 5 trips', async () => {

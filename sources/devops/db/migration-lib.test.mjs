@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
@@ -7,14 +7,18 @@ import { afterEach, test } from 'node:test'
 import {
   applyPendingMigrations,
   assertAppliedMigrationChecksums,
+  COMMAND_AUDIT_OPERATIONS,
+  commandActorEmail,
   discoverMigrations,
   migrationChecksum,
   normalizeHostArgument,
   parseApplyArguments,
+  parsePlatformAdminArguments,
   parseTenantCreateArguments,
   parseTenantDeleteArguments,
   parseTenantHostArguments,
   parseTenantMemberArguments,
+  recordCommandAudit,
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
@@ -408,4 +412,89 @@ test('test-tenant-delete takes --slug more than once, in the order given', () =>
     parseTenantDeleteArguments(['--slug', 'e2e-a', '--slug', 'e2e-b', '--slug', 'e2e-c']),
     { slugs: ['e2e-a', 'e2e-b', 'e2e-c'] },
   )
+})
+
+// platform-admin-add / platform-admin-remove (specifica 2026-10-26, MT5-DEC-2): una sola opzione,
+// `--email`, normalizzata come la normalizza l'app.
+test('parses platform-admin flags', () => {
+  assert.deepEqual(parsePlatformAdminArguments(['--email', ' Capo@Acme.IT ']), { email: 'capo@acme.it' })
+})
+
+test('platform-admin arguments reject a missing, repeated, unknown or malformed flag', () => {
+  assert.throws(() => parsePlatformAdminArguments([]), /--email/)
+  assert.throws(() => parsePlatformAdminArguments(['--email']), /--email/)
+  assert.throws(() => parsePlatformAdminArguments(['--email', 'a@b.it', '--email', 'c@d.it']), /due volte/)
+  assert.throws(() => parsePlatformAdminArguments(['--email=a@b.it']), /--email a@b\.it/)
+  assert.throws(() => parsePlatformAdminArguments(['--email', 'a@b.it', '--admin']), /--admin/)
+  assert.throws(() => parsePlatformAdminArguments(['--email', 'a@b.it', 'extra']), /extra/)
+  for (const email of ['a.b.it', ' ', '@', 'a@', '@b.it']) {
+    assert.throws(() => parsePlatformAdminArguments(['--email', email]), /--email/, email)
+  }
+})
+
+// L'utente del sistema operativo, se c'è (MT5-DEC-22): lo dà il sistema, poi USER e LOGNAME, poi niente.
+test('commandActorEmail prefers the operating system user, then USER, then LOGNAME, then null', () => {
+  assert.equal(commandActorEmail({ USER: 'env-user' }, () => ({ username: 'os-user' })), 'os-user')
+  assert.equal(commandActorEmail({ USER: 'env-user' }, () => { throw new Error('no passwd entry') }), 'env-user')
+  assert.equal(commandActorEmail({ LOGNAME: 'login' }, () => ({ username: '' })), 'login')
+  assert.equal(commandActorEmail({ USER: '  ', LOGNAME: '' }, () => { throw new Error('no passwd entry') }), null)
+  assert.equal(commandActorEmail({}, () => ({ username: undefined })), null)
+})
+
+// Un finto `tx` che registra le chiamate al tag di postgres.js.
+function recordingTransaction() {
+  const calls = []
+  const tx = (strings, ...values) => {
+    calls.push({ text: strings.join('?'), values })
+    return Promise.resolve([])
+  }
+  return { tx, calls }
+}
+
+test('recordCommandAudit inserts a command row with the operating system user and no person', async () => {
+  const { tx, calls } = recordingTransaction()
+  await recordCommandAudit(tx, {
+    operation: 'platform.admin.add',
+    objectType: 'user',
+    objectId: 'abc',
+    details: { email: 'a@b.it', accountCreated: true },
+  }, 'mario')
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].text, /insert into public\.platform_audit_event/)
+  assert.match(calls[0].text, /'command'/)
+  // id_tenant, actor_email, operation, object_type, object_id, details
+  assert.deepEqual(calls[0].values, [null, 'mario', 'platform.admin.add', 'user', 'abc', '{"email":"a@b.it","accountCreated":true}'])
+})
+
+test('recordCommandAudit records the tenant and turns ids into text', async () => {
+  const { tx, calls } = recordingTransaction()
+  await recordCommandAudit(tx, { tenantId: '7', operation: 'tenant.create', objectType: 'tenant', objectId: 7 }, null)
+  assert.deepEqual(calls[0].values, ['7', null, 'tenant.create', 'tenant', '7', '{}'])
+})
+
+test('recordCommandAudit never writes a password, token, link or secret, at any depth', async () => {
+  const { tx, calls } = recordingTransaction()
+  await recordCommandAudit(tx, {
+    operation: 'platform.admin.add',
+    objectType: 'user',
+    objectId: 'abc',
+    details: { email: 'a@b.it', invitationToken: 'x', Password: 'y', setLink: 'z', nested: { client_secret: 's', keep: 1 }, list: [{ token: 't', ok: true }] },
+  }, 'mario')
+  assert.equal(calls[0].values[5], '{"email":"a@b.it","nested":{"keep":1},"list":[{"ok":true}]}')
+})
+
+test('recordCommandAudit refuses an operation the audit log does not know', async () => {
+  const { tx, calls } = recordingTransaction()
+  await assert.rejects(recordCommandAudit(tx, { operation: 'platform.admin.adds', objectType: 'user', objectId: 'a' }, 'm'), /platform\.admin\.adds/)
+  assert.equal(calls.length, 0)
+})
+
+// I codici dei comandi sono un sottoinsieme di quelli dell'app: lo stesso codice nel registro, scritto
+// da SQL qui e da TypeScript là (lib/audit/audit-types.ts).
+test('every command audit operation is an operation of the application audit log', () => {
+  const source = readFileSync(new URL('../../microservices/web-construct/lib/audit/audit-types.ts', import.meta.url), 'utf8')
+  const declared = source.slice(source.indexOf('AUDIT_OPERATIONS = ['), source.indexOf('] as const'))
+  for (const operation of COMMAND_AUDIT_OPERATIONS) {
+    assert.ok(declared.includes(`'${operation}'`), operation)
+  }
 })

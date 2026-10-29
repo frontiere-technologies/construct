@@ -1,4 +1,5 @@
 import { eq, sql } from 'drizzle-orm'
+import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
@@ -20,11 +21,25 @@ export function isMembershipStatus(value: unknown): value is MembershipStatus {
  * non appartiene a un altro tenant. Ritorna lo stato dell'appartenenza dopo la chiamata, oppure
  * `null` quando non ne esiste una. Non riattiva mai un'appartenenza disattivata. La logica vive
  * nella funzione SQL, in un solo viaggio.
+ *
+ * Se l'appartenenza nasce adesso, la voce `member.join` del registro del tenant si scrive qui, nella
+ * stessa transazione (MT5-DEC-14 esclude l'evento di accesso, non le righe di tenant che crea): chi
+ * crea la riga è l'unico a scrivere la voce, e una chiamata dopo la trova già e non scrive niente.
+ * Per saperlo senza un viaggio in più la stessa istruzione legge se l'appartenenza esisteva: la
+ * sottoselect usa l'istantanea dell'istruzione, che non vede quanto la funzione inserisce. Nel caso
+ * comune (appartenenza già presente) non c'è nessuna scrittura.
  */
 export async function ensureDefaultMembership(tx: TenantTx, userId: string): Promise<MembershipStatus | null> {
-  const [row] = await tx.execute<{ status: string | null }>(
-    sql`select public.ensure_default_membership(${userId}::uuid) as status`)
-  return isMembershipStatus(row?.status) ? row.status : null
+  const [row] = await tx.execute<{ status: string | null; existed: boolean }>(
+    sql`select public.ensure_default_membership(${userId}::uuid) as status,
+      exists (select 1 from public.tenant_membership m where m.user_id = ${userId}::uuid) as existed`)
+  const status = isMembershipStatus(row?.status) ? row.status : null
+  if (status === MEMBERSHIP_ACTIVE && row && !row.existed) {
+    await recordTenantAudit(tx, { userId, email: null, kind: 'person' }, {
+      operation: 'member.join', objectType: 'user', objectId: userId, details: { via: 'first_sign_in' },
+    })
+  }
+  return status
 }
 
 /**
@@ -49,12 +64,30 @@ export async function tenantMemberEmail(tenantId: TenantId, userId: string): Pro
  * appartiene a nessun tenant. Ritorna lo stato dell'appartenenza dopo la chiamata, oppure `null`
  * quando non ne esiste una; non riattiva mai un'appartenenza disattivata. La logica vive in
  * `public.join_by_registration` (0054).
+ *
+ * Se l'appartenenza nasce adesso, la voce `member.join` del registro del tenant si scrive nella
+ * stessa transazione (MT5-DEC-15); chi si registra è la persona che agisce (veste `person`, email
+ * dall'account). Una persona già membro non cambia niente e non lascia voce: per saperlo la
+ * funzione SQL non basta (risponde `active` in entrambi i casi), quindi si legge prima l'appartenenza.
+ *
+ * Limite noto: quella lettura non prende un lucchetto. Due registrazioni simultanee della stessa
+ * persona potrebbero leggere entrambe «nessuna appartenenza» e scrivere entrambe `member.join`:
+ * al peggio una voce doppia, mai una voce persa (l'appartenenza nasce una volta sola, `on conflict
+ * do nothing`, e almeno una delle due transazioni la vede nascere).
  */
 export async function joinTenantByRegistration(userId: string, tenantId: TenantId): Promise<MembershipStatus | null> {
   return withTenant(tenantId, async tx => {
+    const [existing] = await tx.select({ status: tenantMembership.status }).from(tenantMembership)
+      .where(eq(tenantMembership.userId, userId)).limit(1)
     const [row] = await tx.execute<{ status: string | null }>(
       sql`select public.join_by_registration(${userId}::uuid) as status`)
-    return isMembershipStatus(row?.status) ? row.status : null
+    const status = isMembershipStatus(row?.status) ? row.status : null
+    if (!existing && status === MEMBERSHIP_ACTIVE) {
+      await recordTenantAudit(tx, { userId, email: null, kind: 'person' }, {
+        operation: 'member.join', objectType: 'user', objectId: userId,
+      })
+    }
+    return status
   })
 }
 

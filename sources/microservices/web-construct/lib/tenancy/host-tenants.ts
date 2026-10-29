@@ -50,6 +50,19 @@ export async function hasDeactivatedMembershipOnHost(userId: string, host: strin
 }
 
 /**
+ * Vero se la persona ha un'appartenenza attiva in un tenant sospeso o archiviato di questo
+ * indirizzo (MT5-DEC-7, MT5-DEC-8): chi non ha nessun tenant disponibile lì vede allora «Questo
+ * spazio è sospeso» invece del generico «Non sei configurato». Come `listAvailableTenants` scorre i
+ * tenant dell'indirizzo (quelli non attivi, il modello escluso): si chiama solo quando non c'è
+ * nessun tenant disponibile.
+ */
+export async function hasInactiveMembershipOnHost(userId: string, host: string | null): Promise<boolean> {
+  const [row] = await withGlobal(tx => tx.execute<{ inactive: boolean }>(sql`
+    select public.has_inactive_membership_on_host(${userId}::uuid, ${normalizeHost(host)}::text) as inactive`))
+  return row?.inactive === true
+}
+
+/**
  * Vero se l'indirizzo è nel registro, cioè dedicato a un tenant (MT4-DEC-14): lì si entra con email
  * e password, e l'accesso con Google e gli altri OIDC resta sull'indirizzo principale finché il
  * pezzo 6 non porta un accesso unico per tutti i domini. Nullo, sconosciuto o non valido è

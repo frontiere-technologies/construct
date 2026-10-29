@@ -5,6 +5,13 @@ on:
     paths:
       - "sources/libraries/**"
       - "sources/microservices/**"
+  # Anche dopo il merge su development: le cache salvate lì (browser di Playwright) sono leggibili da
+  # tutte le pull request, quelle salvate da una pull request solo da quella pull request.
+  push:
+    branches: [development]
+    paths:
+      - "sources/libraries/**"
+      - "sources/microservices/**"
 
 permissions:
   contents: read
@@ -57,6 +64,7 @@ jobs:
         working-directory: .
         run: bash sources/devops/k8s/validate.sh
       - name: Check whitespace in the pull-request diff
+        if: github.event_name == 'pull_request'
         working-directory: .
         run: git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
 
@@ -161,6 +169,34 @@ jobs:
           CONSTRUCT_RUNTIME_DB_USER=construct_app \
           CONSTRUCT_RUNTIME_DB_PASSWORD=construct-app-ci-runtime-password \
           node sources/devops/db/db.mjs provision-runtime-role
+      - name: Verify platform provisioning rejects an overprivileged existing login
+        run: |
+          node sources/devops/db/db.mjs test-query "create role construct_overprivileged_platform login; grant create on schema public to construct_overprivileged_platform;"
+          # Qualunque uscita diversa da zero non basta: un errore di connessione non deve contare come
+          # rifiuto. Il messaggio deve essere proprio quello del controllo di provision-platform-role.
+          if output=$(MIGRATION_DATABASE_URL="$TEST_DATABASE_URL" \
+            CONSTRUCT_PLATFORM_DB_USER=construct_overprivileged_platform \
+            CONSTRUCT_PLATFORM_DB_PASSWORD=ci-platform-password-at-least-24 \
+            node sources/devops/db/db.mjs provision-platform-role 2>&1); then
+            echo "unsafe existing platform login was accepted"
+            exit 1
+          fi
+          echo "$output"
+          if ! echo "$output" | grep -q "existing platform login has unexpected memberships, ownership, direct grants, or default ACLs"; then
+            echo "the platform login was refused for another reason than the safety check"
+            exit 1
+          fi
+          node sources/devops/db/db.mjs test-query "revoke create on schema public from construct_overprivileged_platform; drop role construct_overprivileged_platform;"
+      - name: Provision the platform login used by the integration suite
+        # L'identità di piattaforma (specifica 2026-10-26, §2.2): NOINHERIT membro di
+        # construct_owner, creato dalla 0002 come construct_runtime, quindi anche questo
+        # passo gira dopo le migrazioni. La password deve combaciare con quella di
+        # TEST_PLATFORM_DATABASE_URL nel passo "Run database integration tests".
+        run: |
+          MIGRATION_DATABASE_URL="$TEST_DATABASE_URL" \
+          CONSTRUCT_PLATFORM_DB_USER=construct_platform \
+          CONSTRUCT_PLATFORM_DB_PASSWORD=construct-platform-ci-password \
+          node sources/devops/db/db.mjs provision-platform-role
       - name: Verify legacy administrators survived migration
         run: >-
           node sources/devops/db/db.mjs test-query
@@ -189,6 +225,8 @@ jobs:
         # fixture, ruoli e semi con db.mjs test-query.
         env:
           TEST_DATABASE_URL: postgresql://construct_app:construct-app-ci-runtime-password@127.0.0.1:5432/construct_test
+          # Il login di piattaforma: l'unico altro che la suite apre (lib/platform/db.ts).
+          TEST_PLATFORM_DATABASE_URL: postgresql://construct_platform:construct-platform-ci-password@127.0.0.1:5432/construct_test
         run: npm run test:integration
         working-directory: sources/microservices/web-construct
       - run: uv sync --locked
@@ -204,18 +242,29 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
       - run: uv run playwright install --with-deps chromium
-      - name: Resolve the tenant subdomains used by test_tenants.py
+      - name: Resolve the tenant subdomains used by test_tenants.py and test_platform.py
         # Chromium manda già *.localhost al computer locale, ma le richieste fatte
         # senza browser (ctx.request di Playwright, dal processo Node) passano dal
-        # resolver di sistema: le due righe in /etc/hosts tolgono la dipendenza da
+        # resolver di sistema: le righe in /etc/hosts tolgono la dipendenza da
         # come il runner risolve i sottodomini di localhost.
-        run: echo "127.0.0.1 a.localhost b.localhost" | sudo tee -a /etc/hosts
+        run: echo "127.0.0.1 a.localhost b.localhost e2e-console.localhost" | sudo tee -a /etc/hosts
       - name: Start the app against the disposable database
         # Con il login limitato del runtime, come in produzione e come la
         # configurazione web-construct-e2e in locale, non con il superutente del
         # job: il superutente salta la RLS, e l'isolamento fra tenant che
         # test_tenants.py verifica passerebbe o fallirebbe per la ragione sbagliata.
-        run: DATABASE_URL="postgresql://construct_app:construct-app-ci-runtime-password@127.0.0.1:5432/construct_test" npm run dev > /tmp/construct-next.log 2>&1 &
+        # PLATFORM_DATABASE_URL è l'identità di piattaforma (construct_platform, provisionata
+        # sopra, lib/platform/db.ts) per la console di test_platform.py: mai il superutente.
+        env:
+          # Il processo dell'app non eredita le stringhe del superutente e delle migrazioni che il job
+          # tiene per i passi di database (e per pytest, che le legge dal proprio passo): un'identità
+          # più forte di quelle due non deve nemmeno essere nell'ambiente del server.
+          TEST_DATABASE_URL: ""
+          TEST_MIGRATION_DATABASE_URL: ""
+        run: |
+          DATABASE_URL="postgresql://construct_app:construct-app-ci-runtime-password@127.0.0.1:5432/construct_test" \
+          PLATFORM_DATABASE_URL="postgresql://construct_platform:construct-platform-ci-password@127.0.0.1:5432/construct_test" \
+          npm run dev > /tmp/construct-next.log 2>&1 &
         working-directory: sources/microservices/web-construct
       - name: Wait for the app
         run: |

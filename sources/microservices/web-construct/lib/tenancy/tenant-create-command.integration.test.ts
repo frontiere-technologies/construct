@@ -1,11 +1,12 @@
 import { execFile } from 'node:child_process'
+import { userInfo } from 'node:os'
 import { resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { passwordSetTokens, tenant, tenantHost, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
-import { closeOwner, deleteTenantForTest } from '@/lib/db/testing'
+import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { resolveActor } from '@/lib/rbac/actor'
 import { getSystemRoleIds } from './system-roles'
@@ -82,6 +83,30 @@ function trackTenant(stdout: string): TenantId {
   const id = tenantIdForTest(Number(match[1]))
   createdTenants.push(id)
   return id
+}
+
+/** L'utente del sistema operativo, come lo scrive il comando (MT5-DEC-22). */
+const OPERATOR = userInfo().username
+
+/** Le voci del registro della piattaforma che nominano il tenant, lette come proprietario (il ruolo dell'app non le rilegge). */
+async function auditRowsOfTenant(tenantId: TenantId) {
+  return withOwner(tx => tx.execute<{
+    id_tenant: string
+    actor_user_id: string | null
+    actor_email: string | null
+    actor_kind: string
+    operation: string
+    object_type: string | null
+    object_id: string | null
+    details: Record<string, unknown>
+  }>(sql`
+    select id_tenant::text as id_tenant, actor_user_id, actor_email, actor_kind, operation, object_type, object_id, details
+    from public.platform_audit_event where id_tenant = ${tenantId} order by id`))
+}
+
+async function commandAuditCount(): Promise<number> {
+  const [row] = await withOwner(tx => tx.execute<{ n: string }>(sql`select count(*)::text as n from public.platform_audit_event where actor_kind = 'command'`))
+  return Number(row.n)
 }
 
 async function userIdOf(address: string): Promise<string | undefined> {
@@ -173,6 +198,22 @@ describeIntegration('db.mjs test-tenant-create', () => {
     const hoursLeft = (new Date(row.expiresAt).getTime() - Date.now()) / 3_600_000
     expect(hoursLeft).toBeGreaterThan(47)
     expect(hoursLeft).toBeLessThan(49)
+
+    // Il registro della piattaforma (MT5-DEC-22): una voce con veste "command", il tenant nuovo e
+    // l'utente del sistema operativo; né il link né il token ci finiscono (MT5-RISK-4).
+    const audit = await auditRowsOfTenant(newTenant)
+    expect(audit).toHaveLength(1)
+    expect(audit[0]).toMatchObject({
+      id_tenant: String(newTenant),
+      actor_user_id: null,
+      actor_email: OPERATOR,
+      actor_kind: 'command',
+      operation: 'tenant.create',
+      object_type: 'tenant',
+      object_id: String(newTenant),
+    })
+    expect(audit[0].details).toEqual({ slug: firstSlug, name: 'Acme di prova', firstAdmin: firstEmail })
+    expect(JSON.stringify(audit[0])).not.toContain(token)
   })
 
   it('the first admin is an admin actor inside the new tenant', async () => {
@@ -255,8 +296,11 @@ describeIntegration('db.mjs test-tenant-create', () => {
   it('a duplicate slug fails with exit code 1 and leaves no account, membership or tenant behind', async () => {
     const address = email()
     const tenantsBefore = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant))
+    const auditBefore = await commandAuditCount()
     const result = await tenantCreate(['--slug', firstSlug, '--name', 'Doppione', '--admin', address])
     expect(result.code).toBe(1)
+    // Una creazione annullata non lascia voci nel registro: stessa transazione.
+    expect(await commandAuditCount()).toBe(auditBefore)
     expect(result.stdout).toBe('')
     expect(result.stderr).toMatch(/^ERROR: /)
     const tenantsAfter = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant))
@@ -289,6 +333,9 @@ describeIntegration('db.mjs test-tenant-create', () => {
     // Schema e porta di AUTH_URL, solo il nome dell'host è quello del tenant (come tenantBaseUrl).
     expect(lines[3]).toMatch(new RegExp(`^Link per impostare la password \\(valido 48 ore\\): http://${host.replace(/\./g, '\\.')}:3000/set-password\\?token=[0-9a-f-]{36}$`))
     expect(await hostRows(host)).toEqual([{ host, idTenant: tenantId, isPrimary: true }])
+    const audit = await auditRowsOfTenant(tenantId)
+    expect(audit.map(row => [row.operation, row.actor_kind])).toEqual([['tenant.create', 'command']])
+    expect(audit[0].details).toEqual({ slug: newSlug, name: 'Con indirizzo', firstAdmin: address, host })
   }, 60_000)
 
   it('tenant-create --host with a host already taken fails and creates nothing', async () => {
@@ -325,6 +372,17 @@ describeIntegration('db.mjs test-tenant-create', () => {
     expect(result.code).toBe(0)
     expect(result.stdout.trimEnd().split('\n')).toEqual([`Indirizzo assegnato: ${host} al tenant ${firstSlug} (non principale)`])
     expect(await hostRows(host)).toEqual([{ host, idTenant: newTenant, isPrimary: false }])
+    const added = (await auditRowsOfTenant(newTenant)).filter(row => row.operation === 'tenant.host.add' && row.object_id === host)
+    expect(added).toHaveLength(1)
+    expect(added[0]).toMatchObject({
+      id_tenant: String(newTenant),
+      actor_user_id: null,
+      actor_email: OPERATOR,
+      actor_kind: 'command',
+      object_type: 'tenant_host',
+    })
+    expect(added[0].details).toEqual({ slug: firstSlug, host, primary: false })
+    expect((await auditRowsOfTenant(newTenant)).filter(row => row.operation === 'tenant.host.primary')).toEqual([])
   }, 60_000)
 
   it('tenant-host-add --primary makes it the primary, and a second primary is refused', async () => {
@@ -342,6 +400,13 @@ describeIntegration('db.mjs test-tenant-create', () => {
     expect(added.stderr).toBe('')
     expect(added.code).toBe(0)
     expect(added.stdout.trimEnd().split('\n')).toEqual([`Indirizzo assegnato: ${first} al tenant ${ownSlug} (principale)`])
+    // Con --primary il registro ha due voci: l'indirizzo aggiunto e l'indirizzo reso principale.
+    const hostRowsAudit = (await auditRowsOfTenant(ownTenant)).filter(row => row.operation.startsWith('tenant.host.'))
+    expect(hostRowsAudit.map(row => [row.operation, row.actor_kind, row.object_id])).toEqual([
+      ['tenant.host.add', 'command', first],
+      ['tenant.host.primary', 'command', first],
+    ])
+    expect(hostRowsAudit[1].details).toEqual({ slug: ownSlug, host: first })
 
     // Un secondo principale si rifiuta, senza spostare quello che c'è: va tolto o cambiato a mano.
     const second = hostName()
@@ -349,6 +414,8 @@ describeIntegration('db.mjs test-tenant-create', () => {
     expect(refused.code).toBe(1)
     expect(refused.stdout).toBe('')
     expect(refused.stderr).toContain(`Il tenant ${ownSlug} ha già un indirizzo principale (${first})`)
+    // Il rifiuto non scrive nulla: restano le due voci di prima.
+    expect((await auditRowsOfTenant(ownTenant)).filter(row => row.operation.startsWith('tenant.host.'))).toHaveLength(2)
     expect(await hostRowsOf(ownTenant)).toEqual([{ host: first, isPrimary: true }])
 
     // Lo stesso indirizzo senza --primary entra.
@@ -400,4 +467,27 @@ describeIntegration('db.mjs test-tenant-create', () => {
     expect(invalid.code).toBe(1)
     expect(invalid.stderr).toMatch(/^ERROR: --host non è un indirizzo valido/)
   }, 60_000)
+
+  it('test-tenant-delete removes a tenant that the commands wrote audit rows for', async () => {
+    // test-tenant-create e test-tenant-host-add scrivono voci nel registro della piattaforma con
+    // il tenant nominato (chiave esterna senza ON DELETE): la pulizia dell'E2E deve riuscire lo stesso.
+    const address = email()
+    const ownSlug = slug()
+    const created = await tenantCreate(['--slug', ownSlug, '--name', 'Da cancellare', '--admin', address])
+    expect(created.code, created.stderr).toBe(0)
+    const ownTenant = trackTenant(created.stdout)
+    const id = await userIdOf(address)
+    if (id) createdUserIds.push(id)
+    const added = await tenantHostAdd(['--slug', ownSlug, '--host', hostName(), '--primary'])
+    expect(added.code, added.stderr).toBe(0)
+    expect((await auditRowsOfTenant(ownTenant)).map(row => row.operation)).toEqual(['tenant.create', 'tenant.host.add', 'tenant.host.primary'])
+
+    const deleted = await runCommand('test-tenant-delete', ['--slug', ownSlug], { ...process.env, AUTH_URL })
+    expect(deleted.stderr).toBe('')
+    expect(deleted.code).toBe(0)
+    expect(deleted.stdout.trimEnd().split('\n')).toEqual([`Tenant cancellato: ${ownSlug}`])
+    expect(await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).where(eq(tenant.id, ownTenant)))).toEqual([])
+    expect(await auditRowsOfTenant(ownTenant)).toEqual([])
+    expect(await hostRowsOf(ownTenant)).toEqual([])
+  }, 90_000)
 })

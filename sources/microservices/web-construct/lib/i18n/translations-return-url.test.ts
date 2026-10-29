@@ -66,7 +66,7 @@ describe('translationsListHref', () => {
 describe('the hrefs the grid navigates to', () => {
   it('points at the edit page and carries the list query in one round trip', () => {
     const search = 'sort=namespace&direction=ASC&namespace=auth'
-    const href = translationEditHref(42, search)
+    const href = translationEditHref(42, search, '/admin/translations')
 
     expect(href.startsWith('/admin/translations/42/edit?')).toBe(true)
     const from = new URLSearchParams(href.split('?')[1]).get('from')
@@ -74,13 +74,19 @@ describe('the hrefs the grid navigates to', () => {
   })
 
   it('omits the parameter entirely when the list has no state', () => {
-    expect(translationEditHref(42, '')).toBe('/admin/translations/42/edit')
-    expect(translationCreateHref('')).toBe('/admin/translations/create')
+    expect(translationEditHref(42, '', '/admin/translations')).toBe('/admin/translations/42/edit')
+    expect(translationCreateHref('', '/admin/translations')).toBe('/admin/translations/create')
   })
 
   it('points at the create page and carries the list query', () => {
-    const href = translationCreateHref('sort=key')
+    const href = translationCreateHref('sort=key', '/admin/translations')
     const from = new URLSearchParams(href.split('?')[1]).get('from')
     expect(translationsListHref(from)).toBe('/admin/translations?sort=key')
+  })
+
+  it('builds the links of the console from its own base path', () => {
+    expect(translationEditHref(42, 'sort=key', '/platform/translations').startsWith('/platform/translations/42/edit?')).toBe(true)
+    expect(translationCreateHref('', '/platform/translations')).toBe('/platform/translations/create')
+    expect(translationsListHref('sort=key', '/platform/translations')).toBe('/platform/translations?sort=key')
   })
 })

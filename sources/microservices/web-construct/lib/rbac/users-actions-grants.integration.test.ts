@@ -8,7 +8,7 @@ import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures
 import type { Actor } from './actor'
 
 const guard = vi.hoisted(() => ({
-  actor: { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() },
+  actor: { userId: 'test', roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set<string>() },
 }))
 vi.mock('@/lib/rbac/auth-guard', async () => {
   // Il guscio dell'attore sta nel guard; il tenant lo aggiunge la guardia vera, qui il predefinito.
@@ -89,12 +89,13 @@ describeIntegration('user role and status actions with a limited actor', () => {
       userId: crypto.randomUUID(),
       roleIds: [0],
       isAdmin: false,
+      isPlatformAdmin: false,
       permissions: new Set(['assign-user-roles', 'set-user-status']),
     }
   })
 
   afterEach(async () => {
-    guard.actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+    guard.actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set() }
     for (const id of created.splice(0)) await withGlobal(tx => tx.delete(users).where(eq(users.id, id)))
     // user_role e role_permission cascatano dal ruolo; la riga permission va tolta a parte.
     const roleIds = createdRoles.splice(0)
@@ -162,13 +163,13 @@ describeIntegration('user role and status actions with a limited actor', () => {
     const reader = await makeRole([await permissionId('read-menu')])
     const manager = await makeRole([await permissionId('manage-menu')])
     const odd = await makeRole([await makeUncodedGrant()])
-    const actor: Actor = { userId: guard.actor.userId, tenantId: defaultTestTenant(), roleIds: [0], isAdmin: false, permissions: new Set(['assign-user-roles', 'read-menu']) }
+    const actor: Actor = { userId: guard.actor.userId, tenantId: defaultTestTenant(), roleIds: [0], isAdmin: false, isPlatformAdmin: false, permissions: new Set(['assign-user-roles', 'read-menu']) }
     expect(await withTenant(defaultTestTenant(), tx => assignableRoleIds(tx, actor, [1, reader, manager, odd]))).toEqual([reader])
   })
 
   it('offers the Administrator every role', async () => {
     const manager = await makeRole([await permissionId('manage-menu')])
-    const admin: Actor = { userId: 'test', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+    const admin: Actor = { userId: 'test', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set() }
     expect(await withTenant(defaultTestTenant(), tx => assignableRoleIds(tx, admin, [1, manager]))).toEqual([1, manager])
   })
 

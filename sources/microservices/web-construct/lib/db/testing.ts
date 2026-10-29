@@ -50,6 +50,8 @@ export async function deleteTenantForTest(tenantId: TenantId): Promise<void> {
     }
     // Gli indirizzi del tenant (0053): tabella globale, fuori dal registro delle tabelle di tenant.
     await tx.execute(sql`delete from public.tenant_host where id_tenant = ${tenantId}`)
+    // Le voci del registro della piattaforma che nominano il tenant (0057): tabella globale, fuori dal registro dei tenant.
+    await tx.execute(sql`delete from public.platform_audit_event where id_tenant = ${tenantId}`)
     await tx.execute(sql`delete from public.tenant where id = ${tenantId}`)
   }, tenantId)
 }

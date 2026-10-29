@@ -10,7 +10,7 @@ import type { CreateNavItemInput } from './types'
 
 vi.mock('@/lib/rbac/auth-guard', async () => {
   const { defaultTestTenant } = await import('@/lib/tenancy/testing')
-  const admin = { userId: 'test', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+  const admin = { userId: '00000000-0000-4000-8000-0000000000a1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
   return {
     requirePermission: async () => admin,
     requireAdministrator: async () => admin,

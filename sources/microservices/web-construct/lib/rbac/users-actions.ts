@@ -1,17 +1,21 @@
 'use server'
 
 import { and, eq, sql } from 'drizzle-orm'
+import { auditActorOf } from '@/lib/audit/audit-types'
+import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { withGlobal, withTenant, type TenantTx } from '@/lib/db/tenant-db'
+import { withTenant, type AnyTx, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole, users } from '@/lib/db/schema'
-import { prepareInvitation } from '@/lib/auth-invitations'
+import { prepareInvitationIn } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
 import { createLogger } from '@/lib/logger'
 import { addTenantMember, MEMBERSHIP_ACTIVE, MEMBERSHIP_DEACTIVATED } from '@/lib/tenancy/membership'
+import { assertTenantActive } from '@/lib/tenancy/tenant-status'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { emailSchema, roleIdsSchema, userIdSchema, userStatusSchema } from './action-input-schemas'
 import { assertCanChangeRoles, assertCanChangeStatus, symmetricDifference } from './grant-guards'
 import { currentRoleIds, functionalityIdsForRoles, grantsForRoles } from './grant-service'
+import { refuseSelfInSupport } from './support-guards'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
 import { USER_STATUS_ACTIVE, type UserStatusId } from './types'
 
@@ -52,6 +56,7 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
   if (!userIdSchema.safeParse(userId).success || !roleIdsSchema.safeParse(roleIds).success) {
     throw new Error('Invalid input')
   }
+  refuseSelfInSupport(actor, userId)
   const currentUserId = actor.userId
   await withTenant(actor.tenantId, async tx => {
     const system = await getSystemRoleIds(tx)
@@ -81,6 +86,9 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
       if (isNotAMember(err)) throw new Error(NOT_A_MEMBER_MESSAGE)
       throw new Error(`Failed to assign roles: ${err instanceof Error ? err.message : String(err)}`)
     }
+    await recordTenantAudit(tx, auditActorOf(actor), {
+      operation: 'member.roles', objectType: 'user', objectId: userId, details: { roleIds: finalRoleIds },
+    })
   })
 }
 
@@ -89,6 +97,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
   if (!userIdSchema.safeParse(userId).success || !userStatusSchema.safeParse(status).success) {
     throw new Error('Invalid input')
   }
+  refuseSelfInSupport(actor, userId)
   const currentUserId = actor.userId
   assertStatusChangeAllowed({
     targetUserId: userId,
@@ -114,6 +123,10 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
       if (isNotAMember(err)) throw new Error(NOT_A_MEMBER_MESSAGE)
       throw new Error(`Failed to update status: ${err instanceof Error ? err.message : String(err)}`)
     }
+    await recordTenantAudit(tx, auditActorOf(actor), {
+      operation: 'member.status', objectType: 'user', objectId: userId,
+      details: { status: status === USER_STATUS_ACTIVE ? MEMBERSHIP_ACTIVE : MEMBERSHIP_DEACTIVATED },
+    })
   })
 }
 
@@ -133,10 +146,25 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
   if (!parsed.success) throw new Error('Email non valida')
   const normalizedEmail = parsed.data
 
-  // `prepareInvitation` crea l'account se manca e ritorna `null` quando ha già una password.
-  const invitation = await prepareInvitation(normalizedEmail, actor.userId)
-  const userId = invitation?.userId ?? await findUserIdByEmail(normalizedEmail)
-  await withTenant(actor.tenantId, tx => addTenantMember(tx, userId))
+  // Account (se manca), token d'invito e appartenenza nascono in una transazione sola, nel tenant
+  // dell'attore, insieme alla voce del registro: o tutto o niente (MT5-DEC-15).
+  const invitation = await withTenant(actor.tenantId, async tx => {
+    // Un tenant sospeso o archiviato non manda inviti né aggiunge persone (MT5-DEC-25).
+    await assertTenantActive(tx)
+    // In assistenza, non il proprio account: prima di creare token o appartenenze.
+    if (actor.support === true) refuseSelfInSupport(actor, await findUserIdByEmailOrNull(tx, normalizedEmail))
+    const prepared = await prepareInvitationIn(tx, normalizedEmail, actor.userId)
+    const userId = prepared?.userId ?? await findUserIdByEmail(tx, normalizedEmail)
+    const added = await addTenantMember(tx, userId)
+    // Una persona già membro non cambia l'appartenenza (niente `member.add`), ma un token nuovo è un invito.
+    if (added || prepared) {
+      await recordTenantAudit(tx, auditActorOf(actor), {
+        operation: added ? 'member.add' : 'member.invite', objectType: 'user', objectId: userId,
+        details: added ? { invited: prepared !== null } : { expiresAt: prepared?.expiresAt },
+      })
+    }
+    return prepared
+  })
 
   if (invitation) {
     // L'appartenenza c'è già: l'invito porta la persona a un tenant a cui può accedere.
@@ -150,8 +178,13 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
   return { ok: true }
 }
 
-async function findUserIdByEmail(email: string): Promise<string> {
-  const [row] = await withGlobal(tx => tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1))
-  if (!row) throw new Error('Failed to add user: account not found')
-  return row.id
+async function findUserIdByEmailOrNull(tx: AnyTx, email: string): Promise<string | null> {
+  const [row] = await tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
+  return row?.id ?? null
+}
+
+async function findUserIdByEmail(tx: AnyTx, email: string): Promise<string> {
+  const id = await findUserIdByEmailOrNull(tx, email)
+  if (!id) throw new Error('Failed to add user: account not found')
+  return id
 }

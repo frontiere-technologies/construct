@@ -14,9 +14,10 @@ import ThemePage from '@/app/(protected)/(admin)/admin/theme/page'
 import EmbeddedItemPage from '@/app/(protected)/embedded/[itemId]/page'
 import SelectTenantPage from '@/app/select-tenant/page'
 import { POST as sendInvite } from '@/app/api/admin/send-invite/route'
+import { POST as tenantAuditGrid } from '@/app/api/audit/tenant-grid/route'
 import { POST as rolesGrid } from '@/app/api/rbac/roles-grid/route'
 import { POST as usersGrid } from '@/app/api/rbac/users-grid/route'
-import { appTheme, menuEntry, role, roleFunctionality, tenantMembership, tenantSettings, userRole, users } from '@/lib/db/schema'
+import { appTheme, menuEntry, role, roleFunctionality, tenantAuditEvent, tenantMembership, tenantSettings, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
@@ -24,10 +25,16 @@ import { createNavigationItem, deleteNavigationItem, moveNavigationItem, updateN
 import { createRole, deleteRole, renameRole, updateRolePermissions } from '@/lib/rbac/roles-actions'
 import { FUNCTYPE_EMBEDDED_PAGE, FUNCTYPE_EXTERNAL_LINK, USER_STATUS_DEACTIVATED, type CreateNavItemInput } from '@/lib/rbac/types'
 import { addUserByEmail, setUserStatus, updateUserRoles } from '@/lib/rbac/users-actions'
+import PlatformTenantPage from '@/app/platform/tenants/[tenantId]/page'
+import {
+  addTenantAdmin, addTenantHost, createTenant as createPlatformTenant, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus,
+} from '@/lib/platform/tenant-actions'
 import { saveAppTheme } from '@/lib/theme-actions'
+import { endSupport, startSupport } from '@/lib/platform/support-actions'
 import { getSystemRoleIds } from './system-roles'
 import { chooseTenant } from './tenant-actions'
 import { setSelfRegistration } from './tenant-settings-actions'
+import { grantSupportConsent, revokeSupportConsent } from './support-consent-actions'
 import { tenantIdForTest } from './testing'
 import type { TenantId } from './tenant-id'
 
@@ -90,18 +97,25 @@ interface CrossTenantCase {
 const PERSONAL = 'preferenze personali: agisce solo sulla riga globale della persona della sessione, senza id e senza righe di tenant'
 const GLOBAL_LANGUAGES = 'catalogo globale delle lingue (MT2-DEC-11, DEF-2.4): gli id sono di righe globali, non esistono righe di B da chiedere'
 const GLOBAL_TRANSLATIONS = 'catalogo globale delle traduzioni (MT2-DEC-11, DEF-2.4): gli id sono di righe globali, non esistono righe di B da chiedere'
-// Le scritture dei cataloghi globali: fino al pezzo 5 le può fare solo un attore del tenant
-// predefinito (§5.3); il rifiuto per gli altri tenant è provato in
-// lib/i18n/global-catalog-tenant.integration.test.ts.
-const GLOBAL_LANGUAGES_WRITE = `${GLOBAL_LANGUAGES}; scrittura riservata al tenant predefinito fino al pezzo 5 (provata in global-catalog-tenant.integration.test.ts)`
-const GLOBAL_TRANSLATIONS_WRITE = `${GLOBAL_TRANSLATIONS}; scrittura riservata al tenant predefinito fino al pezzo 5 (provata in global-catalog-tenant.integration.test.ts)`
+// Le scritture dei cataloghi globali sono dell'amministratore di piattaforma (MT5-DEC-17,
+// MT5-DEC-24): nessun amministratore di tenant può farle, e l'amministratore di piattaforma le
+// fa dalla console senza un tenant. Il rifiuto per gli attori dei tenant e la scrittura dalla
+// console sono provati in lib/i18n/global-catalog-tenant.integration.test.ts.
+const GLOBAL_LANGUAGES_WRITE = `${GLOBAL_LANGUAGES}; scrittura riservata all'amministratore di piattaforma (MT5-DEC-17, provata in global-catalog-tenant.integration.test.ts)`
+const GLOBAL_TRANSLATIONS_WRITE = `${GLOBAL_TRANSLATIONS}; scrittura riservata all'amministratore di piattaforma (MT5-DEC-17, provata in global-catalog-tenant.integration.test.ts)`
+// Le porte della console (pezzo 5a): non ricevono id di tenant e non leggono righe di tenant; un
+// amministratore di tenant che non è di piattaforma è rifiutato dalla guardia, provato in
+// lib/platform/platform-entry-points.integration.test.ts (tutte le porte dell'inventario, una per una) e
+// lib/platform/platform-console.integration.test.ts.
+// Che nessuna porta della piattaforma esca dai conteggi e dalle email degli amministratori (MT5-OK-2)
+// lo prova lib/platform/tenant-service.integration.test.ts.
+const PLATFORM_DOOR = 'porta della console: riservata all\'amministratore di piattaforma (la guardia lo rilegge dal database, provato per ogni porta in lib/platform/platform-entry-points.integration.test.ts), nessun id di tenant in ingresso; dai tenant escono solo conteggi ed email degli amministratori (MT5-OK-2)'
 const ANONYMOUS = 'anonima: nessun id di tenant in ingresso; il tenant, dove serve, viene dall\'indirizzo confrontato con il registro (Task 8)'
 
 const EXEMPT: Record<string, string> = {
-  'app/(protected)/(admin)/admin/languages/page.tsx#default': GLOBAL_LANGUAGES,
-  'app/(protected)/(admin)/admin/translations/[keyId]/edit/page.tsx#default': GLOBAL_TRANSLATIONS_WRITE,
-  'app/(protected)/(admin)/admin/translations/create/page.tsx#default': GLOBAL_TRANSLATIONS_WRITE,
-  'app/(protected)/(admin)/admin/translations/page.tsx#default': GLOBAL_TRANSLATIONS,
+  'app/(protected)/(admin)/admin/audit/page.tsx#default': 'non riceve id e non legge righe di tenant: disegna la griglia, che carica le righe da app/api/audit/tenant-grid/route.ts (ha il suo caso qui sotto)',
+  'app/(protected)/(admin)/admin/languages/page.tsx#default': `${GLOBAL_LANGUAGES}; sola lettura per i tenant (MT5-DEC-24)`,
+  'app/(protected)/(admin)/admin/translations/page.tsx#default': `${GLOBAL_TRANSLATIONS}; sola lettura per i tenant (MT5-DEC-24)`,
   'app/(protected)/[...slug]/page.tsx#default': 'la home per qualunque percorso: non riceve id e non legge righe di tenant (il menu lo disegna il layout)',
   'app/(protected)/page.tsx#default': 'la home: non riceve id e non legge righe di tenant (il menu lo disegna il layout)',
   'app/(protected)/profile/page.tsx#default': PERSONAL,
@@ -120,7 +134,18 @@ const EXEMPT: Record<string, string> = {
   'app/api/i18n/preferences/language/route.ts#GET': PERSONAL,
   'app/api/i18n/preferences/language/route.ts#PUT': PERSONAL,
   'app/api/i18n/translations-grid/route.ts#POST': GLOBAL_TRANSLATIONS,
+  'app/api/platform/audit-grid/route.ts#POST': `${PLATFORM_DOOR}; legge solo il registro della piattaforma e quello del modello, mai quello di un altro tenant (provato in lib/platform/audit-views.integration.test.ts)`,
+  'app/api/platform/languages-grid/route.ts#POST': `${PLATFORM_DOOR}; ${GLOBAL_LANGUAGES}`,
+  'app/api/platform/tenants-grid/route.ts#POST': PLATFORM_DOOR,
+  'app/api/platform/translations-grid/route.ts#POST': `${PLATFORM_DOOR}; ${GLOBAL_TRANSLATIONS}`,
   'app/no-tenant/page.tsx#default': 'il messaggio "non configurato": legge solo lo stato della sessione, nessun id e nessuna riga di tenant',
+  'app/platform/admins/page.tsx#default': PLATFORM_DOOR,
+  'app/platform/audit/page.tsx#default': PLATFORM_DOOR,
+  'app/platform/languages/page.tsx#default': `${PLATFORM_DOOR}; ${GLOBAL_LANGUAGES}`,
+  'app/platform/page.tsx#default': PLATFORM_DOOR,
+  'app/platform/translations/[keyId]/edit/page.tsx#default': `${PLATFORM_DOOR}; ${GLOBAL_TRANSLATIONS}`,
+  'app/platform/translations/create/page.tsx#default': `${PLATFORM_DOOR}; ${GLOBAL_TRANSLATIONS}`,
+  'app/platform/translations/page.tsx#default': `${PLATFORM_DOOR}; ${GLOBAL_TRANSLATIONS}`,
   'lib/appearance-actions.ts#saveAppearance': PERSONAL,
   'lib/i18n/language-actions.ts#createLanguage': GLOBAL_LANGUAGES_WRITE,
   'lib/i18n/language-actions.ts#deleteLanguage': GLOBAL_LANGUAGES_WRITE,
@@ -132,6 +157,8 @@ const EXEMPT: Record<string, string> = {
   'lib/i18n/translation-actions.ts#saveTranslations': GLOBAL_TRANSLATIONS_WRITE,
   'lib/i18n/user-language-actions.ts#getPreferredLanguage': PERSONAL,
   'lib/i18n/user-language-actions.ts#setPreferredLanguage': PERSONAL,
+  'lib/platform/platform-admin-actions.ts#addPlatformAdmin': `${PLATFORM_DOOR}; agisce su un account globale, non su una riga di tenant`,
+  'lib/platform/platform-admin-actions.ts#removePlatformAdmin': `${PLATFORM_DOOR}; agisce su un account globale, non su una riga di tenant`,
   'lib/profile-actions.ts#saveProfile': PERSONAL,
   'lib/tenancy/tenant-actions.ts#refreshTenant': 'non riceve id: chiede al callback jwt di ricalcolare un token in choose/none, che sceglie solo fra i tenant disponibili (Task 4, Task 5)',
 }
@@ -293,6 +320,16 @@ async function setSelfRegistrationOf(tenantId: TenantId, enabled: boolean): Prom
   await withOwner(tx => tx.update(tenantSettings).set({ selfRegistration: enabled }), tenantId)
 }
 
+/** Il permesso di assistenza di un tenant, scritto dal fixture: valido per un'ora o tolto. */
+async function setConsentOf(tenantId: TenantId, valid: boolean): Promise<void> {
+  await withOwner(tx => tx.update(tenantSettings).set({ supportUntil: valid ? sql`now() + interval '1 hour'` : null }), tenantId)
+}
+
+async function consentOf(tenantId: TenantId): Promise<string | null> {
+  const [row] = await withOwner(tx => tx.select({ until: tenantSettings.supportUntil }).from(tenantSettings), tenantId)
+  return row?.until ?? null
+}
+
 async function lastTenantOf(userId: string): Promise<number | null> {
   const [row] = await withGlobal(tx => tx.select({ last: users.lastTenantId }).from(users).where(eq(users.id, userId)))
   return row?.last ?? null
@@ -426,6 +463,31 @@ const CASES: Record<string, CrossTenantCase> = {
       expect(row).toEqual({ on: true })
     },
   },
+  // --- Il permesso di assistenza (pezzo 5a, Task 9) -----------------------------------------------
+  // Come setSelfRegistration: nessun parametro dice il tenant, si scrive quello dell'attore.
+  'lib/tenancy/support-consent-actions.ts#grantSupportConsent': {
+    entry: grantSupportConsent,
+    arrange: async () => {
+      await setConsentOf(A, false)
+      await setConsentOf(B, false)
+    },
+    run: async () => {
+      await grantSupportConsent('1h')
+      expect(await consentOf(A)).not.toBeNull()
+    },
+  },
+  'lib/tenancy/support-consent-actions.ts#revokeSupportConsent': {
+    entry: revokeSupportConsent,
+    arrange: async () => {
+      await setConsentOf(A, true)
+      await setConsentOf(B, true)
+    },
+    run: async () => {
+      // A perde il permesso, B (l'impronta) lo tiene.
+      expect(await revokeSupportConsent()).toEqual({ ok: true })
+      expect(await consentOf(A)).toBeNull()
+    },
+  },
   'lib/theme-actions.ts#saveAppTheme': {
     entry: saveAppTheme,
     run: async () => {
@@ -437,6 +499,72 @@ const CASES: Record<string, CrossTenantCase> = {
       expect(result).toEqual({ saved: true, error: null })
       const [row] = await withOwner(tx => tx.select({ color: appTheme.primaryColor }).from(appTheme), A)
       expect(row).toEqual({ color: A_THEME_COLOR })
+    },
+  },
+
+  // --- Le porte della console che nominano un tenant (pezzo 5a, Task 8) ---------------------------
+  // La sessione dei casi è l'amministratore di A: un amministratore di tenant, non di piattaforma. La
+  // guardia rilegge l'attributo dal database e rifiuta, e B (tenant, indirizzi, persone, token) resta com'era.
+  'lib/platform/tenant-actions.ts#createTenant': {
+    entry: createPlatformTenant,
+    run: async () => {
+      await expect(createPlatformTenant({ name: 'ZZZ preso da A', slug: `zzz-xt-new-${unique()}`.slice(0, 40), adminEmail: bOtherEmail }))
+        .rejects.toThrow('Unauthorized')
+    },
+  },
+  'lib/platform/tenant-actions.ts#setTenantStatus': {
+    entry: setTenantStatus,
+    run: async () => {
+      await expect(setTenantStatus(Number(B), 'suspended')).rejects.toThrow('Unauthorized')
+      await expect(setTenantStatus(Number(B), 'archived', 'preso da A')).rejects.toThrow('Unauthorized')
+    },
+  },
+  'lib/platform/tenant-actions.ts#addTenantHost': {
+    entry: addTenantHost,
+    run: async () => { await expect(addTenantHost(Number(B), `zzz-xt-${unique()}.example.test`, true)).rejects.toThrow('Unauthorized') },
+  },
+  'lib/platform/tenant-actions.ts#setPrimaryHost': {
+    entry: setPrimaryHost,
+    run: async () => { await expect(setPrimaryHost(Number(B), 'b.example.test')).rejects.toThrow('Unauthorized') },
+  },
+  'lib/platform/tenant-actions.ts#removeTenantHost': {
+    entry: removeTenantHost,
+    run: async () => { await expect(removeTenantHost(Number(B), 'b.example.test')).rejects.toThrow('Unauthorized') },
+  },
+  'lib/platform/tenant-actions.ts#addTenantAdmin': {
+    entry: addTenantAdmin,
+    run: async () => { await expect(addTenantAdmin(Number(B), bOtherEmail)).rejects.toThrow('Unauthorized') },
+  },
+  'lib/platform/tenant-actions.ts#resendTenantInvite': {
+    entry: resendTenantInvite,
+    run: async () => {
+      // bUser è l'amministratore di B senza password: un invito per lui creerebbe un token (l'impronta lo vedrebbe).
+      await expect(resendTenantInvite(Number(B), bUser)).rejects.toThrow('Unauthorized')
+    },
+  },
+  // L'ingresso di assistenza (Task 9): l'amministratore di A non è amministratore di piattaforma, e
+  // nemmeno con il permesso valido di B entra in B o scrive nei suoi registri.
+  'lib/platform/support-actions.ts#startSupport': {
+    entry: startSupport,
+    arrange: () => setConsentOf(B, true),
+    run: async () => {
+      await expect(startSupport(Number(B), 'preso da A')).rejects.toThrow('Unauthorized')
+      expect(mocks.unstableUpdate).not.toHaveBeenCalled()
+    },
+  },
+  'lib/platform/support-actions.ts#endSupport': {
+    entry: endSupport,
+    run: async () => {
+      // Una sessione che si dice in assistenza in B: la guardia rilegge l'attributo e rifiuta, nessuna uscita nei registri di B.
+      mocks.session = { ...sessionOf(adminA), user: { ...sessionOf(adminA).user, tenantState: 'support', tenantId: Number(B) } }
+      await expect(endSupport()).rejects.toThrow('Unauthorized')
+      expect(mocks.unstableUpdate).not.toHaveBeenCalled()
+    },
+  },
+  'app/platform/tenants/[tenantId]/page.tsx#default': {
+    entry: PlatformTenantPage,
+    run: async () => {
+      await expect(PlatformTenantPage({ params: Promise.resolve({ tenantId: String(B) }) })).rejects.toThrow('NEXT_NOT_FOUND')
     },
   },
 
@@ -464,6 +592,23 @@ const CASES: Record<string, CrossTenantCase> = {
 
       const byRole = await usersGrid(jsonRequest('/api/rbac/users-grid', { page: 0, size: 100, roleIds: bRoleIds }))
       expect(await byRole.json()).toEqual({ users: [], total: 0 })
+    },
+  },
+  'app/api/audit/tenant-grid/route.ts#POST': {
+    entry: tenantAuditGrid,
+    run: async () => {
+      // A ha la sua voce, B la sua (con il segno): per A c'è la prima (e le voci che gli altri casi
+      // hanno scritto per A), mai quella di B, nemmeno cercando il segno.
+      const all = await tenantAuditGrid(jsonRequest('/api/audit/tenant-grid', { page: 0, size: 200, sort: 'occurredAt', direction: 'ASC' }))
+      expect(all.status).toBe(200)
+      const allBody = await all.json() as { rows: Array<{ operation: string; objectId: string | null }>; total: number }
+      const objectIds = allBody.rows.map(row => row.objectId)
+      expect(objectIds).toContain('a-audit')
+      expect(objectIds).not.toContain('b-audit')
+      expectNoTraceOfB(allBody)
+
+      const byActor = await tenantAuditGrid(jsonRequest('/api/audit/tenant-grid', { page: 0, size: 100, actorSearch: MARK_B }))
+      expect(await byActor.json()).toEqual({ rows: [], total: 0 })
     },
   },
   'app/api/rbac/roles-grid/route.ts#POST': {
@@ -549,11 +694,14 @@ const CASES: Record<string, CrossTenantCase> = {
     arrange: async () => {
       await setSelfRegistrationOf(A, false)
       await setSelfRegistrationOf(B, true)
+      await setConsentOf(A, false)
+      await setConsentOf(B, true)
     },
     run: async () => {
-      // L'interruttore di A (spento, quello di B è acceso); A non ha un indirizzo dedicato.
+      // L'interruttore di A (spento, quello di B è acceso); A non ha un indirizzo dedicato. Il
+      // permesso di assistenza è quello di A (nessuno), non quello di B (valido).
       expect(propsOf<{ initialEnabled: boolean; selfRegistrationApplies: boolean }>(await TenantSettingsPage()))
-        .toEqual({ initialEnabled: false, selfRegistrationApplies: false })
+        .toEqual({ initialEnabled: false, selfRegistrationApplies: false, support: { until: null, inProgress: false, locked: false } })
     },
   },
   'app/(protected)/(admin)/admin/theme/page.tsx#default': {
@@ -672,6 +820,15 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
       await tx.update(appTheme).set({ primaryColor: B_THEME_COLOR })
     })
 
+    // Una voce di registro per tenant: quella di B porta il segno nell'email di chi ha agito.
+    await withOwner(tx => tx.insert(tenantAuditEvent).values({
+      actorKind: 'person', actorEmail: `zzz_a_${unique()}@example.test`, operation: 'role.create', objectType: 'role', objectId: 'a-audit',
+    }), A)
+    await withOwner(tx => tx.insert(tenantAuditEvent).values({
+      actorKind: 'person', actorEmail: `zzz_${MARK_B}@example.test`, operation: 'role.create', objectType: 'role', objectId: 'b-audit',
+      details: { name: MARK_B },
+    }), B)
+
     const bRoles = await withOwner(tx => tx.select({ id: role.idRole }).from(role), B)
     bRoleIds = bRoles.map(row => row.id)
     const bEntries = await withOwner(tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry), B)
@@ -713,6 +870,52 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
     await expect(renameRole(bServiceRole, 'ZZZ preso da A')).rejects.toThrow('Unauthorized')
     expect(await fingerprintOfB()).toEqual(before)
   }, 30_000)
+
+  it('a platform admin in support of A, with the consent of A, reaches nothing of B through the tenant doors', async () => {
+    // La persona della piattaforma entra in A con il permesso di A (MT5-OK-2): l'attore è quello
+    // dell'assistenza in A, e gli id di B non esistono per lui, come per l'amministratore di A.
+    const email = `zzz_xt_platform_${unique()}@example.test`
+    const [person] = await withOwner(tx => tx.insert(users)
+      .values({ email, idUserStatus: 2, authProvider: 'credentials', isPlatformAdmin: true }).returning({ id: users.id }))
+    createdUserIds.push(person.id)
+    await withOwner(tx => tx.update(tenantSettings).set({
+      supportUntil: sql`now() + interval '1 hour'`, supportGrantedBy: adminA, supportGrantedAt: sql`now() - interval '1 second'`,
+    }), A)
+    try {
+      const before = await fingerprintOfB()
+      const platformSession = (state: 'none' | 'support', tenantId: number | null) => ({
+        user: { id: person.id, email, accountActive: true, provider: 'credentials', tenantState: state, tenantId, isPlatformAdmin: true },
+        expires: '2099-01-01T00:00:00.000Z',
+      })
+      mocks.session = platformSession('none', null)
+      mocks.unstableUpdate.mockResolvedValue({ user: { tenantState: 'support' } })
+      await expect(startSupport(Number(B), 'senza il permesso di B')).rejects.toThrow('support_not_allowed')
+      expect(await startSupport(Number(A), 'verifica')).toEqual({ state: 'support' })
+      mocks.session = platformSession('support', Number(A))
+
+      // In A, con i permessi di un amministratore: la griglia delle persone è quella di A, senza B.
+      const all = await usersGrid(jsonRequest('/api/rbac/users-grid', { page: 0, size: 100 }))
+      expect(all.status).toBe(200)
+      const body = await all.json() as { users: Array<{ id: string }> }
+      expect(body.users.map(user => user.id).sort()).toEqual([adminA, memberA].sort())
+      expectNoTraceOfB(body)
+      // Gli id di B: persone, ruoli, voci. Rifiutati come per l'amministratore di A, e B resta com'era.
+      await expect(updateUserRoles(bUser, [aSystem.registered])).rejects.toThrow('La persona non fa parte di questo tenant')
+      await expect(setUserStatus(bUser, USER_STATUS_DEACTIVATED)).rejects.toThrow('La persona non fa parte di questo tenant')
+      await expect(renameRole(bServiceRole, 'ZZZ preso dall\'assistenza')).rejects.toThrow()
+      await expect(deleteRole(bServiceRole)).rejects.toThrow()
+      await expect(RoleDetailPage({ params: Promise.resolve({ roleId: String(bServiceRole) }) })).rejects.toThrow('NEXT_NOT_FOUND')
+      expect((await sendInvite(jsonRequest('/api/admin/send-invite', { userId: bUser }))).status).toBe(404)
+      const audit = await tenantAuditGrid(jsonRequest('/api/audit/tenant-grid', { page: 0, size: 200 }))
+      expectNoTraceOfB(await audit.json())
+      // Da dentro l'assistenza la console è chiusa: nemmeno B si apre da lì.
+      await expect(startSupport(Number(B), 'dall\'assistenza')).rejects.toThrow('Unauthorized')
+      // L'ingresso in A ha lasciato le sue voci in A: B (l'impronta) non ne ha.
+      expect(await fingerprintOfB()).toEqual(before)
+    } finally {
+      await withOwner(tx => tx.update(tenantSettings).set({ supportUntil: null, supportGrantedBy: null, supportGrantedAt: null }), A)
+    }
+  }, 60_000)
 
   for (const [key, testCase] of Object.entries(CASES)) {
     it(key, async () => {

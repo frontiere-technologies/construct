@@ -177,11 +177,10 @@ describe('findDeclaration / inspectExports', () => {
  * Una porta nuova senza riga, una porta tolta o un codice cambiato fanno fallire il test.
  */
 const EXPECTED_DECLARATIONS: Record<string, string> = {
+  'app/(protected)/(admin)/admin/audit/page.tsx#default': 'read-tenant-audit',
   'app/(protected)/(admin)/admin/languages/page.tsx#default': 'read-languages',
   'app/(protected)/(admin)/admin/tenant-settings/page.tsx#default': 'manage-tenant-settings',
   'app/(protected)/(admin)/admin/theme/page.tsx#default': 'requireAdministratorPage',
-  'app/(protected)/(admin)/admin/translations/[keyId]/edit/page.tsx#default': 'edit-translations',
-  'app/(protected)/(admin)/admin/translations/create/page.tsx#default': 'manage-translation-keys',
   'app/(protected)/(admin)/admin/translations/page.tsx#default': 'read-translations',
   'app/(protected)/(admin)/functionalities/[funcId]/edit/page.tsx#default': 'manage-menu',
   'app/(protected)/(admin)/functionalities/create/page.tsx#default': 'manage-menu',
@@ -195,8 +194,17 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'app/(protected)/profile/page.tsx#default': 'allowAnyAuthenticated',
   'app/(protected)/settings/page.tsx#default': 'allowAnyAuthenticated',
   'app/no-tenant/page.tsx#default': 'allowAnyAuthenticated',
+  'app/platform/admins/page.tsx#default': 'requirePlatformAdminPage',
+  'app/platform/audit/page.tsx#default': 'requirePlatformAdminPage',
+  'app/platform/languages/page.tsx#default': 'requirePlatformAdminPage',
+  'app/platform/page.tsx#default': 'requirePlatformAdminPage',
+  'app/platform/tenants/[tenantId]/page.tsx#default': 'requirePlatformAdminPage',
+  'app/platform/translations/[keyId]/edit/page.tsx#default': 'requirePlatformAdminPage',
+  'app/platform/translations/create/page.tsx#default': 'requirePlatformAdminPage',
+  'app/platform/translations/page.tsx#default': 'requirePlatformAdminPage',
   'app/select-tenant/page.tsx#default': 'allowAnyAuthenticated',
   'app/api/admin/send-invite/route.ts#POST': 'invite-users',
+  'app/api/audit/tenant-grid/route.ts#POST': 'read-tenant-audit',
   'app/api/auth/change-password/route.ts#POST': 'allowSelfService',
   'app/api/auth/forgot-password/route.ts#POST': 'allowAnonymous',
   'app/api/auth/register/route.ts#POST': 'allowAnonymous',
@@ -209,19 +217,34 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'app/api/i18n/preferences/language/route.ts#GET': 'allowSelfService',
   'app/api/i18n/preferences/language/route.ts#PUT': 'allowSelfService',
   'app/api/i18n/translations-grid/route.ts#POST': 'read-translations',
+  'app/api/platform/audit-grid/route.ts#POST': 'requirePlatformAdmin',
+  'app/api/platform/languages-grid/route.ts#POST': 'requirePlatformAdmin',
+  'app/api/platform/tenants-grid/route.ts#POST': 'requirePlatformAdmin',
+  'app/api/platform/translations-grid/route.ts#POST': 'requirePlatformAdmin',
   'app/api/rbac/roles-grid/route.ts#POST': 'read-roles',
   'app/api/rbac/users-grid/route.ts#POST': 'read-users',
   'lib/appearance-actions.ts#saveAppearance': 'allowSelfService',
-  'lib/i18n/language-actions.ts#createLanguage': 'manage-languages',
-  'lib/i18n/language-actions.ts#deleteLanguage': 'manage-languages',
-  'lib/i18n/language-actions.ts#setDefaultLanguage': 'manage-languages',
-  'lib/i18n/language-actions.ts#setLanguageActive': 'manage-languages',
-  'lib/i18n/language-actions.ts#updateLanguage': 'manage-languages',
-  'lib/i18n/translation-actions.ts#createTranslationKey': 'manage-translation-keys',
-  'lib/i18n/translation-actions.ts#deleteTranslationKey': 'manage-translation-keys',
-  'lib/i18n/translation-actions.ts#saveTranslations': 'edit-translations',
+  'lib/i18n/language-actions.ts#createLanguage': 'requirePlatformAdmin',
+  'lib/i18n/language-actions.ts#deleteLanguage': 'requirePlatformAdmin',
+  'lib/i18n/language-actions.ts#setDefaultLanguage': 'requirePlatformAdmin',
+  'lib/i18n/language-actions.ts#setLanguageActive': 'requirePlatformAdmin',
+  'lib/i18n/language-actions.ts#updateLanguage': 'requirePlatformAdmin',
+  'lib/i18n/translation-actions.ts#createTranslationKey': 'requirePlatformAdmin',
+  'lib/i18n/translation-actions.ts#deleteTranslationKey': 'requirePlatformAdmin',
+  'lib/i18n/translation-actions.ts#saveTranslations': 'requirePlatformAdmin',
   'lib/i18n/user-language-actions.ts#getPreferredLanguage': 'allowSelfService',
   'lib/i18n/user-language-actions.ts#setPreferredLanguage': 'allowSelfService',
+  'lib/platform/platform-admin-actions.ts#addPlatformAdmin': 'requirePlatformAdmin',
+  'lib/platform/platform-admin-actions.ts#removePlatformAdmin': 'requirePlatformAdmin',
+  'lib/platform/support-actions.ts#endSupport': 'requireSupportExit',
+  'lib/platform/support-actions.ts#startSupport': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#addTenantAdmin': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#addTenantHost': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#createTenant': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#removeTenantHost': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#resendTenantInvite': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#setPrimaryHost': 'requirePlatformAdmin',
+  'lib/platform/tenant-actions.ts#setTenantStatus': 'requirePlatformAdmin',
   'lib/profile-actions.ts#saveProfile': 'allowSelfService',
   'lib/rbac/navigation-actions.ts#createNavigationItem': 'manage-menu',
   'lib/rbac/navigation-actions.ts#deleteNavigationItem': 'manage-menu',
@@ -234,6 +257,8 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/rbac/users-actions.ts#addUserByEmail': 'invite-users',
   'lib/rbac/users-actions.ts#setUserStatus': 'set-user-status',
   'lib/rbac/users-actions.ts#updateUserRoles': 'assign-user-roles',
+  'lib/tenancy/support-consent-actions.ts#grantSupportConsent': 'manage-tenant-settings',
+  'lib/tenancy/support-consent-actions.ts#revokeSupportConsent': 'manage-tenant-settings',
   'lib/tenancy/tenant-actions.ts#chooseTenant': 'allowAnyAuthenticated',
   'lib/tenancy/tenant-actions.ts#refreshTenant': 'allowAnyAuthenticated',
   'lib/tenancy/tenant-settings-actions.ts#setSelfRegistration': 'manage-tenant-settings',
@@ -269,6 +294,11 @@ describe('permission declared', () => {
     expect(files).toContain('app/(protected)/(admin)/functionalities/page.tsx')
     expect(files).toContain('app/(protected)/page.tsx')
     for (const page of SIGNED_IN_PAGES_OUTSIDE_PROTECTED) expect(files).toContain(page)
+    // La console della piattaforma, fuori da (protected): ogni pagina sotto app/platform/.
+    expect(files).toContain('app/platform/page.tsx')
+    expect(files).toContain('app/platform/admins/page.tsx')
+    expect(files).toContain('app/platform/tenants/[tenantId]/page.tsx')
+    expect(files).toContain('app/api/platform/tenants-grid/route.ts')
   })
 
   it('declares access first in every server action, route handler and protected page', () => {

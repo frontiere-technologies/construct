@@ -63,7 +63,7 @@ describe('TranslationsTableClient column sizing', () => {
 
   it('uses create-only initial widths when URL-driven props rebuild column definitions', () => {
     const renderWithNamespaces = (namespaces: string[]) => renderToStaticMarkup(
-      <TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={[]} canEdit canManageKeys />,
+      <TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={[]} canEdit canManageKeys basePath="/platform/translations" />,
     )
 
     renderWithNamespaces(['common'])
@@ -90,7 +90,7 @@ describe('TranslationsTableClient row actions', () => {
   })
 
   it('sends Modifica to the edit page, carrying the grid query', () => {
-    renderToStaticMarkup(<TranslationsTableClient urlParams={{}} namespaces={['common']} modules={[]} canEdit canManageKeys />)
+    renderToStaticMarkup(<TranslationsTableClient urlParams={{}} namespaces={['common']} modules={[]} canEdit canManageKeys basePath="/platform/translations" />)
 
     const actions = captured.columnDefs[0].find(column => column.colId === 'actions')
     const getItems = (actions?.cellRendererParams as { getItems: (row: TranslationRowDto) => { label: string; onClick: () => void }[] }).getItems
@@ -100,13 +100,13 @@ describe('TranslationsTableClient row actions', () => {
 
     expect(pushed.hrefs).toHaveLength(1)
     const from = new URLSearchParams(pushed.hrefs[0].split('?')[1]).get('from')
-    expect(pushed.hrefs[0].startsWith('/admin/translations/42/edit?')).toBe(true)
+    expect(pushed.hrefs[0].startsWith('/platform/translations/42/edit?')).toBe(true)
     expect(new URLSearchParams(from ?? '').get('sort')).toBe('key')
     expect(new URLSearchParams(from ?? '').get('direction')).toBe('ASC')
   })
 
   it('leaves Elimina as an in-place action, not a navigation', () => {
-    renderToStaticMarkup(<TranslationsTableClient urlParams={{}} namespaces={['common']} modules={[]} canEdit canManageKeys />)
+    renderToStaticMarkup(<TranslationsTableClient urlParams={{}} namespaces={['common']} modules={[]} canEdit canManageKeys basePath="/platform/translations" />)
 
     const actions = captured.columnDefs[0].find(column => column.colId === 'actions')
     const getItems = (actions?.cellRendererParams as { getItems: (row: TranslationRowDto) => { label: string; onClick: () => void }[] }).getItems
@@ -130,10 +130,10 @@ describe('TranslationsTableClient row actions', () => {
     document.body.append(container)
     const root = createRoot(container)
 
-    act(() => root.render(<TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={modules} canEdit canManageKeys />))
+    act(() => root.render(<TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={modules} canEdit canManageKeys basePath="/platform/translations" />))
 
     searchParamsHolder.value = 'sort=namespace&direction=DESC'
-    act(() => root.render(<TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={modules} canEdit canManageKeys />))
+    act(() => root.render(<TranslationsTableClient urlParams={{}} namespaces={namespaces} modules={modules} canEdit canManageKeys basePath="/platform/translations" />))
 
     act(() => root.unmount())
     container.remove()

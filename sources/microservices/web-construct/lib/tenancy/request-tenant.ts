@@ -7,15 +7,21 @@ import { toTenantId, type TenantId } from './tenant-id'
 
 /**
  * Il tenant di una sessione già letta: quello del token, rivalidato dal callback `jwt` nella stessa
- * `auth()` (specifica 2026-10-21, §3.1, MT4-DEC-7). `null` se la persona non ha ancora un tenant
+ * `auth()` (specifica 2026-10-21, §3.1, MT4-DEC-7). In assistenza (pezzo 5a, §3.2) è il tenant
+ * assistito, rivalidato allo stesso modo. `null` se la persona non ha ancora un tenant
  * (stato `choose` o `none`) o se l'account non è attivo. Chi ha già la sessione la passa qui invece
  * di chiamare `resolveRequestTenant`: fuori dal rendering `getSession` non memorizza, e una seconda
  * `auth()` rifarebbe la lettura dell'autorizzazione.
  */
 export function tenantFromSession(session: Session): TenantId | null {
   const user = session.user
-  if (user?.tenantState !== 'ready' || typeof user.tenantId !== 'number') return null
+  if ((user?.tenantState !== 'ready' && user?.tenantState !== 'support') || typeof user.tenantId !== 'number') return null
   return toTenantId(user.tenantId)
+}
+
+/** La sessione è dell'amministratore di piattaforma in assistenza (pezzo 5a, §3.2): l'attore si calcola da `resolveSupportActor`. */
+export function isSupportSession(session: Session): boolean {
+  return session.user?.tenantState === 'support'
 }
 
 /**

@@ -26,6 +26,8 @@ interface Props extends LanguagesUrlParams {
   /** Every language code in app_language, not just the grid's loaded rows. */
   existingCodes: string[]
   canManage: boolean
+  /** Where the grid's rows come from: the tenant's read-only route by default, the console's in the console. */
+  gridEndpoint?: string
 }
 
 const LANGUAGE_TEXT_FILTER = TEXT_FILTER as Pick<ColDef<LanguagePageItemDto>, 'filter' | 'filterParams'>
@@ -46,7 +48,7 @@ export default function LanguagesTableClient(props: Props) {
   const [gridApi, setGridApi] = useState<GridApi<LanguagePageItemDto> | null>(null)
   const gridApiRef = useRef<GridApi<LanguagePageItemDto> | null>(null)
 
-  const datasource = useMemo(() => createLanguagesDatasource(), [])
+  const datasource = useMemo(() => createLanguagesDatasource(props.gridEndpoint), [props.gridEndpoint])
 
   // Stable identities: `columnDefs` below depends on `run` in its memo, and an
   // inline function here would give it a new reference every render, forcing

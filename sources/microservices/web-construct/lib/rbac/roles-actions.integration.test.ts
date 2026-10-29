@@ -8,7 +8,7 @@ import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
 import type { Actor } from './actor'
 
 const guard = vi.hoisted(() => ({
-  actor: { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() },
+  actor: { userId: '00000000-0000-4000-8000-0000000000a1', roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set<string>() },
 }))
 vi.mock('@/lib/rbac/auth-guard', async () => {
   // Il guscio dell'attore sta nel guard; il tenant lo aggiunge la guardia vera, qui il predefinito.
@@ -54,8 +54,8 @@ async function makeMenuEntry(kind: 'container' | 'functionality'): Promise<numbe
   return created.id
 }
 
-const limitedActor = { userId: 'test', roleIds: [0], isAdmin: false, permissions: new Set<string>(['grant-role-permissions']) }
-const adminActor = { userId: 'test', roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+const limitedActor = { userId: '00000000-0000-4000-8000-0000000000a1', roleIds: [0], isAdmin: false, isPlatformAdmin: false, permissions: new Set<string>(['grant-role-permissions']) }
+const adminActor = { userId: '00000000-0000-4000-8000-0000000000a1', roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set<string>() }
 
 const nessunDelta = { functionalities: [], operations: [] }
 
@@ -259,7 +259,7 @@ describeIntegration('updateRolePermissions against the database', () => {
     const seen = await makeMenuEntry('functionality')
     const actorRole = await makeServiceRole()
     await withTenant(defaultTestTenant(), tx => tx.insert(roleFunctionality).values({ idRole: actorRole, idMenuEntry: seen }))
-    const actor: Actor = { userId: 'test', tenantId: defaultTestTenant(), roleIds: [actorRole], isAdmin: false, permissions: new Set(['read-menu', 'grant-role-permissions']) }
+    const actor: Actor = { userId: '00000000-0000-4000-8000-0000000000a1', tenantId: defaultTestTenant(), roleIds: [actorRole], isAdmin: false, isPlatformAdmin: false, permissions: new Set(['read-menu', 'grant-role-permissions']) }
 
     const grantable = await withTenant(defaultTestTenant(), tx => grantableItemIds(tx, actor, {
       operationIds: [idOf('read-menu'), idOf('manage-menu'), uncoded],
@@ -271,7 +271,7 @@ describeIntegration('updateRolePermissions against the database', () => {
   it('offers the Administrator every candidate, code-less GRANT rows included', async () => {
     const uncoded = await makePermission('GRANT')
     const hidden = await makeMenuEntry('functionality')
-    const admin: Actor = { userId: 'test', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() }
+    const admin: Actor = { userId: '00000000-0000-4000-8000-0000000000a1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set() }
     const grantable = await withTenant(defaultTestTenant(), tx => grantableItemIds(tx, admin, { operationIds: [uncoded], functionalityIds: [hidden] }))
     expect(grantable).toEqual({ operationIds: [uncoded], functionalityIds: [hidden] })
   })

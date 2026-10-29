@@ -6,6 +6,9 @@ import { db, type Database } from './client'
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0]
 
+/** La forma comune delle transazioni, senza marchio: la usa il registro (lib/audit) per descrivere quella della piattaforma. */
+export type BaseTx = Tx
+
 /** Una transazione con il tenant impostato: può toccare tabelle di tenant e globali. */
 export type TenantTx = Tx & { readonly __txBrand: 'TenantTx' }
 /** Una transazione senza tenant: solo tabelle globali. Una tabella di tenant qui dà 42501. */

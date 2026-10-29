@@ -34,11 +34,11 @@ describeIntegration('authentication security invariants against the database', (
     expect(await resolveUserAuthorization(defaultTestTenant(), userId)).toMatchObject({ accountActive: true, isAdmin: true })
 
     await withGlobal(tx => tx.update(users).set({ idUserStatus: 1 }).where(eq(users.id, userId)))
-    expect(await resolveUserAuthorization(defaultTestTenant(), userId)).toEqual({ accountActive: false, roleIds: [], isAdmin: false })
+    expect(await resolveUserAuthorization(defaultTestTenant(), userId)).toEqual({ accountActive: false, roleIds: [], isAdmin: false, isPlatformAdmin: false })
 
     await withGlobal(tx => tx.update(users).set({ idUserStatus: 2 }).where(eq(users.id, userId)))
     await withTenant(defaultTestTenant(), tx => tx.delete(userRole).where(and(eq(userRole.userId, userId), eq(userRole.idRole, 1))))
-    expect(await resolveUserAuthorization(defaultTestTenant(), userId)).toMatchObject({ accountActive: true, isAdmin: false })
+    expect(await resolveUserAuthorization(defaultTestTenant(), userId)).toMatchObject({ accountActive: true, isAdmin: false, isPlatformAdmin: false })
   })
 
   it('allows only one concurrent password-token claim and invalidates sibling links', async () => {

@@ -1,6 +1,8 @@
 'use server'
 
 import { eq, inArray, sql } from 'drizzle-orm'
+import { auditActorOf } from '@/lib/audit/audit-types'
+import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { permission, menuEntry, role, roleType } from '@/lib/db/schema'
@@ -18,13 +20,14 @@ const arrayLiteral = (ids: number[]) => `{${ids.join(',')}}`
 
 const ROLE_TYPE_SERVICE = 2
 
-async function getRoleType(tx: TenantTx, roleId: number): Promise<RoleTypeStr> {
+/** Il tipo e il nome del ruolo (il nome serve alle voci del registro: prima e dopo). */
+async function loadRole(tx: TenantTx, roleId: number): Promise<{ type: RoleTypeStr; name: string }> {
   // Embedded-resource select (PostgREST `role_type:role_type(description)`) becomes an
   // explicit leftJoin (spec §2 pattern 5).
-  let row: { description: string | null } | undefined
+  let row: { description: string | null; name: string } | undefined
   try {
     ;[row] = await tx
-      .select({ description: roleType.description })
+      .select({ description: roleType.description, name: role.description })
       .from(role)
       .leftJoin(roleType, eq(role.idRoleType, roleType.idRoleType))
       .where(eq(role.idRole, roleId))
@@ -33,7 +36,11 @@ async function getRoleType(tx: TenantTx, roleId: number): Promise<RoleTypeStr> {
     throw new Error(`Role not found: ${err instanceof Error ? err.message : String(err)}`)
   }
   if (!row) throw new Error('Role not found: no rows')
-  return (row.description as RoleTypeStr) ?? 'SYSTEM'
+  return { type: (row.description as RoleTypeStr) ?? 'SYSTEM', name: row.name }
+}
+
+async function getRoleType(tx: TenantTx, roleId: number): Promise<RoleTypeStr> {
+  return (await loadRole(tx, roleId)).type
 }
 
 export async function createRole(roleName: string): Promise<{ id: number }> {
@@ -43,6 +50,9 @@ export async function createRole(roleName: string): Promise<{ id: number }> {
   try {
     return await withTenant(actor.tenantId, async tx => {
       const [created] = await tx.insert(role).values({ description: name, idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole })
+      await recordTenantAudit(tx, auditActorOf(actor), {
+        operation: 'role.create', objectType: 'role', objectId: created.idRole, details: { name },
+      })
       return { id: created.idRole }
     })
   } catch (err) {
@@ -55,12 +65,16 @@ export async function renameRole(roleId: number, roleName: string): Promise<void
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
   await withTenant(actor.tenantId, async tx => {
-    if ((await getRoleType(tx, roleId)) !== 'SERVICE') throw new Error('This role cannot be renamed')
+    const before = await loadRole(tx, roleId)
+    if (before.type !== 'SERVICE') throw new Error('This role cannot be renamed')
     try {
       await tx.update(role).set({ description: name, dateMod: new Date().toISOString() }).where(eq(role.idRole, roleId))
     } catch (err) {
       throw new Error(`Failed to rename role: ${err instanceof Error ? err.message : String(err)}`)
     }
+    await recordTenantAudit(tx, auditActorOf(actor), {
+      operation: 'role.rename', objectType: 'role', objectId: roleId, details: { before: { name: before.name }, after: { name } },
+    })
   })
 }
 
@@ -138,17 +152,37 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
         ${arrayLiteral(deltas.functionalities.filter(d => !d.authorization).map(d => d.idItem))}::bigint[]
       )`)
     }
+
+    // Una voce per albero toccato: i permessi e le funzionalità sono due cose diverse da leggere.
+    const granted = (list: { idItem: number; authorization: boolean }[]) => list.filter(d => d.authorization).map(d => d.idItem)
+    const revoked = (list: { idItem: number; authorization: boolean }[]) => list.filter(d => !d.authorization).map(d => d.idItem)
+    if (deltas.operations.length) {
+      await recordTenantAudit(tx, auditActorOf(actor), {
+        operation: 'role.permissions', objectType: 'role', objectId: roleId,
+        details: { granted: granted(deltas.operations), revoked: revoked(deltas.operations) },
+      })
+    }
+    if (deltas.functionalities.length) {
+      await recordTenantAudit(tx, auditActorOf(actor), {
+        operation: 'role.functionalities', objectType: 'role', objectId: roleId,
+        details: { granted: granted(deltas.functionalities), revoked: revoked(deltas.functionalities) },
+      })
+    }
   })
 }
 
 export async function deleteRole(roleId: number): Promise<void> {
   const actor = await requirePermission('manage-roles')
   await withTenant(actor.tenantId, async tx => {
-    if ((await getRoleType(tx, roleId)) === 'SYSTEM') throw new Error('System roles cannot be deleted')
+    const before = await loadRole(tx, roleId)
+    if (before.type === 'SYSTEM') throw new Error('System roles cannot be deleted')
     try {
       await tx.delete(role).where(eq(role.idRole, roleId))
     } catch (err) {
       throw new Error(`Failed to delete role: ${err instanceof Error ? err.message : String(err)}`)
     }
+    await recordTenantAudit(tx, auditActorOf(actor), {
+      operation: 'role.delete', objectType: 'role', objectId: roleId, details: { name: before.name },
+    })
   })
 }

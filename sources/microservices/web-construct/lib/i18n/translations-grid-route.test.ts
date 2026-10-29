@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   listActiveLanguages: vi.fn(),
 }))
 
+// Un guasto si registra: il registro vero scriverebbe nell'uscita dei test.
+vi.mock('@/lib/logger', () => ({ createLogger: () => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn() }) }))
 vi.mock('@/lib/rbac/auth-guard', () => ({ requirePermission: mocks.requirePermission }))
 vi.mock('@/lib/i18n/translation-service', () => ({ listTranslations: mocks.listTranslations }))
 vi.mock('@/lib/i18n/language-service', () => ({ listActiveLanguages: mocks.listActiveLanguages }))
@@ -81,7 +83,7 @@ describe('POST /api/i18n/translations-grid', () => {
     const response = await POST(request({ page: 0, size: 50 }))
 
     expect(response.status).toBe(500)
-    await expect(response.json()).resolves.toEqual({ error: 'Language lookup failed' })
+    await expect(response.json()).resolves.toEqual({ error: 'Errore interno.' })
     expect(mocks.listTranslations).not.toHaveBeenCalled()
   })
 })

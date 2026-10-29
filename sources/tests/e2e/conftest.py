@@ -6,7 +6,7 @@ import pytest
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-from helpers import delete_e2e_tenants, do_test_login, nav, operator_env
+from helpers import delete_e2e_tenants, delete_people, do_test_login, make_platform_admin, nav, operator_env
 
 _env_file = Path(__file__).parent / ".env.test"
 if _env_file.exists():
@@ -49,14 +49,39 @@ def _delete_leftover_tenants() -> None:
     delete_e2e_tenants()
 
 
+def _e2e_platform_people() -> list[str]:
+    """The accounts the console tests use: the platform administrator and the first admin of the tenant
+    the console creates. Their domain is TEST_EMAIL's, like the people of test_tenants.py."""
+    domain = os.getenv("TEST_EMAIL", "").split("@", 1)[-1] or "frontiere.io"
+    return [f"e2e-platform-admin@{domain}", f"e2e-console-admin@{domain}", f"e2e-console-member@{domain}"]
+
+
+def _delete_leftover_platform_state() -> None:
+    """Platform administrators and the people of the console tenant left by an interrupted run.
+
+    After the tenants (their memberships go with them), before test-reset-e2e. A platform admin left
+    behind would be one more account that can open the console on a database the other tests expect
+    to have none of those; a left-over tenant also takes its support consent with it. Skipped, like
+    the tenants, without the owner identity.
+    """
+    if operator_env():
+        delete_people(_e2e_platform_people())
+
+
 @pytest.fixture(scope="session", autouse=True)
 def clean_language_preferences():
     _require_disposable_test_database()
     _delete_leftover_tenants()
+    _delete_leftover_platform_state()
     _reset_language_preferences()
     try:
         yield
     finally:
+        try:
+            _delete_leftover_tenants()
+            _delete_leftover_platform_state()
+        except Exception as error:  # noqa: BLE001 - the rest of the teardown still has to run
+            warnings.warn(f"console E2E state not cleaned at the end of the session: {error}")
         _reset_language_preferences()
         env = {**os.environ, "E2E_REGISTER_EMAIL": REGISTER_EMAIL}
         subprocess.run(
@@ -152,6 +177,39 @@ def home_page(logged_in_page, base_url):
     for the tests that start from the home page (sidebar, account panel)."""
     nav(logged_in_page, f"{base_url}/")
     return logged_in_page
+
+
+@pytest.fixture(scope="session")
+def platform_admin_email():
+    """A platform administrator who belongs to no tenant: the console is theirs and nothing else.
+
+    A dedicated account, not TEST_EMAIL: with the attribute on TEST_EMAIL every other test would
+    run as someone who also sees the console (MT5-OK-5). Made through db.mjs, removed by the
+    session fixture at the end (and at the start, if a run was interrupted).
+    """
+    email = _e2e_platform_people()[0]
+    make_platform_admin(email)
+    return email
+
+
+@pytest.fixture(scope="session")
+def platform_admin_storage_state(browser, base_url, platform_admin_email):
+    """The login of the platform administrator: no tenant, so the sign-in ends on the console."""
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+    p = ctx.new_page()
+    do_test_login(p, base_url, platform_admin_email, landing="/platform")
+    state = ctx.storage_state()
+    ctx.close()
+    return state
+
+
+@pytest.fixture
+def platform_page(browser, platform_admin_storage_state):
+    """Authenticated platform administrator page; stays on about:blank like `logged_in_page`."""
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900}, storage_state=platform_admin_storage_state)
+    p = ctx.new_page()
+    yield p
+    ctx.close()
 
 
 @pytest.fixture

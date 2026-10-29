@@ -15,11 +15,11 @@
 export const TRANSLATIONS_LIST_PATH = '/admin/translations'
 
 /** The list URL to return to. Anything unusable yields the unfiltered list. */
-export function translationsListHref(from: string | null | undefined): string {
+export function translationsListHref(from: string | null | undefined, basePath: string = TRANSLATIONS_LIST_PATH): string {
   // URLSearchParams strips a single leading '?' itself, and re-encodes whatever
   // it parsed — so a filter value containing slashes or a colon survives.
   const query = new URLSearchParams(from ?? '').toString()
-  return query ? `${TRANSLATIONS_LIST_PATH}?${query}` : TRANSLATIONS_LIST_PATH
+  return query ? `${basePath}?${query}` : basePath
 }
 
 function withFrom(path: string, listSearch: string): string {
@@ -27,10 +27,10 @@ function withFrom(path: string, listSearch: string): string {
   return from ? `${path}?${new URLSearchParams({ from }).toString()}` : path
 }
 
-export function translationEditHref(keyId: number, listSearch: string): string {
-  return withFrom(`${TRANSLATIONS_LIST_PATH}/${keyId}/edit`, listSearch)
+export function translationEditHref(keyId: number, listSearch: string, basePath: string): string {
+  return withFrom(`${basePath}/${keyId}/edit`, listSearch)
 }
 
-export function translationCreateHref(listSearch: string): string {
-  return withFrom(`${TRANSLATIONS_LIST_PATH}/create`, listSearch)
+export function translationCreateHref(listSearch: string, basePath: string): string {
+  return withFrom(`${basePath}/create`, listSearch)
 }

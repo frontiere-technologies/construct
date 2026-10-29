@@ -7,6 +7,17 @@ import type { TenantId } from './tenant-id'
 const SERVER_CONFIGURATION = 'server_configuration'
 
 /**
+ * L'indirizzo principale dell'app, quello di `AUTH_URL` (o del vecchio `NEXTAUTH_URL`) così com'è:
+ * dove stanno la console della piattaforma e le persone che non sono in nessun tenant (MT5-DEC-23).
+ * Senza `AUTH_URL` lancia `server_configuration`. Non guarda il database.
+ */
+export function mainBaseUrl(): string {
+  const configured = process.env.AUTH_URL || process.env.NEXTAUTH_URL
+  if (!configured) throw new Error(SERVER_CONFIGURATION)
+  return configured
+}
+
+/**
  * L'indirizzo base dei link nelle email di un tenant (specifica 2026-10-21, §3.4, MT4-DEC-12):
  * `AUTH_URL` (o il vecchio `NEXTAUTH_URL`) con il solo nome dell'host sostituito dall'indirizzo
  * principale del tenant (`tenant_host.is_primary`); schema, porta e percorso restano quelli di
@@ -16,8 +27,7 @@ const SERVER_CONFIGURATION = 'server_configuration'
  * lancia `server_configuration`, come prima.
  */
 export async function tenantBaseUrl(tenantId: TenantId): Promise<string> {
-  const configured = process.env.AUTH_URL || process.env.NEXTAUTH_URL
-  if (!configured) throw new Error(SERVER_CONFIGURATION)
+  const configured = mainBaseUrl()
 
   const [primary] = await withGlobal(tx => tx
     .select({ host: tenantHost.host })

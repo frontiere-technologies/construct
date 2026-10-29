@@ -57,6 +57,10 @@ const NOT_CONFIGURED_BY_HAND = {
   // Auth.js v4 spelling, read only as a fallback for AUTH_URL. Documenting it
   // would invite people to set the deprecated name.
   NEXTAUTH_URL: 'legacy alias read as a fallback for AUTH_URL — do not document',
+  // Set by the login shell. db.mjs reads them only as a fallback for the operating-system user it
+  // records in the platform audit log (migration-lib.mjs, commandActorEmail).
+  USER: 'set by the login shell, never by a file',
+  LOGNAME: 'set by the login shell, never by a file',
   NEXT_PHASE: 'set by the Next CLI (phase-production-build during next build), never by a file',
   // A one-off switch typed on the command line when a THEME-2 batch lowers the
   // raw-colour baseline. Documenting it in a template would suggest leaving it
@@ -162,7 +166,7 @@ test('every variable the code reads is documented in a template', () => {
  * exact reason — it used to sit in .env.test.local, which put an owner-level
  * connection string in the E2E application's environment.
  */
-const OPERATOR_CREDENTIAL = /^(TEST_)?(MIGRATION_DATABASE_URL|CONSTRUCT_RUNTIME_DB_)/
+const OPERATOR_CREDENTIAL = /^(TEST_)?(MIGRATION_DATABASE_URL|CONSTRUCT_(RUNTIME|PLATFORM)_DB_)/
 
 test('operator credentials appear only in the operator template', () => {
   // The Next template says it in prose; this makes it enforceable. Putting a

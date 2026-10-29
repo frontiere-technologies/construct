@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   listAvailableTenants: vi.fn(),
   resolveHostTenant: vi.fn(),
   hasDeactivatedMembershipOnHost: vi.fn(),
+  hasInactiveMembershipOnHost: vi.fn(),
   isDedicatedHost: vi.fn(),
   ensureDefaultMembership: vi.fn(),
   resolveUserAuthorization: vi.fn(),
@@ -76,6 +77,7 @@ vi.mock('@/lib/tenancy/host-tenants', () => ({
   listAvailableTenants: mocks.listAvailableTenants,
   resolveHostTenant: mocks.resolveHostTenant,
   hasDeactivatedMembershipOnHost: mocks.hasDeactivatedMembershipOnHost,
+  hasInactiveMembershipOnHost: mocks.hasInactiveMembershipOnHost,
   isDedicatedHost: mocks.isDedicatedHost,
 }))
 vi.mock('@/lib/tenancy/membership', async importOriginal => ({
@@ -173,6 +175,7 @@ beforeEach(() => {
   mocks.listAvailableTenants.mockReset().mockResolvedValue(tenants(DEFAULT_TENANT))
   mocks.resolveHostTenant.mockReset().mockResolvedValue(DEFAULT_TENANT)
   mocks.hasDeactivatedMembershipOnHost.mockReset().mockResolvedValue(false)
+  mocks.hasInactiveMembershipOnHost.mockReset().mockResolvedValue(false)
   mocks.isDedicatedHost.mockReset().mockResolvedValue(false)
   mocks.ensureDefaultMembership.mockReset().mockResolvedValue('active')
   mocks.resolveUserAuthorization.mockReset().mockResolvedValue(ROLES)
@@ -337,6 +340,32 @@ describe('tenant chosen at sign-in (MT4-DEC-4, MT4-DEC-15, MT4-DEC-16)', () => {
     expect(session.user).toMatchObject({ id: USER.id, tenantState: 'ready', tenantId: OTHER_TENANT, tenantName: `Tenant ${OTHER_TENANT}`, roleIds: [0] })
   })
 
+  it('sign-in with no tenant available and a suspended one on the address gives none with the suspended reason, and the session carries it (MT5-DEC-7)', async () => {
+    mocks.listAvailableTenants.mockResolvedValue([])
+    mocks.hasInactiveMembershipOnHost.mockResolvedValue(true)
+
+    const token = await signInToken()
+
+    expect(token).toMatchObject({ tenantState: 'none', tenantId: null, tenantNoneReason: 'suspended' })
+    expect(mocks.hasInactiveMembershipOnHost).toHaveBeenCalledWith(USER.id, 'localhost')
+    expect((await sessionOf(token)).user).toMatchObject({ tenantState: 'none', tenantNoneReason: 'suspended' })
+  })
+
+  it('a session in none without the reason, or in another state, carries no reason; the generic message stays', async () => {
+    mocks.listAvailableTenants.mockResolvedValue([])
+    const token = await signInToken()
+    expect(token).toMatchObject({ tenantState: 'none', tenantNoneReason: null })
+    expect((await sessionOf(token)).user).toMatchObject({ tenantNoneReason: null })
+    // Un motivo rimasto in un token che non è più `none` non esce.
+    expect((await sessionOf({ ...token, tenantState: 'choose', tenantNoneReason: 'suspended' })).user).toMatchObject({ tenantNoneReason: null })
+  })
+
+  it('does not look for a suspended tenant when the person has one to work in or to choose from', async () => {
+    mocks.listAvailableTenants.mockResolvedValue(tenants(DEFAULT_TENANT, OTHER_TENANT))
+    await signInToken()
+    expect(mocks.hasInactiveMembershipOnHost).not.toHaveBeenCalled()
+  })
+
   it('sign-in with several tenants and no last tenant gives state choose', async () => {
     mocks.listAvailableTenants.mockResolvedValue(tenants(DEFAULT_TENANT, OTHER_TENANT))
 
@@ -389,6 +418,30 @@ describe('tenant chosen at sign-in (MT4-DEC-4, MT4-DEC-15, MT4-DEC-16)', () => {
     expect(token).toMatchObject({ tenantId: null, tenantState: 'none', tenantHost: 'a.localhost', accountActive: true, roleIds: [] })
     const session = await sessionOf(token)
     expect(session.user).toMatchObject({ id: USER.id, accountActive: true, tenantState: 'none', tenantId: null, roleIds: [] })
+  })
+
+  it('exposes the platform admin attribute of the token in the session, only for an active account', async () => {
+    const none: Token = { userId: USER.id, provider: 'credentials', accountActive: true, roleIds: [], tenantId: null, tenantState: 'none', tenantHost: 'a.localhost', tenantName: null }
+    expect((await sessionOf({ ...none, isPlatformAdmin: true })).user).toMatchObject({ tenantState: 'none', isPlatformAdmin: true })
+    expect((await sessionOf(none)).user).toMatchObject({ isPlatformAdmin: false })
+    expect((await sessionOf({ ...none, accountActive: false, isPlatformAdmin: true })).user).toMatchObject({ isPlatformAdmin: false })
+  })
+
+  // Pezzo 5a, Task 9 (§3.2): in assistenza la sessione porta il tenant assistito come `ready`, più scadenza e motivo per la fascia.
+  it('a support token gives a session in the supported tenant with the expiry and the reason, and nothing of them elsewhere', async () => {
+    const support: Token = {
+      userId: USER.id, provider: 'credentials', accountActive: true, roleIds: [1], tenantId: 7, tenantState: 'support',
+      tenantHost: 'localhost', tenantName: 'Acme', isPlatformAdmin: true, supportUntil: '2026-10-27T12:00:00.000Z', supportReason: 'controllo',
+    }
+    expect((await sessionOf(support)).user).toMatchObject({
+      id: USER.id, tenantState: 'support', tenantId: 7, tenantName: 'Acme', roleIds: [1],
+      supportUntil: '2026-10-27T12:00:00.000Z', supportReason: 'controllo',
+    })
+    // Fuori dall'assistenza i campi non passano, anche se il token li portasse ancora.
+    expect((await sessionOf({ ...support, tenantState: 'ready' })).user).toMatchObject({ supportUntil: null, supportReason: null })
+    // Un'assistenza appena finita non è il messaggio dello spazio sospeso.
+    expect((await sessionOf({ ...support, tenantState: 'none', tenantNoneReason: 'support_ended' })).user)
+      .toMatchObject({ tenantId: null, roleIds: [], tenantNoneReason: null })
   })
 
   it('gives the first default membership before listing the tenants of the address (MT2-DEC-12)', async () => {

@@ -2,6 +2,8 @@
 
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { auditActorOf } from '@/lib/audit/audit-types'
+import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { withTenant } from '@/lib/db/tenant-db'
 import { appTheme } from '@/lib/db/schema'
 import { requireAdministrator } from '@/lib/rbac/auth-guard'
@@ -93,19 +95,29 @@ export async function saveAppTheme(
   if (warnings.length > 0 && !acknowledged) return { saved: false, error: null, warnings }
 
   try {
-    const rows = await withTenant(actor.tenantId, tx => tx.update(appTheme).set({
-      primaryColor,
-      primaryDark,
-      backgroundLight: light.background ?? null,
-      cardLight: light.card ?? null,
-      accentLight: light.accent ?? null,
-      sidebarLight: light.sidebar ?? null,
-      backgroundDark: dark.background ?? null,
-      cardDark: dark.card ?? null,
-      accentDark: dark.accent ?? null,
-      sidebarDark: dark.sidebar ?? null,
-      dateMod: sql`now()`,
-    }).returning({ idTenant: appTheme.idTenant }))
+    const rows = await withTenant(actor.tenantId, async tx => {
+      const updated = await tx.update(appTheme).set({
+        primaryColor,
+        primaryDark,
+        backgroundLight: light.background ?? null,
+        cardLight: light.card ?? null,
+        accentLight: light.accent ?? null,
+        sidebarLight: light.sidebar ?? null,
+        backgroundDark: dark.background ?? null,
+        cardDark: dark.card ?? null,
+        accentDark: dark.accent ?? null,
+        sidebarDark: dark.sidebar ?? null,
+        dateMod: sql`now()`,
+      }).returning({ idTenant: appTheme.idTenant })
+      // Senza riga da aggiornare non è cambiato niente: niente voce.
+      if (updated.length > 0) {
+        await recordTenantAudit(tx, auditActorOf(actor), {
+          operation: 'theme.save', objectType: 'app_theme', objectId: actor.tenantId,
+          details: { primaryColor, primaryDark, surfaces: { light, dark } },
+        })
+      }
+      return updated
+    })
     if (rows.length === 0) {
       log.error('app_theme has no row to update')
       return { saved: false, error: 'failed' }

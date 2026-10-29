@@ -17,10 +17,12 @@ import {
   applyPendingMigrations,
   discoverMigrations,
   parseApplyArguments,
+  parsePlatformAdminArguments,
   parseTenantCreateArguments,
   parseTenantDeleteArguments,
   parseTenantHostArguments,
   parseTenantMemberArguments,
+  recordCommandAudit,
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
@@ -188,17 +190,25 @@ async function runMigrations(connectionUrl, { to } = {}) {
   }
 }
 
-async function provisionRuntimeRole() {
-  const username = process.env.CONSTRUCT_RUNTIME_DB_USER
-  const password = process.env.CONSTRUCT_RUNTIME_DB_PASSWORD
+/**
+ * Un login di servizio per l'app, creato o riallineato da zero ogni volta (idempotente). Il ruolo
+ * runtime e quello di piattaforma hanno la stessa forma e differiscono in due cose: il ruolo di cui
+ * il login è l'unico membro (`construct_runtime` o `construct_owner`) e se lo eredita (il login
+ * runtime sì, quello di piattaforma NO: senza `set local role` non ha alcun privilegio, §2.2).
+ * Un login già esistente con altre appartenenze, oggetti, privilegi diretti o ACL predefinite viene
+ * rifiutato, mai ripulito in silenzio.
+ */
+async function provisionServiceLogin({ label, userVariable, passwordVariable, groupRole, inheritsGroup }) {
+  const username = process.env[userVariable]
+  const password = process.env[passwordVariable]
   if (!username || !/^[a-z_][a-z0-9_]{0,62}$/.test(username)) {
-    throw new Error('CONSTRUCT_RUNTIME_DB_USER must be a valid PostgreSQL role name')
+    throw new Error(`${userVariable} must be a valid PostgreSQL role name`)
   }
   if (!password || password.length < 24) {
-    throw new Error('CONSTRUCT_RUNTIME_DB_PASSWORD must contain at least 24 characters')
+    throw new Error(`${passwordVariable} must contain at least 24 characters`)
   }
-  if (username === 'construct_runtime') {
-    throw new Error('CONSTRUCT_RUNTIME_DB_USER must be a login role, not construct_runtime')
+  if (username === 'construct_runtime' || username === 'construct_owner') {
+    throw new Error(`${userVariable} must be a login role, not ${username}`)
   }
 
   const sql = postgres(migrationDatabaseUrl(), { prepare: false, connect_timeout: 30, idle_timeout: 5 })
@@ -210,7 +220,7 @@ async function provisionRuntimeRole() {
         from pg_auth_members membership
         join pg_roles member on member.oid = membership.member
         join pg_roles granted on granted.oid = membership.roleid
-        where member.rolname = ${username} and granted.rolname <> 'construct_runtime'
+        where member.rolname = ${username} and granted.rolname <> ${groupRole}
       `
       const ownedObjects = await sql`
         select 'database' as kind from pg_database d join pg_roles r on r.oid = d.datdba where r.rolname = ${username}
@@ -249,20 +259,96 @@ async function provisionRuntimeRole() {
         limit 1
       `
       if (unexpectedMemberships.length || ownedObjects.length || directGrants.length || directAclGrants.length) {
-        throw new Error('existing runtime login has unexpected memberships, ownership, direct grants, or default ACLs')
+        throw new Error(`existing ${label} login has unexpected memberships, ownership, direct grants, or default ACLs`)
       }
     }
     const passwordLiteral = password.replaceAll("'", "''")
-    if (exists.length) {
-      await sql.unsafe(`alter role "${username}" login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls password '${passwordLiteral}'`)
-    } else {
-      await sql.unsafe(`create role "${username}" login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls password '${passwordLiteral}'`)
+    const inheritance = inheritsGroup ? 'inherit' : 'noinherit'
+    const verb = exists.length ? 'alter' : 'create'
+    await sql.unsafe(`${verb} role "${username}" login ${inheritance} nosuperuser nocreatedb nocreaterole noreplication nobypassrls password '${passwordLiteral}'`)
+    // Da PostgreSQL 16 l'ereditarietà è anche un'opzione della singola appartenenza, e un `grant` su
+    // un'appartenenza che esiste già non la cambia: la si dice esplicitamente.
+    const [{ version }] = await sql`select current_setting('server_version_num')::int as version`
+    await sql.unsafe(version >= 160000
+      ? `grant ${groupRole} to "${username}" with inherit ${inheritsGroup ? 'true' : 'false'}${inheritsGroup ? '' : ', set true'}`
+      : `grant ${groupRole} to "${username}"`)
+    // Verifica dopo la concessione, solo per il login che non eredita (quello di piattaforma, MT5-RISK-1):
+    // l'appartenenza esiste con le opzioni volute (da PostgreSQL 16 sono per appartenenza, e un
+    // `grant` già presente poteva averle diverse), e nessun ruolo può diventare il login (sotto, la
+    // sola appartenenza in quel verso che si ammette).
+    if (!inheritsGroup) {
+      if (version >= 160000) {
+        const wrongOption = await sql`
+          select 1
+          from pg_auth_members membership
+          join pg_roles member on member.oid = membership.member
+          join pg_roles granted on granted.oid = membership.roleid
+          where member.rolname = ${username} and granted.rolname = ${groupRole}
+            and (membership.inherit_option is not false or membership.set_option is not true)
+        `
+        if (wrongOption.length) {
+          throw new Error(`the ${label} login ${username} is a member of ${groupRole} with the wrong options (expected inherit false, set true)`)
+        }
+      }
+      // Ogni riga con il login come ruolo concesso. Da PostgreSQL 16 solo una è ammessa: quella che
+      // PostgreSQL stesso registra per chi ha creato il ruolo (verificato: member = chi crea, grantor =
+      // il superutente di bootstrap, oid 10, con la sola opzione admin, senza inherit né set). Qualunque
+      // altra, anche con inherit e set falsi, è una strada: chi ha ADMIN sul login può concedersi
+      // `with set true` e da lì passare a construct_owner. Prima della 16 nessuna riga è ammessa.
+      // to_jsonb: le colonne delle opzioni non esistono prima della 16, e la sonda non deve nominarle.
+      const reverse = await sql`
+        select member.rolname as member, membership.admin_option as admin,
+          to_jsonb(membership) ->> 'inherit_option' as inherit_option,
+          to_jsonb(membership) ->> 'set_option' as set_option,
+          membership.grantor::int8 as grantor,
+          (${version >= 160000}
+            and member.rolname = current_user
+            and membership.admin_option
+            and to_jsonb(membership) ->> 'inherit_option' = 'false'
+            and to_jsonb(membership) ->> 'set_option' = 'false'
+            and membership.grantor = 10) as creator_grant
+        from pg_auth_members membership
+        join pg_roles login on login.oid = membership.roleid
+        join pg_roles member on member.oid = membership.member
+        where login.rolname = ${username}
+      `
+      const foreign = reverse.filter(row => !row.creator_grant)
+      if (foreign.length) {
+        const described = foreign.map(row => `${row.member} (admin ${row.admin}, inherit ${row.inherit_option ?? 'n/a'}, set ${row.set_option ?? 'n/a'}, grantor ${row.grantor})`)
+        throw new Error(`the ${label} login ${username} has members: ${described.join('; ')}: only the automatic grant to its creator (admin only) is allowed`)
+      }
     }
-    await sql.unsafe(`grant construct_runtime to "${username}"`)
-    console.log(`provisioned limited runtime login ${username}`)
+    console.log(`provisioned limited ${label} login ${username}`)
   } finally {
     await sql.end({ timeout: 5 })
   }
+}
+
+async function provisionRuntimeRole() {
+  await provisionServiceLogin({
+    label: 'runtime',
+    userVariable: 'CONSTRUCT_RUNTIME_DB_USER',
+    passwordVariable: 'CONSTRUCT_RUNTIME_DB_PASSWORD',
+    groupRole: 'construct_runtime',
+    inheritsGroup: true,
+  })
+}
+
+/**
+ * L'identità di piattaforma (specifica 2026-10-26, §2.2, MT5-RISK-1): il login con cui la console
+ * scrive `tenant`, `tenant_host` e crea tenant dal modello. Membro di construct_owner con NOINHERIT:
+ * da solo non ha alcun privilegio, e solo `withPlatform` (lib/platform/db.ts) passa a construct_owner
+ * con `set local role`. Senza BYPASSRLS, senza superutente, senza createrole né createdb. Come il
+ * login runtime si crea dopo le migrazioni (construct_owner lo crea la 0002) e si può rilanciare.
+ */
+async function provisionPlatformRole() {
+  await provisionServiceLogin({
+    label: 'platform',
+    userVariable: 'CONSTRUCT_PLATFORM_DB_USER',
+    passwordVariable: 'CONSTRUCT_PLATFORM_DB_PASSWORD',
+    groupRole: 'construct_owner',
+    inheritsGroup: false,
+  })
 }
 
 /**
@@ -285,7 +371,9 @@ async function provisionRuntimeRole() {
  * function), and how the tenant boundary is closed (every table classified, row level
  * security forced; on every tenant table id_tenant, its foreign key and default, both
  * tenant policies, the leading index and the composite keys; on every global table the
- * policy and grants of its class). The tenant and global probes are the same queries as
+ * policy and grants of its class). Where the platform identity (construct_platform) exists,
+ * it is held to its own shape too: a NOINHERIT member of construct_owner and nothing else, no
+ * privileged attribute, no direct grant, owns nothing; and the connection is never a member of it. The tenant and global probes are the same queries as
  * the contract test, copied: the two are deliberate duplicates in two runtimes and will
  * drift if edited apart. Change one, change the other: the contract test is
  * lib/schema-contract.integration.test.ts.
@@ -357,6 +445,89 @@ async function boundaryCheck() {
       'construct_owner exists without BYPASSRLS, login and superuser',
       Boolean(ownerRole) && !ownerRole.rolbypassrls && !ownerRole.rolcanlogin && !ownerRole.rolsuper,
     )
+    // L'identità di piattaforma (specifica 2026-10-26, §2.2, MT5-RISK-1) esiste solo dove è stata
+    // configurata: dove non lo è e il ruolo non c'è, la sonda lo dice e passa; dove c'è (o dove
+    // CONSTRUCT_PLATFORM_DB_USER la dà per configurata) si pretende tutto, e il login dell'app non
+    // ne è mai membro. Per nome attraverso pg_roles, come sopra: nessun cast a regrole.
+    const platformConfigured = Boolean(process.env.CONSTRUCT_PLATFORM_DB_USER)
+    const platformName = process.env.CONSTRUCT_PLATFORM_DB_USER || 'construct_platform'
+    const [platformRole] = await sql`
+      select oid::int8 as oid, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
+      from pg_roles where rolname = ${platformName}
+    `
+    if (!platformRole) {
+      if (platformConfigured) report(`the platform identity ${platformName} exists`, false, 'configured but absent: run provision-platform-role')
+      else console.log('  skip  the platform identity: not configured and absent (no console on this database)')
+    } else {
+      const platformAttributes = ['rolsuper', 'rolcreatedb', 'rolcreaterole', 'rolreplication', 'rolbypassrls']
+        .filter(attribute => platformRole[attribute])
+      report(
+        'the platform identity is a login without privileged role attributes',
+        platformRole.rolcanlogin && !platformAttributes.length,
+        platformRole.rolcanlogin ? platformAttributes.join(', ') : 'it cannot log in',
+      )
+      // Da PostgreSQL 16 l'ereditarietà è un'opzione dell'appartenenza (inherit_option); prima è
+      // l'attributo del ruolo. to_jsonb lascia la sonda valida su entrambe.
+      const platformMemberships = await sql`
+        select distinct granted.rolname as granted,
+          coalesce((to_jsonb(membership) ->> 'inherit_option')::boolean, member.rolinherit) as inherits
+        from pg_auth_members membership
+        join pg_roles member on member.oid = membership.member
+        join pg_roles granted on granted.oid = membership.roleid
+        where member.rolname = ${platformName}
+        order by granted.rolname
+      `
+      const platformGranted = [...new Set(platformMemberships.map(row => row.granted))]
+      report(
+        'the platform identity is a member of construct_owner and nothing else',
+        platformGranted.length === 1 && platformGranted[0] === 'construct_owner',
+        platformGranted.join(', ') || '(no memberships)',
+      )
+      report(
+        'the platform identity does not inherit construct_owner (NOINHERIT: no privileges before set local role)',
+        platformMemberships.length > 0 && platformMemberships.every(row => row.inherits === false),
+        platformMemberships.filter(row => row.inherits !== false).map(row => row.granted).join(', '),
+      )
+      // Dal catalogo e non da information_schema: quest'ultimo mostra solo i privilegi che chi si
+      // collega può vedere, e il login dell'app non vede quelli di un altro ruolo.
+      const platformDirect = await sql`
+        select 'table' as source from pg_class c cross join lateral aclexplode(c.relacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'column' from pg_attribute a cross join lateral aclexplode(a.attacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'routine' from pg_proc p cross join lateral aclexplode(p.proacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'schema' from pg_namespace n cross join lateral aclexplode(n.nspacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'database' from pg_database d cross join lateral aclexplode(d.datacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'default' from pg_default_acl x cross join lateral aclexplode(x.defaclacl) acl
+          where acl.grantee = ${platformRole.oid}::oid
+        union all select 'owns table' from pg_class c where c.relowner = ${platformRole.oid}::oid
+        union all select 'owns function' from pg_proc p where p.proowner = ${platformRole.oid}::oid
+        union all select 'owns schema' from pg_namespace n where n.nspowner = ${platformRole.oid}::oid
+      `
+      const platformDirectCounts = [...platformDirect.reduce((counts, row) => {
+        counts.set(row.source, (counts.get(row.source) ?? 0) + 1)
+        return counts
+      }, new Map())].map(([source, count]) => `${source}×${count}`)
+      report('the platform identity holds no direct grants and owns nothing', !platformDirect.length, platformDirectCounts.join(', '))
+    }
+    // Il login dell'app non diventa mai construct_owner né l'identità di piattaforma, nemmeno per via
+    // indiretta (pg_has_role segue le catene di appartenenza).
+    const reachable = await sql`
+      select r.rolname as name
+      from pg_roles r
+      where r.rolname = any(${['construct_owner', platformName]}::name[]) and r.rolname <> current_user
+        and pg_has_role(current_user, r.oid, 'MEMBER')
+      order by 1
+    `
+    report(
+      'the connection is a member of neither construct_owner nor the platform identity',
+      !reachable.length,
+      reachable.map(row => row.name).join(', '),
+    )
+
     // Il proprietario si cerca per nome attraverso pg_roles e non con un cast a regrole: il cast
     // fa abortire l'intero comando dove construct_owner non esiste ancora, e la sonda deve
     // invece dire FAIL.
@@ -495,21 +666,94 @@ async function boundaryCheck() {
         where tc.class <> 'tenant' and not exists (
           select 1 from pg_policies p
           where p.schemaname = 'public' and p.tablename = tc.table_name
-            and p.policyname = case tc.class when 'global_write' then 'global_access' else 'global_read' end)
+            and p.policyname = case tc.class
+              when 'global_write' then 'global_access'
+              when 'global_insert_only' then 'global_insert'
+              else 'global_read' end)
         union all
         select tc.table_name, 'write grant on a read-only table'
         from app_private.table_class tc
         where tc.class = 'global_read'
           and has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'insert,update,delete')
+        union all
+        select tc.table_name, 'insert-only table the runtime cannot insert into'
+        from app_private.table_class tc
+        where tc.class = 'global_insert_only'
+          and not has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'insert')
+        union all
+        select tc.table_name, 'insert-only table the runtime can read, update, delete or truncate'
+        from app_private.table_class tc
+        where tc.class = 'global_insert_only'
+          and (has_table_privilege('construct_runtime', format('public.%I', tc.table_name), 'delete,truncate,trigger')
+            or has_any_column_privilege('construct_runtime', format('public.%I', tc.table_name), 'select,update,references'))
+        union all
+        select tc.table_name, 'insert-only table with a policy beyond global_owner and global_insert'
+        from app_private.table_class tc
+        join pg_policies p on p.schemaname = 'public' and p.tablename = tc.table_name
+        where tc.class = 'global_insert_only' and p.policyname not in ('global_owner', 'global_insert')
+        union all
+        select tc.table_name, 'insert-only table whose global_insert is not an insert policy of construct_runtime alone'
+        from app_private.table_class tc
+        where tc.class = 'global_insert_only' and not exists (
+          select 1 from pg_policies p
+          where p.schemaname = 'public' and p.tablename = tc.table_name and p.policyname = 'global_insert'
+            and p.cmd = 'INSERT' and p.roles = array['construct_runtime']::name[])
+        union all
+        select tc.table_name, 'insert-only table whose identity sequence is reachable by the runtime'
+        from app_private.table_class tc
+        where tc.class = 'global_insert_only'
+          and pg_get_serial_sequence(format('public.%I', tc.table_name), 'id') is not null
+          and has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', tc.table_name), 'id'), 'usage,select,update')
         order by 1, 2
       `
       for (const [label, problem] of [
         ['every global table has the policy of its class', 'policy'],
         ['no read-only global table is writable by construct_runtime', 'write grant on a read-only table'],
+        ['every insert-only global table lets construct_runtime insert', 'insert-only table the runtime cannot insert into'],
+        ['no insert-only global table lets construct_runtime read, update, delete or truncate', 'insert-only table the runtime can read, update, delete or truncate'],
+        ['insert-only global tables carry no policy beyond global_owner and global_insert', 'insert-only table with a policy beyond global_owner and global_insert'],
+        ['insert-only global tables have a global_insert policy for construct_runtime alone', 'insert-only table whose global_insert is not an insert policy of construct_runtime alone'],
+        ['insert-only global tables leave their identity sequence out of reach of construct_runtime', 'insert-only table whose identity sequence is reachable by the runtime'],
       ]) {
         const rows = globalViolations.filter(row => row.problem === problem)
         report(label, !rows.length, rows.map(row => row.name).join(', '))
       }
+      // Specchio di 'keeps the tenant audit tables append-only for the runtime role': i registri di
+      // tenant sono tabelle di tenant con un privilegio in meno, e l'elenco è esplicito.
+      const appendOnly = await sql`
+        select t.name, 'not a classified tenant table' as problem
+        from unnest(array['tenant_audit_event']) as t(name)
+        where not exists (select 1 from app_private.table_class tc where tc.table_name = t.name and tc.class = 'tenant')
+        union all
+        select t.name, 'the runtime cannot select and insert'
+        from unnest(array['tenant_audit_event']) as t(name)
+        where not has_table_privilege('construct_runtime', format('public.%I', t.name), 'select')
+           or not has_table_privilege('construct_runtime', format('public.%I', t.name), 'insert')
+        union all
+        select t.name, 'the runtime can update, delete, truncate, reference or trigger'
+        from unnest(array['tenant_audit_event']) as t(name)
+        where has_table_privilege('construct_runtime', format('public.%I', t.name), 'delete,truncate,trigger')
+           or has_any_column_privilege('construct_runtime', format('public.%I', t.name), 'update,references')
+        union all
+        select t.name, 'the identity sequence is reachable by the runtime'
+        from unnest(array['tenant_audit_event']) as t(name)
+        where pg_get_serial_sequence(format('public.%I', t.name), 'id') is null
+           or has_sequence_privilege('construct_runtime', pg_get_serial_sequence(format('public.%I', t.name), 'id'), 'usage,select,update')
+        order by 1, 2
+      `
+      report('tenant audit tables are append-only for construct_runtime', !appendOnly.length,
+        appendOnly.map(row => `${row.name} (${row.problem})`).join(', '))
+      // Specchio di 'keeps the platform admin guard trigger on users enabled'.
+      const guard = await sql`
+        select 'public.users' as name, 'the platform admin guard trigger is missing, disabled or not before insert or update on each row' as problem
+        where not exists (
+          select 1 from pg_trigger g
+          where g.tgrelid = 'public.users'::regclass and g.tgname = 'users_platform_admin_guard' and g.tgenabled in ('O', 'A')
+            and g.tgfoid in (select p.oid from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app_private' and p.proname = 'guard_platform_admin_flag')
+            and g.tgtype & (1 | 2 | 4 | 16) = (1 | 2 | 4 | 16))
+      `
+      report('the platform admin guard trigger on users is present and enabled', !guard.length)
     }
   } finally {
     await sql.end({ timeout: 5 })
@@ -574,6 +818,13 @@ async function runDatabaseCommand(command, argument) {
  * Con `host` (specifica 2026-10-21, MT4-DEC-13) registra nella stessa transazione l'indirizzo
  * dedicato del tenant, come principale: un indirizzo già preso annulla anche il tenant.
  *
+ * Nota (Task 8, pezzo 5a): la console crea i tenant con `app_private.create_platform_tenant`
+ * (0060), che ripete questa stessa sequenza in SQL ma senza consegnare l'invito. Le regole oggi
+ * esistono quindi in due versioni, questa in JavaScript e quella della 0060 (il commento in testa a
+ * quella migrazione non può dirlo: una migrazione applicata non si modifica nemmeno nei commenti, il
+ * checksum lo impedisce). Farle usare al comando la funzione SQL di `register_tenant_admin` e
+ * `create_platform_tenant` è un lavoro per una migrazione successiva, non di questo task.
+ *
  * Il link stampato contiene un token valido: è il modo previsto di consegnarlo finché l'invio per
  * email non arriva con la console (pezzo 5), e non si scrive da nessun'altra parte. Con `host` il
  * link usa l'indirizzo del tenant, come i link dell'app (`tenantBaseUrl`): `AUTH_URL` con il solo
@@ -609,6 +860,15 @@ async function runTenantCreate(connectionUrl, { slug, name, admin, host }) {
       if (Number(activeAdmins) === 0) {
         throw new Error('Il primo amministratore non è attivo: account disattivato a livello globale. Nessun tenant creato.')
       }
+      // Il registro della piattaforma (MT5-DEC-22), nella stessa transazione: se un controllo
+      // sopra annulla la creazione, la voce non c'è. Né il token né il link ci entrano (MT5-RISK-4).
+      await recordCommandAudit(tx, {
+        tenantId,
+        operation: 'tenant.create',
+        objectType: 'tenant',
+        objectId: tenantId,
+        details: { slug, name, firstAdmin: admin, ...(host ? { host } : {}) },
+      })
       return { tenantId, existed, invitationToken: registered.invitationToken }
     })
 
@@ -678,8 +938,153 @@ async function runTenantHostAdd(connectionUrl, { slug, host, primary }) {
         }
       }
       await tx`insert into public.tenant_host (host, id_tenant, is_primary) values (${host}, ${found.id}, ${primary})`
+      // Il registro della piattaforma (MT5-DEC-22), nella stessa transazione: una voce per
+      // l'indirizzo aggiunto, e una in più se lo si rende principale.
+      await recordCommandAudit(tx, {
+        tenantId: found.id,
+        operation: 'tenant.host.add',
+        objectType: 'tenant_host',
+        objectId: host,
+        details: { slug, host, primary },
+      })
+      if (primary) {
+        await recordCommandAudit(tx, {
+          tenantId: found.id,
+          operation: 'tenant.host.primary',
+          objectType: 'tenant_host',
+          objectId: host,
+          details: { slug, host },
+        })
+      }
     })
     console.log(`Indirizzo assegnato: ${host} al tenant ${slug} (${primary ? 'principale' : 'non principale'})`)
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
+/**
+ * Nomina un amministratore di piattaforma (specifica 2026-10-26, MT5-DEC-2, MT5-DEC-23): imposta
+ * `users.is_platform_admin`, creando l'account se manca. Il comando gira come construct_owner, il
+ * solo che può cambiare quell'attributo (il trigger `users_platform_admin_guard`, 0057), in una
+ * transazione sola con la voce del registro. Un account nuovo non ha password: riceve, come il
+ * primo amministratore di tenant-create (`register_tenant_admin`, 0051), un invito di 48 ore già
+ * consegnato (gli inviti precedenti non usati si sostituiscono), il cui link si stampa verso
+ * `AUTH_URL`, l'indirizzo principale: la piattaforma non è in nessun tenant. Il link si stampa e
+ * non si scrive da nessun'altra parte, registro compreso. Un account già amministratore con una
+ * password non cambia e non lascia voci. Un account già amministratore senza password (il link del
+ * primo invito è scaduto, o l'email della console non è partita) riceve un invito nuovo, con la
+ * voce `platform.admin.invite` nella stessa transazione: è il modo di rientrare, perché toglierlo è
+ * vietato se è l'ultimo e «Password dimenticata» non esiste per un account senza password.
+ * Un account disattivato a livello globale si rifiuta, come in tenant-create.
+ */
+async function runPlatformAdminAdd(connectionUrl, { email }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    const result = await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const [{ existed }] = await tx`select exists (select 1 from public.users where email = ${email}) as existed`
+      await tx`insert into public.users (email, auth_provider) values (${email}, 'credentials') on conflict (email) do nothing`
+      const [account] = await tx`
+        select id::text as id, password_hash is not null as "hasPassword", is_platform_admin as "isAdmin", id_user_status as status
+        from public.users where email = ${email} for update
+      `
+      if (Number(account.status) !== 2) {
+        throw new Error(`L'account ${email} è disattivato a livello globale: riattivalo prima di nominarlo. Nessuna modifica.`)
+      }
+      if (account.isAdmin && account.hasPassword) return { changed: false }
+      const reinvite = account.isAdmin
+      if (!reinvite) await tx`update public.users set is_platform_admin = true where id = ${account.id}`
+      let invitationToken = null
+      if (!account.hasPassword) {
+        invitationToken = (await tx`select gen_random_uuid()::text as token`)[0].token
+        // L'orologio è quello del database, come in register_tenant_admin (0051): non quello di chi lancia il comando.
+        await tx`
+          update public.password_set_tokens set superseded_at = now()
+          where user_id = ${account.id} and purpose = 'invitation' and used_at is null and superseded_at is null
+        `
+        await tx`
+          insert into public.password_set_tokens (user_id, token, expires_at, purpose, delivery_status, delivery_attempted_at, delivered_at)
+          values (${account.id}, ${invitationToken}, now() + interval '48 hours', 'invitation', 'sent', now(), now())
+        `
+      }
+      await recordCommandAudit(tx, {
+        operation: reinvite ? 'platform.admin.invite' : 'platform.admin.add',
+        objectType: 'user',
+        objectId: account.id,
+        details: reinvite ? { email } : { email, accountCreated: !existed },
+      })
+      return { changed: true, existed, invitationToken, reinvite }
+    })
+
+    if (!result.changed) {
+      console.log(`${email} è già amministratore di piattaforma: nessuna modifica`)
+      return
+    }
+    console.log(result.reinvite
+      ? `Amministratore di piattaforma: ${email} (già nominato, senza password: invito rinnovato)`
+      : `Amministratore di piattaforma: ${email} (${result.existed ? 'account esistente' : 'account nuovo'})`)
+    if (result.invitationToken) {
+      const baseUrl = tenantLinkBase(process.env.AUTH_URL ?? '')
+      console.log(`Link per impostare la password (valido 48 ore): ${baseUrl}/set-password?token=${result.invitationToken}`)
+      if (!baseUrl) console.log("AUTH_URL non impostata: anteponi l'indirizzo del sito.")
+    }
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
+/**
+ * Toglie l'attributo di amministratore di piattaforma (MT5-DEC-2). Rifiuta di togliere l'ultimo
+ * amministratore attivo: la piattaforma non resterebbe senza nessuno. Il conteggio e la modifica
+ * stanno nella stessa transazione, e il conteggio blocca le righe degli amministratori (`for
+ * update`, sempre nello stesso ordine): due rimozioni insieme si mettono in fila, e la seconda,
+ * dopo l'attesa, rilegge chi è ancora amministratore e vede che è l'ultimo. Togliere l'attributo a
+ * chi non lo ha non cambia nulla e non lascia voci.
+ */
+async function runPlatformAdminRemove(connectionUrl, { email }) {
+  const sql = postgres(connectionUrl, {
+    prepare: false,
+    max: 1,
+    connect_timeout: 30,
+    idle_timeout: 5,
+    onnotice: notice => console.log(`NOTICE: ${notice.message}`),
+  })
+  try {
+    const changed = await sql.begin(async tx => {
+      await tx`set local role construct_owner`
+      const admins = await tx`
+        select id::text as id, email, id_user_status as status
+        from public.users where is_platform_admin order by id for update
+      `
+      const target = admins.find(row => row.email === email)
+      if (!target) {
+        const [account] = await tx`select id from public.users where email = ${email}`
+        if (!account) throw new Error(`Nessun account con l'email ${email}`)
+        return false
+      }
+      const othersActive = admins.filter(row => row.id !== target.id && Number(row.status) === 2).length
+      if (othersActive === 0) {
+        throw new Error(`Non si toglie l'ultimo amministratore di piattaforma (${email}): nomina prima un altro amministratore. Nessuna modifica.`)
+      }
+      await tx`update public.users set is_platform_admin = false where id = ${target.id}`
+      await recordCommandAudit(tx, {
+        operation: 'platform.admin.remove',
+        objectType: 'user',
+        objectId: target.id,
+        details: { email },
+      })
+      return true
+    })
+    console.log(changed
+      ? `Amministratore di piattaforma tolto: ${email}`
+      : `${email} non è amministratore di piattaforma: nessuna modifica`)
   } finally {
     await sql.end({ timeout: 5 })
   }
@@ -770,6 +1175,10 @@ async function runTestTenantDelete(connectionUrl, { slugs }) {
           await tx`delete from ${tx('public.' + name)} where id_tenant = ${found.id}`
         }
         await tx`delete from public.tenant_host where id_tenant = ${found.id}`
+        // Le voci del registro della piattaforma che nominano il tenant (0057, MT5-DEC-22): chiave
+        // esterna senza ON DELETE, e i comandi di creazione le scrivono. Il comando esiste solo per
+        // il database di prova; il proprietario ha pieno accesso alla tabella.
+        await tx`delete from public.platform_audit_event where id_tenant = ${found.id}`
         await tx`delete from public.tenant where id = ${found.id}`
         deleted.push([slug, true])
       }
@@ -824,6 +1233,9 @@ const [command, argument, ...extraArguments] = process.argv.slice(2)
 const supported = new Set([
   'apply',
   'boundary-check',
+  'platform-admin-add',
+  'platform-admin-remove',
+  'provision-platform-role',
   'provision-runtime-role',
   'query',
   'schema-check',
@@ -834,6 +1246,8 @@ const supported = new Set([
   'test-query',
   'test-reset-e2e',
   'test-delete-user',
+  'test-platform-admin-add',
+  'test-platform-admin-remove',
   'test-tenant-create',
   'test-tenant-host-add',
   'test-tenant-member-add',
@@ -841,7 +1255,7 @@ const supported = new Set([
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...]')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | provision-platform-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | platform-admin-add --email <email> | platform-admin-remove --email <email> | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-platform-admin-add --email <email> | test-platform-admin-remove --email <email> | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...]')
   process.exit(2)
 }
 
@@ -853,11 +1267,16 @@ try {
   else if (command === 'apply') await runMigrations(migrationDatabaseUrl(), parseApplyArguments(commandArguments))
   else if (command === 'boundary-check') await boundaryCheck()
   else if (command === 'provision-runtime-role') await provisionRuntimeRole()
+  else if (command === 'provision-platform-role') await provisionPlatformRole()
   else if (command === 'test-apply') await runMigrations(testMigrationDatabaseUrl(), parseApplyArguments(commandArguments))
   else if (command === 'tenant-create') await runTenantCreate(migrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
   else if (command === 'test-tenant-create') await runTenantCreate(testMigrationDatabaseUrl(), parseTenantCreateArguments(commandArguments))
   else if (command === 'tenant-host-add') await runTenantHostAdd(migrationDatabaseUrl(), parseTenantHostArguments(commandArguments))
   else if (command === 'test-tenant-host-add') await runTenantHostAdd(testMigrationDatabaseUrl(), parseTenantHostArguments(commandArguments))
+  else if (command === 'platform-admin-add') await runPlatformAdminAdd(migrationDatabaseUrl(), parsePlatformAdminArguments(commandArguments))
+  else if (command === 'test-platform-admin-add') await runPlatformAdminAdd(testMigrationDatabaseUrl(), parsePlatformAdminArguments(commandArguments))
+  else if (command === 'platform-admin-remove') await runPlatformAdminRemove(migrationDatabaseUrl(), parsePlatformAdminArguments(commandArguments))
+  else if (command === 'test-platform-admin-remove') await runPlatformAdminRemove(testMigrationDatabaseUrl(), parsePlatformAdminArguments(commandArguments))
   else if (command === 'test-tenant-member-add') await runTestTenantMemberAdd(testMigrationDatabaseUrl(), parseTenantMemberArguments(commandArguments))
   else if (command === 'test-tenant-delete') await runTestTenantDelete(testMigrationDatabaseUrl(), parseTenantDeleteArguments(commandArguments))
   else await runDatabaseCommand(command, argument)

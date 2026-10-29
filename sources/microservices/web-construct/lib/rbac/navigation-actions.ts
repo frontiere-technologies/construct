@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
+import { auditActorOf } from '@/lib/audit/audit-types'
+import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { menuEntry } from '@/lib/db/schema'
@@ -135,6 +137,10 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
         .returning({ id: menuEntry.idMenuEntry })
 
       await writeMenuEntryTags(tx, entry.id, input.tagTranslations)
+      await recordTenantAudit(tx, auditActorOf(actor), {
+        operation: 'menu.create', objectType: 'menu_entry', objectId: entry.id,
+        details: { name: input.name.trim(), parentId: input.idItemParent },
+      })
       return entry
     })
     revalidatePath('/', 'layout')
@@ -200,6 +206,13 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
         .where(eq(menuEntry.idMenuEntry, id))
 
       await writeMenuEntryTags(tx, id, input.tagTranslations)
+      await recordTenantAudit(tx, auditActorOf(actor), {
+        operation: 'menu.update', objectType: 'menu_entry', objectId: id,
+        details: {
+          before: { name: current.name, parentId: current.id_parent },
+          after: { name: input.name.trim(), parentId: input.idItemParent },
+        },
+      })
     })
   } catch (err) {
     throw new Error(`Failed to update item: ${err instanceof Error ? err.message : String(err)}`)
@@ -213,7 +226,15 @@ export async function moveNavigationItem(id: number, move: MoveInput): Promise<v
     await lockNavigationWrites(tx)
     await assertMutable(id, tx)
     const items = await loadMenuItems(tx)
+    const before = items.find(i => i.id_menu_entry === id)
     await reparent(tx, items, id, move.targetParentId, move.orderPosition)
+    await recordTenantAudit(tx, auditActorOf(actor), {
+      operation: 'menu.move', objectType: 'menu_entry', objectId: id,
+      details: {
+        before: { parentId: before?.id_parent ?? null, position: before?.order_position ?? null },
+        after: { parentId: move.targetParentId, position: move.orderPosition },
+      },
+    })
   })
   revalidatePath('/', 'layout')
 }
@@ -235,6 +256,10 @@ export async function deleteNavigationItem(id: number): Promise<void> {
       // niente. Le concessioni della voce se ne vanno con lei, per la cascata su
       // role_functionality.id_menu_entry (migrazione 0024): non c'è niente da raccogliere prima.
       await tx.delete(menuEntry).where(eq(menuEntry.idMenuEntry, id))
+      const removed = items.find(i => i.id_menu_entry === id)
+      await recordTenantAudit(tx, auditActorOf(actor), {
+        operation: 'menu.delete', objectType: 'menu_entry', objectId: id, details: { name: removed?.name ?? null },
+      })
     })
   } catch (err) {
     throw new Error(`Failed to delete item: ${err instanceof Error ? err.message : String(err)}`)

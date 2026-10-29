@@ -3,15 +3,24 @@ import type { NextAuthConfig } from 'next-auth'
 /** Le pagine di chi ha fatto l'accesso senza un tenant scelto: la scelta e il messaggio. */
 const TENANT_STATE_PAGES = ['/select-tenant', '/no-tenant']
 
+/** La console della piattaforma (pezzo 5a, MT5-DEC-3): questa pagina e le sue sottopagine. */
+const PLATFORM_HOME = '/platform'
+
+function isPlatformPath(pathname: string): boolean {
+  return pathname === PLATFORM_HOME || pathname.startsWith(PLATFORM_HOME + '/')
+}
+
 /**
  * Dove sta di casa una sessione secondo lo stato del tenant: `choose` → la pagina di scelta,
- * `none` → il messaggio "Non sei configurato su questo indirizzo", `ready` → la home. Uno stato
+ * `none` → il messaggio "Non sei configurato su questo indirizzo" (per un amministratore di
+ * piattaforma la console, MT5-DEC-3), `ready` → la home. `support` (pezzo 5a, §3.2) è come `ready`:
+ * la piattaforma lavora nel tenant assistito, che il callback jwt ha già rivalidato. Uno stato
  * mancante o sconosciuto vale `none`, come nel callback `session`: mai un tenant per difetto.
  */
-function homeOfTenantState(tenantState: unknown): '/' | '/select-tenant' | '/no-tenant' {
-  if (tenantState === 'ready') return '/'
+function homeOfTenantState(tenantState: unknown, isPlatformAdmin: boolean): '/' | '/select-tenant' | '/no-tenant' | '/platform' {
+  if (tenantState === 'ready' || tenantState === 'support') return '/'
   if (tenantState === 'choose') return '/select-tenant'
-  return '/no-tenant'
+  return isPlatformAdmin ? PLATFORM_HOME : '/no-tenant'
 }
 
 export const authConfig = {
@@ -47,7 +56,12 @@ export const authConfig = {
       // deve scegliere vede solo la pagina di scelta, chi non ha tenant sull'indirizzo solo il
       // messaggio; con un tenant scelto le due pagine riportano alla home. /set-password resta
       // aperta in ogni stato, come oggi (il link d'invito funziona anche con una sessione aperta).
-      const home = homeOfTenantState((session?.user as { tenantState?: unknown }).tenantState)
+      // L'amministratore di piattaforma (MT5-DEC-3) apre la console in ogni stato del tenant: il flag
+      // del token è solo un indizio per il proxy, ogni porta della console rilegge l'attributo dal
+      // database (`requirePlatformAdmin*`). Sull'indirizzo dedicato la pagina risponde 404 da sé.
+      const isPlatformAdmin = (session?.user as { isPlatformAdmin?: unknown }).isPlatformAdmin === true
+      if (isPlatformAdmin && isPlatformPath(pathname)) return true
+      const home = homeOfTenantState((session?.user as { tenantState?: unknown }).tenantState, isPlatformAdmin)
       const tenantPage = TENANT_STATE_PAGES.find(p => pathname === p || pathname.startsWith(p + '/'))
       if (isAuthOnlyRedirect) {
         return Response.redirect(new URL(home, nextUrl))

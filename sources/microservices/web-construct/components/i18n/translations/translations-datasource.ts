@@ -8,7 +8,7 @@ import {
   type TranslationsGridFilterModel, type TranslationsGridSortItem,
 } from '@/lib/i18n/translations-grid-query'
 
-export function createTranslationsDatasource(): IDatasource {
+export function createTranslationsDatasource(endpoint: string = '/api/i18n/translations-grid'): IDatasource {
   return {
     getRows(params: IGetRowsParams) {
       const query = buildTranslationsGridQuery(
@@ -17,7 +17,7 @@ export function createTranslationsDatasource(): IDatasource {
         params.sortModel as TranslationsGridSortItem[],
         params.filterModel as TranslationsGridFilterModel,
       )
-      fetch('/api/i18n/translations-grid', {
+      fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(query),

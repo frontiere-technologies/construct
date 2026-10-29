@@ -4724,3 +4724,908 @@ begin
   ]$seed$::jsonb) into v_summary;
   raise notice '%', v_summary;
 end $$;
+
+-- Migration: 0057_platform_admin_and_audit.sql
+-- Multi-tenancy, pezzo 5a (specifica 2026-10-26, §2.1, §2.3, §2.4, MT5-DEC-1, MT5-DEC-10, MT5-DEC-14,
+-- MT5-DEC-15, MT5-DEC-23): l'attributo di amministratore di piattaforma, il permesso di assistenza
+-- del tenant, i due registri delle modifiche (del tenant e della piattaforma) e il permesso per
+-- leggere il registro del tenant. Gira come construct_owner, con app.tenant_id vuoto finché la
+-- sezione 7 non lo imposta; la sezione 7 lo rimette com'era prima di uscire.
+
+-- 1. L'amministratore di piattaforma (§2.1, MT5-DEC-1) -----------------------------------------
+-- Una qualità dell'account, globale: non rende membro di nessun tenant e non dà accesso ai dati dei
+-- tenant. Il comando di db.mjs e la console lo impostano (Task 2 e seguenti).
+alter table public.users add column is_platform_admin boolean not null default false;
+
+-- Chi può cambiarlo. Sbloccare l'identità di piattaforma (MT5-RISK-1) dipende da questo valore, ma
+-- users è scrivibile dal ruolo dell'app (0047) e una concessione per colonna spezzerebbe gli insert
+-- di Drizzle, che elencano ogni colonna con il suo DEFAULT. Il confine è quindi un trigger: rifiuta
+-- (42501) un valore vero in inserimento e ogni cambio in aggiornamento, a meno che chi scrive sia
+-- construct_owner o ne erediti i privilegi (migrazioni, comandi di db.mjs con `set local role
+-- construct_owner`, identità di piattaforma). Il ruolo dell'app e il suo login non lo sono.
+create function app_private.guard_platform_admin_flag() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+begin
+  if (case tg_op when 'INSERT' then new.is_platform_admin
+        else new.is_platform_admin is distinct from old.is_platform_admin end)
+     and not pg_catalog.pg_has_role(current_user, 'construct_owner', 'USAGE') then
+    raise exception using errcode = '42501',
+      message = 'is_platform_admin can only be changed by construct_owner';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app_private.guard_platform_admin_flag() from public;
+create trigger users_platform_admin_guard
+  before insert or update on public.users
+  for each row execute function app_private.guard_platform_admin_flag();
+
+-- 2. Il permesso di assistenza (§2.3, MT5-DEC-10) ----------------------------------------------
+-- Dati di tenant, scritti dall'amministratore del tenant nelle impostazioni: fino a quando vale il
+-- permesso, chi l'ha concesso e quando. Un permesso scaduto o revocato (support_until nullo o
+-- passato) non vale. Una copia dal modello parte senza permesso: copy_tenant non copia queste
+-- colonne, il permesso è del tenant che lo concede.
+alter table public.tenant_settings
+  add column support_until timestamptz,
+  add column support_granted_by uuid references public.users(id) on delete set null,
+  add column support_granted_at timestamptz;
+
+-- 3. Una classe nuova nel registro delle tabelle: globale, solo inserimento ---------------------
+-- Il registro dei tenant conosce tre classi (0046). Il registro della piattaforma (sezione 5) è
+-- scritto dal ruolo dell'app (lingue e traduzioni, MT5-DEC-24) ma non deve poterlo mai rileggere,
+-- modificare o cancellare: serve una classe che dia al ruolo dell'app il solo `insert`, e che il
+-- contratto di schema e boundary-check possano pretendere così com'è. Il proprietario ha tutto,
+-- come su ogni tabella globale.
+alter table app_private.table_class drop constraint table_class_class_check;
+alter table app_private.table_class add constraint table_class_class_check
+  check (class in ('tenant', 'global_read', 'global_write', 'global_insert_only'));
+
+create function app_private.declare_global_insert_only_table(p_table regclass, p_reason text)
+returns void
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_name text;
+  v_policy record;
+begin
+  if p_reason is null or pg_catalog.btrim(p_reason) = '' then
+    raise exception 'a global table needs a reason';
+  end if;
+  select c.relname into v_name from pg_catalog.pg_class c where c.oid = p_table;
+
+  execute pg_catalog.format('alter table %s enable row level security', p_table);
+  execute pg_catalog.format('alter table %s force row level security', p_table);
+  for v_policy in select p.polname from pg_catalog.pg_policy p where p.polrelid = p_table loop
+    execute pg_catalog.format('drop policy %I on %s', v_policy.polname, p_table);
+  end loop;
+  execute pg_catalog.format(
+    'create policy global_owner on %s for all to construct_owner using (true) with check (true)', p_table);
+  -- Nessuna policy di lettura per il ruolo dell'app, e nessun privilegio oltre `insert`.
+  execute pg_catalog.format(
+    'create policy global_insert on %s for insert to construct_runtime with check (true)', p_table);
+  execute pg_catalog.format('revoke all on %s from construct_runtime', p_table);
+  execute pg_catalog.format('grant insert on %s to construct_runtime', p_table);
+
+  insert into app_private.table_class (table_name, class, reason)
+  values (v_name, 'global_insert_only', p_reason)
+  on conflict (table_name) do update set class = excluded.class, reason = excluded.reason;
+end $$;
+revoke all on function app_private.declare_global_insert_only_table(regclass, text) from public;
+
+-- 4. Il registro del tenant (§2.4, MT5-DEC-14, MT5-DEC-15) -------------------------------------
+-- Tabella di tenant, protetta come le altre. La scrive l'app dentro la transazione della modifica;
+-- la legge l'amministratore del tenant. Contiene anche le azioni della piattaforma in assistenza
+-- (veste 'platform'). Il ruolo dell'app ha solo select e insert: una voce non si modifica e non si
+-- cancella dall'app. Né persona né email hanno una chiave esterna: la voce deve sopravvivere
+-- all'account.
+create table public.tenant_audit_event (
+  id bigint generated always as identity,
+  id_tenant bigint not null default app_private.current_tenant_id() references public.tenant(id),
+  occurred_at timestamptz not null default now(),
+  actor_user_id uuid,
+  actor_email text,
+  actor_kind text not null check (actor_kind in ('person', 'platform', 'command')),
+  operation text not null,
+  object_type text,
+  object_id text,
+  details jsonb not null default '{}'::jsonb,
+  primary key (id_tenant, id)
+);
+create index tenant_audit_event_occurred_idx on public.tenant_audit_event (id_tenant, occurred_at desc);
+select app_private.protect_tenant_table('public.tenant_audit_event'::regclass);
+-- I privilegi di default (0002) danno al ruolo dell'app anche update e delete: qui si tolgono. Una
+-- colonna `generated always as identity` non chiede al chiamante nessun privilegio sulla sequenza
+-- (il valore lo prende il motore, non la persona che inserisce): la concessione di default su di
+-- essa (usage, select) si toglie del tutto, e non resta niente che permetta di leggerla o muoverla.
+revoke update, delete, truncate on public.tenant_audit_event from construct_runtime;
+revoke all on sequence public.tenant_audit_event_id_seq from construct_runtime;
+
+-- 5. Il registro della piattaforma (§2.4, MT5-DEC-14, MT5-DEC-15, MT5-DEC-22, MT5-DEC-24) -------
+-- Le stesse colonne, più il tenant toccato (facoltativo: un'azione può non riguardare un tenant).
+-- Globale: lo scrivono l'identità di piattaforma, i comandi di db.mjs e il ruolo dell'app per
+-- lingue e traduzioni; lo legge solo la piattaforma, con la sua identità (membro di construct_owner).
+-- Il ruolo dell'app ha il solo `insert`.
+create table public.platform_audit_event (
+  id bigint generated always as identity primary key,
+  id_tenant bigint references public.tenant(id),
+  occurred_at timestamptz not null default now(),
+  actor_user_id uuid,
+  actor_email text,
+  actor_kind text not null check (actor_kind in ('person', 'platform', 'command')),
+  operation text not null,
+  object_type text,
+  object_id text,
+  details jsonb not null default '{}'::jsonb
+);
+create index platform_audit_event_occurred_idx on public.platform_audit_event (occurred_at desc);
+create index platform_audit_event_tenant_idx on public.platform_audit_event (id_tenant, occurred_at desc);
+select app_private.declare_global_insert_only_table('public.platform_audit_event',
+  'registro della piattaforma; il ruolo dell''app ci inserisce soltanto (pezzo 5a, MT5-DEC-15, MT5-DEC-24)');
+-- Come sopra: nessun privilegio sulla sequenza dell'identità.
+revoke all on sequence public.platform_audit_event_id_seq from construct_runtime;
+
+-- 6. Il permesso per leggere il registro del tenant (modello 0041) ------------------------------
+-- Direttamente sotto la categoria Amministrazione, dopo manage-tenant-settings (0053).
+insert into public.permission
+  (name, code, id_parent, order_position, description, item_translation, kind, origin, is_immutable)
+select 'read-tenant-audit', 'read-tenant-audit', c.id_permission, 5,
+       'Leggere il registro delle modifiche del tenant',
+       '{"EN":{"name":"Read the tenant audit log"},"IT":{"name":"Leggere il registro delle modifiche del tenant"}}'::jsonb,
+       'GRANT', 'SOURCE', 1
+from public.permission c
+where c.name = 'Amministrazione' and c.id_parent = -1 and c.kind = 'CATEGORY' and c.origin = 'SOURCE';
+
+-- 7. Le righe dei tenant che esistono già -------------------------------------------------------
+-- Il permesso nuovo va al ruolo TENANT_ADMIN di ogni tenant, il modello compreso: il modello lo
+-- passa alle copie future. role_permission è una tabella di tenant, quindi si visita un tenant alla
+-- volta cambiando app.tenant_id, e lo si rimette com'era prima di uscire.
+do $$
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_tenant record;
+begin
+  for v_tenant in select t.id from public.tenant t order by t.id loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant.id::text, true);
+    insert into public.role_permission (id_tenant, id_role, id_permission)
+    select v_tenant.id, r.id_role, p.id_permission
+    from public.role r
+    cross join public.permission p
+    where r.id_tenant = v_tenant.id and r.system_key = 'TENANT_ADMIN' and p.code = 'read-tenant-audit'
+    on conflict do nothing;
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', coalesce(v_origine, ''), true);
+end
+$$;
+
+-- 8. La copia di un tenant salta il registro --------------------------------------------------------
+-- Stessa firma e stesso corpo della 0053, con un solo cambio: tenant_audit_event fra le tabelle
+-- saltate apposta. Il registro è la storia di un tenant: un tenant nuovo parte con il registro
+-- vuoto, e quello del modello resta al modello.
+create or replace function app_private.copy_tenant(p_source bigint, p_slug text, p_name text, p_is_template boolean)
+returns bigint
+language plpgsql security invoker set search_path = '' set client_min_messages = warning as $$
+declare
+  -- Le tabelle di tenant che questa funzione conosce. Una tabella di tenant nuova va aggiunta a
+  -- uno dei due elenchi, e se va copiata anche al corpo della funzione: finché non succede la
+  -- copia si rifiuta, invece di far nascere tenant senza quei dati (Review Focus #4).
+  v_copiate constant text[] := array['menu_entry', 'menu_entry_tag', 'role', 'role_permission',
+                                     'role_functionality', 'app_theme', 'tenant_settings'];
+  v_saltate constant text[] := array['user_role', 'tenant_membership', 'tenant_audit_event'];
+  v_sconosciuta text;
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_nuovo bigint;
+begin
+  select c.table_name into v_sconosciuta
+  from app_private.table_class c
+  where c.class = 'tenant' and c.table_name <> all (v_copiate || v_saltate)
+  order by c.table_name
+  limit 1;
+  if v_sconosciuta is not null then
+    raise exception using errcode = 'P0001', message = 'tenant_table_not_copied:' || v_sconosciuta;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = p_source) then
+    raise exception using errcode = 'P0001', message = 'source_tenant_missing';
+  end if;
+
+  insert into public.tenant (slug, name, is_template) values (p_slug, p_name, p_is_template)
+  returning id into v_nuovo;
+
+  -- Lettura, con il contesto del tenant di partenza. Le tabelle temporanee si ricreano a ogni
+  -- chiamata: la funzione si può chiamare più volte nella stessa transazione.
+  perform pg_catalog.set_config('app.tenant_id', p_source::text, true);
+
+  drop table if exists pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema,
+    pg_temp.copy_tenant_impostazioni;
+
+  create temporary table copy_tenant_voce as
+  select m.id_menu_entry as id_vecchio, pg_catalog.nextval('public.s_id_menu_entry') as id_nuovo,
+         m.id_parent, m.name, m.order_position, m.navbar_position, m.icon_path, m.id_functionality_type,
+         m.functionality_link, m.open_in_new_tab, m.item_translation, m.is_immutable
+  from public.menu_entry m
+  where m.id_tenant = p_source;
+
+  create temporary table copy_tenant_ruolo as
+  select r.id_role as id_vecchio, pg_catalog.nextval('public.s_id_role') as id_nuovo,
+         r.id_role_type, r.description, r.system_key
+  from public.role r
+  where r.id_tenant = p_source;
+
+  create temporary table copy_tenant_etichetta as
+  select t.id_menu_entry, t.tag_lan, t.tag from public.menu_entry_tag t where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_permesso as
+  select p.id_role, p.id_permission from public.role_permission p where p.id_tenant = p_source;
+
+  create temporary table copy_tenant_funzionalita as
+  select f.id_role, f.id_menu_entry from public.role_functionality f where f.id_tenant = p_source;
+
+  create temporary table copy_tenant_tema as
+  select t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark
+  from public.app_theme t
+  where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_impostazioni as
+  select s.self_registration from public.tenant_settings s where s.id_tenant = p_source;
+
+  -- Scrittura, con il contesto del tenant nuovo e gli id nuovi. Il controllo sul genitore delle
+  -- voci è differito alla fine della transazione, quindi l'ordine delle righe non conta.
+  perform pg_catalog.set_config('app.tenant_id', v_nuovo::text, true);
+
+  insert into public.menu_entry (id_menu_entry, id_tenant, id_parent, name, order_position, navbar_position,
+    icon_path, id_functionality_type, functionality_link, open_in_new_tab, item_translation, is_immutable,
+    created_at, updated_at)
+  select v.id_nuovo, v_nuovo, genitore.id_nuovo, v.name, v.order_position, v.navbar_position,
+         v.icon_path, v.id_functionality_type, v.functionality_link, v.open_in_new_tab, v.item_translation,
+         v.is_immutable, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_voce v
+  left join pg_temp.copy_tenant_voce genitore on genitore.id_vecchio = v.id_parent;
+
+  insert into public.menu_entry_tag (id_tenant, id_menu_entry, tag_lan, tag, date_ins)
+  select v_nuovo, v.id_nuovo, e.tag_lan, e.tag, pg_catalog.now()
+  from pg_temp.copy_tenant_etichetta e
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = e.id_menu_entry;
+
+  insert into public.role (id_role, id_tenant, id_role_type, description, system_key, date_ins, date_mod)
+  select r.id_nuovo, v_nuovo, r.id_role_type, r.description, r.system_key, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_ruolo r;
+
+  -- Il permesso resta lo stesso id: il catalogo dei permessi è globale.
+  insert into public.role_permission (id_tenant, id_role, id_permission)
+  select v_nuovo, r.id_nuovo, p.id_permission
+  from pg_temp.copy_tenant_permesso p
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = p.id_role;
+
+  insert into public.role_functionality (id_tenant, id_role, id_menu_entry)
+  select v_nuovo, r.id_nuovo, v.id_nuovo
+  from pg_temp.copy_tenant_funzionalita f
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = f.id_role
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = f.id_menu_entry;
+
+  insert into public.app_theme (id_tenant, primary_color, primary_dark, background_light, card_light,
+    accent_light, sidebar_light, background_dark, card_dark, accent_dark, sidebar_dark, date_mod)
+  select v_nuovo, t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark, pg_catalog.now()
+  from pg_temp.copy_tenant_tema t;
+
+  -- Sempre una riga: ogni tenant ha le sue impostazioni.
+  insert into public.tenant_settings (id_tenant, self_registration, updated_at)
+  values (v_nuovo, coalesce((select s.self_registration from pg_temp.copy_tenant_impostazioni s), false),
+          pg_catalog.now());
+
+  drop table pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema,
+    pg_temp.copy_tenant_impostazioni;
+
+  -- Il tenant di chi ha chiamato torna com'era: le istruzioni successive della transazione non
+  -- devono lavorare nel tenant nuovo.
+  perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+  return v_nuovo;
+end;
+$$;
+revoke all on function app_private.copy_tenant(bigint, text, text, boolean) from public;
+
+-- 9. Nessun ingresso automatico per un amministratore di piattaforma (MT5-DEC-23) ---------------
+-- Corpo della 0054 più un controllo: chi è amministratore di piattaforma non entra da solo nel
+-- tenant predefinito, così chi non è membro di nessun tenant arriva sulla console. Chi è già membro
+-- riceve il suo stato come prima (MT5-DEC-1: può lavorare in un tenant come chiunque altro): il
+-- controllo viene dopo. Stessa firma: i permessi restano.
+create or replace function public.ensure_default_membership(p_user_id uuid) returns text
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_status text;
+begin
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  if found then
+    return v_status;
+  end if;
+  if exists (select 1 from public.users u where u.id = p_user_id and u.is_platform_admin) then
+    return null;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = v_tenant and t.slug = 'default') then
+    return null;
+  end if;
+  if not exists (
+    select 1 from public.tenant_settings s where s.id_tenant = v_tenant and s.self_registration
+  ) then
+    return null;
+  end if;
+  if app_private.is_member_elsewhere(p_user_id) then
+    return null;
+  end if;
+
+  insert into public.tenant_membership (id_tenant, user_id, status) values (v_tenant, p_user_id, 'active')
+  on conflict (id_tenant, user_id) do nothing;
+  -- Se una transazione concorrente ha creato la riga per prima, vale il suo stato.
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  return v_status;
+end;
+$$;
+
+-- Migration: 0058_remove_role_2.sql
+-- Multi-tenancy, pezzo 5a (specifica 2026-10-26, §2.5, MT5-DEC-18): il ruolo "Tenant Super
+-- Administrator" (ruolo 2 della baseline, senza chiave di sistema e senza logica dal pezzo 1) si
+-- elimina da ogni tenant e dal modello. Gira come construct_owner, con app.tenant_id vuoto finché
+-- il ciclo non lo imposta; il ciclo lo rimette com'era prima di uscire.
+--
+-- Il ruolo si riconosce da descrizione e assenza di chiave di sistema, tenant per tenant: nelle
+-- copie (copy_tenant, 0050/0053) ha un id nuovo, quindi l'id 2 da solo non basta. Le righe di
+-- user_role, role_permission e role_functionality che lo nominano seguono la cancellazione: le
+-- chiavi esterne composte (id_tenant, id_role) sono tutte `on delete cascade` (0046).
+--
+-- Chi aveva solo quel ruolo conserva quello di base: prima di cancellare, ogni persona che lo
+-- possiede e non ha REGISTERED lo riceve. Nella pratica lo hanno già tutti; la migrazione lo
+-- garantisce invece di supporlo. Rieseguirla non fa niente dove il ruolo non c'è più.
+do $$
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_tenant record;
+begin
+  for v_tenant in select t.id from public.tenant t order by t.id loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant.id::text, true);
+
+    insert into public.user_role (id_tenant, user_id, id_role)
+    select v_tenant.id, ur.user_id, base.id_role
+    from public.user_role ur
+    join public.role r on r.id_tenant = ur.id_tenant and r.id_role = ur.id_role
+    join public.role base on base.id_tenant = v_tenant.id and base.system_key = 'REGISTERED'
+    where ur.id_tenant = v_tenant.id
+      and r.system_key is null and r.description = 'Tenant Super Administrator'
+    on conflict do nothing;
+
+    delete from public.role r
+    where r.id_tenant = v_tenant.id
+      and r.system_key is null and r.description = 'Tenant Super Administrator';
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', coalesce(v_origine, ''), true);
+end
+$$;
+
+-- Migration: 0059_platform_translations.sql
+-- Multi-tenancy, pezzo 5a (specifica 2026-10-26, §3.3, §3.4, MT5-DEC-3, MT5-DEC-4, MT5-DEC-2,
+-- MT5-OK-2): tutte le parole dell'interfaccia del pezzo (console, elenco dei tenant, amministratori
+-- di piattaforma, scheda del tenant, assistenza, fascia, registro, messaggio del tenant sospeso),
+-- e la funzione che conta le persone e gli amministratori di ogni tenant per l'elenco della
+-- console. Le parole dei Task 8, 9 e 10 stanno qui perché una migrazione sola le semina tutte:
+-- chi le usa dopo le trova già, e una chiave nuova che serva davvero va in una migrazione propria.
+-- Gira come construct_owner, con app.tenant_id vuoto: la funzione della sezione 2 lo cambia solo
+-- mentre gira e lo rimette com'era prima di uscire.
+
+-- 1. Le chiavi di traduzione ---------------------------------------------------------------------
+-- Solo additiva: apply_translation_seed non riscrive mai una chiave esistente. I segnaposto sono
+-- {{nome}}, la forma di lib/i18n/interpolate. «Esci» e «Riprova» altrove riusano chiavi esistenti.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key": "platform.nav.section", "namespace": "platform", "module": "rbac", "description": "Sidebar: the platform console section, and the entry that leads to it from a tenant", "it": "Piattaforma", "en": "Platform"},
+    {"key": "platform.nav.tenants", "namespace": "platform", "module": "rbac", "description": "Console sidebar: the tenant list", "it": "Tenant", "en": "Tenants"},
+    {"key": "platform.nav.admins", "namespace": "platform", "module": "rbac", "description": "Console sidebar: the platform administrators page", "it": "Amministratori", "en": "Administrators"},
+    {"key": "platform.nav.audit", "namespace": "platform", "module": "rbac", "description": "Console sidebar: the platform audit log", "it": "Registro", "en": "Audit log"},
+    {"key": "platform.nav.languages", "namespace": "platform", "module": "rbac", "description": "Console sidebar: the languages catalog", "it": "Lingue", "en": "Languages"},
+    {"key": "platform.nav.translations", "namespace": "platform", "module": "rbac", "description": "Console sidebar: the translations catalog", "it": "Traduzioni", "en": "Translations"},
+    {"key": "platform.nav.back_to_tenant", "namespace": "platform", "module": "rbac", "description": "Console sidebar: link back to the tenant the person belongs to on this address", "it": "Torna al tenant", "en": "Back to the tenant"},
+    {"key": "platform.tenants.title", "namespace": "platform", "module": "rbac", "description": "Console tenant list: page title", "it": "Tenant", "en": "Tenants"},
+    {"key": "platform.tenants.subtitle", "namespace": "platform", "module": "rbac", "description": "Console tenant list: page subtitle", "it": "Tutti i tenant della piattaforma. Gli archiviati si vedono solo con il filtro Stato.", "en": "Every tenant on the platform. Archived ones show only with the Status filter."},
+    {"key": "platform.tenants.name", "namespace": "platform", "module": "rbac", "description": "Console tenant list: name column", "it": "Nome", "en": "Name"},
+    {"key": "platform.tenants.slug", "namespace": "platform", "module": "rbac", "description": "Console tenant list: slug column", "it": "Slug", "en": "Slug"},
+    {"key": "platform.tenants.host", "namespace": "platform", "module": "rbac", "description": "Console tenant list: primary host column", "it": "Indirizzo principale", "en": "Primary address"},
+    {"key": "platform.tenants.status", "namespace": "platform", "module": "rbac", "description": "Console tenant list: status column", "it": "Stato", "en": "Status"},
+    {"key": "platform.tenants.members", "namespace": "platform", "module": "rbac", "description": "Console tenant list: number of active members column", "it": "Persone attive", "en": "Active people"},
+    {"key": "platform.tenants.admins", "namespace": "platform", "module": "rbac", "description": "Console tenant list: tenant administrators column (their emails)", "it": "Amministratori", "en": "Administrators"},
+    {"key": "platform.tenants.created_at", "namespace": "platform", "module": "rbac", "description": "Console tenant list: creation date column", "it": "Creato", "en": "Created"},
+    {"key": "platform.tenants.template_badge", "namespace": "platform", "module": "rbac", "description": "Console tenant list: badge that marks the template tenant", "it": "Modello", "en": "Template"},
+    {"key": "platform.tenants.status.active", "namespace": "platform", "module": "rbac", "description": "Tenant status badge and filter option: active", "it": "Attivo", "en": "Active"},
+    {"key": "platform.tenants.status.suspended", "namespace": "platform", "module": "rbac", "description": "Tenant status badge and filter option: suspended", "it": "Sospeso", "en": "Suspended"},
+    {"key": "platform.tenants.status.archived", "namespace": "platform", "module": "rbac", "description": "Tenant status badge and filter option: archived", "it": "Archiviato", "en": "Archived"},
+    {"key": "platform.tenants.new", "namespace": "platform", "module": "rbac", "description": "Console tenant list: button that opens the new-tenant dialog", "it": "Nuovo tenant", "en": "New tenant"},
+    {"key": "platform.admins.title", "namespace": "platform", "module": "rbac", "description": "Platform administrators page: title", "it": "Amministratori di piattaforma", "en": "Platform administrators"},
+    {"key": "platform.admins.subtitle", "namespace": "platform", "module": "rbac", "description": "Platform administrators page: subtitle", "it": "Chi può usare la console. Non è un ruolo di tenant e non dà accesso ai dati dei tenant.", "en": "Who can use the console. It is not a tenant role and gives no access to tenant data."},
+    {"key": "platform.admins.email", "namespace": "platform", "module": "rbac", "description": "Platform administrators grid: email column", "it": "Email", "en": "Email"},
+    {"key": "platform.admins.name", "namespace": "platform", "module": "rbac", "description": "Platform administrators grid: name column", "it": "Nome", "en": "Name"},
+    {"key": "platform.admins.status", "namespace": "platform", "module": "rbac", "description": "Platform administrators grid: account status column", "it": "Stato", "en": "Status"},
+    {"key": "platform.admins.you", "namespace": "platform", "module": "rbac", "description": "Platform administrators grid: marks the row of the signed-in person", "it": "Tu", "en": "You"},
+    {"key": "platform.admins.empty", "namespace": "platform", "module": "rbac", "description": "Platform administrators grid: empty state", "it": "Nessun amministratore di piattaforma.", "en": "No platform administrators."},
+    {"key": "platform.admins.add.open", "namespace": "platform", "module": "rbac", "description": "Platform administrators page: button that opens the add dialog", "it": "Aggiungi amministratore", "en": "Add administrator"},
+    {"key": "platform.admins.add.title", "namespace": "platform", "module": "rbac", "description": "Add-administrator dialog: title", "it": "Aggiungi un amministratore di piattaforma", "en": "Add a platform administrator"},
+    {"key": "platform.admins.add.email_label", "namespace": "platform", "module": "rbac", "description": "Add-administrator dialog: label of the email field", "it": "Email", "en": "Email"},
+    {"key": "platform.admins.add.submit", "namespace": "platform", "module": "rbac", "description": "Add-administrator dialog: button that adds the administrator", "it": "Aggiungi", "en": "Add"},
+    {"key": "platform.admins.add.done", "namespace": "platform", "module": "rbac", "description": "Add-administrator dialog: outcome after a successful add for an account that can already sign in", "it": "Amministratore aggiunto.", "en": "Administrator added."},
+    {"key": "platform.admins.add.done_invited", "namespace": "platform", "module": "rbac", "description": "Add-administrator dialog: outcome after a successful add for a new account, which gets an invitation email", "it": "Amministratore aggiunto. Riceverà un'email per impostare la password.", "en": "Administrator added. They will receive an email to set their password."},
+    {"key": "platform.admins.add.invalid_email", "namespace": "platform", "module": "rbac", "description": "Add-administrator dialog: shown when the text is not a valid email address", "it": "Scrivi un indirizzo email valido.", "en": "Enter a valid email address."},
+    {"key": "platform.admins.add.error", "namespace": "platform", "module": "rbac", "description": "Add-administrator dialog: generic failure. The server message is never shown", "it": "Non è stato possibile aggiungere l'amministratore.", "en": "The administrator could not be added."},
+    {"key": "platform.admins.remove.action", "namespace": "platform", "module": "rbac", "description": "Platform administrators grid: row button that removes the administrator attribute", "it": "Togli", "en": "Remove"},
+    {"key": "platform.admins.remove.title", "namespace": "platform", "module": "rbac", "description": "Remove-administrator confirmation: title", "it": "Togliere l'amministratore?", "en": "Remove the administrator?"},
+    {"key": "platform.admins.remove.message", "namespace": "platform", "module": "rbac", "description": "Remove-administrator confirmation: message. {{email}} is the account email", "it": "{{email}} non potrà più usare la console della piattaforma.", "en": "{{email}} will no longer be able to use the platform console."},
+    {"key": "platform.admins.remove.confirm", "namespace": "platform", "module": "rbac", "description": "Remove-administrator confirmation: confirm button", "it": "Togli", "en": "Remove"},
+    {"key": "platform.admins.remove.error", "namespace": "platform", "module": "rbac", "description": "Remove-administrator confirmation: generic failure. The server message is never shown", "it": "Non è stato possibile togliere l'amministratore. Non si può togliere l'ultimo amministratore attivo.", "en": "The administrator could not be removed. The last active administrator cannot be removed."},
+    {"key": "platform.admins.remove.last_hint", "namespace": "platform", "module": "rbac", "description": "Platform administrators grid: tooltip on the disabled remove button of the last active administrator", "it": "Non si può togliere l'ultimo amministratore attivo.", "en": "The last active administrator cannot be removed."},
+    {"key": "platform.tenant.new.title", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: title", "it": "Nuovo tenant", "en": "New tenant"},
+    {"key": "platform.tenant.new.name", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: label of the name field", "it": "Nome", "en": "Name"},
+    {"key": "platform.tenant.new.slug", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: label of the slug field", "it": "Slug", "en": "Slug"},
+    {"key": "platform.tenant.new.slug_hint", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: hint under the slug field", "it": "Lettere minuscole, cifre e trattini. Si propone dal nome.", "en": "Lowercase letters, digits and hyphens. Suggested from the name."},
+    {"key": "platform.tenant.new.host", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: label of the optional dedicated host field", "it": "Indirizzo dedicato (facoltativo)", "en": "Dedicated address (optional)"},
+    {"key": "platform.tenant.new.host_hint", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: hint under the host field", "it": "Senza indirizzo il tenant risponde sull'indirizzo principale.", "en": "Without an address the tenant answers on the main address."},
+    {"key": "platform.tenant.new.admin_email", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: label of the first administrator email field", "it": "Email del primo amministratore", "en": "First administrator email"},
+    {"key": "platform.tenant.new.submit", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: button that creates the tenant", "it": "Crea tenant", "en": "Create tenant"},
+    {"key": "platform.tenant.new.done_invited", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: outcome when the first administrator is a new account", "it": "Tenant creato. Il primo amministratore riceve l'email d'invito.", "en": "Tenant created. The first administrator receives the invitation email."},
+    {"key": "platform.tenant.new.done_existing", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: outcome when the first administrator already has a password (no email)", "it": "Tenant creato. L'account esiste già con una password: può entrare subito.", "en": "Tenant created. The account already has a password: they can sign in right away."},
+    {"key": "platform.tenant.new.error", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: generic failure. The server message is never shown", "it": "Non è stato possibile creare il tenant.", "en": "The tenant could not be created."},
+    {"key": "platform.tenant.new.error_taken", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: the slug or the dedicated address belongs to another tenant", "it": "Slug o indirizzo già in uso.", "en": "Slug or address already in use."},
+    {"key": "platform.tenant.detail.data", "namespace": "platform", "module": "rbac", "description": "Tenant page: section with name, slug and status", "it": "Dati", "en": "Details"},
+    {"key": "platform.tenant.detail.hosts", "namespace": "platform", "module": "rbac", "description": "Tenant page: section with the dedicated addresses", "it": "Indirizzi", "en": "Addresses"},
+    {"key": "platform.tenant.detail.admins", "namespace": "platform", "module": "rbac", "description": "Tenant page: section with the tenant administrators", "it": "Amministratori", "en": "Administrators"},
+    {"key": "platform.tenant.detail.support", "namespace": "platform", "module": "rbac", "description": "Tenant page: section with the support consent and the button that enters the tenant", "it": "Assistenza", "en": "Support"},
+    {"key": "platform.tenant.detail.events", "namespace": "platform", "module": "rbac", "description": "Tenant page: section with the platform audit rows about this tenant", "it": "Eventi della piattaforma", "en": "Platform events"},
+    {"key": "platform.tenant.detail.events_empty", "namespace": "platform", "module": "rbac", "description": "Tenant page: empty list of platform events", "it": "Nessun evento.", "en": "No events."},
+    {"key": "platform.tenant.detail.inactive_hint", "namespace": "platform", "module": "rbac", "description": "Tenant page: why the administrator actions are disabled", "it": "Il tenant è sospeso o archiviato: non si aggiungono amministratori né si rimandano inviti.", "en": "The tenant is suspended or archived: administrators cannot be added and invitations cannot be resent."},
+    {"key": "platform.tenant.host.add", "namespace": "platform", "module": "rbac", "description": "Tenant page: button that adds a dedicated address", "it": "Aggiungi indirizzo", "en": "Add address"},
+    {"key": "platform.tenant.host.label", "namespace": "platform", "module": "rbac", "description": "Tenant page: label of the address field", "it": "Indirizzo", "en": "Address"},
+    {"key": "platform.tenant.host.primary", "namespace": "platform", "module": "rbac", "description": "Tenant page: badge on the primary address", "it": "Principale", "en": "Primary"},
+    {"key": "platform.tenant.host.make_primary", "namespace": "platform", "module": "rbac", "description": "Tenant page: button that makes an address the primary one", "it": "Rendi principale", "en": "Make primary"},
+    {"key": "platform.tenant.host.remove", "namespace": "platform", "module": "rbac", "description": "Tenant page: button that removes an address", "it": "Togli", "en": "Remove"},
+    {"key": "platform.tenant.host.empty", "namespace": "platform", "module": "rbac", "description": "Tenant page: empty list of addresses", "it": "Nessun indirizzo dedicato: il tenant risponde sull'indirizzo principale.", "en": "No dedicated address: the tenant answers on the main address."},
+    {"key": "platform.tenant.admin.add", "namespace": "platform", "module": "rbac", "description": "Tenant page: button that adds a tenant administrator by email", "it": "Aggiungi amministratore", "en": "Add administrator"},
+    {"key": "platform.tenant.admin.resend", "namespace": "platform", "module": "rbac", "description": "Tenant page: button that resends the invitation email to an administrator", "it": "Rimanda l'invito", "en": "Resend invitation"},
+    {"key": "platform.tenant.admin.done", "namespace": "platform", "module": "rbac", "description": "Tenant page: neutral confirmation after an administrator action", "it": "Fatto.", "en": "Done."},
+    {"key": "platform.tenant.admin.error", "namespace": "platform", "module": "rbac", "description": "Tenant page: generic failure of an administrator action", "it": "Non è stato possibile completare l'operazione.", "en": "The operation could not be completed."},
+    {"key": "platform.tenant.status.suspend", "namespace": "platform", "module": "rbac", "description": "Tenant page: button that suspends the tenant", "it": "Sospendi", "en": "Suspend"},
+    {"key": "platform.tenant.status.reactivate", "namespace": "platform", "module": "rbac", "description": "Tenant page: button that reactivates a suspended tenant", "it": "Riattiva", "en": "Reactivate"},
+    {"key": "platform.tenant.status.archive", "namespace": "platform", "module": "rbac", "description": "Tenant page: button that archives the tenant", "it": "Archivia", "en": "Archive"},
+    {"key": "platform.tenant.status.restore", "namespace": "platform", "module": "rbac", "description": "Tenant page: button that restores an archived tenant", "it": "Ripristina", "en": "Restore"},
+    {"key": "platform.tenant.status.suspend_title", "namespace": "platform", "module": "rbac", "description": "Suspend confirmation: title", "it": "Sospendere il tenant?", "en": "Suspend the tenant?"},
+    {"key": "platform.tenant.status.suspend_message", "namespace": "platform", "module": "rbac", "description": "Suspend confirmation: message. {{name}} is the tenant name", "it": "Chi lavora in {{name}} ne esce alla richiesta successiva. I dati restano intatti.", "en": "People working in {{name}} are signed out of it at their next request. The data stays intact."},
+    {"key": "platform.tenant.status.reactivate_title", "namespace": "platform", "module": "rbac", "description": "Reactivate confirmation: title", "it": "Riattivare il tenant?", "en": "Reactivate the tenant?"},
+    {"key": "platform.tenant.status.reactivate_message", "namespace": "platform", "module": "rbac", "description": "Reactivate confirmation: message. {{name}} is the tenant name", "it": "{{name}} torna disponibile per le sue persone.", "en": "{{name}} becomes available to its people again."},
+    {"key": "platform.tenant.status.archive_title", "namespace": "platform", "module": "rbac", "description": "Archive confirmation: title", "it": "Archiviare il tenant?", "en": "Archive the tenant?"},
+    {"key": "platform.tenant.status.archive_message", "namespace": "platform", "module": "rbac", "description": "Archive confirmation: message. {{name}} is the tenant name", "it": "{{name}} sparisce dall'elenco principale e per le persone vale quanto vale per un tenant sospeso. Scrivi il motivo: finisce nel registro.", "en": "{{name}} leaves the main list, and for its people it behaves like a suspended tenant. Write the reason: it goes in the audit log."},
+    {"key": "platform.tenant.status.restore_title", "namespace": "platform", "module": "rbac", "description": "Restore confirmation: title", "it": "Ripristinare il tenant?", "en": "Restore the tenant?"},
+    {"key": "platform.tenant.status.restore_message", "namespace": "platform", "module": "rbac", "description": "Restore confirmation: message. {{name}} is the tenant name", "it": "{{name}} esce dall'archivio e torna attivo.", "en": "{{name}} leaves the archive and becomes active again."},
+    {"key": "platform.tenant.status.reason", "namespace": "platform", "module": "rbac", "description": "Archive and support-entry dialogs: label of the reason field", "it": "Motivo", "en": "Reason"},
+    {"key": "platform.tenant.status.reason_required", "namespace": "platform", "module": "rbac", "description": "Archive and support-entry dialogs: shown when the reason is empty", "it": "Il motivo è obbligatorio.", "en": "The reason is required."},
+    {"key": "platform.tenant.status.error", "namespace": "platform", "module": "rbac", "description": "Tenant page: generic failure of a status change", "it": "Non è stato possibile cambiare lo stato.", "en": "The status could not be changed."},
+    {"key": "platform.support.none", "namespace": "platform", "module": "rbac", "description": "Tenant page, support section: the tenant has not granted support access", "it": "Nessun permesso di assistenza.", "en": "No support consent."},
+    {"key": "platform.support.until", "namespace": "platform", "module": "rbac", "description": "Tenant page, support section: the tenant granted support access. {{time}} is the expiry", "it": "Permesso valido fino alle {{time}}.", "en": "Consent valid until {{time}}."},
+    {"key": "platform.support.template", "namespace": "platform", "module": "rbac", "description": "Tenant page, support section: note on the template tenant", "it": "Il modello si apre sempre, senza permesso.", "en": "The template can always be entered, without consent."},
+    {"key": "platform.support.enter", "namespace": "platform", "module": "rbac", "description": "Tenant page, support section: button that starts support access", "it": "Entra come piattaforma", "en": "Enter as platform"},
+    {"key": "platform.support.enter_title", "namespace": "platform", "module": "rbac", "description": "Support-entry dialog: title", "it": "Entra come piattaforma", "en": "Enter as platform"},
+    {"key": "platform.support.enter_submit", "namespace": "platform", "module": "rbac", "description": "Support-entry dialog: button that starts support access", "it": "Entra", "en": "Enter"},
+    {"key": "platform.support.enter_error", "namespace": "platform", "module": "rbac", "description": "Support-entry dialog: generic failure", "it": "Non è stato possibile entrare.", "en": "Support access could not be started."},
+    {"key": "platform.support.disabled_hint", "namespace": "platform", "module": "rbac", "description": "Tenant page, support section: why the enter button is disabled", "it": "Serve il permesso del tenant, e il tenant deve essere attivo.", "en": "The tenant must grant consent, and the tenant must be active."},
+    {"key": "platform.support.banner", "namespace": "platform", "module": "rbac", "description": "Support banner: always visible during support access. {{tenant}} is the tenant name, {{time}} the expiry", "it": "Stai lavorando come piattaforma in {{tenant}}, fino alle {{time}}.", "en": "You are working as the platform in {{tenant}}, until {{time}}."},
+    {"key": "platform.support.banner_no_end", "namespace": "platform", "module": "rbac", "description": "Support banner for the template tenant, which has no expiry. {{tenant}} is the tenant name", "it": "Stai lavorando come piattaforma in {{tenant}}.", "en": "You are working as the platform in {{tenant}}."},
+    {"key": "platform.support.exit", "namespace": "platform", "module": "rbac", "description": "Support banner: button that ends support access and returns to the console", "it": "Esci", "en": "Exit"},
+    {"key": "tenancy.suspended.message", "namespace": "tenancy", "module": "rbac", "description": "Page shown to a person whose only tenant on the address is suspended or archived", "it": "Questo spazio è sospeso. Contatta il tuo amministratore.", "en": "This space is suspended. Contact your administrator."},
+    {"key": "tenancy.support.title", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: title of the support section", "it": "Assistenza alla piattaforma", "en": "Platform support"},
+    {"key": "tenancy.support.grant", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: label of the support consent control", "it": "Consenti assistenza alla piattaforma", "en": "Allow platform support"},
+    {"key": "tenancy.support.grant_hint", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: explanation under the support consent control", "it": "Per il tempo scelto, la piattaforma può entrare nel tenant con i permessi di un amministratore. Ogni modifica finisce nel registro.", "en": "For the chosen time, the platform can enter the tenant with an administrator's permissions. Every change goes in the audit log."},
+    {"key": "tenancy.support.duration", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: label of the consent duration choice", "it": "Durata", "en": "Duration"},
+    {"key": "tenancy.support.duration.1h", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: consent duration option", "it": "1 ora", "en": "1 hour"},
+    {"key": "tenancy.support.duration.1d", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: consent duration option", "it": "1 giorno", "en": "1 day"},
+    {"key": "tenancy.support.duration.1w", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: consent duration option", "it": "1 settimana", "en": "1 week"},
+    {"key": "tenancy.support.granted_until", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: the consent is valid. {{time}} is the expiry", "it": "Assistenza consentita fino alle {{time}}.", "en": "Support allowed until {{time}}."},
+    {"key": "tenancy.support.not_granted", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: no valid consent", "it": "L'assistenza non è consentita.", "en": "Support is not allowed."},
+    {"key": "tenancy.support.revoke", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: button that revokes the support consent", "it": "Revoca", "en": "Revoke"},
+    {"key": "tenancy.support.in_progress", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: the platform is working in the tenant right now", "it": "C'è un'assistenza in corso.", "en": "A support session is in progress."},
+    {"key": "tenancy.support.error", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page: generic failure of a consent change", "it": "Non è stato possibile salvare il permesso.", "en": "The consent could not be saved."},
+    {"key": "audit.title", "namespace": "audit", "module": "rbac", "description": "Tenant audit page: title", "it": "Registro", "en": "Audit log"},
+    {"key": "audit.subtitle", "namespace": "audit", "module": "rbac", "description": "Tenant audit page: subtitle", "it": "Le modifiche fatte in questo tenant, comprese quelle della piattaforma in assistenza.", "en": "The changes made in this tenant, including the platform's during support."},
+    {"key": "platform.audit.title", "namespace": "platform", "module": "rbac", "description": "Console audit page: title", "it": "Registro della piattaforma", "en": "Platform audit log"},
+    {"key": "platform.audit.subtitle", "namespace": "platform", "module": "rbac", "description": "Console audit page: subtitle", "it": "Gli eventi della piattaforma. Non mostra cosa fanno le persone dentro i tenant.", "en": "Platform events. It does not show what people do inside tenants."},
+    {"key": "audit.col.time", "namespace": "audit", "module": "rbac", "description": "Audit grid: time column", "it": "Quando", "en": "When"},
+    {"key": "audit.col.actor", "namespace": "audit", "module": "rbac", "description": "Audit grid: actor column", "it": "Chi", "en": "Who"},
+    {"key": "audit.col.kind", "namespace": "audit", "module": "rbac", "description": "Audit grid: capacity column (person, platform, command)", "it": "Veste", "en": "Capacity"},
+    {"key": "audit.col.operation", "namespace": "audit", "module": "rbac", "description": "Audit grid: operation column", "it": "Operazione", "en": "Operation"},
+    {"key": "audit.col.object", "namespace": "audit", "module": "rbac", "description": "Audit grid: object column", "it": "Oggetto", "en": "Object"},
+    {"key": "audit.col.details", "namespace": "audit", "module": "rbac", "description": "Audit grid: details column", "it": "Dettagli", "en": "Details"},
+    {"key": "audit.col.tenant", "namespace": "audit", "module": "rbac", "description": "Platform audit grid: tenant column", "it": "Tenant", "en": "Tenant"},
+    {"key": "audit.kind.person", "namespace": "audit", "module": "rbac", "description": "Audit grid: capacity of a person of the tenant", "it": "Persona", "en": "Person"},
+    {"key": "audit.kind.platform", "namespace": "audit", "module": "rbac", "description": "Audit grid: capacity of the platform (console or support access)", "it": "Piattaforma", "en": "Platform"},
+    {"key": "audit.kind.command", "namespace": "audit", "module": "rbac", "description": "Audit grid: capacity of a database command", "it": "Comando", "en": "Command"},
+    {"key": "audit.filter.from", "namespace": "audit", "module": "rbac", "description": "Audit page: start of the period filter", "it": "Dal", "en": "From"},
+    {"key": "audit.filter.to", "namespace": "audit", "module": "rbac", "description": "Audit page: end of the period filter", "it": "Al", "en": "To"},
+    {"key": "audit.filter.actor", "namespace": "audit", "module": "rbac", "description": "Audit page: filter by the person who acted", "it": "Persona", "en": "Person"},
+    {"key": "audit.filter.operation", "namespace": "audit", "module": "rbac", "description": "Audit page: filter by operation", "it": "Operazione", "en": "Operation"},
+    {"key": "audit.empty", "namespace": "audit", "module": "rbac", "description": "Audit grid: empty state", "it": "Nessuna voce.", "en": "No entries."},
+    {"key": "audit.operation.role.create", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code role.create", "it": "Ruolo creato", "en": "Role created"},
+    {"key": "audit.operation.role.rename", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code role.rename", "it": "Ruolo rinominato", "en": "Role renamed"},
+    {"key": "audit.operation.role.permissions", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code role.permissions", "it": "Permessi del ruolo modificati", "en": "Role permissions changed"},
+    {"key": "audit.operation.role.functionalities", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code role.functionalities", "it": "Funzionalità del ruolo modificate", "en": "Role functionalities changed"},
+    {"key": "audit.operation.role.delete", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code role.delete", "it": "Ruolo eliminato", "en": "Role deleted"},
+    {"key": "audit.operation.menu.create", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code menu.create", "it": "Voce di menu creata", "en": "Menu entry created"},
+    {"key": "audit.operation.menu.update", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code menu.update", "it": "Voce di menu modificata", "en": "Menu entry changed"},
+    {"key": "audit.operation.menu.move", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code menu.move", "it": "Voce di menu spostata", "en": "Menu entry moved"},
+    {"key": "audit.operation.menu.delete", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code menu.delete", "it": "Voce di menu eliminata", "en": "Menu entry deleted"},
+    {"key": "audit.operation.member.add", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code member.add", "it": "Persona aggiunta", "en": "Person added"},
+    {"key": "audit.operation.member.roles", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code member.roles", "it": "Ruoli della persona modificati", "en": "Person roles changed"},
+    {"key": "audit.operation.member.status", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code member.status", "it": "Stato della persona modificato", "en": "Person status changed"},
+    {"key": "audit.operation.member.invite", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code member.invite", "it": "Invito inviato", "en": "Invitation sent"},
+    {"key": "audit.operation.member.join", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code member.join", "it": "Persona entrata nel tenant", "en": "Person joined the tenant"},
+    {"key": "audit.operation.theme.save", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code theme.save", "it": "Tema salvato", "en": "Theme saved"},
+    {"key": "audit.operation.settings.self_registration", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code settings.self_registration", "it": "Registrazioni autonome modificate", "en": "Self-registration changed"},
+    {"key": "audit.operation.support.grant", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code support.grant", "it": "Assistenza consentita", "en": "Support allowed"},
+    {"key": "audit.operation.support.revoke", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code support.revoke", "it": "Assistenza revocata", "en": "Support revoked"},
+    {"key": "audit.operation.support.enter", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code support.enter", "it": "Piattaforma entrata in assistenza", "en": "Platform entered for support"},
+    {"key": "audit.operation.support.exit", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code support.exit", "it": "Piattaforma uscita dall'assistenza", "en": "Platform left support"},
+    {"key": "audit.operation.tenant.create", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code tenant.create", "it": "Tenant creato", "en": "Tenant created"},
+    {"key": "audit.operation.tenant.status", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code tenant.status", "it": "Stato del tenant modificato", "en": "Tenant status changed"},
+    {"key": "audit.operation.tenant.host.add", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code tenant.host.add", "it": "Indirizzo aggiunto", "en": "Address added"},
+    {"key": "audit.operation.tenant.host.remove", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code tenant.host.remove", "it": "Indirizzo tolto", "en": "Address removed"},
+    {"key": "audit.operation.tenant.host.primary", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code tenant.host.primary", "it": "Indirizzo principale cambiato", "en": "Primary address changed"},
+    {"key": "audit.operation.tenant.admin.add", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code tenant.admin.add", "it": "Amministratore del tenant aggiunto", "en": "Tenant administrator added"},
+    {"key": "audit.operation.tenant.invite.resend", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code tenant.invite.resend", "it": "Invito rimandato", "en": "Invitation resent"},
+    {"key": "audit.operation.platform.admin.add", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code platform.admin.add", "it": "Amministratore di piattaforma aggiunto", "en": "Platform administrator added"},
+    {"key": "audit.operation.platform.admin.remove", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code platform.admin.remove", "it": "Amministratore di piattaforma tolto", "en": "Platform administrator removed"},
+    {"key": "audit.operation.language.create", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code language.create", "it": "Lingua creata", "en": "Language created"},
+    {"key": "audit.operation.language.update", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code language.update", "it": "Lingua modificata", "en": "Language changed"},
+    {"key": "audit.operation.language.active", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code language.active", "it": "Lingua attivata o disattivata", "en": "Language activated or deactivated"},
+    {"key": "audit.operation.language.default", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code language.default", "it": "Lingua predefinita cambiata", "en": "Default language changed"},
+    {"key": "audit.operation.language.delete", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code language.delete", "it": "Lingua eliminata", "en": "Language deleted"},
+    {"key": "audit.operation.translation.key.create", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code translation.key.create", "it": "Chiave di traduzione creata", "en": "Translation key created"},
+    {"key": "audit.operation.translation.key.delete", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code translation.key.delete", "it": "Chiave di traduzione eliminata", "en": "Translation key deleted"},
+    {"key": "audit.operation.translation.save", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code translation.save", "it": "Traduzioni salvate", "en": "Translations saved"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- 2. I numeri di ogni tenant per l'elenco della console (MT5-DEC-4, MT5-OK-2) -----------------------
+-- Persone attive (appartenenza attiva, account attivo) ed email degli amministratori (ruolo
+-- TENANT_ADMIN, stessi requisiti di app_private.count_active_admins, 0048) dei tenant indicati.
+-- Solo numeri e email degli amministratori: nessun'altra riga di tenant esce da qui. Le
+-- appartenenze sono tabelle di tenant, e la RLS forzata vale anche per il proprietario: come
+-- available_tenants (0054) la funzione visita i tenant uno per uno cambiando app.tenant_id e lo
+-- rimette com'era prima di ogni uscita. Un errore a metà annulla la transazione, e con lei
+-- l'impostazione. Non è security definer: gira coi privilegi di chi la chiama, quindi solo
+-- l'identità di piattaforma (construct_owner) può chiamarla; al ruolo dell'app non è concessa.
+create function app_private.platform_tenant_counts(p_tenant_ids bigint[])
+returns table (id_tenant bigint, active_members bigint, admin_emails text[])
+language plpgsql security invoker set search_path = '' as $$
+#variable_conflict use_column
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_tenant bigint;
+begin
+  for v_tenant in
+    select t.id from public.tenant t where t.id = any (p_tenant_ids) order by t.id
+  loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant::text, true);
+    return query
+      select v_tenant,
+        (select count(*)
+           from public.tenant_membership m
+           join public.users u on u.id = m.user_id
+          where m.id_tenant = v_tenant and m.status = 'active' and u.id_user_status = 2),
+        coalesce((select array_agg(a.email order by a.email)
+           from (select distinct u.email
+                   from public.tenant_membership m
+                   join public.users u on u.id = m.user_id
+                   join public.user_role ur on ur.id_tenant = m.id_tenant and ur.user_id = m.user_id
+                   join public.role r on r.id_tenant = ur.id_tenant and r.id_role = ur.id_role
+                  where m.id_tenant = v_tenant and m.status = 'active' and u.id_user_status = 2
+                    and r.system_key = 'TENANT_ADMIN' and u.email is not null) a),
+          '{}'::text[]);
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', coalesce(v_origine, ''), true);
+  return;
+end;
+$$;
+revoke all on function app_private.platform_tenant_counts(bigint[]) from public;
+
+-- Migration: 0060_platform_tenant_lifecycle.sql
+-- Multi-tenancy, pezzo 5a, Task 8 (specifica 2026-10-26, MT5-DEC-5, MT5-DEC-7, MT5-DEC-8,
+-- MT5-DEC-25): creare un tenant dalla console, iscrivere un amministratore senza segnare l'invito
+-- come consegnato, e riconoscere chi ha il suo unico tenant sospeso o archiviato. Gira come
+-- construct_owner, con app.tenant_id vuoto: le funzioni che lo cambiano lo rimettono com'era prima di
+-- uscire (e un errore annulla la transazione, e con lei l'impostazione). Nessuna è security definer.
+
+-- 1. Iscrivere un amministratore nel tenant corrente ------------------------------------------------
+-- Come app_private.register_tenant_admin (0051): account creato se manca, appartenenza attiva (anche
+-- se c'era ed era disattivata: è una scelta esplicita della piattaforma), ruoli REGISTERED e
+-- TENANT_ADMIN. A differenza di quella NON crea il token d'invito: la console lo crea in TypeScript
+-- nella stessa transazione, con lo stato di consegna «pending», e lo segna consegnato solo dopo che
+-- l'email è davvero partita. Riservata alla piattaforma (solo il revoke).
+create function app_private.enroll_tenant_admin(p_email text)
+returns table (user_id uuid, account_existed boolean, has_password boolean)
+language plpgsql security invoker set search_path = '' as $$
+#variable_conflict use_column
+declare
+  v_email text := pg_catalog.lower(pg_catalog.btrim(p_email));
+  v_tenant bigint := app_private.current_tenant_id();
+  v_registrato bigint;
+  v_amministratore bigint;
+  v_utente uuid;
+  v_password text;
+  v_esisteva boolean;
+begin
+  if v_email is null or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+$' then
+    raise exception using errcode = 'P0001', message = 'invalid_email';
+  end if;
+
+  select r.id_role into v_registrato from public.role r
+  where r.id_tenant = v_tenant and r.system_key = 'REGISTERED';
+  select r.id_role into v_amministratore from public.role r
+  where r.id_tenant = v_tenant and r.system_key = 'TENANT_ADMIN';
+  if v_registrato is null or v_amministratore is null then
+    raise exception using errcode = 'P0001', message = 'system_roles_missing';
+  end if;
+
+  select exists (select 1 from public.users u where u.email = v_email) into v_esisteva;
+  insert into public.users (email, auth_provider) values (v_email, 'credentials')
+  on conflict (email) do nothing;
+  select u.id, u.password_hash into v_utente, v_password
+  from public.users u where u.email = v_email
+  for update;
+
+  insert into public.tenant_membership (id_tenant, user_id, status) values (v_tenant, v_utente, 'active')
+  on conflict on constraint tenant_membership_pkey do update set status = 'active';
+
+  insert into public.user_role (id_tenant, user_id, id_role)
+  values (v_tenant, v_utente, v_registrato), (v_tenant, v_utente, v_amministratore)
+  on conflict do nothing;
+
+  user_id := v_utente;
+  account_existed := v_esisteva;
+  has_password := v_password is not null;
+  return next;
+end;
+$$;
+revoke all on function app_private.enroll_tenant_admin(text) from public;
+
+-- 2. Un tenant nuovo dalla console -----------------------------------------------------------------
+-- La stessa sequenza di `db.mjs tenant-create` (copia dal modello, indirizzo principale facoltativo,
+-- primo amministratore, almeno un amministratore attivo), in una funzione sola: la console e il
+-- comando non hanno due versioni delle regole. L'indirizzo (già nella forma normalizzata) si rifiuta
+-- se è di qualcuno, prima di creare niente; un slug già preso fa fallire la copia (unique). Qualsiasi
+-- rifiuto annulla tutto. Il token d'invito non nasce qui (vedi la sezione 1).
+create function app_private.create_platform_tenant(p_slug text, p_name text, p_host text, p_admin_email text)
+returns table (tenant_id bigint, user_id uuid, account_existed boolean, has_password boolean)
+language plpgsql security invoker set search_path = '' as $$
+#variable_conflict use_column
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_nuovo bigint;
+  v_admin record;
+begin
+  if p_host is not null and exists (select 1 from public.tenant_host h where h.host = p_host) then
+    raise exception using errcode = 'P0001', message = 'host_taken';
+  end if;
+
+  v_nuovo := app_private.create_tenant_from_template(p_slug, p_name);
+  if p_host is not null then
+    insert into public.tenant_host (host, id_tenant, is_primary) values (p_host, v_nuovo, true);
+  end if;
+
+  perform pg_catalog.set_config('app.tenant_id', v_nuovo::text, true);
+  select e.user_id, e.account_existed, e.has_password into v_admin
+  from app_private.enroll_tenant_admin(p_admin_email) e;
+  -- register_tenant_admin accetta anche un account disattivato a livello globale, che non conta:
+  -- un tenant non nasce senza un amministratore attivo.
+  if app_private.count_active_admins() = 0 then
+    raise exception using errcode = 'P0001', message = 'first_admin_inactive';
+  end if;
+  perform pg_catalog.set_config('app.tenant_id', coalesce(v_origine, ''), true);
+
+  tenant_id := v_nuovo;
+  user_id := v_admin.user_id;
+  account_existed := v_admin.account_existed;
+  has_password := v_admin.has_password;
+  return next;
+end;
+$$;
+revoke all on function app_private.create_platform_tenant(text, text, text, text) from public;
+
+-- 3. Chi ha il suo tenant sospeso o archiviato sull'indirizzo (MT5-DEC-7) ---------------------------
+-- Vero se, fra i tenant dell'indirizzo che non sono attivi (le stesse regole di host_tenant_ids,
+-- 0054, ma per i soli stati sospeso e archiviato; il modello non conta), la persona ha
+-- un'appartenenza attiva. Serve solo quando non ha nessun tenant disponibile: allora vede «Questo
+-- spazio è sospeso» e non il generico «Non sei configurato». Come available_tenants visita i tenant
+-- uno per uno e rimette app.tenant_id; la chiama il ruolo dell'app.
+create function public.has_inactive_membership_on_host(p_user_id uuid, p_host text) returns boolean
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_indirizzo text := pg_catalog.regexp_replace(
+    pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(p_host)), ':[0-9]{1,5}$', ''), '\.$', '');
+  v_tenant bigint;
+begin
+  for v_tenant in
+    select t.id
+    from public.tenant t
+    where t.status <> 'active'
+      and not t.is_template
+      and case
+            when exists (select 1 from public.tenant_host h where h.host = v_indirizzo)
+              then t.id in (select h.id_tenant from public.tenant_host h where h.host = v_indirizzo)
+            else not exists (select 1 from public.tenant_host h where h.id_tenant = t.id)
+          end
+    order by t.id
+  loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant::text, true);
+    if exists (
+      select 1 from public.tenant_membership m
+      where m.id_tenant = v_tenant and m.user_id = p_user_id and m.status = 'active'
+    ) then
+      perform pg_catalog.set_config('app.tenant_id', coalesce(v_origine, ''), true);
+      return true;
+    end if;
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', coalesce(v_origine, ''), true);
+  return false;
+end;
+$$;
+revoke all on function public.has_inactive_membership_on_host(uuid, text) from public;
+grant execute on function public.has_inactive_membership_on_host(uuid, text) to construct_runtime;
+
+-- 4. Le parole in più ------------------------------------------------------------------------------
+-- Solo additiva (apply_translation_seed non riscrive mai una chiave esistente). Le parole che il
+-- Task 7 aveva già riservato nella 0059 restano là.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key": "platform.admins.add.done_invite_failed", "namespace": "platform", "module": "rbac", "description": "Add-administrator dialog: the administrator was added but the invitation email could not be sent", "it": "Amministratore aggiunto, ma l'email d'invito non è partita. La persona non ha ancora una password e «Password dimenticata» non le serve: togli l'amministratore e aggiungilo di nuovo per riprovare.", "en": "Administrator added, but the invitation email was not sent. The person has no password yet and «Forgot password» does not help: remove the administrator and add them again to retry."},
+    {"key": "platform.tenant.new.done_invite_failed", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: the tenant was created but the invitation email could not be sent", "it": "Tenant creato, ma l'email d'invito non è partita. Dalla scheda del tenant puoi rimandarla.", "en": "Tenant created, but the invitation email was not sent. You can resend it from the tenant page."},
+    {"key": "platform.tenant.new.invalid", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: shown when a field is missing or malformed", "it": "Controlla i campi: nome, slug (da 3 a 40 caratteri fra lettere minuscole, cifre e trattini) ed email del primo amministratore.", "en": "Check the fields: name, slug (3 to 40 characters of lowercase letters, digits and hyphens) and the first administrator email."},
+    {"key": "platform.tenant.new.host_invalid", "namespace": "platform", "module": "rbac", "description": "New-tenant dialog: the dedicated address is not a valid host name", "it": "L'indirizzo dedicato non è valido.", "en": "The dedicated address is not valid."},
+    {"key": "platform.tenant.detail.back", "namespace": "platform", "module": "rbac", "description": "Tenant page: link back to the tenant list", "it": "Tutti i tenant", "en": "All tenants"},
+    {"key": "platform.tenant.detail.fixed_hint", "namespace": "platform", "module": "rbac", "description": "Tenant page: why the status buttons are missing for the default tenant and the template", "it": "Il tenant predefinito e il modello non si sospendono né si archiviano.", "en": "The default tenant and the template cannot be suspended or archived."},
+    {"key": "platform.tenant.detail.template_hint", "namespace": "platform", "module": "rbac", "description": "Tenant page: the template has no people and no addresses", "it": "Il modello non ha persone né indirizzi dedicati.", "en": "The template has no people and no dedicated addresses."},
+    {"key": "platform.tenant.admin.empty", "namespace": "platform", "module": "rbac", "description": "Tenant page: no active administrator", "it": "Nessun amministratore attivo.", "en": "No active administrator."},
+    {"key": "platform.tenant.admin.pending", "namespace": "platform", "module": "rbac", "description": "Tenant page: badge on an administrator who has not set a password yet", "it": "Invito in attesa", "en": "Invitation pending"},
+    {"key": "platform.tenant.admin.add_title", "namespace": "platform", "module": "rbac", "description": "Tenant page: title of the add-administrator dialog", "it": "Aggiungi un amministratore del tenant", "en": "Add a tenant administrator"},
+    {"key": "platform.tenant.admin.email_label", "namespace": "platform", "module": "rbac", "description": "Tenant page: label of the administrator email field", "it": "Email", "en": "Email"},
+    {"key": "platform.tenant.admin.add_submit", "namespace": "platform", "module": "rbac", "description": "Tenant page: button that adds the administrator", "it": "Aggiungi", "en": "Add"},
+    {"key": "platform.tenant.admin.done_invited", "namespace": "platform", "module": "rbac", "description": "Tenant page: administrator added, an invitation email is on its way", "it": "Amministratore aggiunto. Riceverà un'email per impostare la password.", "en": "Administrator added. They will receive an email to set their password."},
+    {"key": "platform.tenant.admin.done_invite_failed", "namespace": "platform", "module": "rbac", "description": "Tenant page: the action went through but the invitation email was not sent", "it": "Fatto, ma l'email d'invito non è partita. Usa «Rimanda l'invito» per riprovare.", "en": "Done, but the invitation email was not sent. Use «Resend invitation» to retry."},
+    {"key": "platform.tenant.admin.resent", "namespace": "platform", "module": "rbac", "description": "Tenant page: the invitation email was resent", "it": "Invito rimandato.", "en": "Invitation resent."},
+    {"key": "platform.tenant.host.add_title", "namespace": "platform", "module": "rbac", "description": "Tenant page: title of the add-address dialog", "it": "Aggiungi un indirizzo dedicato", "en": "Add a dedicated address"},
+    {"key": "platform.tenant.host.make_primary_option", "namespace": "platform", "module": "rbac", "description": "Tenant page: checkbox that makes the new address the primary one", "it": "Rendilo l'indirizzo principale", "en": "Make it the primary address"},
+    {"key": "platform.tenant.host.make_primary_title", "namespace": "platform", "module": "rbac", "description": "Make-primary confirmation: title", "it": "Cambiare l'indirizzo principale?", "en": "Change the primary address?"},
+    {"key": "platform.tenant.host.make_primary_message", "namespace": "platform", "module": "rbac", "description": "Make-primary confirmation: message. {{host}} is the address", "it": "I link nelle email del tenant punteranno a {{host}}.", "en": "The links in the tenant's emails will point to {{host}}."},
+    {"key": "platform.tenant.host.remove_title", "namespace": "platform", "module": "rbac", "description": "Remove-address confirmation: title", "it": "Togliere l'indirizzo?", "en": "Remove the address?"},
+    {"key": "platform.tenant.host.remove_message", "namespace": "platform", "module": "rbac", "description": "Remove-address confirmation: message. {{host}} is the address", "it": "{{host}} non risponderà più per questo tenant. Senza indirizzi dedicati il tenant risponde sull'indirizzo principale della piattaforma.", "en": "{{host}} will no longer answer for this tenant. With no dedicated address the tenant answers on the platform's main address."},
+    {"key": "platform.tenant.host.error", "namespace": "platform", "module": "rbac", "description": "Tenant page: generic failure of an address action. The server message is never shown", "it": "Non è stato possibile completare l'operazione sugli indirizzi.", "en": "The address operation could not be completed."},
+    {"key": "platform.tenant.host.error_taken", "namespace": "platform", "module": "rbac", "description": "Tenant page: the address already belongs to a tenant", "it": "Questo indirizzo è già assegnato a un tenant.", "en": "This address is already assigned to a tenant."},
+    {"key": "platform.tenant.host.error_invalid", "namespace": "platform", "module": "rbac", "description": "Tenant page: the address is not valid or not allowed for this tenant", "it": "Indirizzo non valido, o non ammesso per questo tenant (l'indirizzo principale della piattaforma, il tenant predefinito e il modello non ne hanno).", "en": "The address is not valid or not allowed for this tenant (the platform's main address, the default tenant and the template cannot have one)."},
+    {"key": "platform.tenant.host.error_primary", "namespace": "platform", "module": "rbac", "description": "Tenant page: the primary address cannot be removed while other addresses exist", "it": "Prima rendi principale un altro indirizzo: l'indirizzo principale non si toglie finché ce ne sono altri.", "en": "Make another address primary first: the primary address cannot be removed while others exist."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0061_platform_support_translations.sql
+-- Multi-tenancy, pezzo 5a, Task 9 (specifica 2026-10-26, MT5-DEC-10, MT5-DEC-12): le due parole
+-- dell'assistenza che la 0059 non aveva riservato. L'errore dell'uscita dalla fascia (se l'uscita
+-- non riesce si resta nel tenant, e chi guarda deve saperlo) e la riga delle impostazioni del tenant
+-- che spiega alla piattaforma in assistenza perché il permesso non si cambia da qui.
+-- Solo additiva (apply_translation_seed non riscrive mai una chiave esistente).
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key": "platform.support.exit_error", "namespace": "platform", "module": "rbac", "description": "Support banner: the exit failed; the person is still working in the tenant", "it": "Non è stato possibile uscire dall'assistenza. Riprova.", "en": "Support access could not be ended. Try again."},
+    {"key": "tenancy.support.locked", "namespace": "tenancy", "module": "rbac", "description": "Tenant settings page, during support: the platform sees the consent but cannot change it", "it": "Durante l'assistenza il permesso lo cambia solo un amministratore del tenant.", "en": "During support only a tenant administrator can change the consent."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0062_tenant_audit_menu.sql
+-- Multi-tenancy, pezzo 5a, Task 10 (specifica 2026-10-26, MT5-DEC-16, MT5-OK-4): la voce di menu
+-- «Registro» del tenant. Le voci di menu sono righe di tenant: la voce nasce in ogni tenant che ha
+-- «Impostazioni del tenant» (admin/tenant-settings), o in mancanza «Theme & Styles» (admin/theme),
+-- cioè il predefinito, il modello (che la passa alle copie future: copy_tenant copia menu_entry e
+-- role_functionality) e ogni tenant già creato dal modello. Sta subito dopo la voce di riferimento,
+-- con lo stesso genitore: le voci successive scendono di un posto. È concessa al ruolo TENANT_ADMIN
+-- del tenant; la pagina la protegge il permesso read-tenant-audit (0057), che lo stesso ruolo ha già.
+-- Gira come construct_owner, con app.tenant_id vuoto finché il ciclo non lo imposta; il ciclo lo
+-- rimette com'era prima di uscire. Idempotente: un tenant che ha già la voce non cambia.
+do $$
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_tenant record;
+  v_riferimento record;
+  v_voce bigint;
+begin
+  for v_tenant in select t.id from public.tenant t order by t.id loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant.id::text, true);
+
+    select m.id_parent, m.order_position, m.id_functionality_type, m.open_in_new_tab
+    into v_riferimento
+    from public.menu_entry m
+    where m.id_tenant = v_tenant.id and m.functionality_link in ('admin/tenant-settings', 'admin/theme')
+    order by (m.functionality_link = 'admin/tenant-settings') desc, m.id_menu_entry
+    limit 1;
+
+    if found and not exists (
+      select 1 from public.menu_entry m
+      where m.id_tenant = v_tenant.id and m.functionality_link = 'admin/audit'
+    ) then
+      update public.menu_entry m
+      set order_position = m.order_position + 1
+      where m.id_tenant = v_tenant.id
+        and m.id_parent is not distinct from v_riferimento.id_parent
+        and m.order_position > v_riferimento.order_position;
+
+      insert into public.menu_entry (id_tenant, id_parent, name, order_position, navbar_position, icon_path,
+        id_functionality_type, functionality_link, open_in_new_tab, item_translation, is_immutable)
+      values (v_tenant.id, v_riferimento.id_parent, 'Audit log', v_riferimento.order_position + 1, null, 'ScrollText',
+        v_riferimento.id_functionality_type, 'admin/audit', v_riferimento.open_in_new_tab,
+        '{"EN":{"name":"Audit log"},"IT":{"name":"Registro"}}'::jsonb, 1)
+      returning id_menu_entry into v_voce;
+
+      insert into public.role_functionality (id_tenant, id_role, id_menu_entry)
+      select v_tenant.id, r.id_role, v_voce
+      from public.role r
+      where r.id_tenant = v_tenant.id and r.system_key = 'TENANT_ADMIN'
+      on conflict do nothing;
+    end if;
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', coalesce(v_origine, ''), true);
+end
+$$;
+
+-- Migration: 0063_platform_admin_reinvite.sql
+-- Multi-tenancy, pezzo 5a, revisione finale (specifica 2026-10-26, MT5-DEC-2, MT5-DEC-23): un
+-- amministratore di piattaforma che non ha ancora una password (il link del primo invito è scaduto
+-- dopo 48 ore, o l'email della console non è partita) non aveva modo di rientrare: nominarlo di
+-- nuovo non faceva niente, toglierlo era vietato se era l'ultimo, e «Password dimenticata» non
+-- esiste per un account senza password. Ora nominare di nuovo la stessa email, se l'account è già
+-- amministratore e non ha una password, manda un invito nuovo e scrive la voce
+-- `platform.admin.invite`. Qui le due parole che servono.
+--
+-- 1. L'etichetta della nuova operazione, nella griglia del registro (solo additiva: apply_translation_seed
+--    non riscrive mai una chiave esistente).
+-- 2. Il testo dell'errore d'invio, già riservato nella 0060, che diceva di togliere e aggiungere di
+--    nuovo l'amministratore: ora dice di aggiungere la stessa email un'altra volta. Come nella 0030 e nella
+--    0036 serve un aggiornamento, e solo dove il valore è ancora quello della 0060, per non
+--    sovrascrivere una correzione fatta dal pannello Traduzioni.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key": "audit.operation.platform.admin.invite", "namespace": "audit", "module": "rbac", "description": "Audit grid: label of the operation code platform.admin.invite", "it": "Invito inviato a un amministratore di piattaforma", "en": "Invitation sent to a platform administrator"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+update translation_value tv
+set value = 'Amministratore aggiunto, ma l''email d''invito non è partita. La persona non ha ancora una password e «Password dimenticata» non le serve: aggiungi di nuovo la stessa email per rimandare l''invito.',
+    updated_at = now()
+from translation_key tk, app_language al
+where tk.id_translation_key = tv.id_translation_key
+  and al.id_language = tv.id_language
+  and tk.key = 'platform.admins.add.done_invite_failed'
+  and al.code = 'it'
+  and tv.value = 'Amministratore aggiunto, ma l''email d''invito non è partita. La persona non ha ancora una password e «Password dimenticata» non le serve: togli l''amministratore e aggiungilo di nuovo per riprovare.';
+
+update translation_value tv
+set value = 'Administrator added, but the invitation email was not sent. The person has no password yet and «Forgot password» does not help: add the same email again to resend the invitation.',
+    updated_at = now()
+from translation_key tk, app_language al
+where tk.id_translation_key = tv.id_translation_key
+  and al.id_language = tv.id_language
+  and tk.key = 'platform.admins.add.done_invite_failed'
+  and al.code = 'en'
+  and tv.value = 'Administrator added, but the invitation email was not sent. The person has no password yet and «Forgot password» does not help: remove the administrator and add them again to retry.';
