@@ -1,18 +1,19 @@
 # Multi-tenancy: stato dell'implementazione
 
-Aggiornato: 2026-10-26. Tiene insieme in un'unica tabella quello che è fatto e quello che resta.
+Aggiornato: 2026-10-29. Tiene insieme in un'unica tabella quello che è fatto e quello che resta.
 Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-multi-tenancy-deferred.md)
 (ID `DEF-*`) e nelle specifiche dei singoli pezzi.
 
 ## Sommario
 
 - **Fatti:** pezzo 1 (fondamenta dell'isolamento) con il lavoro sulle prestazioni, pezzo 2 (tenant
-  e appartenenze), pezzo 4 (tenant corrente). Database di sviluppo alla migrazione 0056.
-- **In corso:** pezzo 5 (piattaforma), fase di specifica; proposta di dividerlo in 5a (console,
-  amministratore di piattaforma, assistenza, registro) e 5b (funzioni concesse, limiti,
-  esportazione ed eliminazione).
-- **Da fare dopo:** pezzo 3 (identità e accesso), poi pezzo 6 (domini e brand). Ordine consigliato:
-  5 → 3 → 6; si inverte 5 e 3 se servono a breve persone vere di organizzazioni separate.
+  e appartenenze), pezzo 4 (tenant corrente) e pezzo 5a (console, amministratore di piattaforma,
+  assistenza e registro), unito con la [richiesta #89](https://github.com/frontiere-technologies/construct/pull/89).
+  Database di sviluppo alla migrazione 0063, identità e primo amministratore di piattaforma
+  configurati, 32 controlli dei privilegi superati e console autenticata verificata in locale.
+- **Da fare dopo:** pezzo 5b (funzioni concesse, limiti, esportazione ed eliminazione), pezzo 3
+  (identità e accesso), poi pezzo 6 (domini e brand). Resta l'ordine consigliato 5b → 3 → 6;
+  si inverte 5b e 3 se servono a breve persone vere di organizzazioni separate.
 
 ## Come si legge
 
@@ -35,7 +36,7 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
 | [✅] | MT-2.2 | 2 | Disattivazione per tenant | "Disattiva" agisce sul tenant corrente; regola dell'ultimo amministratore per tenant. | P0 | hours | PR #86, migrazione 0052 | |
 | [✅] | MT-2.3 | 2 | Pagina Utenti dai membri | Elenco solo dei membri del tenant; "Aggiungi persona" per email con risposta neutra. | P1 | days | PR #86 | |
 | [✅] | MT-2.4 | 2 | Tenant modello e creazione | Modello copiato in ogni tenant nuovo; comando `db.mjs tenant-create`. | P1 | days | PR #86 | |
-| [ ] | MT-2.5 | 2 | Lingue e traduzioni per tenant | Lingue attive e traduzioni personalizzate per tenant. | P2 | days | DEF-2.4 | Oggi globali, modificabili solo dal predefinito |
+| [ ] | MT-2.5 | 2 | Lingue e traduzioni per tenant | Lingue attive e traduzioni personalizzate per tenant. | P2 | days | DEF-2.4 | Oggi globali, modificabili dalla piattaforma |
 | [ ] | MT-2.6 | 2 | Raccolta di temi per tenant | Più temi con nome, uno attivo. | P3 | days | DEF-2.5 | Oggi un tema per tenant |
 | [✅] | MT-2.7 | 2 | Eliminare il ruolo 2 | Togliere "Tenant Super Administrator", ruolo senza logica. | P2 | minutes | DEF-2.7 | Insieme all'amministratore di piattaforma (5a) |
 | [ ] | MT-3.1 | 3 | Identità per provider | Tabella `user_identity` (provider, issuer, subject), non solo email. | P0 | days | DEF-3.1 | |
