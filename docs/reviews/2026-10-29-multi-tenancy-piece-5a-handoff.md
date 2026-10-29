@@ -1,6 +1,6 @@
 # Pezzo 5a (console della piattaforma): stato e passaggio di consegne
 
-Data: 2026-10-29. Ramo locale `feature/multi-tenancy-piece-5a`, nato da `development` a 187a15a, **non inviato** al remoto e senza richiesta di unione.
+Data: 2026-10-29. Ramo `feature/multi-tenancy-piece-5a`, nato da `development` a 187a15a, **inviato al remoto**; [richiesta di unione #89](https://github.com/frontiere-technologies/construct/pull/89) aperta verso `development`, con le verifiche automatiche superate. L'unione attende l'OK del proprietario.
 
 ## Riepilogo
 
@@ -16,6 +16,7 @@ Data: 2026-10-29. Ramo locale `feature/multi-tenancy-piece-5a`, nato da `develop
   - `boundary-check` sul database di prova: 32 controlli ok;
   - `npm audit --omit=dev`: 0 vulnerabilità.
 - **Database di sviluppo non toccato.** È fermo alla migrazione 0056, mentre il ramo porta le migrazioni 0057–0063.
+- **Verifiche GitHub (2026-10-29):** [esecuzione Quality 46](https://github.com/frontiere-technologies/construct/actions/runs/40832945269) conclusa con successo in entrambi i gruppi (`application` e `database-and-e2e`): 1521 test unitari, 625 test d'integrazione e 163 prove sul browser superati; compilazione e controlli dei contratti, dei tipi, dello stile e delle dipendenze superati. Prima dell'invio sono stati ripetuti in locale i 1521 test unitari, il controllo dei tipi e quello dello stile, tutti superati.
 - **Registro completo del lavoro.** Le 57 decisioni prese durante l'esecuzione e tutti i punti rimandati sono nel registro: [2026-10-26-multi-tenancy-piece-5a-platform-ledger.md](../superpowers/sdd/2026-10-26-multi-tenancy-piece-5a-platform-ledger.md). È una copia di `.superpowers/sdd/…/progress.md`, che è ignorato da git.
 
 ## Regole del proprietario (valgono per chiunque continui)
@@ -31,7 +32,7 @@ Data: 2026-10-29. Ramo locale `feature/multi-tenancy-piece-5a`, nato da `develop
 
 ## Passi successivi
 
-- [ ] ID=NEXT-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Invio del ramo e richiesta di unione, Fix description=Chiedere l'OK al proprietario. Poi `git push -u origin feature/multi-tenancy-piece-5a`, aprire la richiesta di unione verso `development` con `gh pr create` e controllare la CI (job `quality.yml`, compreso `database-and-e2e`). Se la CI è rossa, correggere sul ramo. Unire solo con l'OK del proprietario.
+- [✅] ID=NEXT-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Invio del ramo e richiesta di unione, Fix description=OK ricevuto dal proprietario il 2026-10-29; ramo inviato e [richiesta di unione #89](https://github.com/frontiere-technologies/construct/pull/89) aperta verso `development`. Le verifiche GitHub sono superate in entrambi i gruppi, compreso `database-and-e2e` ([esecuzione Quality 46](https://github.com/frontiere-technologies/construct/actions/runs/40832945269)). Unire solo con un nuovo OK del proprietario.
 - [ ] ID=NEXT-2, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Database di sviluppo (task 12 passo 3), Fix description=**Solo dopo l'unione e con un sì esplicito del proprietario**, in quest'ordine:
   1. Lettura senza modifiche per la 0058: `select id_tenant, id_role, description from role where system_key is null and description ilike '%super admin%'`. Ci si aspetta al massimo una riga per tenant.
   2. `node sources/devops/db/db.mjs apply`, che applica 0057–0063.
@@ -67,7 +68,7 @@ Data: 2026-10-29. Ramo locale `feature/multi-tenancy-piece-5a`, nato da `develop
 ## Rimasugli di un altro lavoro (velocità dei test, [2026-10-27-test-speed-review.md](2026-10-27-test-speed-review.md))
 
 - [ ] ID=TS-0, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Misurare i tempi per test, Fix description=Vedi il documento della revisione.
-- [ ] ID=TS-8, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Cache di Playwright in CI, Fix description=Confermare alla prossima richiesta di unione che la cache viene trovata (la chiave è `playwright-Linux-1.60.0-chromium`).
+- [ ] ID=TS-8, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Cache di Playwright in CI, Fix description=Confermare alla prossima richiesta di unione che la cache viene trovata (la chiave è `playwright-Linux-1.60.0-chromium`). Nella prima esecuzione della richiesta #89 (Quality 46) la cache non è stata trovata ed è stata salvata alla fine; il lancio dopo l'unione su `development` è introdotto da questo ramo, quindi il riuso da una nuova richiesta resta da verificare dopo l'unione.
 - [ ] ID=TS-26, Severity=Low, Complexity=Low, Priority=P2, Estimate=minutes, Title=Test che dipende dall'ordine, Fix description=`test_users.py::test_status_toggle_updates_grid_in_place`, vedi il documento della revisione.
 
 ## Come si lavora in locale
