@@ -14,10 +14,11 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
 - **Da fare dopo:** pezzo 5b (funzioni concesse, limiti, esportazione ed eliminazione), pezzo 3
   (identità e accesso), poi pezzo 6 (domini e brand). Resta l'ordine consigliato 5b → 3 → 6;
   si inverte 5b e 3 se servono a breve persone vere di organizzazioni separate.
-- **In preparazione:** [specifica del 5b](../../superpowers/specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md)
-  approvata dal proprietario il 2026-10-30; [piano operativo](../../superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md)
-  completo, con 13 attività e verifiche. Il codice non è ancora iniziato; restano la lettura
-  del piano e la scelta del metodo di esecuzione.
+- **In corso:** [specifica del 5b](../../superpowers/specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md) e
+  [piano operativo](../../superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md) approvati.
+  Metodo scelto: agenti con revisione per ogni attività. T01 (catalogo) e T02 (configurazione
+  protetta, copia iniziale e blocchi per tenant) realizzati e rivisti; T03–T13 ancora aperti.
+  La 0064 è applicata solo alla prova locale; lo sviluppo resta alla 0063.
 
 ## Come si legge
 
@@ -62,7 +63,7 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
 | [✅] | MT-5.4 | 5a | Accesso di assistenza | "Entra come piattaforma" con motivo, durata limitata e fascia visibile; permette di modificare il modello dall'app. | P1 | days | DEF-5.5 | |
 | [✅] | MT-5.5 | 5a | Registro delle operazioni | Tabella `audit_event` scritta nella stessa transazione della modifica. | P1 | days | DEF-5.6 | |
 | [✅] | MT-5.6 | 5a | Cataloghi comuni alla piattaforma | Lingue e traduzioni modificabili dall'amministratore di piattaforma, non più dal solo predefinito. | P1 | hours | final review pezzo 4 | |
-| [~] | MT-5.7 | 5b | Funzioni concesse per tenant | Quali aree dell'app un tenant può usare, rispettate nei controlli e nel database. | P1 | days | DEF-5.2, DEF-5.4, MT-DEC-04, specifica e piano 5b | Specifica approvata; piano scritto, codice da fare |
+| [~] | MT-5.7 | 5b | Funzioni concesse per tenant | Quali aree dell'app un tenant può usare, rispettate nei controlli e nel database. | P1 | days | DEF-5.2, DEF-5.4, MT-DEC-04, specifica e piano 5b | Catalogo e persistenza realizzati/rivisti (T01–T02); controlli effettivi e interfaccia ancora da fare |
 | [ ] | MT-5.8 | 5b | Interruttore delle funzioni di tenant | Spegnere console e selettore per un'applicazione derivata con un solo tenant. | P2 | hours | DEF-5.7 | |
 | [ ] | MT-5.9 | 5b | Limiti per tenant | Tempo massimo delle query, quote su utenti, ruoli, voci di menu. | P2 | days | DEF-5.8 | |
 | [ ] | MT-5.10 | 5b | Esportazione ed eliminazione di un tenant | Esportazione completa, prova di ripristino, eliminazione sicura. | P2 | days | DEF-5.9 | |

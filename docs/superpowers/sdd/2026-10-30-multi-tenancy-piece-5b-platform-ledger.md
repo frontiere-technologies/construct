@@ -5,7 +5,7 @@ Data: 2026-10-30. Metodo scelto: agenti con revisione per attività. Ramo featur
 ## Stato delle attività
 
 - [✅] ID=MT5B-T01, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=Catalogo e precedenza, Fix description=Definire chiavi, dipendenze e calcolo delle capacità senza database; copre MT5B-OK-1.
-- [ ] ID=MT5B-T02, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Configurazione protetta per tenant, Fix description=Persistenza con RLS, impostazioni iniziali compatibili e copia dal modello; copre MT5B-OK-1 e OK-7.
+- [✅] ID=MT5B-T02, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Configurazione protetta per tenant, Fix description=Persistenza con RLS, impostazioni iniziali compatibili e copia dal modello; copre MT5B-OK-1 e OK-7.
 - [ ] ID=MT5B-T03, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Menu senza aggiramenti, Fix description=Classificare pagine e contenuti propri con chiavi stabili, preservando il menu esistente; copre RF-2 e MT5B-OK-1/2.
 - [ ] ID=MT5B-T04, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Concessioni applicate a ogni porta, Fix description=Intersezione prima delle scorciatoie amministrative e vincoli SQL con sospensione reversibile; copre MT5B-OK-1/2.
 - [ ] ID=MT5B-T05, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Azioni della piattaforma verificabili, Fix description=Salvataggio con revisione, anteprima e cancellazione delle sole assegnazioni selezionate, registro atomico; copre MT5B-OK-1/2 e RF-5.
@@ -146,3 +146,35 @@ Task 1: cannot-verify resolved — conservazione delle assegnazioni e applicazio
 Task 1: complete (commits aa9129e..33887f6, review clean)
 
 Revisore /root/mt5b_t01_reviewer: conformità ✅ e qualità Approved, nessun Critical/Important, sola nota minore sopra. Nessuna prova ripetuta dal revisore. Prossimo task 2.
+
+Task 2: in progress — BASE 48cfd29435ade132c5367124e835a45e69e9f867; implementer /root/mt5b_t02_implementer, gpt-6.1-sol high; uso esclusivo delle integrazioni riservato.
+
+Ruling: 3. La funzione SQL e enabledFeatures del servizio filtrano le capacità prive di dipendenze effettive; il valutatore puro T01 calcola invece le concessioni grezze per poter mostrare gli errori di configurazione. La console T05 rifiuterà una configurazione incoerente senza concedere dipendenze automaticamente — mantiene il blocco in caso di dati privilegiati incoerenti e conserva il ruolo del valutatore puro — costo se errato: dati incoerenti inseriti da un operatore appaiono come capacità non utilizzabili invece di provocare errore di lettura; la configurazione ordinaria valida non cambia.
+
+Ruling: 4. I servizi comuni riusano il tipo strutturale PlatformAuditTx già presente in lib/audit/audit-types, equivalente a PlatformTx, e una prova di tipo nel modulo consentito ne verifica l’unione con TenantTx. Non si indebolisce platform-boundary né si importa la porta privilegiata fuori da lib/platform — il confine del 5a vieta esplicitamente anche gli import solo di tipo, mentre il piano esprime una forma di transazione e non richiede il percorso dell’import — costo se errato: il nome storico del tipo menziona audit anche dove descrive una lettura di policy; eventuale riordino futuro dei nomi, nessun privilegio aggiuntivo.
+
+Ambiente T02: nuova segnalazione ECONNREFUSED sulla prova locale; il coordinatore verifica Docker. Nessun ripiego verso database remoti.
+
+Ruling: 5. Il fixture policy-test-fixture previsto da T02 entra nell’elenco nominativo degli helper esclusivamente di test di tenant-boundary; soltanto quel modulo può riusare gli altri helper e nessun sorgente applicativo può importarlo — il piano richiede il fixture, ma non aveva elencato l’aggiornamento del rilevatore — costo se errato: manutenzione del rilevatore su un nuovo percorso di test; nessun permesso applicativo o SQL aperto. Richieste prove detector per import/re-export e percorsi equivalenti.
+
+Ruling: 6. Il blocco globale storico del menu va sostituito nel task T02 con il blocco comune per tenant, mantenendo la serializzazione entro il tenant e l’ordine dichiarato. La frase del piano «blocchi esistenti» non giustifica conservare una serializzazione tra tenant diversi vietata dalla specifica — T03 dipende già dal blocco comune e la modifica ora evita un contratto transitorio errato — costo se errato: aggiornamento dei test e dei punti di lock del menu; le invarianti di ordine devono essere provate prima della revisione.
+
+Task 2: implementation done — commit aa994c9011438255631e26e21553ed78c6e13c36; report task-2-report.md; 1555 unità, 638 integrazioni, 23 mirati sul fixture finale, tipi/lint/schema/boundary locale e 32 test migrazioni verdi. Nessun processo di prova in corso; esclusiva DB rilasciata. Revisore /root/mt5b_t02_reviewer, gpt-6-astra high, pacchetto review-48cfd29..aa994c9.diff.
+
+Docker: prima della ripresa erano assenti app/backend (restava solo vmnetd); docker desktop start ha avviato il servizio, poi local-test-db.sh up ha ripreparato solo la prova locale. Causa della precedente chiusura non accertata; nessuna modifica alle impostazioni globali o ripiego remoto. La successiva suite completa è terminata con successo.
+
+Task 2: review — conformità ✅, qualità Needs fixes; Critical nessuno. Important: nuova sonda SQL duplicata in db.mjs:723 e schema-contract.integration.test.ts:453, plan-mandated. Minor deferred: Pino dei tre errori di contesto intenzionali nel nuovo test. Revisore /root/mt5b_t02_reviewer.
+
+Ruling: 7. «Sonde speculari» richiede gli stessi criteri, non due copie letterali della query. La nuova query viene estratta in sources/devops/db/probes/tenant-policy-boundary.sql e caricata dal comando e dal test, con esecuzione/reporting distinti. Restano indipendenti le prove comportamentali dei privilegi — la duplicazione osservata è reale e la condivisione soddisfa il controllo operativo richiesto senza estendere il rifacimento alle sonde storiche — costo se errato: il nuovo file deve accompagnare la CLI e il test; i percorsi relativi al modulo e la verifica locale devono intercettarne l’assenza.
+
+Task 2: minor (deferred): log Pino degli errori di contesto attesi introdotti nel nuovo tenant-policy-schema.integration.test.ts; tre stack confermati dal revisore nel log mirato. Da considerare nella revisione finale; non entra nel giro di correzione importante.
+
+Task 2: fix round 1/5 avviato — FIX_BASE aa994c9011438255631e26e21553ed78c6e13c36; unica finding Important sulla duplicazione della sonda.
+
+Task 2: fix round 1/5 (1 addressed, 0 open — nuova sonda condivisa, prova GRANT/rollback e percorsi indipendenti dal cwd; commits aa994c9..fa761bd)
+
+Task 2: cannot-verify resolved — il revisore ha controllato i chiamanti con rischio concreto di inversione e i test di concorrenza; nessuna inversione identificata. L’assenza generale di deadlock resta materia della revisione finale, senza una pretesa di prova formale assoluta.
+
+Task 2: complete (commits 48cfd29..fa761bd, review clean)
+
+Riesame /root/mt5b_t02_r1_reviewer (gpt-6.1-sol medium): finding ADDRESSED, nessuna nuova rottura o osservazione fuori perimetro. Copertura/output del rapporto confermati, nessun test ripetuto dal revisore. Prossimo task 3.

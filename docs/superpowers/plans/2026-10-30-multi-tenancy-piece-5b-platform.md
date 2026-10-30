@@ -120,7 +120,7 @@ it('does not silently grant the read capability required by an invitation', () =
 
 ## Task 2 — T02 — Configurazione persistente e copia iniziale
 
-- [ ] ID=MT5B-T02, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Configurazione protetta per tenant, Fix description=Persistenza con RLS, impostazioni iniziali compatibili e copia dal modello; copre MT5B-OK-1 e OK-7.
+- [✅] ID=MT5B-T02, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Configurazione protetta per tenant, Fix description=Persistenza con RLS, impostazioni iniziali compatibili e copia dal modello; copre MT5B-OK-1 e OK-7.
 
 **File:** C `D/migrations/0064_tenant_feature_policy.sql`, `W/lib/tenancy/tenant-policy-service.ts`, `tenant-policy-lock.ts`, `policy-test-fixture.ts`; M `W/lib/db/schema.ts`, `W/lib/db/testing.ts`, `W/lib/schema-contract.integration.test.ts`, `D/db.mjs`, snapshot `D/schema.sql`; T `W/lib/tenancy/tenant-policy-schema.integration.test.ts`, `tenant-policy-service.integration.test.ts`, `tenant-template.integration.test.ts`.
 
@@ -130,7 +130,7 @@ it('does not silently grant the read capability required by an invitation', () =
 
 Per i test produce `createPolicyFixture(label: string): Promise<PolicyFixture>`: tenant copiato dal modello, `tenantId`, `slug`, `adminId`, `memberId`, `platformAdminId`, `roleId`, `menuEntryId`, `close(): Promise<void>`. Account sintetici senza credenziali, sessioni sostituite ai soli confini Next come nei test 5a; pulizia solo degli id creati. Non esportare questo helper nel codice applicativo.
 
-- [ ] T02.1 Scrivere test che confrontano cataloghi SQL e T01, tentano modifiche di policy come runtime e verificano il rifiuto, leggono A senza vedere B e verificano area iniziale accesa/limiti nulli. Test copia: modificare il modello, creare A, cambiare il modello ancora; A conserva la fotografia iniziale. Aggiornare l'elenco delle tabelle note nei test del modello.
+- [✅] T02.1 Scrivere test che confrontano cataloghi SQL e T01, tentano modifiche di policy come runtime e verificano il rifiuto, leggono A senza vedere B e verificano area iniziale accesa/limiti nulli. Test copia: modificare il modello, creare A, cambiare il modello ancora; A conserva la fotografia iniziale. Aggiornare l'elenco delle tabelle note nei test del modello.
 
 ```ts
 it('preserves current access when creating the initial policy', async () => {
@@ -142,11 +142,14 @@ it('preserves current access when creating the initial policy', async () => {
   } finally { await fixture.close() }
 })
 ```
-- [ ] T02.2 Con solo database usa e getta eseguire `npm run test:integration:local -- lib/tenancy/tenant-policy-schema.integration.test.ts lib/tenancy/tenant-policy-service.integration.test.ts lib/tenancy/tenant-template.integration.test.ts`: fallimento atteso per schema mancante.
-- [ ] T02.3 Implementare migrazione, modelli Drizzle, servizi e helper. Aggiornare `copy_tenant` nella nuova migrazione e i percorsi di creazione; nessun tenant esistente si sincronizza con il modello. Introdurre il blocco comune prima dei blocchi già esistenti. Esplicitare l'ordine: policy del tenant → riga tenant quando necessaria → blocchi esistenti di membri/menu/ruoli. Aggiornare anche le funzioni SQL che li prendono in ordine diverso. Non serializzare le letture ordinarie.
+- [✅] T02.2 Con solo database usa e getta eseguire `npm run test:integration:local -- lib/tenancy/tenant-policy-schema.integration.test.ts lib/tenancy/tenant-policy-service.integration.test.ts lib/tenancy/tenant-template.integration.test.ts`: fallimento atteso per schema mancante.
+- [✅] T02.3 Implementare migrazione, modelli Drizzle, servizi e helper. Aggiornare `copy_tenant` nella nuova migrazione e i percorsi di creazione; nessun tenant esistente si sincronizza con il modello. Introdurre il blocco comune prima dei blocchi già esistenti. Esplicitare l'ordine: policy del tenant → riga tenant quando necessaria → blocchi esistenti di membri/menu/ruoli. Aggiornare anche le funzioni SQL che li prendono in ordine diverso. Non serializzare le letture ordinarie.
 Tutte le funzioni SQL nuove hanno `security invoker set search_path = ''`, riferimenti qualificati e `EXECUTE` tolto a PUBLIC e concesso soltanto ai ruoli necessari. Dopo `protect_tenant_table` si tolgono esplicitamente le scritture runtime sulle tre configurazioni. `effective_tenant_feature_codes()` valida anche le dipendenze come T01.
-- [ ] T02.4 Applicare solo alla prova con `node sources/devops/db/db.mjs test-apply` dalla radice, rigenerare lo snapshot dai file tramite `schema-write` (non apre connessioni), ripetere i test mirati e `schema-check`. Aggiornare contestualmente le sonde di `boundary-check` per queste tabelle/permessi, senza eseguirlo sullo sviluppo.
-- [ ] T02.5 Commit locale `feat(tenancy): persist protected tenant policies`; registrare la migrazione 0064 senza modificare 0001–0063.
+- [✅] T02.4 Applicare solo alla prova con `node sources/devops/db/db.mjs test-apply` dalla radice, rigenerare lo snapshot dai file tramite `schema-write` (non apre connessioni), ripetere i test mirati e `schema-check`. Aggiornare contestualmente le sonde di `boundary-check` per queste tabelle/permessi, senza eseguirlo sullo sviluppo.
+- [✅] T02.5 Commit locale `feat(tenancy): persist protected tenant policies`; registrare la migrazione 0064 senza modificare 0001–0063.
+
+
+**Precisazioni del coordinatore prima dell’esecuzione di T02 (registro, decisioni 3–6):** SQL e servizio restituiscono soltanto capacità con dipendenze effettive; il valutatore puro T01 resta grezzo per la validazione della bozza. Il tipo della transazione di piattaforma è espresso tramite l’equivalente strutturale PlatformAuditTx già esistente, con prova di tipo nel modulo lib/platform consentito; la guardia platform-boundary non si indebolisce. Il nuovo fixture è aggiunto come percorso test-only nominato alla guardia tenant-boundary, con prove detector. Il vecchio blocco globale del menu viene sostituito dal blocco comune per tenant, non mantenuto; anche helper/test di navigazione interessati entrano nel perimetro T02.
 
 ## Task 3 — T03 — Associazione del menu alle capacità reali
 
