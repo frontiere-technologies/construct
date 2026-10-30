@@ -6,16 +6,13 @@ import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
+import { lockTenantPolicy } from '@/lib/tenancy/tenant-policy-lock'
 import { menuEntry } from '@/lib/db/schema'
 import { toMenuEntryRow } from './nav-row-mapper'
 import { sanitizeSvg } from './svg-sanitize'
 import { canDeleteSubtree, hasChildren, isDescendant } from './nav-tree-builder'
 import type { CreateNavItemInput, UpdateNavItemInput, MoveInput, MenuEntryRow } from './types'
 import { ITEM_TYPE_CATEGORY } from './types'
-
-async function lockNavigationWrites(tx: TenantTx) {
-  await tx.execute(sql`select pg_advisory_xact_lock(49374201)`)
-}
 
 async function writeMenuEntryTags(tx: TenantTx, idMenuEntry: number, tagTranslations: Record<string, string[]>) {
   const rows: { tag_lan: string; tag: string }[] = []
@@ -113,7 +110,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
 
   try {
     const created = await withTenant(actor.tenantId, async tx => {
-      await lockNavigationWrites(tx)
+      await lockTenantPolicy(tx)
 
       // Le voci di primo livello hanno id_parent nullo: append-at-end fra i fratelli veri
       // (quelli sotto lo stesso genitore, root incluso), non un ordine fisso a 0.
@@ -161,7 +158,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
   if (!input.name.trim()) throw new Error('Name is required')
   try {
     await withTenant(actor.tenantId, async tx => {
-      await lockNavigationWrites(tx)
+      await lockTenantPolicy(tx)
       await assertMutable(id, tx)
 
       const items = await loadMenuItems(tx)
@@ -223,7 +220,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
 export async function moveNavigationItem(id: number, move: MoveInput): Promise<void> {
   const actor = await requirePermission('manage-menu')
   await withTenant(actor.tenantId, async tx => {
-    await lockNavigationWrites(tx)
+    await lockTenantPolicy(tx)
     await assertMutable(id, tx)
     const items = await loadMenuItems(tx)
     const before = items.find(i => i.id_menu_entry === id)
@@ -243,7 +240,7 @@ export async function deleteNavigationItem(id: number): Promise<void> {
   const actor = await requirePermission('manage-menu')
   try {
     await withTenant(actor.tenantId, async tx => {
-      await lockNavigationWrites(tx)
+      await lockTenantPolicy(tx)
       const items = await loadMenuItems(tx)
       if (!items.some(i => i.id_menu_entry === id)) return
       if (!canDeleteSubtree(items, id)) throw new Error('This item (or a descendant) is immutable and cannot be deleted')

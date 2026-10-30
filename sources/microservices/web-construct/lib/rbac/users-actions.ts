@@ -3,6 +3,7 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
+import { lockTenantPolicy } from '@/lib/tenancy/tenant-policy-lock'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { withTenant, type AnyTx, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole, users } from '@/lib/db/schema'
@@ -59,6 +60,7 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
   refuseSelfInSupport(actor, userId)
   const currentUserId = actor.userId
   await withTenant(actor.tenantId, async tx => {
+    await lockTenantPolicy(tx)
     const system = await getSystemRoleIds(tx)
     const targetCurrentlyAdmin = await userIsAdmin(tx, userId, system.tenantAdmin)
     assertRoleChangeAllowed({
@@ -109,6 +111,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
   })
 
   await withTenant(actor.tenantId, async tx => {
+    await lockTenantPolicy(tx)
     if (!actor.isAdmin) {
       const system = await getSystemRoleIds(tx)
       assertCanChangeStatus(actor, await userIsAdmin(tx, userId, system.tenantAdmin))
@@ -149,6 +152,7 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
   // Account (se manca), token d'invito e appartenenza nascono in una transazione sola, nel tenant
   // dell'attore, insieme alla voce del registro: o tutto o niente (MT5-DEC-15).
   const invitation = await withTenant(actor.tenantId, async tx => {
+    await lockTenantPolicy(tx)
     // Un tenant sospeso o archiviato non manda inviti né aggiunge persone (MT5-DEC-25).
     await assertTenantActive(tx)
     // In assistenza, non il proprio account: prima di creare token o appartenenze.

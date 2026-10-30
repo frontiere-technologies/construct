@@ -6,14 +6,17 @@ import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { permission, menuEntry, role, roleFunctionality } from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
+import { createPolicyFixture } from '@/lib/tenancy/policy-test-fixture'
 import type { CreateNavItemInput } from './types'
 
+const actorState = vi.hoisted(() => ({ tenantId: 1 }))
+
 vi.mock('@/lib/rbac/auth-guard', async () => {
-  const { defaultTestTenant } = await import('@/lib/tenancy/testing')
-  const admin = { userId: '00000000-0000-4000-8000-0000000000a1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+  const { tenantIdForTest } = await import('@/lib/tenancy/testing')
+  const admin = () => ({ userId: '00000000-0000-4000-8000-0000000000a1', tenantId: tenantIdForTest(actorState.tenantId), roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() })
   return {
-    requirePermission: async () => admin,
-    requireAdministrator: async () => admin,
+    requirePermission: async () => admin(),
+    requireAdministrator: async () => admin(),
   }
 })
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
@@ -64,6 +67,7 @@ afterAll(closeOwner)
 
 describeIntegration('navigation mutations against the database', () => {
   afterEach(async () => {
+    actorState.tenantId = 1
     // menu_entry e permission non hanno più relazione dopo la 0027 (Task 6): questa riga di
     // pulizia è difensiva, nel caso un test qui sotto inserisca ancora un permesso con questo
     // prefisso — nessuno lo fa più oggi.
@@ -269,17 +273,50 @@ describeIntegration('navigation mutations against the database', () => {
     // DB remoto, un UPDATE per fratello dentro il lock del menu: ~5-6 s, oltre il timeout predefinito.
   }, 15_000)
 
+  it('keeps another tenant navigation writable while this tenant waits for its policy lock', async () => {
+    const a = await createPolicyFixture('menu-a')
+    const b = await createPolicyFixture('menu-b')
+    const sql = postgres(process.env.TEST_DATABASE_URL!, { prepare: false, max: 1 })
+    const connection = await sql.reserve()
+    let writing: Promise<{ id: number }> | undefined
+    let writingOther: Promise<{ id: number }> | undefined
+    let deadline: ReturnType<typeof setTimeout> | undefined
+    try {
+      await connection`select pg_advisory_lock(-${a.tenantId}::bigint)`
+      actorState.tenantId = a.tenantId
+      let completed = false
+      writing = createNavigationItem(categoryInput('Waiting tenant')).then(result => { completed = true; return result })
+      await new Promise(resolve => setTimeout(resolve, 75))
+      expect(completed).toBe(false)
+      actorState.tenantId = b.tenantId
+      writingOther = createNavigationItem(categoryInput('Independent tenant'))
+      const created = await Promise.race([writingOther, new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => reject(new Error('another tenant was serialized')), 1000)
+      })])
+      expect(created.id).toBeGreaterThan(0)
+    } finally {
+      if (deadline) clearTimeout(deadline)
+      await connection`select pg_advisory_unlock(-${a.tenantId}::bigint)`
+      await Promise.all([writing, writingOther])
+      connection.release()
+      await sql.end({ timeout: 5 })
+      actorState.tenantId = 1
+      await a.close()
+      await b.close()
+    }
+  })
+
   it('serializes subtree deletion with every other navigation write', async () => {
     const { id } = await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`))
     const sql = postgres(process.env.TEST_DATABASE_URL!, { prepare: false, max: 1 })
     const connection = await sql.reserve()
     try {
-      await connection`select pg_advisory_lock(49374201)`
+      await connection`select pg_advisory_lock(-${defaultTestTenant()}::bigint)`
       let completed = false
       const deleting = deleteNavigationItem(id).then(() => { completed = true })
       await new Promise(resolve => setTimeout(resolve, 75))
       expect(completed).toBe(false)
-      await connection`select pg_advisory_unlock(49374201)`
+      await connection`select pg_advisory_unlock(-${defaultTestTenant()}::bigint)`
       await deleting
       expect(await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))).toHaveLength(0)
     } finally {

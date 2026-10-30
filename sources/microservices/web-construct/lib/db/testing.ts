@@ -42,6 +42,8 @@ export async function deleteTenantForTest(tenantId: TenantId): Promise<void> {
     if (target.slug === 'default' || target.is_template) {
       throw new Error(`deleteTenantForTest refuses to delete tenant ${target.slug}`)
     }
+    // La pulizia prende prima il blocco della policy; le configurazioni sono scrivibili soltanto dal proprietario.
+    await tx.execute(sql`select app_private.lock_tenant_policy()`)
     const tables = await tx.execute<{ name: string }>(
       sql`select table_name as name from app_private.table_class where class = 'tenant' order by table_name`)
     // Le chiavi esterne fra tabelle di tenant sono tutte in cascata: l'ordine non conta.

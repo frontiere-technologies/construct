@@ -357,3 +357,41 @@ export const translationValue = pgTable('translation_value', {
   unique('translation_value_key_language_unique').on(t.idTranslationKey, t.idLanguage),
   index('translation_value_language_idx').on(t.idLanguage),
 ])
+
+/** Cataloghi fissi 5b: sola lettura per construct_runtime (0064). */
+export const featureArea = pgTable('feature_area', {
+  code: text('code').primaryKey(),
+})
+
+export const appFeature = pgTable('app_feature', {
+  code: text('code').primaryKey(),
+  areaCode: text('area_code').references(() => featureArea.code),
+  idPermission: bigint('id_permission', { mode: 'number' }).references(() => permission.idPermission),
+})
+
+export const appFeatureDependency = pgTable('app_feature_dependency', {
+  featureCode: text('feature_code').notNull().references(() => appFeature.code),
+  dependencyCode: text('dependency_code').notNull().references(() => appFeature.code),
+}, t => [primaryKey({ columns: [t.featureCode, t.dependencyCode] })])
+
+/** Concessioni e limiti: il tenant legge, la piattaforma modifica; RLS forzata (0064). */
+export const tenantPlatformPolicy = pgTable('tenant_platform_policy', {
+  idTenant: tenantIdColumn().primaryKey(),
+  revision: bigint('revision', { mode: 'number' }).notNull().default(1),
+  queryTimeoutMs: integer('query_timeout_ms'),
+  maxMembers: integer('max_members'),
+  maxRoles: integer('max_roles'),
+  maxMenuEntries: integer('max_menu_entries'),
+})
+
+export const tenantAreaEntitlement = pgTable('tenant_area_entitlement', {
+  idTenant: tenantIdColumn(),
+  areaCode: text('area_code').notNull().references(() => featureArea.code),
+  enabled: boolean('enabled').notNull(),
+}, t => [primaryKey({ columns: [t.idTenant, t.areaCode] })])
+
+export const tenantEntitlement = pgTable('tenant_entitlement', {
+  idTenant: tenantIdColumn(),
+  featureCode: text('feature_code').notNull().references(() => appFeature.code),
+  allowed: boolean('allowed').notNull(),
+}, t => [primaryKey({ columns: [t.idTenant, t.featureCode] })])

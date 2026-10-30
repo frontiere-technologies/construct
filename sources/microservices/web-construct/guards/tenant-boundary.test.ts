@@ -25,7 +25,8 @@ const ROOT = join(__dirname, '..')
 const SOURCE_ROOTS = ['app', 'components', 'context', 'guards', 'lib', 'types']
 // Moduli del driver e del client, come percorsi dalla radice del progetto (alias @/ e relativi risolti).
 const DRIVER_MODULES = new Set(['postgres', 'drizzle-orm/postgres-js', 'lib/db/client', 'lib/db', 'lib/db/index'])
-const TESTING_MODULES = new Set(['lib/tenancy/testing', 'lib/db/testing'])
+const POLICY_TEST_FIXTURE = 'lib/tenancy/policy-test-fixture'
+const TESTING_MODULES = new Set(['lib/tenancy/testing', 'lib/db/testing', POLICY_TEST_FIXTURE])
 const TENANT_ID_MODULE = 'lib/tenancy/tenant-id'
 const TENANT_SESSION_VARIABLE = 'app.tenant_id'
 
@@ -150,7 +151,7 @@ describe('tenant boundary', () => {
 
   it('imports the test helpers only from test files', () => {
     const offenders = files
-      .filter(file => !isTestFile(file.path))
+      .filter(file => !isTestFile(file.path) && file.path !== `${POLICY_TEST_FIXTURE}.ts`)
       .filter(file => importsTestingHelpers(file.text, file.path))
       .map(file => file.path)
     expect(offenders).toEqual([])
@@ -203,6 +204,9 @@ describe('tenant boundary detectors', () => {
 
   it('sees the test helpers in every form, also through relative paths', () => {
     const forms = [
+      `import { createPolicyFixture } from '@/lib/tenancy/policy-test-fixture'`,
+      `export { createPolicyFixture } from '@/lib/tenancy/policy-test-fixture'`,
+      `const fixture = await import('@/lib/tenancy/policy-test-fixture')`,
       `import { tenantIdForTest } from '@/lib/tenancy/testing'`,
       `import { withOwner } from '@/lib/db/testing'`,
       `export { withOwner } from '@/lib/db/testing'`,
@@ -211,6 +215,7 @@ describe('tenant boundary detectors', () => {
       `import t = require('@/lib/db/testing')`,
     ]
     for (const form of forms) expect(importsTestingHelpers(form, from), form).toBe(true)
+    expect(importsTestingHelpers(`import { createPolicyFixture } from './policy-test-fixture'`, 'lib/tenancy/other.ts')).toBe(true)
     expect(importsTestingHelpers(`import { x } from './testing'`, 'lib/db/other.ts')).toBe(true)
     expect(importsTestingHelpers(`import { x } from './testing'`, 'lib/other/other.ts')).toBe(false)
     expect(importsTestingHelpers(`import { x } from '@/lib/db/tenant-db'`, from)).toBe(false)

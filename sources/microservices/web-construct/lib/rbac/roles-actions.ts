@@ -3,6 +3,7 @@
 import { eq, inArray, sql } from 'drizzle-orm'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
+import { lockTenantPolicy } from '@/lib/tenancy/tenant-policy-lock'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { permission, menuEntry, role, roleType } from '@/lib/db/schema'
@@ -49,6 +50,7 @@ export async function createRole(roleName: string): Promise<{ id: number }> {
   if (!name) throw new Error('Role name is required')
   try {
     return await withTenant(actor.tenantId, async tx => {
+      await lockTenantPolicy(tx)
       const [created] = await tx.insert(role).values({ description: name, idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole })
       await recordTenantAudit(tx, auditActorOf(actor), {
         operation: 'role.create', objectType: 'role', objectId: created.idRole, details: { name },
@@ -65,6 +67,7 @@ export async function renameRole(roleId: number, roleName: string): Promise<void
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
   await withTenant(actor.tenantId, async tx => {
+    await lockTenantPolicy(tx)
     const before = await loadRole(tx, roleId)
     if (before.type !== 'SERVICE') throw new Error('This role cannot be renamed')
     try {
@@ -86,6 +89,7 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
   }
 
   await withTenant(actor.tenantId, async tx => {
+    await lockTenantPolicy(tx)
     if ((await getRoleType(tx, roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
 
     // Non si concede ciò che non si possiede (DEC-6, DEC-29): vale per chi concede, non per chi
@@ -174,6 +178,7 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
 export async function deleteRole(roleId: number): Promise<void> {
   const actor = await requirePermission('manage-roles')
   await withTenant(actor.tenantId, async tx => {
+    await lockTenantPolicy(tx)
     const before = await loadRole(tx, roleId)
     if (before.type === 'SYSTEM') throw new Error('System roles cannot be deleted')
     try {

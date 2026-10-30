@@ -4,6 +4,7 @@ import { tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
+import { lockTenantPolicy } from './tenant-policy-lock'
 
 /** Lo stato di un'appartenenza a un tenant (specifica 2026-10-20, §2.1). */
 export type MembershipStatus = 'active' | 'deactivated'
@@ -99,6 +100,7 @@ export async function joinTenantByRegistration(userId: string, tenantId: TenantI
  * `REGISTERED` del tenant e ritorna `true`.
  */
 export async function addTenantMember(tx: TenantTx, userId: string): Promise<boolean> {
+  await lockTenantPolicy(tx)
   const created = await tx.insert(tenantMembership)
     .values({ userId, status: MEMBERSHIP_ACTIVE })
     .onConflictDoNothing()

@@ -18,7 +18,7 @@ const DEFAULT = defaultTestTenant()
 // Le tabelle di tenant che la copia riproduce, e quelle che salta apposta (persone, appartenenze e
 // il registro delle modifiche: un tenant nuovo parte con il registro vuoto, 0057).
 const COPIED = ['menu_entry', 'menu_entry_tag', 'role', 'role_permission', 'role_functionality', 'app_theme',
-  'tenant_settings'] as const
+  'tenant_settings', 'tenant_platform_policy', 'tenant_area_entitlement', 'tenant_entitlement'] as const
 const ALL_TENANT_TABLES = [...COPIED, 'user_role', 'tenant_membership', 'tenant_audit_event'] as const
 
 let template: TenantId
@@ -70,6 +70,9 @@ async function countsOf(tenantId: TenantId): Promise<Record<string, number>> {
       (select count(*)::int from public.role_functionality) as role_functionality,
       (select count(*)::int from public.app_theme) as app_theme,
       (select count(*)::int from public.tenant_settings) as tenant_settings,
+      (select count(*)::int from public.tenant_platform_policy) as tenant_platform_policy,
+      (select count(*)::int from public.tenant_area_entitlement) as tenant_area_entitlement,
+      (select count(*)::int from public.tenant_entitlement) as tenant_entitlement,
       (select count(*)::int from public.user_role) as user_role,
       (select count(*)::int from public.tenant_membership) as tenant_membership,
       (select count(*)::int from public.tenant_audit_event) as tenant_audit_event
@@ -93,6 +96,9 @@ async function fingerprintOf(tenantId: TenantId): Promise<Record<string, string 
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.role_functionality t) as role_functionality,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.app_theme t) as app_theme,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_settings t) as tenant_settings,
+      (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_platform_policy t) as tenant_platform_policy,
+      (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_area_entitlement t) as tenant_area_entitlement,
+      (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_entitlement t) as tenant_entitlement,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.user_role t) as user_role,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_membership t) as tenant_membership,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_audit_event t) as tenant_audit_event
@@ -134,7 +140,10 @@ async function contentOf(tenantId: TenantId): Promise<Record<string, unknown[]>>
         left join ruolo r on r.id_role = f.id_role
         left join voce v on v.id_menu_entry = f.id_menu_entry) s),
       'app_theme', (select coalesce(jsonb_agg(to_jsonb(t) - 'id_tenant' - 'date_mod'), '[]') from public.app_theme t),
-      'tenant_settings', (select coalesce(jsonb_agg(to_jsonb(t) - 'id_tenant' - 'updated_at'), '[]') from public.tenant_settings t)
+      'tenant_settings', (select coalesce(jsonb_agg(to_jsonb(t) - 'id_tenant' - 'updated_at'), '[]') from public.tenant_settings t),
+      'tenant_platform_policy', (select coalesce(jsonb_agg(to_jsonb(t) - 'id_tenant'), '[]') from public.tenant_platform_policy t),
+      'tenant_area_entitlement', (select coalesce(jsonb_agg(to_jsonb(t) - 'id_tenant' order by t.area_code), '[]') from public.tenant_area_entitlement t),
+      'tenant_entitlement', (select coalesce(jsonb_agg(to_jsonb(t) - 'id_tenant' order by t.feature_code), '[]') from public.tenant_entitlement t)
     ) as content
   `), tenantId)
   return rows[0].content
@@ -226,6 +235,26 @@ describeIntegration('tenant template', () => {
     expect(sourceContent.menu_entry_tag).toHaveLength(3)
     for (const table of COPIED) expect(copiedContent[table], table).toEqual(sourceContent[table])
   }, 30_000)
+
+  it('copies a policy snapshot once, without synchronizing later template changes', async () => {
+    // Un'unica transazione annullata mantiene modello e database esattamente com'erano.
+    await expect(withOwner(async tx => {
+      await tx.execute(sql`update public.tenant_platform_policy set revision = 9, query_timeout_ms = 3210,
+        max_members = 12, max_roles = 9, max_menu_entries = 80`)
+      await tx.execute(sql`update public.tenant_area_entitlement set enabled = false where area_code = 'people'`)
+      await tx.execute(sql`insert into public.tenant_entitlement (feature_code, allowed) values ('read-users', true)`)
+      const [created] = await tx.execute<{ id: string }>(sql`select app_private.create_tenant_from_template(${slug()}, 'Policy snapshot')::text as id`)
+      await tx.execute(sql`update public.tenant_platform_policy set max_members = 22`)
+      await tx.execute(sql`update public.tenant_area_entitlement set enabled = true where area_code = 'people'`)
+      await tx.execute(sql`delete from public.tenant_entitlement where feature_code = 'read-users'`)
+      await tx.execute(sql`select set_config('app.tenant_id', ${created.id}, true)`)
+      const [policy] = await tx.execute(sql`select revision::int, query_timeout_ms, max_members, max_roles, max_menu_entries from public.tenant_platform_policy`)
+      expect(policy).toEqual({ revision: 1, query_timeout_ms: 3210, max_members: 12, max_roles: 9, max_menu_entries: 80 })
+      expect(await tx.execute(sql`select enabled from public.tenant_area_entitlement where area_code = 'people'`)).toEqual([{ enabled: false }])
+      expect(await tx.execute(sql`select feature_code, allowed from public.tenant_entitlement`)).toEqual([{ feature_code: 'read-users', allowed: true }])
+      throw new Error('snapshot-test-rollback')
+    }, template)).rejects.toThrow('snapshot-test-rollback')
+  })
 
   it('every internal reference of the copy points to rows of the copy', async () => {
     const [orphans] = await withOwner(tx => tx.execute<Record<string, number>>(sql`

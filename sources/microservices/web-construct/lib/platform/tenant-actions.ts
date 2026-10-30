@@ -11,6 +11,7 @@ import { sendInvitationEmail } from '@/lib/invitation-email'
 import { createLogger } from '@/lib/logger'
 import { emailSchema, userIdSchema } from '@/lib/rbac/action-input-schemas'
 import { requirePlatformAdmin, type PlatformActor } from '@/lib/rbac/auth-guard'
+import { lockTenantPolicy } from '@/lib/tenancy/tenant-policy-lock'
 import { normalizeHost } from '@/lib/tenancy/request-host'
 import { createdTenantId, existingTenantId } from '@/lib/tenancy/platform-tenant'
 import { DEFAULT_TENANT_SLUG, type TenantId } from '@/lib/tenancy/tenant-id'
@@ -80,6 +81,7 @@ type TenantRowLocked = { id: number; slug: string; status: string; isTemplate: b
 
 /** Il tenant della transazione, bloccato: due azioni sullo stesso tenant si mettono in fila e la seconda vede lo stato della prima. */
 async function lockTenant(tx: PlatformTx, tenantId: TenantId): Promise<TenantRowLocked> {
+  await lockTenantPolicy(tx)
   const [row] = await tx
     .select({ id: tenant.id, slug: tenant.slug, status: tenant.status, isTemplate: tenant.isTemplate })
     .from(tenant).where(eq(tenant.id, tenantId)).for('update')
