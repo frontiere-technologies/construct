@@ -1,6 +1,6 @@
 # Multi-tenancy, pezzo 5b: concessioni, limiti e chiusura dei tenant
 
-Data: 2026-10-29. Aggiornato: 2026-10-30. **Specifica rivista, in attesa di approvazione per l'implementazione.**
+Data: 2026-10-29. Aggiornato: 2026-10-30. **Specifica rivista e approvata dal proprietario il 2026-10-30.**
 
 ## Sommario
 
@@ -58,7 +58,7 @@ Scelta confermata il 2026-10-30. Non si conservano vecchi eventi o dati del tena
 - [✅] ID=MT5B-DEC-4, Severity=High, Complexity=Medium, Priority=P0, Estimate=minutes, Title=Accesso all'esportazione, Fix description=Decisione confermata il 2026-10-30: amministratore del tenant e piattaforma solo con consenso. La modalità concreta del consenso è proposta nel §7, non una decisione già approvata.
 - [✅] ID=MT5B-DEC-5, Severity=High, Complexity=Medium, Priority=P0, Estimate=minutes, Title=Traccia della cancellazione, Fix description=Decisione confermata il 2026-10-30: solo evento di cancellazione, data, amministratore e identificativo tecnico del tenant. Conservare gli account condivisi deriva dall'isolamento già richiesto; il trattamento degli account rimasti senza appartenenze è proposto nel §9.
 - [✅] ID=MT5B-DES-1, Severity=High, Complexity=High, Priority=P0, Estimate=hours, Title=Completare la specifica verificabile, Fix description=Documento completato e riletto da un revisore indipendente il 2026-10-30. Chiarita l'esportazione del modello; verifica conclusa con «nothing important left». Non comprende l'approvazione né l'implementazione.
-- [ ] ID=MT5B-APP-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Approvazione della specifica completa, Fix description=Presentare il documento rivisto, evidenziando le scelte progettuali proposte, e ottenere l'approvazione prima del piano e del codice.
+- [✅] ID=MT5B-APP-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Approvazione della specifica completa, Fix description=Il proprietario ha approvato il documento e le proposte progettuali rispondendo «procedi» il 2026-10-30 alla richiesta di approvazione completa. Prossimo passo: piano operativo; nessuna autorizzazione implicita al database di sviluppo o al remoto.
 
 ## 2. Ambito, vincoli e confini
 
@@ -301,10 +301,14 @@ oppure dopo una riattivazione deliberata.
 
 Formato JSON con versione del formato, schema/catalogo, istante, metadati, riferimenti alle
 identità e sezioni con conteggi. Contiene tutte le righe di proprietà del tenant: appartenenze,
-ruoli, assegnazioni, menu ed etichette, tema, domini email ammessi, impostazioni e registro,
+ruoli, assegnazioni, menu ed etichette, tema, impostazioni e registro,
 comprese nuove concessioni e quote. Gli indirizzi dedicati sono metadati, non autorizzazioni
 da riattivare. Registro della piattaforma e cataloghi globali sono esclusi; dei secondi si
 registrano chiavi/versioni necessarie a verificare la compatibilità.
+Precisazione ricavata dal codice durante il piano: `allowed_domains` è ancora un elenco
+globale, come `auth_rate_limit` e `password_set_tokens`; non è esportabile o cancellabile
+come proprietà del singolo tenant. I domini email per tenant restano nel pezzo 3, senza
+anticiparne la migrazione nel 5b.
 
 Mai password, hash, token di invito/reimpostazione, segreti, sessioni, limiti dei tentativi
 d'accesso o attributi di amministratore di piattaforma. Delle identità globali entrano solo
@@ -451,5 +455,5 @@ Revisione indipendente completata il 2026-10-30. L'unica domanda riguardava chi 
 autorizzare l'esportazione del modello senza amministratori: si è scelto di non esporla
 nell'app, mantenendo consenso esplicito e divieto di auto-autorizzazione della piattaforma.
 Il revisore ha riletto il chiarimento e concluso «nothing important left».
-Approvazione completa del proprietario ancora da ottenere. Nessun codice applicativo o
-migrazione del 5b è stato scritto in questa fase.
+Approvazione completa ottenuta il 2026-10-30 con «procedi», dopo la presentazione del documento
+e delle proposte. Nessun codice applicativo o migrazione del 5b è stato scritto in questa fase.
