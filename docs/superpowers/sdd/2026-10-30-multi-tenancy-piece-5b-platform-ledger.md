@@ -4,19 +4,19 @@ Data: 2026-10-30. Metodo scelto: agenti con revisione per attività. Ramo featur
 
 ## Stato delle attività
 
-- [ ] ID=MT5B-T01, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Catalogo e tipi, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T02, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Persistenza/letture/blocco, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T03, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Menu e capacità, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T04, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Autorizzazione/Actor/guardie, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T05, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Azioni policy e pulizia, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T06, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Quote e withTenant, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T07, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Modalità installazione, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T08, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Schermate, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T09, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Consenso export, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T10, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Formato/export, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T11, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Ripristino, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T12, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Eliminazione, Fix description=Da eseguire e rivedere secondo il piano.
-- [ ] ID=MT5B-T13, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Verifica e rilascio, Fix description=Da eseguire e rivedere secondo il piano.
+- [✅] ID=MT5B-T01, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=Catalogo e precedenza, Fix description=Definire chiavi, dipendenze e calcolo delle capacità senza database; copre MT5B-OK-1.
+- [ ] ID=MT5B-T02, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Configurazione protetta per tenant, Fix description=Persistenza con RLS, impostazioni iniziali compatibili e copia dal modello; copre MT5B-OK-1 e OK-7.
+- [ ] ID=MT5B-T03, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Menu senza aggiramenti, Fix description=Classificare pagine e contenuti propri con chiavi stabili, preservando il menu esistente; copre RF-2 e MT5B-OK-1/2.
+- [ ] ID=MT5B-T04, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Concessioni applicate a ogni porta, Fix description=Intersezione prima delle scorciatoie amministrative e vincoli SQL con sospensione reversibile; copre MT5B-OK-1/2.
+- [ ] ID=MT5B-T05, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Azioni della piattaforma verificabili, Fix description=Salvataggio con revisione, anteprima e cancellazione delle sole assegnazioni selezionate, registro atomico; copre MT5B-OK-1/2 e RF-5.
+- [ ] ID=MT5B-T06, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Limiti affidabili, Fix description=Conteggi esatti e protezioni SQL su tutti i percorsi; timeout locale alla transazione; copre MT5B-OK-3 e RF-3.
+- [ ] ID=MT5B-T07, Severity=High, Complexity=Medium, Priority=P1, Estimate=days, Title=Modalità singola senza privilegi impliciti, Fix description=Disabilitare davvero gli ingressi multi-tenant mantenendo default e isolamento; copre MT5B-OK-5 e RF-5.
+- [ ] ID=MT5B-T08, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Gestione comprensibile delle concessioni, Fix description=Collegare T05/T06 alle schermate e distinguere sospensione da cancellazione; copre MT5B-OK-2/3/7.
+- [ ] ID=MT5B-T09, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=days, Title=Consenso distinto e rivalidato, Fix description=Estendere l'assistenza senza ampliare retroattivamente i consensi; copre MT5B-OK-6 e RF-1.
+- [ ] ID=MT5B-T10, Severity=Critical, Complexity=High, Priority=P1, Estimate=days, Title=Esportazione completa e limitata, Fix description=Formato chiuso, copertura di tutte le tabelle e consegna soltanto dopo verifica aggiornata; copre MT5B-OK-4/6 e RF-1.
+- [ ] ID=MT5B-T11, Severity=Critical, Complexity=High, Priority=P1, Estimate=days, Title=Ripristino isolato e verificato, Fix description=Verifica preventiva e importazione atomica con identità rimappate, nessun privilegio globale dal file; copre MT5B-OK-4/6 e RF-4.
+- [ ] ID=MT5B-T12, Severity=Critical, Complexity=High, Priority=P1, Estimate=days, Title=Cancellazione completa e atomica, Fix description=Eliminare dati e vecchi registri lasciando solo l'evento concordato; copre MT5B-OK-4/6 e RF-4, risolve DEF-A.
+- [ ] ID=MT5B-T13, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Chiusura verificata e rilascio separato, Fix description=Coprire tutte le porte/tabelle, provare installazione nuova e aggiornata, consegnare guida e mantenere autorizzazioni operative separate; copre MT5B-OK-1…8.
 
 ## Controllo preliminare interno a ciascuna attività
 
@@ -130,3 +130,19 @@ Ruling: 2. Revocare un ruolo o un suo grant sospeso non richiede che le capacit�
 Area isolata creata con strumento nativo; nessun file locale del proprietario copiato. Scritture nel percorso gestito richiedono escalation del contenitore iniziale: usare comandi espliciti con require_escalated, senza lavorare nel checkout originale. Script sdd-workspace fermato dopo errore di permessi e rieseguito correttamente; dipendenze in preparazione. Nessun database interrogato.
 
 Baseline: npm ci concluso, dipendenze del lock installate. npm test -- --reporter=dot: 154 file, 1521 test passati, uscita 0 in 7.77 s. Log completo baseline-unit.log; contiene log diagnostici dei casi di errore già esistenti. Nessun test di integrazione o browser avviato; nessun database contattato.
+
+Task 1: in progress — BASE aa9129ef55eb1ac0ca27e09597d294ae3246c3fb; implementer /root/mt5b_t01_implementer, gpt-6.1-sol high; brief task-1-brief.md; report task-1-report.md.
+
+Ambiente test: Docker Desktop avviato; local-test-db.sh up ha preparato una nuova banca dati usa e getta locale alla 0063 e le identità di test, uscita 0. Nessuna integrazione o browser in corso. Dettagli non sensibili in test-environment.md.
+
+Task 1: implementation done — commit 33887f6; report task-1-report.md; ROSSO/VERDE documentato, 33 mirati, 1554 unità, tipi e lint passati. Revisione assegnata a /root/mt5b_t01_reviewer (gpt-6.1-sol high), pacchetto review-aa9129e..33887f6.diff. Dopo aggiornamento del contesto della chat il revisore è stato ripreso, senza rilanciare implementazione o test.
+
+Ambiente aggiornato: il percorso gestito del 5b ora è una radice scrivibile; non serve più escalation per normali modifiche ai sorgenti/rapporti. Restano le protezioni Git e Docker e tutti i limiti del proprietario.
+
+Task 1: minor (deferred): log diagnostici Pino di casi di errore simulati preesistenti nella suite completa; non introdotti da T01. Riferimento task-1-report.md, sezione Verifiche finali. La revisione finale deve considerare se valga una pulizia separata.
+
+Task 1: cannot-verify resolved — conservazione delle assegnazioni e applicazione runtime non sono requisiti implementativi di T01; sono nei T03/T04/T05/T08 e restano aperti. Nessuna lacuna del catalogo rilevata.
+
+Task 1: complete (commits aa9129e..33887f6, review clean)
+
+Revisore /root/mt5b_t01_reviewer: conformità ✅ e qualità Approved, nessun Critical/Important, sola nota minore sopra. Nessuna prova ripetuta dal revisore. Prossimo task 2.

@@ -94,14 +94,14 @@ I codici inutilizzati non acquistano nuove porte: `manage-permissions`, `manage-
 
 ## Task 1 — T01 — Catalogo stabile e regole pure
 
-- [ ] ID=MT5B-T01, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=Catalogo e precedenza, Fix description=Definire chiavi, dipendenze e calcolo delle capacità senza database; copre MT5B-OK-1.
+- [✅] ID=MT5B-T01, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=Catalogo e precedenza, Fix description=Definire chiavi, dipendenze e calcolo delle capacità senza database; copre MT5B-OK-1.
 
 **File:** C `W/lib/tenancy/{feature-catalog,tenant-policy-types,tenant-policy}.ts`; T `W/lib/tenancy/tenant-policy.test.ts`, `W/guards/feature-catalog.test.ts`.
 
 **Interfacce:** produce i tipi comuni; `evaluateTenantFeatures(areas: Record<AreaKey, boolean>, overrides: Partial<Record<FeatureKey, boolean>>): ReadonlySet<FeatureKey>`; `findMissingDependencies(features: ReadonlySet<FeatureKey>): FeatureKey[]`; `featureForPermission(code: PermissionCode): FeatureKey | null`. Il catalogo contiene chiave, area o nucleo essenziale, permesso individuale eventuale e dipendenze. Esportare `FEATURE_CATALOG`, `AREA_KEYS`, `FEATURE_KEYS` come letterali immutabili.
 
 - [✅] T01.0 Prima dell'esecuzione applicare `using-git-worktrees`: controllare gli allegati della chat, riusare un isolamento adatto o crearne uno gestito a partire dal `development` locale con questi documenti, ramo `feature/multi-tenancy-piece-5b`. Usare esplicitamente il percorso restituito. Conservare nel checkout originale file del proprietario e stash. Per le verifiche riusare le variabili del database usa e getta già configurate, senza riscrivere credenziali o introdurre quelle dell'operatore nel processo web.
-- [ ] T01.1 Scrivere i test prima del valutatore. La tabella di precedenza comprende tutte le sei combinazioni area/eccezione e le chiavi sconosciute sono rifiutate dai validatori; le capacità essenziali restano presenti. Test esatto di dipendenza:
+- [✅] T01.1 Scrivere i test prima del valutatore. La tabella di precedenza comprende tutte le sei combinazioni area/eccezione e le chiavi sconosciute sono rifiutate dai validatori; le capacità essenziali restano presenti. Test esatto di dipendenza:
 
 ```ts
 it('does not silently grant the read capability required by an invitation', () => {
@@ -113,10 +113,10 @@ it('does not silently grant the read capability required by an invitation', () =
 
 `allAreasDisabled` è una costante di test costruita da `AREA_KEYS`, non una configurazione applicativa nuova. Dipendenze: invito/status/assegnazione ruoli → `read-users`; gestione/concessione ruoli → `read-roles`; modifica menu → `read-menu`. La concessione di ruoli a utenti richiede anche la consultazione dei ruoli. Le dipendenze sono transitive e il catalogo non può avere cicli.
 
-- [ ] T01.2 Eseguire `npm test -- lib/tenancy/tenant-policy.test.ts guards/feature-catalog.test.ts` da W: deve fallire perché il valutatore non esiste, non per errore di raccolta.
-- [ ] T01.3 Implementare le interfacce sopra; la guardia confronta permessi realmente dichiarati dalle porte e inventario, accettando soltanto le esclusioni inutilizzate nominate. Nessuna funzione sconosciuta è concessa per difetto.
-- [ ] T01.4 Ripetere lo stesso comando: tutti i casi passano; eseguire `npm run typecheck`.
-- [ ] T01.5 Rileggere il cambiamento e creare commit locale `feat(tenancy): define platform feature catalog`; includere soltanto i file del task.
+- [✅] T01.2 Eseguire `npm test -- lib/tenancy/tenant-policy.test.ts guards/feature-catalog.test.ts` da W: deve fallire perché il valutatore non esiste, non per errore di raccolta.
+- [✅] T01.3 Implementare le interfacce sopra; la guardia confronta permessi realmente dichiarati dalle porte e inventario, accettando soltanto le esclusioni inutilizzate nominate. Nessuna funzione sconosciuta è concessa per difetto.
+- [✅] T01.4 Ripetere lo stesso comando: tutti i casi passano; eseguire `npm run typecheck`.
+- [✅] T01.5 Rileggere il cambiamento e creare commit locale `feat(tenancy): define platform feature catalog`; includere soltanto i file del task.
 
 ## Task 2 — T02 — Configurazione persistente e copia iniziale
 
