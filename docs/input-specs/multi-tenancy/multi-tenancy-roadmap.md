@@ -1,6 +1,6 @@
 # Multi-tenancy: stato dell'implementazione
 
-Aggiornato: 2026-10-29. Tiene insieme in un'unica tabella quello che è fatto e quello che resta.
+Aggiornato: 2026-10-30. Tiene insieme in un'unica tabella quello che è fatto e quello che resta.
 Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-multi-tenancy-deferred.md)
 (ID `DEF-*`) e nelle specifiche dei singoli pezzi.
 
@@ -14,6 +14,9 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
 - **Da fare dopo:** pezzo 5b (funzioni concesse, limiti, esportazione ed eliminazione), pezzo 3
   (identità e accesso), poi pezzo 6 (domini e brand). Resta l'ordine consigliato 5b → 3 → 6;
   si inverte 5b e 3 se servono a breve persone vere di organizzazioni separate.
+- **In progettazione:** [specifica del 5b](../../superpowers/specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md),
+  con le decisioni del proprietario su concessioni, sospensione, menu, esportazione e traccia
+  della cancellazione. Il codice non è ancora iniziato; approvazione completa ancora da ottenere.
 
 ## Come si legge
 
@@ -58,7 +61,7 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
 | [✅] | MT-5.4 | 5a | Accesso di assistenza | "Entra come piattaforma" con motivo, durata limitata e fascia visibile; permette di modificare il modello dall'app. | P1 | days | DEF-5.5 | |
 | [✅] | MT-5.5 | 5a | Registro delle operazioni | Tabella `audit_event` scritta nella stessa transazione della modifica. | P1 | days | DEF-5.6 | |
 | [✅] | MT-5.6 | 5a | Cataloghi comuni alla piattaforma | Lingue e traduzioni modificabili dall'amministratore di piattaforma, non più dal solo predefinito. | P1 | hours | final review pezzo 4 | |
-| [ ] | MT-5.7 | 5b | Funzioni concesse per tenant | Quali aree dell'app un tenant può usare, rispettate nei controlli e nel database. | P1 | days | DEF-5.2, DEF-5.4, MT-DEC-04 | Decisione del proprietario |
+| [~] | MT-5.7 | 5b | Funzioni concesse per tenant | Quali aree dell'app un tenant può usare, rispettate nei controlli e nel database. | P1 | days | DEF-5.2, DEF-5.4, MT-DEC-04, specifica 5b | Scelte confermate; progettazione in corso, codice da fare |
 | [ ] | MT-5.8 | 5b | Interruttore delle funzioni di tenant | Spegnere console e selettore per un'applicazione derivata con un solo tenant. | P2 | hours | DEF-5.7 | |
 | [ ] | MT-5.9 | 5b | Limiti per tenant | Tempo massimo delle query, quote su utenti, ruoli, voci di menu. | P2 | days | DEF-5.8 | |
 | [ ] | MT-5.10 | 5b | Esportazione ed eliminazione di un tenant | Esportazione completa, prova di ripristino, eliminazione sicura. | P2 | days | DEF-5.9 | |
