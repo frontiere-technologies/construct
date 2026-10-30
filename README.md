@@ -216,6 +216,10 @@ outside the boundary:
 node sources/devops/db/db.mjs boundary-check
 ```
 
+When packaging the operator CLI or migration image, include the `sources/devops/db/probes/`
+directory alongside `db.mjs` and its other resources. `boundary-check` reads
+`probes/tenant-policy-boundary.sql` relative to `db.mjs`, independently of the working directory.
+
 ### Identità di piattaforma
 
 La console di piattaforma (creare tenant, indirizzi, sospensioni) scrive `tenant`, `tenant_host` e

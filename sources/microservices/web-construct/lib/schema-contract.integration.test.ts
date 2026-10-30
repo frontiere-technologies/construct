@@ -1,13 +1,19 @@
-import { expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { afterAll, expect, it } from 'vitest'
 import { is, SQL, sql } from 'drizzle-orm'
 import { getTableConfig, getViewConfig, PgDialect, PgTable, PgView } from 'drizzle-orm/pg-core'
 import type { IndexedColumn } from 'drizzle-orm/pg-core'
+import { closeOwner, withOwner } from '@/lib/db/testing'
 import { withGlobal } from '@/lib/db/tenant-db'
 import * as drizzleSchema from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
 import { assertExactCatalogSection } from './schema-contract'
 
+const TENANT_POLICY_BOUNDARY_PROBE = readFileSync(
+  new URL('../../../devops/db/probes/tenant-policy-boundary.sql', import.meta.url), 'utf8')
+
 describeIntegration('database runtime boundary', () => {
+  afterAll(closeOwner)
   it('keeps the deployed catalog aligned with the complete Drizzle model', async () => {
     const tableConfigs = Object.values(drizzleSchema)
       .filter(value => is(value, PgTable))
@@ -448,33 +454,20 @@ describeIntegration('database runtime boundary', () => {
    * aggiunta in entrambi.
    */
   it('keeps tenant policies read-only and their helpers restricted to the runtime and owner', async () => {
-    const violations = await withGlobal(tx => tx.execute<{ name: string; problem: string }>(sql`
-      select t.name, 'not a classified tenant table' as problem
-      from unnest(array['tenant_platform_policy', 'tenant_area_entitlement', 'tenant_entitlement']) as t(name)
-      where not exists (select 1 from app_private.table_class tc where tc.table_name = t.name and tc.class = 'tenant')
-      union all
-      select t.name, 'the runtime cannot select'
-      from unnest(array['tenant_platform_policy', 'tenant_area_entitlement', 'tenant_entitlement']) as t(name)
-      where not has_table_privilege('construct_runtime', format('public.%I', t.name), 'select')
-      union all
-      select t.name, 'the runtime can write'
-      from unnest(array['tenant_platform_policy', 'tenant_area_entitlement', 'tenant_entitlement']) as t(name)
-      where has_table_privilege('construct_runtime', format('public.%I', t.name), 'insert,update,delete,truncate,trigger,references')
-         or has_any_column_privilege('construct_runtime', format('public.%I', t.name), 'insert,update,references')
-      union all
-      select f.name, 'helper boundary differs'
-      from unnest(array['lock_tenant_policy', 'effective_tenant_feature_codes']) as f(name)
-      where not exists (
-        select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-        where n.nspname = 'app_private' and p.proname = f.name and p.pronargs = 0
-          and not p.prosecdef and 'search_path=""' = any(p.proconfig)
-          and has_function_privilege('construct_runtime', p.oid, 'execute')
-          and has_function_privilege('construct_owner', p.oid, 'execute')
-          and not exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
-            where a.grantee = 0 and a.privilege_type = 'EXECUTE'))
-      order by 1, 2
-    `))
+    const violations = await withGlobal(tx => tx.execute<{ name: string; problem: string }>(sql.raw(TENANT_POLICY_BOUNDARY_PROBE)))
     expect(violations).toEqual([])
+  })
+
+  it('detects a writable tenant policy with the shared operational probe and rolls the grant back', async () => {
+    const rollback = new Error('rollback-policy-boundary-probe')
+    await expect(withOwner(async tx => {
+      await tx.execute(sql`grant update on public.tenant_platform_policy to construct_runtime`)
+      const violations = await tx.execute<{ name: string; problem: string }>(sql.raw(TENANT_POLICY_BOUNDARY_PROBE))
+      expect(violations).toEqual([{ name: 'tenant_platform_policy', problem: 'the runtime can write' }])
+      throw rollback
+    })).rejects.toBe(rollback)
+    const afterRollback = await withGlobal(tx => tx.execute(sql.raw(TENANT_POLICY_BOUNDARY_PROBE)))
+    expect(afterRollback).toEqual([])
   })
 
   it('keeps the tenant audit tables append-only for the runtime role', async () => {
