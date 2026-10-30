@@ -8,7 +8,7 @@
 
 **Tecnologie:** TypeScript, React 19, Next.js 16.4.2, Auth.js v5, Drizzle/Postgres, Zod, componenti e token shadcn, Vitest, pytest/Playwright tramite `uv`.
 
-**Specifica:** [2026-10-29-multi-tenancy-piece-5b-platform-design.md](../specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md), rivista e approvata dal proprietario il 2026-10-30. Questo piano è da sottoporre alla lettura finale prima dell'esecuzione.
+**Specifica:** [2026-10-29-multi-tenancy-piece-5b-platform-design.md](../specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md), rivista e approvata dal proprietario il 2026-10-30. Piano approvato con scelta degli agenti e revisione per attività il 2026-10-30.
 
 ## Sommario e ordine
 
@@ -92,7 +92,7 @@ I due tipi delle chiavi sono esportati da `feature-catalog.ts`; `tenant-policy-t
 
 I codici inutilizzati non acquistano nuove porte: `manage-permissions`, `manage-languages`, `edit-translations`, `manage-translation-keys` sono dichiarati inutilizzati nell'inventario, separati dalle funzioni concedibili. I normali dizionari e la scelta della lingua non dipendono dalla concessione delle pagine amministrative dei cataloghi.
 
-## T01 — Catalogo stabile e regole pure
+## Task 1 — T01 — Catalogo stabile e regole pure
 
 - [ ] ID=MT5B-T01, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=hours, Title=Catalogo e precedenza, Fix description=Definire chiavi, dipendenze e calcolo delle capacità senza database; copre MT5B-OK-1.
 
@@ -100,7 +100,7 @@ I codici inutilizzati non acquistano nuove porte: `manage-permissions`, `manage-
 
 **Interfacce:** produce i tipi comuni; `evaluateTenantFeatures(areas: Record<AreaKey, boolean>, overrides: Partial<Record<FeatureKey, boolean>>): ReadonlySet<FeatureKey>`; `findMissingDependencies(features: ReadonlySet<FeatureKey>): FeatureKey[]`; `featureForPermission(code: PermissionCode): FeatureKey | null`. Il catalogo contiene chiave, area o nucleo essenziale, permesso individuale eventuale e dipendenze. Esportare `FEATURE_CATALOG`, `AREA_KEYS`, `FEATURE_KEYS` come letterali immutabili.
 
-- [ ] T01.0 Prima dell'esecuzione applicare `using-git-worktrees`: controllare gli allegati della chat, riusare un isolamento adatto o crearne uno gestito a partire dal `development` locale con questi documenti, ramo `feature/multi-tenancy-piece-5b`. Usare esplicitamente il percorso restituito. Conservare nel checkout originale file del proprietario e stash. Per le verifiche riusare le variabili del database usa e getta già configurate, senza riscrivere credenziali o introdurre quelle dell'operatore nel processo web.
+- [✅] T01.0 Prima dell'esecuzione applicare `using-git-worktrees`: controllare gli allegati della chat, riusare un isolamento adatto o crearne uno gestito a partire dal `development` locale con questi documenti, ramo `feature/multi-tenancy-piece-5b`. Usare esplicitamente il percorso restituito. Conservare nel checkout originale file del proprietario e stash. Per le verifiche riusare le variabili del database usa e getta già configurate, senza riscrivere credenziali o introdurre quelle dell'operatore nel processo web.
 - [ ] T01.1 Scrivere i test prima del valutatore. La tabella di precedenza comprende tutte le sei combinazioni area/eccezione e le chiavi sconosciute sono rifiutate dai validatori; le capacità essenziali restano presenti. Test esatto di dipendenza:
 
 ```ts
@@ -118,7 +118,7 @@ it('does not silently grant the read capability required by an invitation', () =
 - [ ] T01.4 Ripetere lo stesso comando: tutti i casi passano; eseguire `npm run typecheck`.
 - [ ] T01.5 Rileggere il cambiamento e creare commit locale `feat(tenancy): define platform feature catalog`; includere soltanto i file del task.
 
-## T02 — Configurazione persistente e copia iniziale
+## Task 2 — T02 — Configurazione persistente e copia iniziale
 
 - [ ] ID=MT5B-T02, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Configurazione protetta per tenant, Fix description=Persistenza con RLS, impostazioni iniziali compatibili e copia dal modello; copre MT5B-OK-1 e OK-7.
 
@@ -148,7 +148,7 @@ Tutte le funzioni SQL nuove hanno `security invoker set search_path = ''`, rifer
 - [ ] T02.4 Applicare solo alla prova con `node sources/devops/db/db.mjs test-apply` dalla radice, rigenerare lo snapshot dai file tramite `schema-write` (non apre connessioni), ripetere i test mirati e `schema-check`. Aggiornare contestualmente le sonde di `boundary-check` per queste tabelle/permessi, senza eseguirlo sullo sviluppo.
 - [ ] T02.5 Commit locale `feat(tenancy): persist protected tenant policies`; registrare la migrazione 0064 senza modificare 0001–0063.
 
-## T03 — Associazione del menu alle capacità reali
+## Task 3 — T03 — Associazione del menu alle capacità reali
 
 - [ ] ID=MT5B-T03, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Menu senza aggiramenti, Fix description=Classificare pagine e contenuti propri con chiavi stabili, preservando il menu esistente; copre RF-2 e MT5B-OK-1/2.
 
@@ -170,7 +170,7 @@ Associare la pagina condivisa `/admin/tenant-settings` a `manage-support-consent
 - [ ] T03.4 Ripetere unità e integrazione mirate: passano anche spostamento, duplicazione, cambio URL, voci immutabili e categorie senza figli. Non cambiare i controlli sugli indirizzi delle pagine incorporate già presenti.
 - [ ] T03.5 Commit locale `feat(navigation): bind menu entries to tenant features` e nuovo snapshot generato.
 
-## T04 — Autorizzazione effettiva e blocco SQL delle nuove assegnazioni
+## Task 4 — T04 — Autorizzazione effettiva e blocco SQL delle nuove assegnazioni
 
 - [ ] ID=MT5B-T04, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Concessioni applicate a ogni porta, Fix description=Intersezione prima delle scorciatoie amministrative e vincoli SQL con sospensione reversibile; copre MT5B-OK-1/2.
 
@@ -179,6 +179,9 @@ Associare la pagina condivisa `/admin/tenant-settings` a `manage-support-consent
 **Interfacce:** `AuthorizationSnapshot` e `SupportAccess` ricevono `enabledFeatures: FeatureKey[]` nella stessa istruzione. `Actor` riceve `features: ReadonlySet<FeatureKey>` e `canManageSupportConsent: boolean`, calcolato dai permessi originari (o amministratore), prima dell'intersezione, e falso in assistenza. `permissions` rimane l'insieme effettivo. `requireAdministratorFeature(feature: FeatureKey): Promise<Actor>` e `requireAdministratorFeaturePage(feature: FeatureKey): Promise<Actor>`; `requireSupportConsentManager(): Promise<Actor>` richiede il flag dedicato e rifiuta `support`. Per leggere la pagina comune usare `requireTenantSettingsPage(): Promise<Actor>`, che accetta anche l'amministratore in assistenza valido senza permettergli di modificare il consenso. Non introdurre una guardia pubblica generica che ignori le concessioni.
 
 `TenantGrantContext { policy: TenantPolicySnapshot; menuBindings: ReadonlyMap<number, MenuFeatureBinding> }` è costruito dentro la transazione dai servizi. Aggiungere questo argomento obbligatorio a `canGrantFunctionality`, `assertCanGrantFunctionalities`, `assertCanChangeRoles`, `canChangeRole`; gli altri argomenti mantengono ordine e tipo esistenti. Nessun ripiego se manca una voce nell'associazione. `canGrantCode` usa `actor.features` prima del ramo amministratore; `grantableItemIds` e i caricamenti delle pagine chiamano le stesse regole, senza un secondo valutatore client.
+
+
+Decisione preliminare registrata: revocare ruoli/grant sospesi rimane possibile. Assegnare un ruolo esistente valuta i suoi diritti effettivi; le righe dormienti conservate nel ruolo non sono nuovi grant della funzione. Le nuove righe role_permission/role_functionality sulle capacità sospese restano vietate. Provare anche questi casi, senza un nuovo trigger di concessione sulle membership.
 
 `withTenantFeature<T>(actor: Actor, feature: FeatureKey, fn: (tx: TenantTx) => Promise<T>): Promise<T>` in `tenant-feature-access.ts` apre la transazione, prende il blocco T02, rilegge la concessione e solo allora esegue la modifica. Tema, utenti, ruoli, menu e impostazioni ordinarie lo usano con la capacità dell'azione; i servizi interni ricevono la transazione esistente. I controlli individuali restano la prima guardia della porta. Le azioni essenziali non diventano dipendenti da un'area opzionale.
 
@@ -196,7 +199,7 @@ it('does not let the tenant administrator bypass a disabled theme', async () => 
 La gara comprende anche una modifica del tema già ammessa dalla guardia iniziale: se la sospensione è confermata prima della transazione di scrittura, nessuna riga viene modificata.
 - [ ] T04.5 Commit locale `feat(auth): enforce tenant feature ceiling for all actors`.
 
-## T05 — Modifica atomica della policy e cancellazione distinta delle assegnazioni
+## Task 5 — T05 — Modifica atomica della policy e cancellazione distinta delle assegnazioni
 
 - [ ] ID=MT5B-T05, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Azioni della piattaforma verificabili, Fix description=Salvataggio con revisione, anteprima e cancellazione delle sole assegnazioni selezionate, registro atomico; copre MT5B-OK-1/2 e RF-5.
 
@@ -220,7 +223,7 @@ it('rejects a second save from the same revision', async () => {
 - [ ] T05.4 Introdurre `CONSTRUCT_PLATFORM_POLICY_WRITES=0|1`, predefinito `0`: finché non vale `1`, salvataggi e pulizia sono chiusi con `disabled`. È il blocco di rilascio finché restano istanze vecchie; letture disponibili. Testarlo e documentarlo nel modello web e nel contratto delle variabili, senza modificare credenziali né cancellare modifiche del proprietario.
 - [ ] T05.5 Ripetere integrazione mirata e `npm run test:env-contract`; poi commit locale `feat(platform): manage tenant policies and purge suspended grants`.
 
-## T06 — Quote concorrenti e tempo delle query
+## Task 6 — T06 — Quote concorrenti e tempo delle query
 
 - [ ] ID=MT5B-T06, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Limiti affidabili, Fix description=Conteggi esatti e protezioni SQL su tutti i percorsi; timeout locale alla transazione; copre MT5B-OK-3 e RF-3.
 
@@ -242,7 +245,7 @@ it('never relaxes a stricter connection timeout', () => {
 - [ ] T06.4 Impostare il timeout nella fase iniziale di `withTenant`, locale alla transazione, prima del lavoro. Recuperare configurazione/limite della connessione in una fase accorpata, mai per ogni query del servizio. Aggiungere prova `pg_sleep` oltre limite, annullamento della modifica e connessione riusata da B senza residui. Aggiornare il tetto fisso delle porte soltanto per il costo di configurazione misurato e documentato; non allargare il tetto delle letture di autorizzazione.
 - [ ] T06.5 Ripetere i test, compresa gara con isolamento diverso e blocchi menu/ultimo amministratore senza attese indefinite; commit locale `feat(tenancy): enforce resource quotas and transaction query timeout`.
 
-## T07 — Modalità dell'installazione con una sola organizzazione
+## Task 7 — T07 — Modalità dell'installazione con una sola organizzazione
 
 - [ ] ID=MT5B-T07, Severity=High, Complexity=Medium, Priority=P1, Estimate=days, Title=Modalità singola senza privilegi impliciti, Fix description=Disabilitare davvero gli ingressi multi-tenant mantenendo default e isolamento; copre MT5B-OK-5 e RF-5.
 
@@ -263,7 +266,7 @@ it('rejects an unknown installation mode instead of silently enabling tenants', 
 - [ ] T07.4 Ripetere test e contratto variabili; verificare le stesse policy RLS e connessioni prima/dopo. Le righe di B sono invariate.
 - [ ] T07.5 Commit locale `feat(tenancy): add single-organization installation mode`.
 
-## T08 — Schermata concessioni e limiti, editor del tenant
+## Task 8 — T08 — Schermata concessioni e limiti, editor del tenant
 
 - [ ] ID=MT5B-T08, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Gestione comprensibile delle concessioni, Fix description=Collegare T05/T06 alle schermate e distinguere sospensione da cancellazione; copre MT5B-OK-2/3/7.
 
@@ -285,7 +288,7 @@ La pagina delle impostazioni usa `requireTenantSettingsPage` T04; la sezione reg
 - [ ] T08.4 Ripetere unità, poi integrazione mirata se cambia una porta e soltanto dopo avviare E2E contro la prova. Casi `test_suspend_restore_and_purge_grants` e `test_policy_conflict_and_quota_notice`; invocazione `uv run pytest sources/tests/e2e/test_tenant_policies.py`. Salvare immagini della verifica con dati sintetici. Non riusare il server localhost:3000 collegato allo sviluppo.
 - [ ] T08.5 Commit locale `feat(platform): expose tenant feature policies and limits`.
 
-## T09 — Consenso esplicito all'esportazione
+## Task 9 — T09 — Consenso esplicito all'esportazione
 
 - [ ] ID=MT5B-T09, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=days, Title=Consenso distinto e rivalidato, Fix description=Estendere l'assistenza senza ampliare retroattivamente i consensi; copre MT5B-OK-6 e RF-1.
 
@@ -311,7 +314,7 @@ await expect(requireTenantExporter()).rejects.toThrow('Unauthorized')
 - [ ] T09.4 Ripetere test e aggiungere revoca/account disattivato/ruolo rimosso tra due controlli. Il secondo controllo vede il nuovo stato anche se la fotografia di esportazione è antecedente.
 - [ ] T09.5 Commit locale `feat(tenancy): require explicit consent for platform exports`.
 
-## T10 — Archivio versione 1 ed esportazione autenticata
+## Task 10 — T10 — Archivio versione 1 ed esportazione autenticata
 
 - [ ] ID=MT5B-T10, Severity=Critical, Complexity=High, Priority=P1, Estimate=days, Title=Esportazione completa e limitata, Fix description=Formato chiuso, copertura di tutte le tabelle e consegna soltanto dopo verifica aggiornata; copre MT5B-OK-4/6 e RF-1.
 
@@ -338,7 +341,7 @@ Le prove dei due limiti devono anche provocare il superamento nell'esportatore, 
 La scadenza deve interrompere anche la query in corso e annullare la transazione; una semplice corsa fra promesse che lasci il lavoro sul database in esecuzione non basta. Verificare l'API di annullamento nella versione installata del driver prima di implementarla.
 - [ ] T10.5 Collegare il pulsante nelle impostazioni, aggiungere E2E `test_export_requires_tenant_admin_or_explicit_support_consent` al gruppo policy/dati e provarlo solo dopo integrazione conclusa. Commit locale `feat(tenancy): export versioned tenant data with consent and limits`.
 
-## T11 — Ripristino operativo in un nuovo tenant
+## Task 11 — T11 — Ripristino operativo in un nuovo tenant
 
 - [ ] ID=MT5B-T11, Severity=Critical, Complexity=High, Priority=P1, Estimate=days, Title=Ripristino isolato e verificato, Fix description=Verifica preventiva e importazione atomica con identità rimappate, nessun privilegio globale dal file; copre MT5B-OK-4/6 e RF-4.
 
@@ -361,7 +364,7 @@ expect(restoredRoleIds).not.toEqual(sourceRoleIds)
 Gli eventi importati ricevono sempre `origin='restored'` e riferimenti sorgente, anche se il file sosteneva `live`; i nuovi eventi dell'importatore sono `live`. I campi di provenienza non sovrascrivono identità o privilegi.
 - [ ] T11.5 Provare fallimento dopo metà importazione, prima dell'evento finale e concorrenza sullo slug: zero residui, un solo tenant eventuale. Il comando usa limiti operativi espliciti propri, senza cambiare timeout del web. Ripetere test e commit locale `feat(tenancy): restore tenant archives through guarded operator command`.
 
-## T12 — Eliminazione definitiva con sola traccia minima
+## Task 12 — T12 — Eliminazione definitiva con sola traccia minima
 
 - [ ] ID=MT5B-T12, Severity=Critical, Complexity=High, Priority=P1, Estimate=days, Title=Cancellazione completa e atomica, Fix description=Eliminare dati e vecchi registri lasciando solo l'evento concordato; copre MT5B-OK-4/6 e RF-4, risolve DEF-A.
 
@@ -382,7 +385,7 @@ expect(afterB).toEqual(beforeB)
 - [ ] T12.4 Implementare cancellazione e evento minimo nella stessa transazione, sotto blocco T02 e riga tenant. Risolvere i riferimenti dei registri senza lasciare lo storico tramite il solo SET NULL. Revocare token strettamente tenant tramite riferimento strutturato dove disponibile; i token globali attuali restano globali e non ricreano membership. Gestire i vincoli dell'ultimo amministratore per cancellazione integrale solo owner e tenant archiviato, senza aprirli nelle normali revoche. `users.last_tenant_id` si azzera; nessuna cancellazione users, neanche senza altre membership.
 - [ ] T12.5 Provare fallimento dell'inserimento dell'evento finale e scrittura concorrente; tutto annullato o concluso senza righe che ricompaiono. I registri restano immodificabili dal runtime. Collegare conferma accessibile con slug e avviso; nessuna esportazione obbligatoria/implicita. Browser con `uv run pytest sources/tests/e2e/test_tenant_data.py` soltanto dopo integrazione. Commit locale `feat(platform): erase archived tenants with minimal deletion trace`.
 
-## T13 — Verifiche complete, aggiornamento dalla 0063 e guida di rilascio
+## Task 13 — T13 — Verifiche complete, aggiornamento dalla 0063 e guida di rilascio
 
 - [ ] ID=MT5B-T13, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Chiusura verificata e rilascio separato, Fix description=Coprire tutte le porte/tabelle, provare installazione nuova e aggiornata, consegnare guida e mantenere autorizzazioni operative separate; copre MT5B-OK-1…8.
 
@@ -409,7 +412,7 @@ Ogni task termina così: rilettura mirata → verifica fresca → spunta della c
 ## Controllo del piano prima della consegna
 
 - [✅] ID=MT5B-PLAN-1, Severity=High, Complexity=Medium, Priority=P0, Estimate=minutes, Title=Copertura e interfacce del piano, Fix description=Rilettura completata il 2026-10-30: ogni criterio è associato ai task nella tabella seguente; tipi/interfacce ricontrollati, componenti esistenti individuati, cinque casi RF coperti. Chiariti consenso essenziale su pagina condivisa, provenienza dei registri importati e classificazione globale di allowed_domains. Nessuna implementazione considerata completata.
-- [ ] ID=MT5B-PLAN-2, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Lettura e metodo di esecuzione, Fix description=Presentare il piano completo al proprietario; ottenere conferma che descriva il lavoro voluto e scelta fra esecuzione con revisore per ogni task o esecuzione diretta con revisione finale. Nessun codice fino a questa lettura.
+- [✅] ID=MT5B-PLAN-2, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Lettura e metodo di esecuzione, Fix description=Piano presentato e metodo confermato dal proprietario il 2026-10-30: «Agenti con revisione per ogni attività». Avvio autorizzato; database di sviluppo e remoto restano soggetti agli OK separati.
 
 ## Corrispondenza con i criteri della specifica
 
