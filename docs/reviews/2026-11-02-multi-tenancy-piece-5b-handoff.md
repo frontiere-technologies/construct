@@ -2,6 +2,8 @@
 
 Data: 2026-11-02. **Lavoro fermato su richiesta del proprietario:** «Ferma il lavoro. Devo andare a casa. Lascia in modo che possa ripartire». Nessuna autorizzazione a continuare durante la pausa.
 
+Ripresa successiva autorizzata dal proprietario: «Continua. Credo ci sia stato un blocco. Verifica». Stato salvato e ramo verificati, cartella pulita al commit `d821602`; uso di Codex consentito. Ripreso lo stesso revisore T04, senza riavviare le attività concluse. Le indicazioni della pausa qui sotto restano il riferimento storico; la ripresa è registrata nel registro del piano.
+
 ## Stato salvato
 
 T01, T02 e T03 sono completati, verificati e approvati. **T04 è implementato e testato, ma non ancora approvato dalla revisione indipendente.** Il revisore è stato interrotto per rispettare la pausa; non ha ancora salvato un rapporto né un verdetto. T05–T13 non sono stati avviati. Non ricominciare attività già concluse.
@@ -12,7 +14,7 @@ Ultimo commit del codice: `9c83e68fa28da0b502035e63bb81d16ceda7db8a` — `feat(a
 
 ## Punto esatto di ripresa
 
-- [ ] ID=RESUME-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Rileggere il contesto salvato, Fix description=Leggere AGENTS.md e README.md della radice, AGENTS.md del microservizio, questo documento, il piano e il registro sotto indicati. Controllare ramo, HEAD e modifiche locali senza stash; non ricreare il lavoro.
+- [✅] ID=RESUME-1, Severity=High, Complexity=Low, Priority=P0, Estimate=minutes, Title=Rileggere il contesto salvato, Fix description=Leggere AGENTS.md e README.md della radice, AGENTS.md del microservizio, questo documento, il piano e il registro sotto indicati. Controllare ramo, HEAD e modifiche locali senza stash; non ricreare il lavoro.
 - [ ] ID=RESUME-2, Severity=Critical, Complexity=High, Priority=P0, Estimate=hours, Title=Completare la revisione indipendente di T04, Fix description=Riprendere prima il revisore `/root/mt5b_t04_reviewer` con followup_task, se disponibile, chiedendogli di continuare la lettura interrotta. Se non recuperabile, assegnare un nuovo revisore indipendente. Il codice da rivedere è sempre BASE `435a83a2ced35f385885b347c9bf1e7381bda8e8` → HEAD `9c83e68fa28da0b502035e63bb81d16ceda7db8a`, non HEAD~1. Non ripetere le suite già documentate per semplice conferma. Rapporto atteso `task-4-review.md`; la sua assenza alla pausa significa revisione incompleta, non approvazione.
 - [ ] ID=RESUME-3, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Chiudere eventuali correzioni di T04, Fix description=Solo dopo il verdetto, riprendere l'esecutore `/root/mt5b_t04_implementer` per eventuali correzioni circoscritte e farle riesaminare. Spuntare T04 e i suoi passi soltanto per quanto completato e verificato, aggiornando registro e roadmap. Non ricominciare l'implementazione intera.
 - [ ] ID=RESUME-4, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Proseguire da T05 dopo approvazione T04, Fix description=Continuare il piano con un esecutore nuovo per attività e revisione indipendente per ciascuna; nessun nuovo consenso sul metodo è necessario. T05 deve preservare il nuovo permesso essenziale del consenso quando cancella assegnazioni opzionali.
