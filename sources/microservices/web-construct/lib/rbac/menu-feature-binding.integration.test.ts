@@ -340,3 +340,34 @@ describeIntegration('authoritative target boundary', () => {
     } finally { vi.unstubAllEnvs(); actorState.tenantId = 1; await f.close() }
   })
 })
+
+describeIntegration('T03 round 2 canonical regressions', () => {
+  it.each(['http://127.0.0.1./user-management', 'http://2130706433./user-management', 'http://127.1./user-management', 'http://0x7f000001./user-management', 'http://0177.0.0.1./user-management'])('rejects the noncanonical numeric host in %s', async target => {
+    const f = await createPolicyFixture('ipv4-dot')
+    const appOrigin = 'http://127.0.0.1'
+    try {
+      expect(normalizeMenuTargetUrl(target, 2, appOrigin)).toBe('http://127.0.0.1/user-management')
+      expect(bindMenuTarget({ link: target, functionalityType: 2, areaKey: null }, appOrigin)).toEqual({ areaKey: 'people', featureKey: 'read-users' })
+      await expect(withTenant(f.tenantId, async tx => {
+        await tx.execute(sql`select set_config('app.menu_origin', ${appOrigin}, true)`)
+        await tx.insert(menuEntry).values({ name: 'Noncanonical IP', idFunctionalityType: 2, functionalityLink: '/profile', canonicalLink: target })
+      })).rejects.toThrow()
+    } finally { await f.close() }
+  })
+
+  it.each([
+    String.raw`https://outside.test/search?q=C:\docs`,
+    String.raw`https://outside.test/page#C:\docs`,
+    String.raw`http+custom:opaque\payload?q=C:\docs#end\path`,
+  ])('preserves a native canonical backslash in a non-structural component of %s', async target => {
+    const f = await createPolicyFixture('url-suffix')
+    try {
+      expect(normalizeMenuTargetUrl(target, 2, origin)).toBe(target)
+      const [row] = await withTenant(f.tenantId, async tx => {
+        await tx.execute(sql`select set_config('app.menu_origin', ${origin}, true)`)
+        return tx.insert(menuEntry).values({ name: 'URL suffix', idFunctionalityType: 2, functionalityLink: target, canonicalLink: target }).returning()
+      })
+      expect(row).toMatchObject({ functionalityLink: target, canonicalLink: target, areaKey: 'navigation', featureKey: 'use-custom-content' })
+    } finally { await f.close() }
+  })
+})

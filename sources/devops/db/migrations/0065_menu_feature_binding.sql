@@ -64,7 +64,7 @@ begin
         v_ip := v_mapped[1] || pg_catalog.to_hex(v_octets[1] * 256 + v_octets[2]) || ':' || pg_catalog.to_hex(v_octets[3] * 256 + v_octets[4]);
       end if;
       if v_host <> '[' || v_ip || ']' then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
-    elsif v_host ~ '(^|\.)([0-9]+|0x[0-9a-f]+)$' then
+    elsif pg_catalog.rtrim(v_host, '.') ~ '(^|\.)([0-9]+|0x[0-9a-f]+)$' then
       if v_host !~ '^((0|[1-9][0-9]{0,2})\.){3}(0|[1-9][0-9]{0,2})$' or pg_catalog.host(v_host::inet) <> v_host then
         raise exception 'noncanonical_menu_target' using errcode = '23514';
       end if;
@@ -84,7 +84,10 @@ begin
     return query select coalesce(p_area, 'navigation'), 'use-custom-content'::text; return;
   end if;
 
-  if p_target ~ '[[:space:]]' or pg_catalog.strpos(p_target, E'\\') > 0 or pg_catalog.octet_length(p_target) <> pg_catalog.length(p_target) then
+  -- In HTTP(S) la barra inversa è strutturale soltanto prima di query/frammento.
+  -- URL nativo la conserva nei suffissi; vietarla lì renderebbe il backfill retroattivo.
+  if p_target ~ '[[:space:]]' or pg_catalog.strpos(pg_catalog.regexp_replace(p_target, '[?#].*$', ''), E'\\') > 0
+    or pg_catalog.octet_length(p_target) <> pg_catalog.length(p_target) then
     raise exception 'noncanonical_menu_target' using errcode = '23514';
   end if;
   -- URL risolve i dot segment prima della decodifica degli slash: l'ordine è significativo.
