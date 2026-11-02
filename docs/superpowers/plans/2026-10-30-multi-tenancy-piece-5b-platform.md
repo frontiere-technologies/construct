@@ -212,13 +212,13 @@ La gara comprende anche una modifica del tema già ammessa dalla guardia inizial
 
 ## Task 5 — T05 — Modifica atomica della policy e cancellazione distinta delle assegnazioni
 
-- [ ] ID=MT5B-T05, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Azioni della piattaforma verificabili, Fix description=Salvataggio con revisione, anteprima e cancellazione delle sole assegnazioni selezionate, registro atomico; copre MT5B-OK-1/2 e RF-5.
+- [✅] ID=MT5B-T05, Severity=High, Complexity=High, Priority=P0, Estimate=days, Title=Azioni della piattaforma verificabili, Fix description=Salvataggio con revisione, anteprima e cancellazione delle sole assegnazioni selezionate, registro atomico; copre MT5B-OK-1/2 e RF-5.
 
 **File:** C `W/lib/platform/{tenant-policy-actions,tenant-policy-schemas}.ts`, `tenant-policy-actions.integration.test.ts`; M `W/lib/platform/tenant-service.ts`, `W/lib/audit/audit-types.ts`, `W/.env.template`, `sources/devops/k8s/base/configmap.yaml`, `sources/devops/env-contract.test.mjs`.
 
 **Interfacce:** `saveTenantPolicy(tenantId: number, draft: TenantPolicyDraft): Promise<PolicyActionResult>`; `previewTenantGrantPurge(tenantId: number, keys: FeatureKey[]): Promise<PurgePreview>`; `purgeTenantGrants(tenantId: number, preview: PurgePreview): Promise<PolicyActionResult>`. Risultato unione `{ ok: true; revision: number } | { ok: false; reason: 'invalid' | 'conflict' | 'disabled' }`. `PurgePreview` contiene `revision`, `keys`, `roleCount`, `permissionGrantCount`, `menuGrantCount`, `fingerprint` (digest degli id delle assegnazioni selezionate). Tutti gli input sono Zod strict e la prima istruzione richiede amministratore di piattaforma.
 
-- [ ] T05.1 Scrivere test: due amministratori salvano dalla stessa revisione, il secondo riceve `conflict`; dipendenze mancanti danno `invalid` senza cambiamenti; il fallimento del secondo registro annulla tutto. La pulizia ricalcola anteprima sotto blocco e rifiuta un'impronta vecchia. Non elimina menu/ruoli o assegnazioni di funzioni ancora concesse nascoste nella selezione.
+- [✅] T05.1 Scrivere test: due amministratori salvano dalla stessa revisione, il secondo riceve `conflict`; dipendenze mancanti danno `invalid` senza cambiamenti; il fallimento del secondo registro annulla tutto. La pulizia ricalcola anteprima sotto blocco e rifiuta un'impronta vecchia. Non elimina menu/ruoli o assegnazioni di funzioni ancora concesse nascoste nella selezione.
 Per Ruling 13, la pulizia di `manage-tenant-settings` non elimina né disattiva il permesso essenziale distinto `manage-support-consent`; provare che il delegato conservi la gestione del consenso dopo il purge opzionale. Non selezionare permessi essenziali tramite un'area opzionale o una vecchia associazione condivisa.
 
 Con `fixture` T02, sessione piattaforma e scritture abilitate:
@@ -230,10 +230,12 @@ it('rejects a second save from the same revision', async () => {
   expect(await saveTenantPolicy(fixture.tenantId, draft)).toEqual({ ok: false, reason: 'conflict' })
 })
 ```
-- [ ] T05.2 Eseguire il solo test d'integrazione del task: deve fallire sui nuovi comandi.
-- [ ] T05.3 Implementare sotto `withPlatform`, contesto del tenant e blocco T02. Salvare aree, eccezioni, limiti e incremento della revisione nella stessa transazione. Registrare differenze strutturate nei due registri. Pulizia ammessa per le capacità sospese esplicitamente elencate; un'area si espande nelle sole capacità sospese. Un alias segue la capacità T03. Il digest stale non viene accettato soltanto perché i conteggi coincidono.
-- [ ] T05.4 Introdurre `CONSTRUCT_PLATFORM_POLICY_WRITES=0|1`, predefinito `0`: finché non vale `1`, salvataggi e pulizia sono chiusi con `disabled`. È il blocco di rilascio finché restano istanze vecchie; letture disponibili. Testarlo e documentarlo nel modello web e nel contratto delle variabili, senza modificare credenziali né cancellare modifiche del proprietario.
-- [ ] T05.5 Ripetere integrazione mirata e `npm run test:env-contract`; poi commit locale `feat(platform): manage tenant policies and purge suspended grants`.
+- [✅] T05.2 Eseguire il solo test d'integrazione del task: deve fallire sui nuovi comandi.
+- [✅] T05.3 Implementare sotto `withPlatform`, contesto del tenant e blocco T02. Salvare aree, eccezioni, limiti e incremento della revisione nella stessa transazione. Registrare differenze strutturate nei due registri. Pulizia ammessa per le capacità sospese esplicitamente elencate; un'area si espande nelle sole capacità sospese. Un alias segue la capacità T03. Il digest stale non viene accettato soltanto perché i conteggi coincidono.
+Decisione di esecuzione T05 (registro, Ruling 14): la selezione di area della schermata T08 si espande nelle sole chiavi di capacità sospese mostrate nel riepilogo; le azioni conservano la firma `FeatureKey[]`. Il server rivalida ogni chiave e rifiuta essenziali o capacità ancora concesse, ricalcolando l’anteprima sotto il blocco. Nessun nuovo input privilegiato di area o cancellazione implicita delle eccezioni. Per Ruling 15 il purge non inferisce categorie da un’area: `feature_key` nullo non corrisponde a una funzione selezionata; eventuali assegnazioni storiche di categoria restano fuori da questa pulizia. La porta canonica esistente rifiuta anche la loro revoca puntuale; T05 non introduce un percorso nuovo per le categorie. Limite registrato per il triage finale, senza promettere una revoca non presente.
+
+- [✅] T05.4 Introdurre `CONSTRUCT_PLATFORM_POLICY_WRITES=0|1`, predefinito `0`: finché non vale `1`, salvataggi e pulizia sono chiusi con `disabled`. È il blocco di rilascio finché restano istanze vecchie; letture disponibili. Testarlo e documentarlo nel modello web e nel contratto delle variabili, senza modificare credenziali né cancellare modifiche del proprietario.
+- [✅] T05.5 Ripetere integrazione mirata e `npm run test:env-contract`; poi commit locale `feat(platform): manage tenant policies and purge suspended grants`.
 
 ## Task 6 — T06 — Quote concorrenti e tempo delle query
 
