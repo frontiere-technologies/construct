@@ -252,6 +252,61 @@ describeIntegration('platform tenant policy actions', () => {
     expect(await purgeTenantGrants(fixture.tenantId, stale)).toEqual({ ok: false, reason: 'conflict' })
   })
 
+  it.each([
+    ['permission', 'direct'], ['permission', 'delta'], ['menu', 'direct'], ['menu', 'delta'],
+  ] as const)('rejects a preview overtaken by a runtime %s revocation through %s SQL', async (kind, path) => {
+    await seedGrants()
+    const value = await draft()
+    value.areas.people = false
+    await saveTenantPolicy(fixture.tenantId, value)
+    const preview = await previewTenantGrantPurge(fixture.tenantId, ['read-users'])
+    const previous = await grants()
+    const previousAudits = await audits()
+    let release!: () => void
+    let revoked!: (pid: number) => void
+    const held = new Promise<void>(resolve => { release = resolve })
+    const revocationReady = new Promise<number>(resolve => { revoked = resolve })
+    const revocation = withTenant(fixture.tenantId, async tx => {
+      const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
+      const [{ id }] = await tx.execute<{ id: string }>(sql`select id_permission::text as id from public.permission where code = 'read-users'`)
+      if (kind === 'permission') {
+        if (path === 'direct') await tx.execute(sql`delete from public.role_permission where id_role = ${fixture.roleId} and id_permission = ${id}::bigint`)
+        else await tx.execute(sql`select public.apply_role_permission_deltas(${fixture.roleId}::bigint, '{}'::bigint[], array[${id}::bigint])`)
+      } else {
+        if (path === 'direct') await tx.execute(sql`delete from public.role_functionality where id_role = ${fixture.roleId} and id_menu_entry = ${fixture.menuEntryId}`)
+        else await tx.execute(sql`select public.apply_role_functionality_deltas(${fixture.roleId}::bigint, '{}'::bigint[], array[${fixture.menuEntryId}::bigint])`)
+      }
+      revoked(pid)
+      await held
+    })
+    let confirmation: ReturnType<typeof purgeTenantGrants> | undefined
+    try {
+      const revokerPid = await Promise.race([revocationReady, revocation.then(() => { throw new Error('revocation barrier was not reached') })])
+      // Ordinary previews must stay nonblocking while a SQL revocation owns the row lock.
+      expect(await previewTenantGrantPurge(fixture.tenantId, ['read-users'])).toEqual(preview)
+      confirmation = purgeTenantGrants(fixture.tenantId, preview)
+      // This observes a real database wait, rather than guessing which query ran after a sleep.
+      await vi.waitFor(async () => {
+        const [{ waiting }] = await withOwner(tx => tx.execute<{ waiting: boolean }>(sql`
+          select exists(select 1 from pg_catalog.pg_stat_activity a
+            where ${revokerPid} = any(pg_catalog.pg_blocking_pids(a.pid))) as waiting`))
+        expect(waiting).toBe(true)
+      })
+      release()
+      await revocation
+      expect(await confirmation).toEqual({ ok: false, reason: 'conflict' })
+      expect(await grants()).toEqual({
+        ...previous,
+        ...(kind === 'permission' ? { permissions: previous.permissions.filter(code => code !== 'read-users') } : { menus: [] }),
+      })
+      expect((await readTenantPolicy(fixture.tenantId)).revision).toBe(2)
+      expect(await audits()).toEqual(previousAudits)
+    } finally {
+      release()
+      await Promise.allSettled([revocation, ...(confirmation ? [confirmation] : [])])
+    }
+  })
+
   it('rejects stale fingerprints even when counts match and accepts canonical menu aliases', async () => {
     await seedGrants()
     const [alias] = await withOwner(tx => tx.execute<{ id: number }>(sql`insert into public.menu_entry

@@ -89,7 +89,7 @@ interface SelectedGrants {
   preview: PurgePreview
 }
 
-async function selectPurge(tx: PlatformTx, tenantId: TenantId, policy: TenantPolicySnapshot, selectedKeys: FeatureKey[]): Promise<SelectedGrants> {
+async function selectPurge(tx: PlatformTx, tenantId: TenantId, policy: TenantPolicySnapshot, selectedKeys: FeatureKey[], shouldLockGrants = false): Promise<SelectedGrants> {
   const keys = FEATURE_KEYS.filter(key => selectedKeys.includes(key))
   const list = sql.join(keys.map(key => sql`${key}`), sql`, `)
   // Il mapping di permission e menu è quello validato in SQL: mai URL, nomi o id fissi.
@@ -97,14 +97,14 @@ async function selectPurge(tx: PlatformTx, tenantId: TenantId, policy: TenantPol
     select rp.id_role::text as role, rp.id_permission::text as target
     from public.role_permission rp join public.app_feature f on f.id_permission = rp.id_permission
     where rp.id_tenant = ${tenantId} and f.area_code is not null and f.code in (${list})
-    order by rp.id_role, rp.id_permission`)
+    order by rp.id_role, rp.id_permission ${shouldLockGrants ? sql`for update of rp` : sql``}`)
   const menus = await tx.execute<GrantId & Record<string, unknown>>(sql`
     select rf.id_role::text as role, rf.id_menu_entry::text as target
     from public.role_functionality rf
     join public.menu_entry m on m.id_tenant = rf.id_tenant and m.id_menu_entry = rf.id_menu_entry
     join public.app_feature f on f.code = m.feature_key
     where rf.id_tenant = ${tenantId} and f.area_code is not null and m.feature_key in (${list})
-    order by rf.id_role, rf.id_menu_entry`)
+    order by rf.id_role, rf.id_menu_entry ${shouldLockGrants ? sql`for update of rf` : sql``}`)
   const fingerprint = createHash('sha256').update(JSON.stringify({ tenantId, keys, permissions, menus })).digest('hex')
   return {
     permissions: [...permissions], menus: [...menus],
@@ -142,7 +142,8 @@ export async function purgeTenantGrants(tenantId: number, preview: PurgePreview)
     const policy = await lockedPolicy(tx, tenantKey)
     if (policy.revision !== value.revision) return { ok: false, reason: 'conflict' }
     if (!canPurge(policy, value.keys)) return { ok: false, reason: 'invalid' }
-    const current = await selectPurge(tx, tenantKey, policy, value.keys)
+    // Le revoche SQL possono saltare il lock della policy: proteggere le identità fino a DELETE e audit.
+    const current = await selectPurge(tx, tenantKey, policy, value.keys, true)
     if (current.preview.fingerprint !== value.fingerprint || current.preview.roleCount !== value.roleCount
       || current.preview.permissionGrantCount !== value.permissionGrantCount || current.preview.menuGrantCount !== value.menuGrantCount) {
       return { ok: false, reason: 'conflict' }
