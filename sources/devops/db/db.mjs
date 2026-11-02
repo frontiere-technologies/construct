@@ -27,6 +27,7 @@ import {
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
+import { prepareMenuTargetBackfill } from './menu-target-backfill.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const appDir = resolve(here, '../../microservices/web-construct')
@@ -144,6 +145,7 @@ function migrationAdapter(sql) {
           select exists (select 1 from pg_roles where rolname = 'construct_owner') as "ownerExists"
         `
         if (ownerExists) await sql`set local role construct_owner`
+        if (migration.version === '0065') await prepareMenuTargetBackfill(sql, menuOrigin())
         await sql.unsafe(migration.sql).simple()
         // La cronologia resta dell'utente delle migrazioni, non del proprietario.
         await sql`reset role`

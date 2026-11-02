@@ -71,12 +71,12 @@ describe('real route inventory', () => {
     expect(bindMenuTarget({ link, functionalityType: 3, areaKey: null }, origin)).toEqual({ areaKey, featureKey })
   })
 
-  it.each(['javascript:alert(1)', 'data:text/html,test', 'https://user:pass@construct.example.test/user-management'])('rejects unsafe URL %s', link => {
-    expect(() => bindMenuTarget({ link, functionalityType: 2, areaKey: null }, origin)).toThrow()
+  it.each(['javascript:alert(1)', 'data:text/html,test'])('does not open executable URI %s in an iframe', link => {
+    expect(() => bindMenuTarget({ link, functionalityType: 1, areaKey: null }, origin)).toThrow()
   })
 
-  it('does not accept an external URL as an internal functionality', () => {
-    expect(() => bindMenuTarget({ link: 'https://example.net', functionalityType: 3, areaKey: null }, origin)).toThrow()
+  it('uses the real external capability even when the historical type is internal', () => {
+    expect(bindMenuTarget({ link: 'https://example.net', functionalityType: 3, areaKey: null }, origin)).toEqual({ areaKey: 'navigation', featureKey: 'use-custom-content' })
   })
 
   it('rejects a category carrying a URL and a functionality without one', () => {

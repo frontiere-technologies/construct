@@ -287,6 +287,7 @@ export const menuEntry = pgTable('menu_entry', {
   iconPath: text('icon_path'),
   idFunctionalityType: bigint('id_functionality_type', { mode: 'number' }).references(() => functionalityType.idFunctionalityType),
   functionalityLink: text('functionality_link'),
+  canonicalLink: text('canonical_link'),
   areaKey: text('area_key', { enum: AREA_KEYS }).references(() => featureArea.code),
   featureKey: text('feature_key', { enum: FEATURE_KEYS }).references(() => appFeature.code),
   openInNewTab: smallint('open_in_new_tab').notNull().default(1),

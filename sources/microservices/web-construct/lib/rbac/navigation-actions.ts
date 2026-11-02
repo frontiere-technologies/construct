@@ -10,6 +10,7 @@ import { selectTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
 import { mainBaseUrl } from '@/lib/tenancy/tenant-base-url'
 import { lockTenantPolicy } from '@/lib/tenancy/tenant-policy-lock'
 import { menuEntry } from '@/lib/db/schema'
+import { normalizeMenuTargetUrl } from './menu-target-url'
 import { bindMenuTarget, canUseMenuEntry } from './menu-feature-binding'
 import { menuAreaSchema } from './action-input-schemas'
 import { toMenuEntryRow } from './nav-row-mapper'
@@ -33,7 +34,7 @@ async function bindTarget(
     binding.areaKey = previousAreaKey
   }
   if (!canUseMenuEntry(await selectTenantPolicy(tx), binding)) throw new Error('menu_capability_unavailable')
-  return binding
+  return { ...binding, canonicalLink: normalizeMenuTargetUrl(input.functionalityLink, input.idFunctionalityType ?? null, origin) }
 }
 
 async function writeMenuEntryTags(tx: TenantTx, idMenuEntry: number, tagTranslations: Record<string, string[]>) {
@@ -151,6 +152,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
           functionalityLink: input.functionalityLink,
           areaKey: binding.areaKey,
           featureKey: binding.featureKey,
+          canonicalLink: binding.canonicalLink,
           iconPath: sanitizeSvg(input.iconPath),
           openInNewTab: input.openInNewTab === false ? 0 : 1,
           itemTranslation: input.itemTranslation,
@@ -219,7 +221,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
         || input.areaKey !== undefined && input.areaKey !== current.area_key
       const binding = isTargetChanged
         ? await bindTarget(tx, input, input.areaKey, wasCategory || current.feature_key === 'use-custom-content' ? current.area_key : undefined)
-        : { areaKey: current.area_key, featureKey: current.feature_key }
+        : { areaKey: current.area_key, featureKey: current.feature_key, canonicalLink: current.canonical_link }
 
       await tx
         .update(menuEntry)
@@ -229,6 +231,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
           functionalityLink: input.functionalityLink,
           areaKey: binding.areaKey,
           featureKey: binding.featureKey,
+          canonicalLink: binding.canonicalLink,
           iconPath: sanitizeSvg(input.iconPath),
           openInNewTab: input.openInNewTab === false ? 0 : 1,
           itemTranslation: input.itemTranslation,

@@ -3,6 +3,7 @@ import { eq, inArray, sql } from 'drizzle-orm'
 import { menuEntry, passwordSetTokens, tenant, tenantHost, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
+import { normalizeMenuTargetUrl } from '@/lib/rbac/menu-target-url'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { tenantIdForTest } from '@/lib/tenancy/testing'
@@ -204,10 +205,10 @@ describeIntegration('createTenant', () => {
   it('passes the configured origin when copying absolute internal and external menu targets', async () => {
     const [template] = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).where(eq(tenant.isTemplate, true)))
     const templateId = tenantIdForTest(template.id)
-    const links = ['https://construct.example.test/user-management', 'https://outside.test/user-management']
+    const links = ['https://construct.example.test/user-management', 'https://bücher.example/user-management']
     const originals = await withOwner(async tx => {
       await tx.execute(sql`select set_config('app.menu_origin', 'https://construct.example.test', true)`)
-      return tx.insert(menuEntry).values(links.map((link, index) => ({ name: 'Absolute template ' + index, idFunctionalityType: 2, functionalityLink: link }))).returning({ id: menuEntry.idMenuEntry })
+      return tx.insert(menuEntry).values(links.map((link, index) => ({ name: 'Absolute template ' + index, idFunctionalityType: 2, functionalityLink: link, canonicalLink: normalizeMenuTargetUrl(link, 2, 'https://construct.example.test') }))).returning({ id: menuEntry.idMenuEntry })
     }, templateId)
     try {
       const { result } = await create('absolute')
@@ -215,6 +216,7 @@ describeIntegration('createTenant', () => {
       if (!result.ok) return
       const copied = await withTenant(tenantIdForTest(result.tenantId), tx => tx.select().from(menuEntry).where(inArray(menuEntry.functionalityLink, links)))
       expect(copied.map(entry => entry.featureKey).sort()).toEqual(['read-users', 'use-custom-content'])
+      expect(copied.map(entry => entry.canonicalLink).sort()).toEqual(['https://construct.example.test/user-management', 'https://xn--bcher-kva.example/user-management'])
       expect(copied.every(entry => !originals.some(original => original.id === entry.idMenuEntry))).toBe(true)
     } finally {
       await withOwner(tx => tx.delete(menuEntry).where(inArray(menuEntry.idMenuEntry, originals.map(entry => entry.id))), templateId)

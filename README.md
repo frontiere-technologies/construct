@@ -141,13 +141,22 @@ restano identici. Anche `tenant-create` e la console di piattaforma richiedono t
 configurazione quando il modello contiene URL assoluti: una copia fallita non lascia
 un tenant parziale.
 
-Dopo `0065`, immagini web precedenti che non impostano il contesto transazionale
-dell'origine non possono creare o cambiare collegamenti assoluti. Le letture dei menu e
-le modifiche di etichette/posizione sui dati già classificati restano disponibili;
-percorsi relativi non richiedono un'origine. Coordinare quindi migrazione e aggiornamento
-dell'immagine prima di riabilitare la modifica dei collegamenti assoluti. Gli host Unicode
-nei nuovi collegamenti vanno espressi nella forma ASCII/punycode; credenziali nell'URL,
-caratteri di controllo e barre inverse sono rifiutati dalla classificazione.
+`functionality_link` conserva il valore originale per l'editor; `canonical_link` è la
+destinazione autorevole usata dalla sidebar e dalla pagina embedded. La normalizzazione
+usa `URL` nativo, preserva query/frammento e mantiene i percorsi relativi sulla radice
+dell'host corrente. Il database valida e classifica il target canonico, senza tentare
+una seconda implementazione WHATWG/IDNA. Unicode, tab, barre inverse e credenziali di URL
+prima utilizzabili vengono normalizzati senza riscrivere il valore di authoring. La
+regola href precedente è conservata: `ftp:`, `mailto:` e `tel:` nelle normali voci menu
+continuano a essere percorsi Home, mentre i controlli delle pagine embedded restano attivi.
+
+La CLI prepara la mappa completa di id/tenant/valore/tipo nella stessa transazione della
+migrazione, prendendo i lock prima della lettura; una fotografia incompleta o stantia
+annulla il backfill. Eseguire la migrazione tramite `db.mjs apply`, che prepara la mappa.
+Le immagini precedenti usano ancora il valore raw come href e non implementano questo
+confine: il rilascio deve coordinare migrazione e sostituzione delle immagini senza
+mantenere renderer precedenti attivi sul nuovo schema. Una modifica SQL del solo valore
+di authoring non modifica la destinazione aperta dai nuovi renderer.
 
 Dalla migrazione `0045` gli oggetti del database appartengono al ruolo `construct_owner` (senza
 login e senza BYPASSRLS), e `db.mjs apply` esegue ogni migrazione successiva con
@@ -236,6 +245,12 @@ node sources/devops/db/db.mjs boundary-check
 When packaging the operator CLI or migration image, include the `sources/devops/db/probes/`
 directory alongside `db.mjs` and its other resources. `boundary-check` reads
 `probes/tenant-policy-boundary.sql` relative to `db.mjs`, independently of the working directory.
+Include also `menu-target-backfill.mjs` and `menu-target-url.generated.mjs` beside `db.mjs`.
+The generated module comes from the application TypeScript source
+`lib/rbac/menu-target-url.ts`; regenerate it with
+`node sources/devops/db/generate-menu-target-url.mjs`, or use `--check` to verify it.
+Generation uses the existing development TypeScript dependency; the operator runtime
+imports plain ECMAScript and needs no TypeScript loader. `test:migrations` checks drift.
 
 ### Identità di piattaforma
 

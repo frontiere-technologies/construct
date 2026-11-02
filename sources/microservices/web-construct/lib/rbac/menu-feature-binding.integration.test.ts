@@ -8,6 +8,7 @@ import { menuEntry, roleFunctionality } from '@/lib/db/schema'
 import { tenantIdForTest } from '@/lib/tenancy/testing'
 import { createPolicyFixture } from '@/lib/tenancy/policy-test-fixture'
 import { bindMenuTarget } from './menu-feature-binding'
+import { normalizeMenuTargetUrl } from './menu-target-url'
 import { getSidebarMenu } from './navigation-service'
 import type { CreateNavItemInput } from './types'
 
@@ -72,7 +73,7 @@ describeIntegration('binding parity and preservation', () => {
           '/functionalities/create', '/functionalities/7/edit', '/roles-permissions/2', '/admin/tenant-settings',
           '/embedded/77', '/generic-home', 'https://outside.test/user-management']) {
           const [binding] = await tx.execute<{ area_key: string | null; feature_key: string | null }>(sql`
-            select * from app_private.bind_menu_target(${link}, 2, null)`)
+            select * from app_private.bind_menu_target(${normalizeMenuTargetUrl(link, 2, origin)}, 2, null)`)
           expect(binding, link).toEqual({
             area_key: bindMenuTarget({ link, functionalityType: 2, areaKey: null }, origin).areaKey,
             feature_key: bindMenuTarget({ link, functionalityType: 2, areaKey: null }, origin).featureKey,
@@ -91,7 +92,7 @@ describeIntegration('binding parity and preservation', () => {
           const [internal] = await tx.execute<{ feature_key: string }>(sql`insert into public.menu_entry
             (name, id_functionality_type, functionality_link) values ('legacy internal', ${type}, '/user-management') returning feature_key`)
           const [external] = await tx.execute<{ feature_key: string }>(sql`insert into public.menu_entry
-            (name, id_functionality_type, functionality_link) values ('legacy external', ${type}, 'https://outside.test') returning feature_key`)
+            (name, id_functionality_type, functionality_link, canonical_link) values ('legacy external', ${type}, 'https://outside.test', 'https://outside.test/') returning feature_key`)
           expect(internal.feature_key).toBe('read-users')
           expect(external.feature_key).toBe('use-custom-content')
         }
@@ -107,7 +108,7 @@ describeIntegration('binding parity and preservation', () => {
         await tx.execute(sql`select set_config('app.menu_origin', ${origin}, true)`)
         const entries = await tx.insert(menuEntry).values([
           { name: 'Absolute internal', idFunctionalityType: 2, functionalityLink: `${origin}/user-management/?a=1#t` },
-          { name: 'Absolute external', idFunctionalityType: 1, functionalityLink: 'https://outside.test/user-management', areaKey: 'people' },
+          { name: 'Absolute external', idFunctionalityType: 1, functionalityLink: 'https://outside.test/user-management', canonicalLink: 'https://outside.test/canonical-target', areaKey: 'people' },
         ]).returning({ id: menuEntry.idMenuEntry })
         await tx.execute(sql`update public.tenant_area_entitlement set enabled = false where area_code = 'people'`)
         return entries.map(entry => entry.id)
@@ -122,7 +123,7 @@ describeIntegration('binding parity and preservation', () => {
       const external = entries.find(entry => entry.name === 'Absolute external')!
       expect([internal.idMenuEntry, external.idMenuEntry].every(id => !sourceIds.includes(id))).toBe(true)
       expect(internal).toMatchObject({ areaKey: 'people', featureKey: 'read-users', functionalityLink: `${origin}/user-management/?a=1#t` })
-      expect(external).toMatchObject({ areaKey: 'people', featureKey: 'use-custom-content', functionalityLink: 'https://outside.test/user-management' })
+      expect(external).toMatchObject({ areaKey: 'people', featureKey: 'use-custom-content', functionalityLink: 'https://outside.test/user-management', canonicalLink: 'https://outside.test/canonical-target' })
     } finally { if (copy) await deleteTenantForTest(copy); await f.close() }
   })
 
@@ -177,7 +178,7 @@ describeIntegration('trusted origin and transaction boundary', () => {
     try {
       const [binding] = await withTenant(f.tenantId, async tx => {
         await tx.execute(sql`select set_config('app.menu_origin', ${appOrigin}, true)`)
-        return tx.execute<{ area_key: string; feature_key: string }>(sql`select * from app_private.bind_menu_target(${link}, 2, null)`)
+        return tx.execute<{ area_key: string; feature_key: string }>(sql`select * from app_private.bind_menu_target(${normalizeMenuTargetUrl(link, 2, appOrigin)}, 2, null)`)
       })
       expect(bindMenuTarget({ link, functionalityType: 2, areaKey: null }, appOrigin)).toEqual({ areaKey: 'people', featureKey: 'read-users' })
       expect(binding).toEqual({ area_key: 'people', feature_key: 'read-users' })
@@ -262,5 +263,80 @@ describeIntegration('menu target edits', () => {
       const [entry] = await withTenant(f.tenantId, tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, f.menuEntryId)))
       expect(entry).toMatchObject({ areaKey: 'people', featureKey: 'read-users', functionalityLink: '/user-management' })
     } finally { actorState.tenantId = 1; await f.close() }
+  })
+})
+
+describeIntegration('T03 review regressions', () => {
+  it.each([
+    ['///construct.example.test/user-management', 'people', 'read-users'],
+    ['/a%2f..%2fuser-management', null, 'core-app'],
+  ] as const)('keeps SQL and native URL classification aligned for %s', async (link, areaKey, featureKey) => {
+    const f = await createPolicyFixture('review-url')
+    try {
+      expect(bindMenuTarget({ link, functionalityType: 2, areaKey: null }, origin)).toEqual({ areaKey, featureKey })
+      const [binding] = await withTenant(f.tenantId, async tx => {
+        await tx.execute(sql`select set_config('app.menu_origin', ${origin}, true)`)
+        return tx.execute<{ area_key: string | null; feature_key: string }>(sql`select * from app_private.bind_menu_target(${normalizeMenuTargetUrl(link, 2, origin)}, 2, null)`)
+      })
+      expect(binding).toEqual({ area_key: areaKey, feature_key: featureKey })
+    } finally { await f.close() }
+  })
+
+  it('backfills a previously accepted Unicode target without changing its saved value', async () => {
+    const f = await createPolicyFixture('review-idna')
+    const link = 'https://bücher.example/page'
+    try {
+      const [row] = await withOwner(async tx => {
+        await tx.execute(sql`select set_config('app.menu_origin', ${origin}, true)`)
+        await tx.execute(sql`alter table public.menu_entry disable trigger menu_feature_binding_guard`)
+        const [entry] = await tx.execute<{ id: number }>(sql`insert into public.menu_entry
+          (name, id_functionality_type, functionality_link) values ('Pre-0065 Unicode', 2, ${link}) returning id_menu_entry::int as id`)
+        await tx.execute(sql`set constraints all immediate`)
+        await tx.execute(sql`alter table public.menu_entry enable trigger menu_feature_binding_guard`)
+        return tx.execute<{ functionality_link: string; feature_key: string }>(sql`update public.menu_entry m set canonical_link = ${normalizeMenuTargetUrl(link, 2, origin)}, (area_key, feature_key) =
+          (select b.area_key, b.feature_key from app_private.bind_menu_target(${normalizeMenuTargetUrl(link, 2, origin)}, m.id_functionality_type, null) b)
+          where id_menu_entry = ${entry.id} returning functionality_link, feature_key`)
+      }, f.tenantId)
+      expect(row).toEqual({ functionality_link: link, feature_key: 'use-custom-content' })
+    } finally { await f.close() }
+  })
+})
+
+describeIntegration('authoritative target boundary', () => {
+  it('keeps the opened destination and its feature unchanged when only raw authoring text is changed through SQL', async () => {
+    const f = await createPolicyFixture('raw-only')
+    try {
+      await withOwner(tx => tx.insert(roleFunctionality).values({ idRole: f.roleId, idMenuEntry: f.menuEntryId }), f.tenantId)
+      await withTenant(f.tenantId, tx => tx.update(menuEntry).set({ functionalityLink: '/profile' }).where(eq(menuEntry.idMenuEntry, f.menuEntryId)))
+      const [row] = await withTenant(f.tenantId, tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, f.menuEntryId)))
+      expect(row).toMatchObject({ functionalityLink: '/profile', canonicalLink: '/user-management', featureKey: 'read-users' })
+      expect((await getSidebarMenu(f.tenantId, [f.roleId])).map(item => item.route)).toEqual(['/user-management'])
+      await expect(withTenant(f.tenantId, tx => tx.update(menuEntry).set({ areaKey: null, featureKey: 'core-app' }).where(eq(menuEntry.idMenuEntry, f.menuEntryId)))).rejects.toThrow()
+    } finally { await f.close() }
+  })
+
+  it.each(['///construct.example.test/user-management', '/a/../user-management', 'https://CONSTRUCT.EXAMPLE.TEST/user-management', 'https://bücher.example/page'])('rejects a noncanonical effective target %s rather than guessing its feature', async canonical => {
+    const f = await createPolicyFixture('target-bad')
+    try {
+      await expect(withTenant(f.tenantId, async tx => {
+        await tx.execute(sql`select set_config('app.menu_origin', ${origin}, true)`)
+        await tx.insert(menuEntry).values({ name: 'Forged canonical', idFunctionalityType: 2, functionalityLink: '/profile', canonicalLink: canonical })
+      })).rejects.toThrow()
+    } finally { await f.close() }
+  })
+
+  it('binds an internal Unicode host alias to the internal capability and opens only its canonical target', async () => {
+    const f = await createPolicyFixture('unicode-in')
+    actorState.tenantId = f.tenantId
+    vi.stubEnv('AUTH_URL', 'https://xn--bcher-kva.example')
+    try {
+      const { id } = await createNavigationItem({ ...customInput(), areaKey: null, functionalityLink: 'https://bücher.example/user-management' })
+      await withOwner(tx => tx.insert(roleFunctionality).values({ idRole: f.roleId, idMenuEntry: id }), f.tenantId)
+      const [entry] = await withTenant(f.tenantId, tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
+      expect(entry).toMatchObject({ functionalityLink: 'https://bücher.example/user-management', canonicalLink: 'https://xn--bcher-kva.example/user-management', featureKey: 'read-users', areaKey: 'people' })
+      expect((await getSidebarMenu(f.tenantId, [f.roleId])).map(item => item.route)).toEqual(['https://xn--bcher-kva.example/user-management'])
+      await withOwner(tx => tx.execute(sql`insert into public.tenant_entitlement(feature_code,allowed) values ('read-users',false)`), f.tenantId)
+      expect(await getSidebarMenu(f.tenantId, [f.roleId])).toEqual([])
+    } finally { vi.unstubAllEnvs(); actorState.tenantId = 1; await f.close() }
   })
 })

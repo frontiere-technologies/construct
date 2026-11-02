@@ -6190,11 +6190,11 @@ end;
 $$;
 
 -- Migration: 0065_menu_feature_binding.sql
--- La voce presenta una capacità stabile; id, etichette e posizione non la determinano.
+-- La destinazione effettiva è canonica e separata dal valore di authoring conservato.
+alter table public.menu_entry add column canonical_link text;
 alter table public.menu_entry add column area_key text references public.feature_area(code);
 alter table public.menu_entry add column feature_key text references public.app_feature(code);
 
--- Decodifica per classificare anche gli alias percent-encoded; non modifica l'URL salvato.
 create function app_private.menu_decode_path(p_path text) returns text
 language plpgsql immutable security invoker set search_path = '' as $$
 declare v_bytes bytea := ''::bytea; v_pos integer := 1; v_char text;
@@ -6215,90 +6215,78 @@ end $$;
 revoke all on function app_private.menu_decode_path(text) from public;
 grant execute on function app_private.menu_decode_path(text) to construct_runtime;
 
-create function app_private.bind_menu_target(p_link text, p_type bigint, p_area text)
+-- Valida un target già serializzato dal parser URL nativo, non tenta di riprodurre WHATWG/IDNA.
+-- Anche una scrittura diretta può scegliere il target, ma feature/area proteggono ciò che si apre.
+create function app_private.bind_menu_target(p_target text, p_type bigint, p_area text)
 returns table(area_key text, feature_key text)
 language plpgsql stable security invoker set search_path = '' as $$
 declare
-  v_link text := pg_catalog.btrim(p_link);
   v_origin text := nullif(pg_catalog.current_setting('app.menu_origin', true), '');
-  v_absolute text[]; v_authority text; v_scheme text; v_target_origin text; v_path text;
-  v_host text; v_port text; v_parts text[]; v_ip bigint; v_value bigint; v_index integer; v_octet text;
-  v_part text; v_segments text[] := array[]::text[]; v_feature text; v_area text;
+  v_parts text[]; v_scheme text; v_authority text; v_host_port text; v_host text; v_port text;
+  v_ip text; v_mapped text[]; v_octets integer[]; v_target_origin text; v_path text; v_feature text; v_area text;
 begin
   if p_type is null then
-    if coalesce(v_link, '') <> '' then raise exception 'category_cannot_have_target' using errcode = '23514'; end if;
+    if p_target is not null then raise exception 'category_cannot_have_target' using errcode = '23514'; end if;
     return query select p_area, null::text; return;
   end if;
   if p_type not in (1, 2, 3, 4, 5) then raise exception 'unsupported_menu_type' using errcode = '23514'; end if;
-  if coalesce(v_link, '') = '' then raise exception 'menu_target_required' using errcode = '23514'; end if;
-  if v_link ~ '[[:cntrl:][:space:]]' or pg_catalog.strpos(v_link, E'\\') > 0 then raise exception 'unsafe_menu_target' using errcode = '23514'; end if;
-  v_absolute := pg_catalog.regexp_match(v_link, '^(?:(https?):)?//([^/?#]+)(.*)$', 'i');
-  if v_absolute is not null then
-    if v_origin is null then raise exception 'menu_origin_required: configure AUTH_URL or NEXTAUTH_URL for menu writes and tenant copies' using errcode = '23514'; end if;
-    v_scheme := coalesce(pg_catalog.lower(v_absolute[1]), pg_catalog.split_part(v_origin, ':', 1));
-    v_authority := pg_catalog.lower(v_absolute[2]);
-    if v_authority ~ '[@%]' or pg_catalog.octet_length(v_authority) <> pg_catalog.length(v_authority) then
-      raise exception 'unsafe_menu_target: use an ASCII hostname without credentials' using errcode = '23514';
+  if coalesce(p_target, '') = '' then raise exception 'canonical_menu_target_required' using errcode = '23514'; end if;
+  if p_target ~ '[[:cntrl:]]' or p_target <> pg_catalog.btrim(p_target) then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
+
+  if p_target ~ '^(https?://|//)' then
+    if v_origin is null then raise exception 'menu_origin_required: configure AUTH_URL or NEXTAUTH_URL' using errcode = '23514'; end if;
+    v_parts := pg_catalog.regexp_match(p_target, '^(?:(https?):)?//([^/?#]+)(/[^?#]*)([?#].*)?$');
+    if v_parts is null then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
+    v_scheme := coalesce(v_parts[1], pg_catalog.split_part(v_origin, ':', 1));
+    v_authority := v_parts[2];
+    -- Userinfo viene conservata ma non appartiene all'origine.
+    v_host_port := pg_catalog.regexp_replace(v_authority, '^.*@', '');
+    if v_host_port <> pg_catalog.lower(v_host_port) or v_host_port ~ '[@%]' then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
+    v_parts := pg_catalog.regexp_match(v_host_port, '^(\[[0-9a-f:]+\]|[a-z0-9._-]+)(?::(0|[1-9][0-9]*))?$');
+    if v_parts is null then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
+    v_host := v_parts[1]; v_port := v_parts[2];
+    if v_port is not null and (v_port::numeric > 65535 or (v_scheme = 'https' and v_port = '443') or (v_scheme = 'http' and v_port = '80')) then
+      raise exception 'noncanonical_menu_target' using errcode = '23514';
     end if;
-    v_authority := pg_catalog.regexp_replace(v_authority, ':$', '');
-    v_port := (pg_catalog.regexp_match(v_authority, ':([0-9]+)$'))[1];
-    if v_port is not null then
-      if v_port::numeric > 65535 then raise exception 'unsafe_menu_target' using errcode = '23514'; end if;
-      v_authority := pg_catalog.regexp_replace(v_authority, ':[0-9]+$', ':' || v_port::integer::text);
-    end if;
-    v_host := pg_catalog.regexp_replace(v_authority, ':[0-9]+$', '');
-    if v_host ~ '^\[.*\]$' then
-      v_authority := '[' || pg_catalog.host(pg_catalog.substr(v_host, 2, pg_catalog.length(v_host)-2)::inet) || ']' ||
-        case when v_port is null then '' else ':' || v_port::integer::text end;
-      if v_origin ~ '^https?://\[' then
-        v_part := (pg_catalog.regexp_match(v_origin, '^https?://\[([^]]+)\]'))[1];
-        v_origin := pg_catalog.replace(v_origin, '[' || v_part || ']', '[' || pg_catalog.host(v_part::inet) || ']');
+    if v_host like '[%' then
+      v_ip := pg_catalog.host(pg_catalog.substr(v_host, 2, pg_catalog.length(v_host)-2)::inet);
+      v_mapped := pg_catalog.regexp_match(v_ip, '^(.*:)([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)$');
+      if v_mapped is not null then
+        v_octets := pg_catalog.string_to_array(v_mapped[2], '.')::integer[];
+        v_ip := v_mapped[1] || pg_catalog.to_hex(v_octets[1] * 256 + v_octets[2]) || ':' || pg_catalog.to_hex(v_octets[3] * 256 + v_octets[4]);
       end if;
-    elsif pg_catalog.rtrim(v_host, '.') ~ '(^|\.)([0-9]+|0x[0-9a-f]+)$' then
-      -- Le forme IPv4 numeriche accettate da URL (ottale, esadecimale e abbreviazioni).
-      v_parts := pg_catalog.string_to_array(pg_catalog.rtrim(v_host, '.'), '.');
-      if pg_catalog.cardinality(v_parts) > 4 then raise exception 'unsafe_menu_target' using errcode = '23514'; end if;
-      v_ip := 0;
-      for v_index in 1..pg_catalog.cardinality(v_parts) loop
-        v_octet := v_parts[v_index];
-        if v_octet ~ '^0x[0-9a-f]{1,8}$' then
-          v_value := ('x' || pg_catalog.lpad(pg_catalog.substr(v_octet, 3), 8, '0'))::bit(32)::bigint;
-        elsif v_octet ~ '^0[0-7]+$' then
-          v_value := 0;
-          for v_part in select pg_catalog.regexp_split_to_table(v_octet, '') loop v_value := v_value * 8 + v_part::integer; end loop;
-        elsif v_octet ~ '^(0|[1-9][0-9]*)$' then v_value := v_octet::bigint;
-        else raise exception 'unsafe_menu_target' using errcode = '23514'; end if;
-        if v_index < pg_catalog.cardinality(v_parts) then
-          if v_value > 255 then raise exception 'unsafe_menu_target' using errcode = '23514'; end if;
-          v_ip := v_ip + v_value * (256::bigint ^ (4-v_index))::bigint;
-        else
-          if v_value >= (256::bigint ^ (5-v_index))::bigint then raise exception 'unsafe_menu_target' using errcode = '23514'; end if;
-          v_ip := v_ip + v_value;
-        end if;
-      end loop;
-      v_authority := ((v_ip >> 24) & 255)::text || '.' || ((v_ip >> 16) & 255)::text || '.' || ((v_ip >> 8) & 255)::text || '.' || (v_ip & 255)::text ||
-        case when v_port is null then '' else ':' || v_port::integer::text end;
+      if v_host <> '[' || v_ip || ']' then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
+    elsif v_host ~ '(^|\.)([0-9]+|0x[0-9a-f]+)$' then
+      if v_host !~ '^((0|[1-9][0-9]{0,2})\.){3}(0|[1-9][0-9]{0,2})$' or pg_catalog.host(v_host::inet) <> v_host then
+        raise exception 'noncanonical_menu_target' using errcode = '23514';
+      end if;
     end if;
-    if v_scheme = 'https' then v_authority := pg_catalog.regexp_replace(v_authority, ':443$', '');
-    elsif v_scheme = 'http' then v_authority := pg_catalog.regexp_replace(v_authority, ':80$', ''); end if;
-    v_target_origin := v_scheme || '://' || v_authority;
-    if v_target_origin <> v_origin then
-      if p_type = 3 then raise exception 'internal_menu_target_required' using errcode = '23514'; end if;
-      return query select coalesce(p_area, 'navigation'), 'use-custom-content'::text; return;
-    end if;
-    v_path := v_absolute[3];
+    v_target_origin := v_scheme || '://' || v_host_port;
+    v_parts := pg_catalog.regexp_match(p_target, '^(?:https?:)?//[^/?#]+(/[^?#]*)');
+    v_path := v_parts[1];
+  elsif pg_catalog.left(p_target, 1) = '/' then
+    -- /.// è la serializzazione relativa alla radice di una pathname che inizia con //.
+    v_path := pg_catalog.regexp_replace(p_target, '[?#].*$', '');
+    if pg_catalog.left(v_path, 4) = '/.//' then v_path := pg_catalog.substr(v_path, 3); end if;
   else
-    if v_link ~ '^[a-zA-Z][a-zA-Z0-9+.-]*:' then raise exception 'unsafe_menu_target' using errcode = '23514'; end if;
-    v_path := v_link;
+    v_scheme := (pg_catalog.regexp_match(p_target, '^([a-z][a-z0-9+.-]*):'))[1];
+    if v_scheme is null or v_scheme in ('http', 'https', 'javascript', 'data', 'vbscript', 'file', 'blob') then
+      raise exception 'noncanonical_menu_target' using errcode = '23514';
+    end if;
+    return query select coalesce(p_area, 'navigation'), 'use-custom-content'::text; return;
   end if;
-  v_path := app_private.menu_decode_path(pg_catalog.regexp_replace(v_path, '[?#].*$', ''));
-  -- I dot segment vengono risolti anche se codificati, come nel classificatore URL del server.
-  if pg_catalog.left(v_path, 1) = '/' then v_path := pg_catalog.substr(v_path, 2); end if;
-  foreach v_part in array pg_catalog.string_to_array(v_path, '/') loop
-    if v_part = '..' then v_segments := v_segments[1:greatest(pg_catalog.cardinality(v_segments)-1, 0)];
-    elsif v_part <> '.' then v_segments := pg_catalog.array_append(v_segments, v_part); end if;
-  end loop;
-  v_path := pg_catalog.regexp_replace('/' || pg_catalog.array_to_string(v_segments, '/'), '/+$', '');
+
+  if p_target ~ '[[:space:]]' or pg_catalog.strpos(p_target, E'\\') > 0 or pg_catalog.octet_length(p_target) <> pg_catalog.length(p_target) then
+    raise exception 'noncanonical_menu_target' using errcode = '23514';
+  end if;
+  -- URL risolve i dot segment prima della decodifica degli slash: l'ordine è significativo.
+  if pg_catalog.regexp_replace(pg_catalog.lower(v_path), '%2e', '.', 'g') ~ '(^|/)\.{1,2}(/|$)' then
+    raise exception 'noncanonical_menu_target' using errcode = '23514';
+  end if;
+  if v_target_origin is not null and v_target_origin <> v_origin then
+    return query select coalesce(p_area, 'navigation'), 'use-custom-content'::text; return;
+  end if;
+  v_path := pg_catalog.regexp_replace(app_private.menu_decode_path(v_path), '/+$', '');
   if v_path = '' then v_path := '/'; end if;
   if v_path ~ '^/(platform|api)(/|$)' then raise exception 'not_a_tenant_menu_target' using errcode = '23514'; end if;
   v_feature := case
@@ -6321,12 +6309,24 @@ end $$;
 revoke all on function app_private.bind_menu_target(text, bigint, text) from public;
 grant execute on function app_private.bind_menu_target(text, bigint, text) to construct_runtime;
 
--- Backfill nello stesso albero e con gli stessi URL, anche per il modello e gli immutabili.
+-- La CLI prepara la fotografia con URL nativo nella stessa transazione, sotto lock di tenant
+-- e menu presi PRIMA di leggerli. Una mappa parziale o stantia non può completare il backfill.
 do $$ declare v_tenant bigint; v_original text := pg_catalog.current_setting('app.tenant_id', true); begin
+  if pg_catalog.to_regclass('pg_temp.menu_target_backfill') is null then raise exception 'menu_target_backfill_required: run db.mjs apply'; end if;
+  if exists (select 1 from pg_temp.menu_target_backfill b where not exists (select 1 from public.tenant t where t.id = b.id_tenant)) then
+    raise exception 'menu_target_backfill_mismatch';
+  end if;
   for v_tenant in select t.id from public.tenant t order by t.id loop
     perform pg_catalog.set_config('app.tenant_id', v_tenant::text, true);
-    update public.menu_entry m set (area_key, feature_key) =
-      (select b.area_key, b.feature_key from app_private.bind_menu_target(m.functionality_link, m.id_functionality_type, null) b);
+    if exists (select 1 from public.menu_entry m full join
+      (select * from pg_temp.menu_target_backfill where id_tenant = v_tenant) b on b.id_menu_entry = m.id_menu_entry
+      where m.id_menu_entry is null or b.id_menu_entry is null or m.id_tenant <> b.id_tenant
+        or m.functionality_link is distinct from b.raw_link or m.id_functionality_type is distinct from b.functionality_type) then
+      raise exception 'menu_target_backfill_mismatch';
+    end if;
+    update public.menu_entry m set canonical_link = b.canonical_link,
+      (area_key, feature_key) = (select x.area_key, x.feature_key from app_private.bind_menu_target(b.canonical_link, m.id_functionality_type, null) x)
+    from pg_temp.menu_target_backfill b where b.id_tenant = v_tenant and b.id_menu_entry = m.id_menu_entry;
   end loop;
   perform pg_catalog.set_config('app.tenant_id', coalesce(v_original, ''), true);
 end $$;
@@ -6335,19 +6335,23 @@ create function app_private.menu_feature_binding_guard() returns trigger
 language plpgsql security invoker set search_path = '' as $$
 declare v_binding record; v_changed boolean;
 begin
+  -- Compatibilità di inserimenti SQL semplici: il target derivato viene accettato soltanto
+  -- se già canonico. Alias complessi richiedono il normalizzatore del server.
+  if tg_op = 'INSERT' and new.id_functionality_type is not null and new.canonical_link is null then
+    new.canonical_link := case when pg_catalog.left(new.functionality_link, 1) = '/' or pg_catalog.left(new.functionality_link, 4) = 'http'
+      or new.id_functionality_type = 1 then new.functionality_link else '/' || new.functionality_link end;
+  end if;
   v_changed := tg_op = 'INSERT';
   if tg_op = 'UPDATE' then
-    v_changed := (new.functionality_link, new.id_functionality_type, new.area_key, new.feature_key)
-      is distinct from (old.functionality_link, old.id_functionality_type, old.area_key, old.feature_key);
+    v_changed := (new.canonical_link, new.id_functionality_type, new.area_key, new.feature_key)
+      is distinct from (old.canonical_link, old.id_functionality_type, old.area_key, old.feature_key);
   end if;
   if not v_changed then return new; end if;
   perform app_private.lock_tenant_policy();
-  select * into v_binding from app_private.bind_menu_target(new.functionality_link, new.id_functionality_type, new.area_key);
+  select * into v_binding from app_private.bind_menu_target(new.canonical_link, new.id_functionality_type, new.area_key);
   if new.feature_key is not null and new.feature_key is distinct from v_binding.feature_key then raise exception 'inconsistent_menu_feature' using errcode = '23514'; end if;
   new.area_key := v_binding.area_key;
   new.feature_key := v_binding.feature_key;
-  -- Le copie conservano anche binding sospesi; le nuove scelte di area sono verificate
-  -- dal server sotto il blocco comune. Il trigger garantisce coerenza, non abilitazione.
   return new;
 end $$;
 revoke all on function app_private.menu_feature_binding_guard() from public;
@@ -6401,7 +6405,7 @@ begin
   create temporary table copy_tenant_voce as
   select m.id_menu_entry as id_vecchio, pg_catalog.nextval('public.s_id_menu_entry') as id_nuovo,
          m.id_parent, m.name, m.order_position, m.navbar_position, m.icon_path, m.id_functionality_type,
-         m.functionality_link, m.area_key, m.feature_key, m.open_in_new_tab, m.item_translation, m.is_immutable
+         m.functionality_link, m.canonical_link, m.area_key, m.feature_key, m.open_in_new_tab, m.item_translation, m.is_immutable
   from public.menu_entry m
   where m.id_tenant = p_source;
 
@@ -6453,10 +6457,10 @@ begin
   select v_nuovo, e.feature_code, e.allowed from pg_temp.copy_tenant_concessioni e;
 
   insert into public.menu_entry (id_menu_entry, id_tenant, id_parent, name, order_position, navbar_position,
-    icon_path, id_functionality_type, functionality_link, area_key, feature_key, open_in_new_tab, item_translation, is_immutable,
+    icon_path, id_functionality_type, functionality_link, canonical_link, area_key, feature_key, open_in_new_tab, item_translation, is_immutable,
     created_at, updated_at)
   select v.id_nuovo, v_nuovo, genitore.id_nuovo, v.name, v.order_position, v.navbar_position,
-         v.icon_path, v.id_functionality_type, v.functionality_link, v.area_key, v.feature_key, v.open_in_new_tab, v.item_translation,
+         v.icon_path, v.id_functionality_type, v.functionality_link, v.canonical_link, v.area_key, v.feature_key, v.open_in_new_tab, v.item_translation,
          v.is_immutable, pg_catalog.now(), pg_catalog.now()
   from pg_temp.copy_tenant_voce v
   left join pg_temp.copy_tenant_voce genitore on genitore.id_vecchio = v.id_parent;

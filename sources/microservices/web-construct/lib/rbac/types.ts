@@ -52,6 +52,7 @@ export interface MenuEntryRow {
   area_key: AreaKey | null
   feature_key: FeatureKey | null
   functionality_link: string | null
+  canonical_link: string | null
   open_in_new_tab: number
   item_translation: Record<string, ItemTranslation> | null
   is_immutable: number

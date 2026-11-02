@@ -25,6 +25,7 @@ export function toMenuEntryRow(r: typeof menuEntry.$inferSelect): MenuEntryRow {
     icon_path: r.iconPath,
     id_functionality_type: r.idFunctionalityType,
     functionality_link: r.functionalityLink,
+    canonical_link: r.canonicalLink,
     area_key: r.areaKey,
     feature_key: r.featureKey,
     open_in_new_tab: r.openInNewTab,

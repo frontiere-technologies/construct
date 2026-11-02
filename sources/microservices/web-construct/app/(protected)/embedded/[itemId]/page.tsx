@@ -16,15 +16,15 @@ export default async function EmbeddedItemPage({ params }: { params: Promise<{ i
 
   const tenantId = await resolveRequestTenant()
   const item = await getNavigationItemById(tenantId, idItem)
-  if (!item || item.id_functionality_type !== FUNCTYPE_EMBEDDED_PAGE || !item.functionality_link) notFound()
+  if (!item || item.id_functionality_type !== FUNCTYPE_EMBEDDED_PAGE || !item.canonical_link) notFound()
 
   const session = await getSession()
   const roleIds = (session?.user as { roleIds?: number[] })?.roleIds ?? []
   const menu = await getSidebarMenu(tenantId, roleIds)
   if (!menu.some(m => m.route === `/embedded/${idItem}`)) redirect('/')
 
-  const embeddable = await checkEmbeddable(item.functionality_link)
+  const embeddable = await checkEmbeddable(item.canonical_link)
   return embeddable
-    ? <EmbeddedFrame url={item.functionality_link} />
-    : <EmbeddedBlockedNotice url={item.functionality_link} />
+    ? <EmbeddedFrame url={item.canonical_link} />
+    : <EmbeddedBlockedNotice url={item.canonical_link} />
 }

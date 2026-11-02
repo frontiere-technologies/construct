@@ -507,3 +507,13 @@ test('menu origin uses the public auth URL and refuses unsafe origins', async ()
   assert.throws(() => menuOrigin({ AUTH_URL: 'javascript:alert(1)' }), /AUTH_URL/)
   assert.throws(() => menuOrigin({ AUTH_URL: 'https://user:pass@example.test' }), /AUTH_URL/)
 })
+
+test('the CLI menu target artifact matches its single TypeScript source', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const generator = new URL('./generate-menu-target-url.mjs', import.meta.url)
+  execFileSync(process.execPath, [generator.pathname, '--check'], { stdio: 'pipe' })
+  const { normalizeMenuTargetUrl } = await import('./menu-target-url.generated.mjs')
+  assert.equal(normalizeMenuTargetUrl('https://bücher.example/page', 2, 'https://construct.example.test'), 'https://xn--bcher-kva.example/page')
+  assert.equal(normalizeMenuTargetUrl('///construct.example.test/user-management', 2, 'https://construct.example.test'), '//construct.example.test/user-management')
+  assert.equal(normalizeMenuTargetUrl('mailto:person@example.test', 2, ''), '/mailto:person@example.test')
+})

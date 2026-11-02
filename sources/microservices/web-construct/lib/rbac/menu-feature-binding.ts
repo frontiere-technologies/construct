@@ -1,5 +1,6 @@
 import { FEATURE_CATALOG, type AreaKey, type FeatureKey } from '@/lib/tenancy/feature-catalog'
 import type { TenantPolicySnapshot } from '@/lib/tenancy/tenant-policy-types'
+import { normalizeMenuTargetUrl } from './menu-target-url'
 
 export interface MenuFeatureBinding {
   areaKey: AreaKey | null
@@ -49,17 +50,10 @@ export function bindMenuTarget(input: {
     return { areaKey: input.areaKey, featureKey: null }
   }
   if (![1, 2, 3, 4, 5].includes(input.functionalityType)) throw new Error('unsupported_menu_type')
-  if (!input.link?.trim()) throw new Error('menu_target_required')
-  if (/[\\\u0000-\u0020\u007f]/.test(input.link.trim())) throw new Error('unsafe_menu_target')
-  const authority = /^(?:https?:)?\/\/([^/?#]+)/i.exec(input.link.trim())?.[1]
-  if (authority && (authority.includes('%') || /[^\x21-\x7e]/.test(authority))) throw new Error('unsafe_menu_target')
-  if (!appOrigin && (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(input.link.trim()) || input.link.trim().startsWith('//'))) throw new Error('menu_origin_required')
-  // Base sintattica per i soli percorsi relativi quando non è configurata un'origine.
+  const canonical = normalizeMenuTargetUrl(input.link, input.functionalityType, appOrigin)!
   const origin = appOrigin ? new URL(appOrigin).origin : 'https://menu-relative.invalid'
-  const target = new URL(input.link.trim(), origin + '/')
-  if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password) throw new Error('unsafe_menu_target')
-  if (target.origin !== origin) {
-    if (input.functionalityType === 3) throw new Error('internal_menu_target_required')
+  const target = new URL(canonical, origin + '/')
+  if (target.origin !== origin || !['http:', 'https:'].includes(target.protocol)) {
     return { areaKey: input.areaKey ?? 'navigation', featureKey: 'use-custom-content' }
   }
   const path = decodeURIComponent(target.pathname).replace(/\/+$/, '') || '/'

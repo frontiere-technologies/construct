@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { FEATURE_KEYS } from '@/lib/tenancy/feature-catalog'
 import type { TenantPolicySnapshot } from '@/lib/tenancy/tenant-policy-types'
+import { normalizeMenuTargetUrl } from './menu-target-url'
 import { mapMenuToSidebar, resolveGrantedFunctionalityIds } from './sidebar-adapter'
 import { FUNCTYPE_EMBEDDED_PAGE, FUNCTYPE_EXTERNAL_LINK } from './types'
 import type { MenuEntryRow } from './types'
@@ -13,6 +14,7 @@ const policy: TenantPolicySnapshot = {
 
 const voce = (over: Partial<MenuEntryRow> & { id_menu_entry: number }): MenuEntryRow => ({
   area_key: 'navigation', feature_key: 'use-custom-content',
+  canonical_link: normalizeMenuTargetUrl(over.functionality_link ?? '/content', over.id_functionality_type ?? 2, 'https://construct.example.test'),
   id_parent: null, name: `voce-${over.id_menu_entry}`,
   order_position: 0, navbar_position: null, icon_path: null,
   id_functionality_type: 1, functionality_link: null, open_in_new_tab: 1,
@@ -163,4 +165,13 @@ describe('tenant capability ceiling', () => {
   it('does not show an unclassified functionality', () => {
     expect(mapMenuToSidebar([voce({ id_menu_entry: 5, feature_key: null })], new Set([5]), policy)).toEqual([])
   })
+})
+
+it('opens only the authoritative canonical target even if the authoring string names a different page', () => {
+  const out = mapMenuToSidebar([voce({
+    id_menu_entry: 900, id_functionality_type: 2,
+    functionality_link: '/user-management', canonical_link: 'https://outside.test/canonical',
+    area_key: 'navigation', feature_key: 'use-custom-content', open_in_new_tab: 0,
+  })], new Set([900]), policy)
+  expect(out[0]).toMatchObject({ route: 'https://outside.test/canonical', target: '_self' })
 })

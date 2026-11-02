@@ -26,11 +26,6 @@ function isEntryVisible(entry: MenuEntryRow, grantedIds: Set<number>): boolean {
   return grantedIds.has(entry.id_menu_entry)
 }
 
-function normalizeRoute(link: string | null): string | undefined {
-  if (!link) return undefined
-  if (link.startsWith('/') || link.startsWith('http')) return link
-  return '/' + link
-}
 
 /**
  * Una categoria è un contenitore: si mostra se contiene qualcosa di visibile, non se ha una
@@ -48,7 +43,7 @@ function resolveVisibleIds(entries: MenuEntryRow[], grantedIds: Set<number>, pol
   const visible = new Set<number>()
   for (const entry of entries) {
     const isContainer = entry.id_functionality_type === null
-    if (isContainer || entry.feature_key === null || !isEntryVisible(entry, grantedIds) || !canUseMenuEntry(policy, { areaKey: entry.area_key, featureKey: entry.feature_key })) continue
+    if (isContainer || entry.canonical_link === null || entry.feature_key === null || !isEntryVisible(entry, grantedIds) || !canUseMenuEntry(policy, { areaKey: entry.area_key, featureKey: entry.feature_key })) continue
     visible.add(entry.id_menu_entry)
     let parent = entry.id_parent != null ? byId.get(entry.id_parent) : undefined
     while (parent && !visible.has(parent.id_menu_entry)) {
@@ -92,7 +87,7 @@ export function mapMenuToSidebar(
         ? undefined
         : entry.id_functionality_type === FUNCTYPE_EMBEDDED_PAGE
           ? `/embedded/${entry.id_menu_entry}`
-          : normalizeRoute(entry.functionality_link),
+          : entry.canonical_link ?? undefined,
       type: isContainer ? 'container' : 'link',
       // Only an external URL can leave the app, so only it carries a tab preference.
       target: entry.id_functionality_type === FUNCTYPE_EXTERNAL_LINK
