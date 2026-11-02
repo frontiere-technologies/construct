@@ -14,7 +14,7 @@
 
 T01–T06 realizzano catalogo, menu, autorizzazione, gestione e limiti. T07 realizza la modalità singola. T08 collega i controlli alle schermate. T09–T12 completano consenso ed esportazione, ripristino ed eliminazione; dipendono dai dati e dai vincoli dei primi task. T13 chiude verifiche, guida e rilascio. Un solo piano mantiene coerenti le interfacce condivise; ogni task termina con un risultato verificabile e un commit locale.
 
-Non è stato ancora scritto codice del 5b. La preparazione e la rilettura di questo piano non spuntano i criteri di implementazione della specifica.
+Stato al 2026-11-02: T01–T06 realizzati e approvati con revisione indipendente; prossimo T07, T07–T13 aperti. Lo sviluppo resta alla 0063 e non è stato attivato il 5b. Le sole attività davvero completate e verificate sono spuntate sotto; i criteri complessivi della specifica rimangono aperti fino alle prove finali.
 
 ## Vincoli globali
 
@@ -239,13 +239,13 @@ Decisione di esecuzione T05 (registro, Ruling 14): la selezione di area della sc
 
 ## Task 6 — T06 — Quote concorrenti e tempo delle query
 
-- [ ] ID=MT5B-T06, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Limiti affidabili, Fix description=Conteggi esatti e protezioni SQL su tutti i percorsi; timeout locale alla transazione; copre MT5B-OK-3 e RF-3.
+- [✅] ID=MT5B-T06, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Limiti affidabili, Fix description=Conteggi esatti e protezioni SQL su tutti i percorsi; timeout locale alla transazione; copre MT5B-OK-3 e RF-3.
 
 **File:** C `D/migrations/0067_tenant_resource_limits.sql`, `W/lib/tenancy/tenant-limits.ts`, relativi test unitari/d'integrazione; M `W/lib/db/tenant-db.ts`, `W/lib/rbac/{users-actions,roles-actions,navigation-actions}.ts`, `W/lib/tenancy/membership.ts`, percorsi SQL di copia/registrazione/creazione e `D/db.mjs`; T `W/lib/tenancy/tenant-limits-concurrency.integration.test.ts`, test delle porte/viaggi.
 
 **Interfacce:** `TenantUsage { members: number; roles: number; menuEntries: number }`; `selectTenantUsage(tx: TenantTx | PlatformTx): Promise<TenantUsage>`; `effectiveQueryTimeoutMs(connectionLimitMs: number, tenantLimitMs: number | null): number`, con `0` del database = nessun limite preesistente. `withTenant` conserva firma e opzioni di transazione esistenti.
 
-- [ ] T06.1 Scrivere unità: limite connessione 1000/tenant 2000 restituisce 1000; connessione 0/tenant 2000 restituisce 2000; tenant null conserva il valore. Scrivere integrazione per ultimo posto fra due richieste, quota nulla/zero, appartenenze disattivate contate, due ruoli di sistema e categorie contate, abbassamento sotto uso senza cancellazione, invito già membro senza consumo nuovo e copia del modello insufficiente interamente annullata.
+- [✅] T06.1 Scrivere unità: limite connessione 1000/tenant 2000 restituisce 1000; connessione 0/tenant 2000 restituisce 2000; tenant null conserva il valore. Scrivere integrazione per ultimo posto fra due richieste, quota nulla/zero, appartenenze disattivate contate, due ruoli di sistema e categorie contate, abbassamento sotto uso senza cancellazione, invito già membro senza consumo nuovo e copia del modello insufficiente interamente annullata.
 
 ```ts
 it('never relaxes a stricter connection timeout', () => {
@@ -254,10 +254,12 @@ it('never relaxes a stricter connection timeout', () => {
   expect(effectiveQueryTimeoutMs(1000, null)).toBe(1000)
 })
 ```
-- [ ] T06.2 Eseguire test unitario e integrazione mirata in sequenza: i casi nuovi falliscono.
-- [ ] T06.3 Implementare guardie SQL sulle tabelle contate e sui percorsi canonici sotto il blocco T02. Contare nello stesso ambito che inserisce. Per non usare una fotografia obsoleta dopo il blocco, le scritture runtime contate richiedono `READ COMMITTED`; rifiutare un isolamento diverso con errore specifico e test, invece di consentire una quota errata. Copia/ripristino atomici di un tenant nuovo validano anche l'uso finale. Il riordino del menu e la riattivazione di un membro non aumentano l'uso. Nomi degli errori SQL stabili `tenant_member_quota`, `tenant_role_quota`, `tenant_menu_quota`.
-- [ ] T06.4 Impostare il timeout nella fase iniziale di `withTenant`, locale alla transazione, prima del lavoro. Recuperare configurazione/limite della connessione in una fase accorpata, mai per ogni query del servizio. Aggiungere prova `pg_sleep` oltre limite, annullamento della modifica e connessione riusata da B senza residui. Aggiornare il tetto fisso delle porte soltanto per il costo di configurazione misurato e documentato; non allargare il tetto delle letture di autorizzazione.
-- [ ] T06.5 Ripetere i test, compresa gara con isolamento diverso e blocchi menu/ultimo amministratore senza attese indefinite; commit locale `feat(tenancy): enforce resource quotas and transaction query timeout`.
+- [✅] T06.2 Eseguire test unitario e integrazione mirata in sequenza: i casi nuovi falliscono.
+- [✅] T06.3 Implementare guardie SQL sulle tabelle contate e sui percorsi canonici sotto il blocco T02. Contare nello stesso ambito che inserisce. Per non usare una fotografia obsoleta dopo il blocco, le scritture runtime contate richiedono `READ COMMITTED`; rifiutare un isolamento diverso con errore specifico e test, invece di consentire una quota errata. Copia/ripristino atomici di un tenant nuovo validano anche l'uso finale. Il riordino del menu e la riattivazione di un membro non aumentano l'uso. Nomi degli errori SQL stabili `tenant_member_quota`, `tenant_role_quota`, `tenant_menu_quota`.
+Decisione di esecuzione T06 (registro, Ruling 16): READ COMMITTED è richiesto per le scritture sulle risorse contate anche all’owner, senza bypass di copia/ripristino. Letture ed esportazione con il solo audit restano possibili a fotografia stabile. T11/T13 dichiarano questo vincolo dei comandi operativi e il suo costo, senza ampliare i privilegi.
+
+- [✅] T06.4 Impostare il timeout nella fase iniziale di `withTenant`, locale alla transazione, prima del lavoro. Recuperare configurazione/limite della connessione in una fase accorpata, mai per ogni query del servizio. Aggiungere prova `pg_sleep` oltre limite, annullamento della modifica e connessione riusata da B senza residui. Aggiornare il tetto fisso delle porte soltanto per il costo di configurazione misurato e documentato; non allargare il tetto delle letture di autorizzazione.
+- [✅] T06.5 Ripetere i test, compresa gara con isolamento diverso e blocchi menu/ultimo amministratore senza attese indefinite; commit locale `feat(tenancy): enforce resource quotas and transaction query timeout`.
 
 ## Task 7 — T07 — Modalità dell'installazione con una sola organizzazione
 
@@ -376,7 +378,7 @@ expect(restoredRoleIds).not.toEqual(sourceRoleIds)
 - [ ] T11.3 Implementare validazione chiusa coerente con contratto T10, verifica preventiva con conteggi/quote e assenza di scritture. `--apply` richiede `--accept-policy`, mappa completa e attore tecnico esplicito; il comando mostra l'effetto della configurazione di piattaforma ma non valori personali o credenziali. Validare nuovamente dentro la transazione che applica, non fidarsi del rapporto di verifica precedente. Rifiutare esistenza slug, formato/versione/campi/codici ignoti, mappa incompleta o ambigua e quote insufficienti.
 - [ ] T11.4 Nella funzione SQL creare nuovo tenant sospeso, rimappare chiavi e ricostruire righe note in ordine; caricare grant storici con il percorso owner-only T04. Non creare/modificare users o password, non ripristinare consensi/sessioni/token/host attivi, non acquisire ruolo speciale del modello/default. Richiedere almeno un amministratore attivo nella destinazione e preservare gli attori storici come tali. Annotare origine tecnica degli eventi importati e del ripristino; impedire che vecchi eventi `support.*` riaprano assistenza.
 Gli eventi importati ricevono sempre `origin='restored'` e riferimenti sorgente, anche se il file sosteneva `live`; i nuovi eventi dell'importatore sono `live`. I campi di provenienza non sovrascrivono identità o privilegi.
-- [ ] T11.5 Provare fallimento dopo metà importazione, prima dell'evento finale e concorrenza sullo slug: zero residui, un solo tenant eventuale. Il comando usa limiti operativi espliciti propri, senza cambiare timeout del web. Ripetere test e commit locale `feat(tenancy): restore tenant archives through guarded operator command`.
+- [ ] T11.5 Provare fallimento dopo metà importazione, prima dell'evento finale e concorrenza sullo slug: zero residui, un solo tenant eventuale. Il comando usa limiti operativi espliciti propri e READ COMMITTED per le scritture contate (Ruling 16), senza cambiare timeout del web. Ripetere test e commit locale `feat(tenancy): restore tenant archives through guarded operator command`.
 
 ## Task 12 — T12 — Eliminazione definitiva con sola traccia minima
 

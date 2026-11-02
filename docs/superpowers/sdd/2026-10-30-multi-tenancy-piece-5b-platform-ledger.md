@@ -278,3 +278,19 @@ Task 5: fix round1/5 (1 addressed,0open — T05-CHECK-1; commits88af74a..2205b2c
 Task 5: complete (commits1c72937..2205b2c, review clean)
 
 T05 e relativi passi spuntati dopo verifica/riesame. Limiti storici della prima prova e della suite completa espliciti, non ricopiati come verde completo. Minore differito MIN-1 e limite categorie della rettifica Ruling15 restano per triage finale; nessun bloccante. Blocco di scritture policy resta0 nei modelli, nessuna attivazione reale o accesso allo sviluppo. Prossimo task6.
+
+Task 6: in progress — BASE0697be13b3a6f0fdd36ea3d473d64ea5c4a108c3; implementer /root/mt5b_t06_implementer, gpt-6.1-sol high (integrazione su piano già definito). Brief task-6-brief.md, contesto task-6-context.md, rapporto atteso task-6-report.md. Esclusiva integrazione locale concessa, nessun browser o altro esecutore. Nuova migrazione0067; 0001–0066 immutate. Quote/concorrenza/timeout da verificare e rivedere indipendentemente, nessuna attivazione sullo sviluppo.
+
+Ruling: 16. Le nuove guardie delle scritture sulle tre risorse contate richiedono READ COMMITTED anche per construct_owner, senza introdurre un bypass per copia/ripristino. Le letture, compresa l’esportazione REPEATABLE READ con il solo audit, non sono soggette a questo rifiuto. I comandi di copia/ripristino che inseriscono risorse usano READ COMMITTED e transazione atomica — il piano impone la garanzia runtime e non richiede scritture owner con fotografia stabile; estendere la precondizione evita un percorso non verificato di conteggio obsoleto senza nuovi privilegi o flag — costo se errato: comandi operativi o fixture che avessero scelto un altro isolamento dovranno dichiarare READ COMMITTED per queste scritture; vincolo da documentare nella guida e portare a T11/T13. Nessun cambiamento a credenziali o RLS.
+
+Task 6: ROSSO reale integrazione7falliti/1passato (quote/copia/isolamento/timeout mancanti); unità iniziale import helper assente distinta da rosso semantico. Approccio affinato: lock/isolamento BEFORE STATEMENT, verifica del conteggio AFTER INSERT con transition table solo se esistono righe effettivamente inserite, per preservare no-op e costo per batch. Configurazione PL/pgSQL sequenziale nella query iniziale esistente. Test iniziale EPERM locale, retry autorizzato senza rifiuti automatici.
+
+Task 6: implementation done — commitf4f1087d42f9d13654f7c6b81d3f775d630fa3ad,9file; report task-6-report.md verificato. Trial0067 in rollback e applicazione solo test0;0001–0066 immutate. Verifiche66integrazioni mirate (48+18), poi9della quota ripetute dopo soli assert rafforzati,1635unità/161file unica completa,lint/tipi/schema0. Budget3viaggi withTenant vuota e5autorizzazione invariati;0viaggi aggiuntivi, lettura pg_settings/policy interna alla prima istruzione. Diagnostici unitari intenzionali dichiarati. Verificati SHA/stat/show--check e soli3documenti coordinatore sporchi; nessuna integrazione o browser attivo. Package review-0697be1..f4f1087.diff per gate indipendente specifica/qualità.
+
+Task 6: reviewer /root/mt5b_t06_reviewer (gpt-6-astra high per concorrenza, snapshot e timeout), intervallo0697be1..f4f1087. Gate in corso; nessun esecutore, integrazione o browser attivo.
+
+Task 6: review — conforme, Approved; 0Critical/Important,1Minor preesistente differito T06-M1 (stesso rumore Pino già in T05, non una nuova regressione). V1 risolto dal coordinatore rispetto al piano: tutti i percorsi sono coperti dai trigger SQL, copia verificata e alcuni chiamanti canonici esercitati; la matrice completa UI/CLI e il futuro restore restano esplicitamente T11/T13, non mancanti nel gate T06. Nessuna suite o DB rieseguiti dal revisore.
+
+Task 6: complete (commits0697be1..f4f1087, review clean)
+
+T06 e relativi passi spuntati dopo prove/revisione. Prova locale0067, sviluppo0063 invariato; nessuna attivazione o operazione remota. Ruling16 portato a T11/T13. Prossimo task7.
