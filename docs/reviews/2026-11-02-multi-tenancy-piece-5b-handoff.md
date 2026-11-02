@@ -4,7 +4,7 @@ Data: 2026-11-02. **Lavoro fermato su richiesta del proprietario:** «Ferma il l
 
 Ripresa successiva autorizzata dal proprietario: «Continua. Credo ci sia stato un blocco. Verifica». Stato salvato e ramo verificati, cartella pulita al commit `d821602`; uso di Codex consentito. Ripreso lo stesso revisore T04, senza riavviare le attività concluse. Le indicazioni della pausa qui sotto restano il riferimento storico; la ripresa è registrata nel registro del piano.
 
-Stato aggiornato della ripresa: **T04 concluso e approvato** dopo correzione T04-REV-1 nel commit `9cbd253`. Riesame indipendente: 1 ADDRESSED, nessuna nuova rottura. Tutti gli 11 casi saltati con flag assente/0, raccolti con 1, senza connessioni; stile mirato e tipi verdi. Il nuovo run abilitato non ha potuto passare perché Docker era fermo; la preparazione successiva è stata respinta dal controllo automatico e attende il sì specifico del proprietario. T05–T13 non ancora avviati. Nessun invio/PR/unione o accesso allo sviluppo. Le sezioni della pausa più sotto sono storiche, non lo stato corrente.
+Stato aggiornato della ripresa: **T04 concluso e approvato** dopo correzione T04-REV-1 nel commit `9cbd253`. Riesame indipendente: 1 ADDRESSED, nessuna nuova rottura. Tutti gli 11 casi saltati con flag assente/0, raccolti con 1, senza connessioni; stile mirato e tipi verdi. Dopo il sì specifico del proprietario, preparazione della prova completata e run abilitato **11/11 verdi**: limite ambientale risolto. Prossima attività T05; T05–T13 ancora aperti. Nessun invio/PR/unione o accesso allo sviluppo. Le sezioni della pausa più sotto sono storiche, non lo stato corrente.
 
 ## Stato salvato
 

@@ -18,7 +18,7 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
   [piano operativo](../../superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md) approvati.
   Metodo scelto: agenti con revisione per ogni attività. T01 (catalogo), T02 (configurazione
   protetta, copia iniziale e blocchi per tenant) e T03 (menu e destinazioni canoniche) realizzati
-  e rivisti; T04 (limite per tutti gli attori e nuovi grant SQL) concluso e rivisto, T05–T13 ancora aperti. La prova aveva raggiunto la 0066; dopo il riavvio di Docker va ripreparata e attende il sì specifico richiesto dal controllo automatico. Lo sviluppo resta alla 0063.
+  e rivisti; T04 (limite per tutti gli attori e nuovi grant SQL) concluso e rivisto, T05–T13 ancora aperti. La prova è stata ripreparata fino alla 0066 con sì specifico; gli 11 casi del gate corretto sono passati. Lo sviluppo resta alla 0063.
 
 ## Come si legge
 

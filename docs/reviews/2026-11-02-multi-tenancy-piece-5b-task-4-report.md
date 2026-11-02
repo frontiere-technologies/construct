@@ -1,6 +1,6 @@
 # T04 — Rapporto conservato e revisione conclusa
 
-Copia aggiornata del rapporto dell’esecutore: codice iniziale `9c83e68`, fix del gate `9cbd253`. Revisione indipendente iniziale: 1 Important, corretto; riesame: 1 ADDRESSED, nessuna nuova rottura. T04 concluso. Il run abilitato successivo al fix resta limitato dall’ambiente, come riportato; non sostituisce né annulla le precedenti prove applicative. Preparazione della prova locale attualmente in attesa del sì specifico richiesto dal controllo automatico.
+T04 concluso e approvato: codice9c83e68, fix9cbd253. Riesame: 1 ADDRESSED, nessuna nuova rottura. Dopo il sì specifico del proprietario, ambiente ripreparato e file abilitato11/11 verde. I limiti ambientali descritti nel rapporto sono storici e risolti dalla verifica finale del coordinatore.
 
 # T04 — Concessioni effettive su attori, porte e nuove assegnazioni SQL
 
@@ -128,3 +128,7 @@ Nessuna suite completa ripetuta. Nessun documento del coordinatore incluso nel f
 Il coordinatore ha successivamente riavviato Docker, ma la preparazione dell'ambiente richiede ancora il consenso specifico richiesto dal controllo automatico nel suo percorso. Ha confermato che le verifiche richieste per T04-REV-1 (gate assente/0 e raccolta con 1, senza DB) sono già complete e ha disposto il commit del fix senza altri tentativi DB. Esito R1: **DONE_WITH_CONCERNS** soltanto per la limitazione ambientale del run abilitato; nessun dubbio sul gate corretto. Nessuna suite o prova aggiuntiva eseguita dopo questa disposizione.
 
 Commit R1 eseguito con `git commit --only` sul solo file di integrazione, uscita 0; evidenza `logs/t04-r1-commit.log`. La differenza ampia di righe deriva dal rientro dei sette casi nella suite; il diff ignorando whitespace conserva soltanto il gate e l’hook corretti.
+
+## Verifica successiva del coordinatore
+
+Dopo il sì specifico del proprietario, preparazione locale up completata con uscita0, 0001–0066 e ruoli/seed pronti. Unica ripetizione del comando abilitato già citato: **11/11 verdi**, uscita0; log `logs/t04-r1-enabled-final.log`. Diagnostico Unauthorized atteso nella gara tema. Nessuna modifica al codice dopo il fix rivisto; limitazione ambientale R1 risolta. Nessun accesso allo sviluppo.
