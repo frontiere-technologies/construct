@@ -1,6 +1,8 @@
-# T04 — Concessioni effettive su attori, porte e nuove assegnazioni SQL
+# T04 — Rapporto conservato e revisione conclusa
 
-> Copia del rapporto dell’esecutore salvata alla pausa del 2026-11-02. L’implementazione è testata; la revisione indipendente è stata interrotta su richiesta del proprietario e T04 rimane aperto. Il commit del codice è 9c83e68fa28da0b502035e63bb81d16ceda7db8a.
+Copia aggiornata del rapporto dell’esecutore: codice iniziale `9c83e68`, fix del gate `9cbd253`. Revisione indipendente iniziale: 1 Important, corretto; riesame: 1 ADDRESSED, nessuna nuova rottura. T04 concluso. Il run abilitato successivo al fix resta limitato dall’ambiente, come riportato; non sostituisce né annulla le precedenti prove applicative. Preparazione della prova locale attualmente in attesa del sì specifico richiesto dal controllo automatico.
+
+# T04 — Concessioni effettive su attori, porte e nuove assegnazioni SQL
 
 Risultato: **DONE**. Il limite del tenant precede le scorciatoie amministrative anche in assistenza; le scritture opzionali rileggono la capacità sotto il lock comune. SQL rifiuta nuovi grant sospesi, conserva quelli esistenti e permette revoca/riattivazione. Il consenso essenziale ha una delega indipendente secondo il Ruling 13. Nessun dubbio architetturale aperto; revisione indipendente demandata al coordinatore.
 
@@ -99,3 +101,30 @@ Nessun accesso al DB di sviluppo o remoto, strumenti Supabase, credenziali mostr
 Autolettura del diff completata su migrazione, confini applicativi, UI e prove; `diff --check` pulito. Il rapporto e i log vivono nell'area di esecuzione ignorata richiesta dal coordinatore. Nessuna attività T01–T03 reimplementata. La revisione indipendente è ancora da eseguire da parte del coordinatore e non è conteggiata come prova già completata.
 
 Commit eseguito con lista esplicita di 34 file e `git commit --only`, uscita 0; log `logs/t04-commit.log`. Verifica successiva: nel worktree rimangono soltanto piano e ledger del coordinatore.
+
+## Fix round 1/5 — T04-REV-1
+
+La revisione ha individuato correttamente sette `it` al livello del modulo, fuori da `describeIntegration`: il comando npm abituale li eseguiva con flag esplicito e non rendeva visibile il difetto. Correzione limitata a `lib/tenancy/tenant-feature-enforcement.integration.test.ts`: tutti gli 11 casi sono ora nello stesso `describeIntegration`, con `beforeEach` che azzera la sessione e un solo `afterAll(closeOwner)` nello scope della suite. Nessuna modifica ad assert, prodotto, SQL, configurazione comune o timeout. Autolettura con `git diff --ignore-all-space` conferma soltanto lo spostamento della chiusura della suite e la rimozione dell'hook duplicato.
+
+Commit R1: `9cbd2530934cec207df1f32dc9dad6f70656aaa0`.
+
+### Prova sicura del gate
+
+Il runner persistente `logs/t04-r1-gate-check.mjs` genera una configurazione isolata senza loader env, alias `@` del workspace e setup che sostituisce `@/lib/db/client` con uno stub: ogni transazione lancia `T04_R1_DB_ACCESS_FORBIDDEN`, senza creare client PostgreSQL. Le variabili DB del processo figlio sono rimosse; l'unico valore owner è una sentinella non utilizzabile come connessione. Nessuna lettura di `.env.local` o `operator.env`, né connessione DB, nei ROSSI/VERDI del gate. Il setup e la configurazione sono riportati integralmente nei log aggregati.
+
+| Comando / modalità | Uscita e copertura | Log |
+| --- | --- | --- |
+| `node .superpowers/sdd/2026-10-30-multi-tenancy-piece-5b-platform/logs/t04-r1-gate-check.mjs red` prima del fix | Wrapper 0; Vitest assente/0 uscita 1 ciascuno, **7 falliti sullo stub e 4 skipped**. I sette tentativi restano bloccati e non aprono connessioni. Flag 1: `list --json`, uscita 0, 11 raccolti | `t04-r1-gate-red.log`, tre log per modalità |
+| Stesso runner con argomento `green` dopo il fix | Wrapper 0; Vitest assente/0 uscita 0 ciascuno, **11 skipped** ciascuno; flag 1 `list --json` uscita 0, **11 nomi unici**, tutti nella suite gated | `t04-r1-gate-green.log`, tre log per modalità |
+| Assert Node sui log del gate | 0; verifica 11 skipped per assente/0, assenza della sentinella di tentata transazione e 11 nomi unici raccolti con 1 | `t04-r1-gate-assertions.log` |
+| Da W: `./node_modules/.bin/eslint lib/tenancy/tenant-feature-enforcement.integration.test.ts` | 0; nessun output | `t04-r1-lint.log` |
+| `npm --prefix sources/microservices/web-construct run typecheck` | 0; `tsc --noEmit` | `t04-r1-typecheck.log` |
+| `git -c core.fsmonitor=false diff --check` | 0; nessun output | transcript R1 |
+
+Il solo file abilitato è stato tentato con `AUTH_URL=http://localhost:3000 npm --prefix sources/microservices/web-construct run test:integration:local -- lib/tenancy/tenant-feature-enforcement.integration.test.ts`, che carica il solo `local-test.env` previsto. Il tentativo è terminato con uscita 1: 11 fallimenti di connessione/timeout in 32,85 secondi; nessun timeout è stato allungato. `docker ps --format '{{.Names}} {{.Status}} {{.Ports}}'` ha restituito uscita 1, daemon Docker locale non raggiungibile. Evidenze: `logs/t04-r1-enabled.log`, `logs/t04-r1-docker-status.log`. Processo terminato, nessun test/browser attivo, nessun avvio/reset o ripiego remoto eseguito. Coordinatore informato per l'eventuale ripristino dell'ambiente; i verdi senza DB rimangono validi.
+
+Nessuna suite completa ripetuta. Nessun documento del coordinatore incluso nel fix; rapporto/log restano nell'area di esecuzione richiesta.
+
+Il coordinatore ha successivamente riavviato Docker, ma la preparazione dell'ambiente richiede ancora il consenso specifico richiesto dal controllo automatico nel suo percorso. Ha confermato che le verifiche richieste per T04-REV-1 (gate assente/0 e raccolta con 1, senza DB) sono già complete e ha disposto il commit del fix senza altri tentativi DB. Esito R1: **DONE_WITH_CONCERNS** soltanto per la limitazione ambientale del run abilitato; nessun dubbio sul gate corretto. Nessuna suite o prova aggiuntiva eseguita dopo questa disposizione.
+
+Commit R1 eseguito con `git commit --only` sul solo file di integrazione, uscita 0; evidenza `logs/t04-r1-commit.log`. La differenza ampia di righe deriva dal rientro dei sette casi nella suite; il diff ignorando whitespace conserva soltanto il gate e l’hook corretti.

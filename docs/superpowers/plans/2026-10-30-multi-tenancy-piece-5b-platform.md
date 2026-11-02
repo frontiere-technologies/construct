@@ -181,7 +181,7 @@ Associare la pagina condivisa `/admin/tenant-settings` a `manage-support-consent
 
 ## Task 4 — T04 — Autorizzazione effettiva e blocco SQL delle nuove assegnazioni
 
-- [ ] ID=MT5B-T04, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Concessioni applicate a ogni porta, Fix description=Intersezione prima delle scorciatoie amministrative e vincoli SQL con sospensione reversibile; copre MT5B-OK-1/2.
+- [✅] ID=MT5B-T04, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Concessioni applicate a ogni porta, Fix description=Intersezione prima delle scorciatoie amministrative e vincoli SQL con sospensione reversibile; copre MT5B-OK-1/2.
 
 **File:** C `D/migrations/0066_tenant_grant_guards.sql`, `W/lib/tenancy/tenant-feature-access.ts`; M `W/lib/rbac/{actor,auth-roles,auth-guard,grant-guards,grant-service,roles-actions,users-actions,navigation-actions}.ts`, `W/lib/tenancy/{support-consent,tenant-settings-actions}.ts`, `W/lib/theme-actions.ts`, `W/app/(protected)/(admin)/admin/theme/page.tsx`, `W/guards/permission-declared.test.ts`, test dei viaggi al database; T `W/lib/tenancy/tenant-feature-enforcement.integration.test.ts`, test esistenti attore/guardie e fra tenant.
 
@@ -196,7 +196,7 @@ Decisione preliminare registrata: revocare ruoli/grant sospesi rimane possibile.
 
 `withTenantFeature<T>(actor: Actor, feature: FeatureKey, fn: (tx: TenantTx) => Promise<T>): Promise<T>` in `tenant-feature-access.ts` apre la transazione, prende il blocco T02, rilegge la concessione e solo allora esegue la modifica. Tema, utenti, ruoli, menu e impostazioni ordinarie lo usano con la capacità dell'azione; i servizi interni ricevono la transazione esistente. I controlli individuali restano la prima guardia della porta. Le azioni essenziali non diventano dipendenti da un'area opzionale.
 
-- [ ] T04.1 Scrivere test parametrizzati per persona, amministratore e assistenza: spegnere lettura utenti/tema blocca guardie e richieste dirette; cambiare concessione tra due richieste è immediato. La sospensione conserva righe, vieta nuove `role_permission`/`role_functionality` anche chiamando SQL, consente revoca e riattivazione. Gestire un consenso già assegnato resta possibile anche se l'area impostazioni è spenta.
+- [✅] T04.1 Scrivere test parametrizzati per persona, amministratore e assistenza: spegnere lettura utenti/tema blocca guardie e richieste dirette; cambiare concessione tra due richieste è immediato. La sospensione conserva righe, vieta nuove `role_permission`/`role_functionality` anche chiamando SQL, consente revoca e riattivazione. Gestire un consenso già assegnato resta possibile anche se l'area impostazioni è spenta.
 
 Con sessione amministratore e area Aspetto spenta nel `beforeEach`:
 ```ts
@@ -204,11 +204,11 @@ it('does not let the tenant administrator bypass a disabled theme', async () => 
   await expect(requireAdministratorFeature('manage-tenant-theme')).rejects.toThrow('Unauthorized')
 })
 ```
-- [ ] T04.2 Eseguire unità attore/guardie e poi `npm run test:integration:local -- lib/tenancy/tenant-feature-enforcement.integration.test.ts lib/db/round-trip-budget.integration.test.ts`: falliscono sui casi nuovi.
-- [ ] T04.3 Implementare letture accorpate e intersezione; mantenere distinti permessi e menu. Le guardie di concessione controllano prima la capacità del tenant e poi i diritti dell'attore. Gli aggiornamenti di ruoli rivalidano dentro la transazione che scrive e prendono il blocco T02. SQL invoker su inserimento/cambio della capacità verifica la concessione; revoche e aggiornamenti estranei restano possibili. Copia e ripristino storico owner-only possono ricostruire righe sospese durante la nascita del tenant, senza abilitarle: modalità SQL interna rifiutata al runtime, mai parametro del browser.
-- [ ] T04.4 Ripetere i comandi. Aggiungere prova di gara tra sospensione e assegnazione e prova che il contesto interno di copia non apre un aggiramento al runtime. Gli attuali tetti dei viaggi per autorizzazione restano validi. Cataloghi globali e permessi di piattaforma non diventano permessi del tenant.
+- [✅] T04.2 Eseguire unità attore/guardie e poi `npm run test:integration:local -- lib/tenancy/tenant-feature-enforcement.integration.test.ts lib/db/round-trip-budget.integration.test.ts`: falliscono sui casi nuovi.
+- [✅] T04.3 Implementare letture accorpate e intersezione; mantenere distinti permessi e menu. Le guardie di concessione controllano prima la capacità del tenant e poi i diritti dell'attore. Gli aggiornamenti di ruoli rivalidano dentro la transazione che scrive e prendono il blocco T02. SQL invoker su inserimento/cambio della capacità verifica la concessione; revoche e aggiornamenti estranei restano possibili. Copia e ripristino storico owner-only possono ricostruire righe sospese durante la nascita del tenant, senza abilitarle: modalità SQL interna rifiutata al runtime, mai parametro del browser.
+- [✅] T04.4 Ripetere i comandi. Aggiungere prova di gara tra sospensione e assegnazione e prova che il contesto interno di copia non apre un aggiramento al runtime. Gli attuali tetti dei viaggi per autorizzazione restano validi. Cataloghi globali e permessi di piattaforma non diventano permessi del tenant.
 La gara comprende anche una modifica del tema già ammessa dalla guardia iniziale: se la sospensione è confermata prima della transazione di scrittura, nessuna riga viene modificata.
-- [ ] T04.5 Commit locale `feat(auth): enforce tenant feature ceiling for all actors`.
+- [✅] T04.5 Commit locale `feat(auth): enforce tenant feature ceiling for all actors`.
 
 ## Task 5 — T05 — Modifica atomica della policy e cancellazione distinta delle assegnazioni
 
