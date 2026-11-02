@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { areaKeySchema } from '@/lib/tenancy/feature-catalog'
 import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from './types'
 
 /**
@@ -22,3 +23,5 @@ export const rolePermissionDeltasSchema = z.object({
 
 // Maiuscole e spazi non devono creare un secondo account: l'email si normalizza prima di cercarla.
 export const emailSchema = z.string().trim().toLowerCase().email().max(254)
+
+export const menuAreaSchema = areaKeySchema.nullable()

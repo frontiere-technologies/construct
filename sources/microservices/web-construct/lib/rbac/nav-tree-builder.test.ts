@@ -3,6 +3,7 @@ import { buildNavTree, canDeleteSubtree, hasChildren, isDescendant, selectablePa
 import type { MenuEntryRow } from './types'
 
 const row = (id: number, parent: number | null, isCategory: boolean, name: string, extra: Partial<MenuEntryRow> = {}): MenuEntryRow => ({
+  area_key: null, feature_key: null,
   id_menu_entry: id, id_parent: parent, name,
   order_position: id, navbar_position: null, icon_path: null,
   id_functionality_type: isCategory ? null : 3,

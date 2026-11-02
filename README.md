@@ -132,6 +132,23 @@ node sources/devops/db/db.mjs apply
 node sources/devops/db/db.mjs provision-runtime-role
 ```
 
+Per la migrazione `0065` fornire al processo del migratore anche `AUTH_URL` (o
+`NEXTAUTH_URL`), con lo stesso indirizzo pubblico configurato nel processo web. L'origine
+serve a riconoscere gli alias assoluti delle pagine dell'app; non si ricava dal database
+o dall'intestazione `Host`. Se esistono URL assoluti e manca l'origine, la migrazione si
+interrompe con `menu_origin_required` e annulla le proprie modifiche. Gli URL memorizzati
+restano identici. Anche `tenant-create` e la console di piattaforma richiedono tale
+configurazione quando il modello contiene URL assoluti: una copia fallita non lascia
+un tenant parziale.
+
+Dopo `0065`, immagini web precedenti che non impostano il contesto transazionale
+dell'origine non possono creare o cambiare collegamenti assoluti. Le letture dei menu e
+le modifiche di etichette/posizione sui dati già classificati restano disponibili;
+percorsi relativi non richiedono un'origine. Coordinare quindi migrazione e aggiornamento
+dell'immagine prima di riabilitare la modifica dei collegamenti assoluti. Gli host Unicode
+nei nuovi collegamenti vanno espressi nella forma ASCII/punycode; credenziali nell'URL,
+caratteri di controllo e barre inverse sono rifiutati dalla classificazione.
+
 Dalla migrazione `0045` gli oggetti del database appartengono al ruolo `construct_owner` (senza
 login e senza BYPASSRLS), e `db.mjs apply` esegue ogni migrazione successiva con
 `set local role construct_owner`. L'utente di `MIGRATION_DATABASE_URL` ne diventa membro con la

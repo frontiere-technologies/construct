@@ -1,4 +1,6 @@
+import type { TenantPolicySnapshot } from '@/lib/tenancy/tenant-policy-types'
 import type { MenuItem, MenuPosition } from '@/types/menu'
+import { canUseMenuEntry } from './menu-feature-binding'
 import { type MenuEntryRow, type Locale, DEFAULT_LOCALE, FUNCTYPE_EMBEDDED_PAGE, FUNCTYPE_EXTERNAL_LINK } from './types'
 import { resolveNavigationText } from './navigation-locales'
 
@@ -41,12 +43,12 @@ function normalizeRoute(link: string | null): string | undefined {
  * perché la risalita sia sparita, ma perché il travaso (migrazione 0017+0018) ha già escluso
  * quelle righe da menu_entry: chi arriva fin qui è già un genitore legittimo.
  */
-function resolveVisibleIds(entries: MenuEntryRow[], grantedIds: Set<number>): Set<number> {
+function resolveVisibleIds(entries: MenuEntryRow[], grantedIds: Set<number>, policy: TenantPolicySnapshot): Set<number> {
   const byId = new Map(entries.map(e => [e.id_menu_entry, e]))
   const visible = new Set<number>()
   for (const entry of entries) {
     const isContainer = entry.id_functionality_type === null
-    if (isContainer || !isEntryVisible(entry, grantedIds)) continue
+    if (isContainer || entry.feature_key === null || !isEntryVisible(entry, grantedIds) || !canUseMenuEntry(policy, { areaKey: entry.area_key, featureKey: entry.feature_key })) continue
     visible.add(entry.id_menu_entry)
     let parent = entry.id_parent != null ? byId.get(entry.id_parent) : undefined
     while (parent && !visible.has(parent.id_menu_entry)) {
@@ -71,10 +73,11 @@ function resolveVisibleIds(entries: MenuEntryRow[], grantedIds: Set<number>): Se
 export function mapMenuToSidebar(
   entries: MenuEntryRow[],
   grantedIds: Set<number>,
+  policy: TenantPolicySnapshot,
   locale: Locale = DEFAULT_LOCALE,
   fallbackLocale: Locale = DEFAULT_LOCALE,
 ): MenuItem[] {
-  const visible = resolveVisibleIds(entries, grantedIds)
+  const visible = resolveVisibleIds(entries, grantedIds, policy)
   const out: MenuItem[] = []
   for (const entry of entries) {
     if (!visible.has(entry.id_menu_entry)) continue

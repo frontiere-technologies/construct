@@ -1,5 +1,6 @@
 import { cache } from 'react'
-import { asc, eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
+import { tenantPolicySelection, tenantPolicyFromData, type TenantPolicyData } from '@/lib/tenancy/tenant-policy-service'
 import { allInTransaction } from '@/lib/db/all-in-transaction'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { menuEntry, roleFunctionality } from '@/lib/db/schema'
@@ -17,17 +18,21 @@ export const getSidebarMenu = cache(async (
 ): Promise<MenuItem[]> => withTenant(tenantId, async tx => {
   // Voci (senza parametri) e concessioni (con parametri): postgres.js le mette in coda insieme sulla
   // stessa connessione (specifica 2026-10-15, §2.5). Ogni ramo è una sola istruzione.
-  const [entryRows, grantRows] = await allInTransaction([
-    tx.select().from(menuEntry).orderBy(asc(menuEntry.orderPosition)),
+  const [menuRows, grantRows] = await allInTransaction([
+    tx.execute<{ entries: MenuEntryRow[]; policy: TenantPolicyData }>(sql`
+      select coalesce((select jsonb_agg(m order by m.order_position) from ${menuEntry} m), '[]'::jsonb) as entries,
+        row_to_json(p) as policy from (${tenantPolicySelection}) p`),
     roleIds.length
       ? tx.select({ id_role: roleFunctionality.idRole, id_menu_entry: roleFunctionality.idMenuEntry })
         .from(roleFunctionality)
         .where(inArray(roleFunctionality.idRole, roleIds))
       : Promise.resolve([]),
   ])
-  const entries = entryRows.map(toMenuEntryRow)
+  const result = menuRows[0]
+  const policy = tenantPolicyFromData(result?.policy)
+  const entries = result.entries
   const granted = resolveGrantedFunctionalityIds(grantRows, roleIds)
-  return mapMenuToSidebar(entries, granted, locale, fallbackLocale)
+  return mapMenuToSidebar(entries, granted, policy, locale, fallbackLocale)
 }))
 
 // La rotta /embedded/{id} usa l'identificativo della VOCE di menu (sidebar-adapter la

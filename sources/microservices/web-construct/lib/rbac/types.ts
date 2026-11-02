@@ -1,3 +1,4 @@
+import type { AreaKey, FeatureKey } from '@/lib/tenancy/feature-catalog'
 import type { TextSearch } from '@/lib/grid-text-search'
 
 export type Locale = string
@@ -48,6 +49,8 @@ export interface MenuEntryRow {
   navbar_position: 'TOP' | 'BOTTOM' | null
   icon_path: string | null
   id_functionality_type: number | null
+  area_key: AreaKey | null
+  feature_key: FeatureKey | null
   functionality_link: string | null
   open_in_new_tab: number
   item_translation: Record<string, ItemTranslation> | null
@@ -170,6 +173,7 @@ export interface CreateNavItemInput {
   iconPath: string | null
   /** External links only: open the URL in a new tab. Defaults to true when omitted. */
   openInNewTab?: boolean
+  areaKey?: AreaKey | null
   idItemParent: number | null
   description: string
   itemTranslation: Record<string, { name?: string; description?: string }>

@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 import {
   applyPendingMigrations,
   discoverMigrations,
+  menuOrigin,
   parseApplyArguments,
   parsePlatformAdminArguments,
   parseTenantCreateArguments,
@@ -135,7 +136,7 @@ function migrationAdapter(sql) {
         // imposta il tenant a livello di sessione (set_config(..., false)) non deve lasciarlo alle
         // migrazioni successive, che scriverebbero nel suo tenant invece di fallire con 42501
         // (Review Focus 2).
-        await sql`select set_config('app.tenant_id', '', false)`
+        await sql`select set_config('app.tenant_id', '', false), set_config('app.menu_origin', ${menuOrigin()}, true)`
         // Dalla 0045 in poi ogni migrazione lavora come construct_owner, che possiede gli oggetti e
         // non ha BYPASSRLS: la RLS forzata vale anche qui (specifica 2026-10-13, §2.1). La 0045
         // stessa gira ancora come utente delle migrazioni, perché il ruolo non esiste ancora.
@@ -847,6 +848,7 @@ async function runTenantCreate(connectionUrl, { slug, name, admin, host }) {
     const result = await sql.begin(async tx => {
       await tx`set local role construct_owner`
       if (host) await assertHostFree(tx, host)
+      await tx`select set_config('app.menu_origin', ${menuOrigin()}, true)`
       const [{ tenantId }] = await tx`
         select app_private.create_tenant_from_template(${slug}, ${name})::text as "tenantId"
       `

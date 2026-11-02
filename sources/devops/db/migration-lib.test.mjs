@@ -498,3 +498,12 @@ test('every command audit operation is an operation of the application audit log
     assert.ok(declared.includes(`'${operation}'`), operation)
   }
 })
+
+test('menu origin uses the public auth URL and refuses unsafe origins', async () => {
+  const { menuOrigin } = await import('./migration-lib.mjs')
+  assert.equal(menuOrigin({ AUTH_URL: 'https://Construct.Example:443/base' }), 'https://construct.example')
+  assert.equal(menuOrigin({ NEXTAUTH_URL: 'http://localhost:3001/' }), 'http://localhost:3001')
+  assert.equal(menuOrigin({}), '')
+  assert.throws(() => menuOrigin({ AUTH_URL: 'javascript:alert(1)' }), /AUTH_URL/)
+  assert.throws(() => menuOrigin({ AUTH_URL: 'https://user:pass@example.test' }), /AUTH_URL/)
+})

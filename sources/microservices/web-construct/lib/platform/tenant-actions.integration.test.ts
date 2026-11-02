@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { eq, inArray, sql } from 'drizzle-orm'
-import { passwordSetTokens, tenant, tenantHost, tenantMembership, userRole, users } from '@/lib/db/schema'
+import { menuEntry, passwordSetTokens, tenant, tenantHost, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
@@ -200,6 +200,27 @@ async function create(label: string, options: { host?: string; adminEmail?: stri
 }
 
 describeIntegration('createTenant', () => {
+
+  it('passes the configured origin when copying absolute internal and external menu targets', async () => {
+    const [template] = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).where(eq(tenant.isTemplate, true)))
+    const templateId = tenantIdForTest(template.id)
+    const links = ['https://construct.example.test/user-management', 'https://outside.test/user-management']
+    const originals = await withOwner(async tx => {
+      await tx.execute(sql`select set_config('app.menu_origin', 'https://construct.example.test', true)`)
+      return tx.insert(menuEntry).values(links.map((link, index) => ({ name: 'Absolute template ' + index, idFunctionalityType: 2, functionalityLink: link }))).returning({ id: menuEntry.idMenuEntry })
+    }, templateId)
+    try {
+      const { result } = await create('absolute')
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      const copied = await withTenant(tenantIdForTest(result.tenantId), tx => tx.select().from(menuEntry).where(inArray(menuEntry.functionalityLink, links)))
+      expect(copied.map(entry => entry.featureKey).sort()).toEqual(['read-users', 'use-custom-content'])
+      expect(copied.every(entry => !originals.some(original => original.id === entry.idMenuEntry))).toBe(true)
+    } finally {
+      await withOwner(tx => tx.delete(menuEntry).where(inArray(menuEntry.idMenuEntry, originals.map(entry => entry.id))), templateId)
+    }
+  })
+
   it('copies the template, sets the primary host, makes the admin, and emails a link to the tenant host', async () => {
     const host = hostOf('create')
     const { result, slug, adminEmail, account } = await create('create', { host })

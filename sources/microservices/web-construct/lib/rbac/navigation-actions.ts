@@ -6,13 +6,35 @@ import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
+import { selectTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
+import { mainBaseUrl } from '@/lib/tenancy/tenant-base-url'
 import { lockTenantPolicy } from '@/lib/tenancy/tenant-policy-lock'
 import { menuEntry } from '@/lib/db/schema'
+import { bindMenuTarget, canUseMenuEntry } from './menu-feature-binding'
+import { menuAreaSchema } from './action-input-schemas'
 import { toMenuEntryRow } from './nav-row-mapper'
 import { sanitizeSvg } from './svg-sanitize'
 import { canDeleteSubtree, hasChildren, isDescendant } from './nav-tree-builder'
 import type { CreateNavItemInput, UpdateNavItemInput, MoveInput, MenuEntryRow } from './types'
 import { ITEM_TYPE_CATEGORY } from './types'
+
+async function bindTarget(
+  tx: TenantTx,
+  input: CreateNavItemInput,
+  areaKey: CreateNavItemInput['areaKey'],
+  previousAreaKey?: MenuEntryRow['area_key'],
+) {
+  const origin = process.env.AUTH_URL || process.env.NEXTAUTH_URL ? new URL(mainBaseUrl()).origin : ''
+  await tx.execute(sql`select set_config('app.menu_origin', ${origin}, true)`)
+  const binding = bindMenuTarget({ link: input.functionalityLink, functionalityType: input.idFunctionalityType, areaKey: menuAreaSchema.parse(areaKey ?? null) }, origin)
+  // Solo contenuti propri e categorie conservano un'area di presentazione scelta in precedenza.
+  // Un nuovo URL interno prende sempre l'area della propria capacità.
+  if (areaKey === undefined && previousAreaKey !== undefined && (binding.featureKey === 'use-custom-content' || binding.featureKey === null)) {
+    binding.areaKey = previousAreaKey
+  }
+  if (!canUseMenuEntry(await selectTenantPolicy(tx), binding)) throw new Error('menu_capability_unavailable')
+  return binding
+}
 
 async function writeMenuEntryTags(tx: TenantTx, idMenuEntry: number, tagTranslations: Record<string, string[]>) {
   const rows: { tag_lan: string; tag: string }[] = []
@@ -114,6 +136,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
 
       // Le voci di primo livello hanno id_parent nullo: append-at-end fra i fratelli veri
       // (quelli sotto lo stesso genitore, root incluso), non un ordine fisso a 0.
+      const binding = await bindTarget(tx, input, input.areaKey)
       const siblings = await loadMenuItems(tx)
       const nextOrder = siblings
         .filter(i => i.id_parent === input.idItemParent)
@@ -126,6 +149,8 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
           name: input.name.trim(),
           idFunctionalityType: input.idFunctionalityType,
           functionalityLink: input.functionalityLink,
+          areaKey: binding.areaKey,
+          featureKey: binding.featureKey,
           iconPath: sanitizeSvg(input.iconPath),
           openInNewTab: input.openInNewTab === false ? 0 : 1,
           itemTranslation: input.itemTranslation,
@@ -189,12 +214,21 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
         await reparent(tx, items, id, input.idItemParent, siblings)
       }
 
+      const isTargetChanged = current.functionality_link !== input.functionalityLink
+        || current.id_functionality_type !== (input.idFunctionalityType ?? null)
+        || input.areaKey !== undefined && input.areaKey !== current.area_key
+      const binding = isTargetChanged
+        ? await bindTarget(tx, input, input.areaKey, wasCategory || current.feature_key === 'use-custom-content' ? current.area_key : undefined)
+        : { areaKey: current.area_key, featureKey: current.feature_key }
+
       await tx
         .update(menuEntry)
         .set({
           name: input.name.trim(),
           idFunctionalityType: input.idFunctionalityType,
           functionalityLink: input.functionalityLink,
+          areaKey: binding.areaKey,
+          featureKey: binding.featureKey,
           iconPath: sanitizeSvg(input.iconPath),
           openInNewTab: input.openInNewTab === false ? 0 : 1,
           itemTranslation: input.itemTranslation,

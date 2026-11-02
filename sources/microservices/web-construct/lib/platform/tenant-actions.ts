@@ -115,6 +115,7 @@ export async function createTenant(
   let created: { tenantId: TenantId; invitation: PreparedInvitation | null }
   try {
     created = await withPlatform(async tx => {
+      await tx.execute(sql`select set_config('app.menu_origin', ${process.env.AUTH_URL || process.env.NEXTAUTH_URL ? new URL(mainBaseUrl()).origin : ''}, true)`)
       const [row] = await tx.execute<{ tenant_id: string }>(sql`
         select c.tenant_id::text as tenant_id
         from app_private.create_platform_tenant(${parsed.slug}, ${parsed.name}, ${host}::text, ${parsed.adminEmail}) c`)

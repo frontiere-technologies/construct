@@ -308,3 +308,14 @@ export async function applyPendingMigrations(adapter, migrations, { to } = {}) {
 
   return applied
 }
+
+/** Origine pubblica, mai derivata da input CLI/browser o dalla connessione DB. */
+export function menuOrigin(env = process.env) {
+  const configured = env.AUTH_URL || env.NEXTAUTH_URL
+  if (!configured) return ''
+  const url = new URL(configured)
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw new Error('AUTH_URL/NEXTAUTH_URL must be a public HTTP(S) URL without credentials')
+  }
+  return url.origin
+}
