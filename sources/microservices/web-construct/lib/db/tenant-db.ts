@@ -50,6 +50,8 @@ export function createTenantAccess(database: Database) {
     if (!Number.isSafeInteger(tenantId) || tenantId <= 0) throw new Error('invalid tenant id')
     try {
       return await database.transaction(async tx => {
+        // La funzione SQL imposta in sequenza tenant e timeout locale senza allentare il limite
+        // della connessione. Un solo viaggio di configurazione, mai query per ogni query servizio.
         // Senza parametri e senza attenderne la risposta prima di far partire la funzione. L'ordine
         // non lo garantisce una scrittura immediata sul socket: viene dalle microattività in ordine
         // FIFO, perché set_config e la prima query della funzione percorrono catene di chiamate di
@@ -62,7 +64,7 @@ export function createTenantAccess(database: Database) {
         // catene vigila tenant-concurrency.integration.test.ts (ordine della prima query, in ogni
         // modalità del pooler, per entrambi i rami di esecuzione di Drizzle).
         const tenantSet = tx
-          .execute(sql.raw(`select set_config('app.tenant_id', '${tenantId}', true)`))
+          .execute(sql.raw(`select app_private.configure_tenant_transaction(${tenantId})`))
           .then(() => undefined)
         // L'async trasforma anche un throw sincrono in un rifiuto, così nessuna promessa resta senza gestore.
         const work = (async () => fn(tx as TenantTx))()

@@ -109,12 +109,14 @@ describeIntegration('round-trip budget', () => {
   it('an empty withTenant costs at most 3 trips (BEGIN, set_config, COMMIT)', async () => {
     const { withTenant } = await import('@/lib/db/tenant-db')
     const count = await measure(() => withTenant(defaultTestTenant(), async () => null))
+    process.stdout.write(`[tenant-budget] empty withTenant: ${count.roundTrips} trips, ${count.statements} statements\n`)
     expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(3)
   })
 
   it('one authorization read costs at most 5 trips', async () => {
     const { resolveUserAuthorization } = await import('@/lib/rbac/auth-roles')
     const count = await measure(() => resolveUserAuthorization(defaultTestTenant(), adminUserId))
+    process.stdout.write(`[tenant-budget] authorization: ${count.roundTrips} trips, ${count.statements} statements\n`)
     expect(count.roundTrips, count.queries.join('\n')).toBeLessThanOrEqual(5)
   })
 
