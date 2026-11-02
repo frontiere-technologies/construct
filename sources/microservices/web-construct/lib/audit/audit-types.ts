@@ -27,6 +27,7 @@ export const AUDIT_OPERATIONS = [
   'support.grant', 'support.revoke', 'support.enter', 'support.exit',
   'tenant.create', 'tenant.status', 'tenant.host.add', 'tenant.host.remove', 'tenant.host.primary',
   'tenant.admin.add', 'tenant.invite.resend',
+  'tenant.policy.save', 'tenant.grants.purge',
   'platform.admin.add', 'platform.admin.remove', 'platform.admin.invite',
   'language.create', 'language.update', 'language.active', 'language.default', 'language.delete',
   'translation.key.create', 'translation.key.delete', 'translation.save',

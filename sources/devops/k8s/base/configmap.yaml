@@ -6,6 +6,8 @@ metadata:
 data:
   NODE_ENV: "production"
   LOG_LEVEL: "info"
+  # Enable only after every pre-policy instance has been replaced.
+  CONSTRUCT_PLATFORM_POLICY_WRITES: "0"
   MAIL_PROVIDER: "resend"
   AUTH_URL: "http://construct.local"
   RESEND_FROM: "noreply@frontiere.io"

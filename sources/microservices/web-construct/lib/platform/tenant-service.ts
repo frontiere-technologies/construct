@@ -5,8 +5,11 @@ import { nextDay } from '@/lib/rbac/date-utils'
 import { requirePlatformAdmin } from '@/lib/rbac/auth-guard'
 import { DEFAULT_TENANT_SLUG } from '@/lib/tenancy/tenant-id'
 import { existingTenantId } from '@/lib/tenancy/platform-tenant'
+import { selectTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
+import type { TenantPolicySnapshot } from '@/lib/tenancy/tenant-policy-types'
 import { readSupportConsent } from '@/lib/tenancy/support-consent'
 import { withPlatform } from './db'
+import { tenantIdArgSchema } from './tenant-action-schemas'
 import type { PlatformTenantRow, PlatformTenantsQuery, PlatformTenantStatus, TenantSortField } from './tenants-grid-query'
 
 export type { PlatformTenantRow, PlatformTenantsQuery, PlatformTenantStatus } from './tenants-grid-query'
@@ -170,4 +173,11 @@ export async function getTenantForPlatform(tenantId: number): Promise<PlatformTe
       support: { until: consent.until },
     }
   }, tenantKey)
+}
+
+/** Lettura di piattaforma disponibile anche prima dell'abilitazione delle nuove scritture. */
+export async function readTenantPolicyForPlatform(tenantId: number): Promise<TenantPolicySnapshot> {
+  await requirePlatformAdmin()
+  const tenantKey = await existingTenantId(tenantIdArgSchema.parse(tenantId))
+  return withPlatform(selectTenantPolicy, tenantKey)
 }
