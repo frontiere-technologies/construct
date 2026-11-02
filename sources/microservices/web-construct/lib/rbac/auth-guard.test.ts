@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { FEATURE_KEYS } from '@/lib/tenancy/feature-catalog'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import type { Actor } from './actor'
 import type { PermissionCode } from './permission-catalog'
@@ -34,14 +35,14 @@ vi.mock('@/lib/tenancy/request-tenant', async () => {
 vi.mock('./actor', () => ({ resolveActor: mocks.resolveActor, resolveSupportActor: mocks.resolveSupportActor }))
 
 const {
-  requireAdministrator, requireAdministratorPage, requirePagePermission, requirePermission,
-  requirePlatformAdmin, requirePlatformAdminPage,
+  requireAdministratorFeature, requireAdministratorFeaturePage, requirePagePermission, requirePermission,
+  requirePlatformAdmin, requirePlatformAdminPage, requireSupportConsentManager, requireTenantSettingsPage,
 } = await import('./auth-guard')
 
 const READY_SESSION = { user: { id: 'u1', tenantState: 'ready', tenantId: defaultTestTenant() } }
 
 function actor(codes: PermissionCode[], isAdmin = false): Actor {
-  return { userId: 'u1', tenantId: defaultTestTenant(), roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, isPlatformAdmin: false, permissions: new Set(codes) }
+  return { features: new Set(FEATURE_KEYS), canManageSupportConsent: isAdmin || codes.includes('manage-support-consent'), userId: 'u1', tenantId: defaultTestTenant(), roleIds: isAdmin ? [0, 1] : [0, 7], isAdmin, isPlatformAdmin: false, permissions: new Set(codes) }
 }
 
 describe('requirePermission', () => {
@@ -83,7 +84,7 @@ describe('requirePermission', () => {
   it.each(['choose', 'none'])('rejects a session in state %s as unauthorized, not as an error, without asking the database', async state => {
     mocks.getSession.mockResolvedValue({ user: { id: 'u1', tenantState: state, tenantId: null } })
     await expect(requirePermission('read-menu')).rejects.toThrow('Unauthorized')
-    await expect(requireAdministrator()).rejects.toThrow('Unauthorized')
+    await expect(requireAdministratorFeature('manage-tenant-theme')).rejects.toThrow('Unauthorized')
     expect(mocks.resolveActor).not.toHaveBeenCalled()
   })
 })
@@ -110,12 +111,12 @@ describe('requirePagePermission', () => {
   it('redirects a session without a chosen tenant instead of failing', async () => {
     mocks.getSession.mockResolvedValue({ user: { id: 'u1', tenantState: 'choose', tenantId: null } })
     await expect(requirePagePermission('read-menu')).rejects.toThrow('NEXT_REDIRECT /')
-    await expect(requireAdministratorPage()).rejects.toThrow('NEXT_REDIRECT /')
+    await expect(requireAdministratorFeaturePage('manage-tenant-theme')).rejects.toThrow('NEXT_REDIRECT /')
     expect(mocks.resolveActor).not.toHaveBeenCalled()
   })
 })
 
-describe('requireAdministrator', () => {
+describe('requireAdministratorFeature', () => {
   beforeEach(() => {
     mocks.getSession.mockReset().mockResolvedValue(READY_SESSION)
     mocks.resolveActor.mockReset()
@@ -124,18 +125,18 @@ describe('requireAdministrator', () => {
 
   it('rejects a user who holds every catalog code but is not the Administrator', async () => {
     mocks.resolveActor.mockResolvedValue(actor(['read-menu', 'manage-menu']))
-    await expect(requireAdministrator()).rejects.toThrow('Unauthorized')
+    await expect(requireAdministratorFeature('manage-tenant-theme')).rejects.toThrow('Unauthorized')
   })
 
   it('accepts the Administrator', async () => {
     const admin = actor([], true)
     mocks.resolveActor.mockResolvedValue(admin)
-    await expect(requireAdministrator()).resolves.toBe(admin)
+    await expect(requireAdministratorFeature('manage-tenant-theme')).resolves.toBe(admin)
   })
 
   it('redirects from a page instead of throwing', async () => {
     mocks.resolveActor.mockResolvedValue(actor([]))
-    await expect(requireAdministratorPage()).rejects.toThrow('NEXT_REDIRECT /')
+    await expect(requireAdministratorFeaturePage('manage-tenant-theme')).rejects.toThrow('NEXT_REDIRECT /')
   })
 })
 
@@ -202,4 +203,36 @@ describe('the actor of a support session', () => {
     mocks.resolveSupportActor.mockResolvedValue(null)
     await expect(requirePermission('read-menu')).rejects.toThrow('Unauthorized')
   })
+})
+
+
+describe('feature and essential consent guards', () => {
+  beforeEach(() => {
+    mocks.getSession.mockReset().mockResolvedValue(READY_SESSION)
+    mocks.resolveActor.mockReset()
+  })
+  it('does not let the tenant administrator bypass a disabled theme', async () => {
+    mocks.resolveActor.mockResolvedValue({ ...actor([], true), features: new Set(['core-app']) })
+    await expect(requireAdministratorFeature('manage-tenant-theme')).rejects.toThrow('Unauthorized')
+    await expect(requireAdministratorFeaturePage('manage-tenant-theme')).rejects.toThrow('NEXT_REDIRECT /')
+  })
+  it('keeps essential consent management independent from optional settings', async () => {
+    mocks.resolveActor.mockResolvedValue({ ...actor([]), canManageSupportConsent: true })
+    await expect(requireSupportConsentManager()).resolves.toMatchObject({ canManageSupportConsent: true })
+    await expect(requireTenantSettingsPage()).resolves.toMatchObject({ canManageSupportConsent: true })
+    await expect(requirePermission('manage-tenant-settings')).rejects.toThrow('Unauthorized')
+  })
+  it('lets valid support read the common page but never manage consent', async () => {
+    mocks.resolveActor.mockResolvedValue({ ...actor([], true), support: true, canManageSupportConsent: true })
+    await expect(requireTenantSettingsPage()).resolves.toMatchObject({ support: true })
+    await expect(requireSupportConsentManager()).rejects.toThrow('Unauthorized')
+  })
+})
+
+
+it('admits a settings delegate without giving them essential consent management', async () => {
+  mocks.getSession.mockResolvedValue(READY_SESSION)
+  mocks.resolveActor.mockResolvedValue(actor(['manage-tenant-settings']))
+  await expect(requireTenantSettingsPage()).resolves.toMatchObject({ canManageSupportConsent: false })
+  await expect(requireSupportConsentManager()).rejects.toThrow('Unauthorized')
 })

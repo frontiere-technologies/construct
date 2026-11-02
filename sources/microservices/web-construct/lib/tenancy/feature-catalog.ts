@@ -42,7 +42,7 @@ export const FEATURE_CATALOG = Object.freeze(([
   { key: 'manage-tenant-settings', area: 'tenant-settings', permission: 'manage-tenant-settings', dependencies: [] },
   { key: 'core-app', area: null, permission: null, dependencies: [] },
   { key: 'read-tenant-audit', area: null, permission: 'read-tenant-audit', dependencies: [] },
-  { key: 'manage-support-consent', area: null, permission: null, dependencies: [] },
+  { key: 'manage-support-consent', area: null, permission: 'manage-support-consent', dependencies: [] },
   { key: 'export-tenant-data', area: null, permission: null, dependencies: [] },
 ] as const satisfies readonly FeatureDefinition[]).map(feature => {
   Object.freeze(feature.dependencies)

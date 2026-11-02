@@ -701,7 +701,7 @@ const CASES: Record<string, CrossTenantCase> = {
       // L'interruttore di A (spento, quello di B è acceso); A non ha un indirizzo dedicato. Il
       // permesso di assistenza è quello di A (nessuno), non quello di B (valido).
       expect(propsOf<{ initialEnabled: boolean; selfRegistrationApplies: boolean }>(await TenantSettingsPage()))
-        .toEqual({ initialEnabled: false, selfRegistrationApplies: false, support: { until: null, inProgress: false, locked: false } })
+        .toEqual({ initialEnabled: false, canManageSettings: true, selfRegistrationApplies: false, support: { until: null, inProgress: false, locked: false } })
     },
   },
   'app/(protected)/(admin)/admin/theme/page.tsx#default': {
@@ -791,6 +791,7 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
 
     aSystem = await withTenant(A, tx => getSystemRoleIds(tx))
     await withTenant(A, async tx => {
+      await tx.execute(sql`select set_config('app.menu_origin', 'http://localhost:3000', true)`)
       const [service] = await tx.insert(role).values({ description: 'ZZZ ruolo di servizio di A', idRoleType: 2 })
         .returning({ id: role.idRole })
       aServiceRole = service.id
@@ -801,6 +802,7 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
     })
 
     await withTenant(B, async tx => {
+      await tx.execute(sql`select set_config('app.menu_origin', 'http://localhost:3000', true)`)
       const system = await getSystemRoleIds(tx)
       const [service] = await tx.insert(role).values({ description: `ZZZ ruolo ${MARK_B}`, idRoleType: 2 })
         .returning({ id: role.idRole })

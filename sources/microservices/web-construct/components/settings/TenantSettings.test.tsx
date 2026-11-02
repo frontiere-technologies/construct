@@ -44,10 +44,10 @@ afterEach(() => {
 type Support = { until: string | null; inProgress: boolean; locked: boolean }
 const NO_CONSENT: Support = { until: null, inProgress: false, locked: false }
 
-function render(initialEnabled: boolean, selfRegistrationApplies = true, support: Support = NO_CONSENT) {
+function render(initialEnabled: boolean, selfRegistrationApplies = true, support: Support = NO_CONSENT, canManageSettings = true) {
   act(() => {
     root = createRoot(container!)
-    root.render(<TenantSettings initialEnabled={initialEnabled} selfRegistrationApplies={selfRegistrationApplies} support={support} />)
+    root.render(<TenantSettings initialEnabled={initialEnabled} canManageSettings={canManageSettings} selfRegistrationApplies={selfRegistrationApplies} support={support} />)
   })
 }
 
@@ -155,4 +155,12 @@ describe('TenantSettings: support consent', () => {
     expect(container!.textContent).toContain('tenancy.settings.self_registration_no_address')
     expect(container!.textContent).toContain('tenancy.support.not_granted')
   })
+})
+
+
+it('keeps essential consent controls without offering suspended optional settings', async () => {
+  await render(false, true, NO_CONSENT, false)
+  expect(document.querySelector('[data-testid="tenant-self-registration"]')).toBeNull()
+  expect(document.querySelector('[data-testid="tenant-self-registration-no-address"]')).toBeNull()
+  expect(document.querySelector('[data-testid="tenant-support-state"]')).not.toBeNull()
 })

@@ -9,7 +9,7 @@ const UNUSED_PERMISSIONS = ['manage-permissions', 'manage-languages', 'edit-tran
 // Le altre dichiarazioni indicano controlli diversi dai permessi del catalogo.
 const ACCESS_DECLARATIONS = new Set([
   'allowSelfService', 'allowAnonymous', 'allowAnyAuthenticated',
-  'requireAdministrator', 'requireAdministratorPage',
+  'manage-tenant-theme', 'requireTenantSettingsPage',
   'requirePlatformAdmin', 'requirePlatformAdminPage', 'requireSupportExit',
 ])
 
@@ -19,7 +19,7 @@ async function loadCatalog() {
 
 function declaredPermissions(): Set<string> {
   return new Set(scannedFiles().flatMap(file =>
-    Object.values(inspectExports(readFileSync(file, 'utf8'), file).declared).filter(marker => !ACCESS_DECLARATIONS.has(marker))))
+    Object.values(inspectExports(readFileSync(file, 'utf8'), file).declared).filter(marker => !ACCESS_DECLARATIONS.has(marker)).map(marker => marker === 'requireSupportConsentManager' ? 'manage-support-consent' : marker)))
 }
 
 describe('platform feature catalog', () => {

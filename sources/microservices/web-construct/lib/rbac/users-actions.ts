@@ -1,11 +1,11 @@
 'use server'
 
 import { and, eq, sql } from 'drizzle-orm'
+import { withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
-import { lockTenantPolicy } from '@/lib/tenancy/tenant-policy-lock'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { withTenant, type AnyTx, type TenantTx } from '@/lib/db/tenant-db'
+import type { AnyTx, TenantTx } from '@/lib/db/tenant-db'
 import { userRole, users } from '@/lib/db/schema'
 import { prepareInvitationIn } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
@@ -15,7 +15,7 @@ import { assertTenantActive } from '@/lib/tenancy/tenant-status'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { emailSchema, roleIdsSchema, userIdSchema, userStatusSchema } from './action-input-schemas'
 import { assertCanChangeRoles, assertCanChangeStatus, symmetricDifference } from './grant-guards'
-import { currentRoleIds, functionalityIdsForRoles, grantsForRoles } from './grant-service'
+import { currentRoleIds, selectTenantGrantContext, grantsForRoles } from './grant-service'
 import { refuseSelfInSupport } from './support-guards'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
 import { USER_STATUS_ACTIVE, type UserStatusId } from './types'
@@ -59,8 +59,7 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
   }
   refuseSelfInSupport(actor, userId)
   const currentUserId = actor.userId
-  await withTenant(actor.tenantId, async tx => {
-    await lockTenantPolicy(tx)
+  await withTenantFeature(actor, 'assign-user-roles', async tx => {
     const system = await getSystemRoleIds(tx)
     const targetCurrentlyAdmin = await userIsAdmin(tx, userId, system.tenantAdmin)
     assertRoleChangeAllowed({
@@ -76,9 +75,9 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
     const finalRoleIds = Array.from(new Set<number>([system.registered, ...roleIds]))
     if (!actor.isAdmin) {
       const touched = symmetricDifference(await currentRoleIds(tx, userId), finalRoleIds)
-      const visible = await functionalityIdsForRoles(tx, actor.roleIds)
+      const context = await selectTenantGrantContext(tx, actor.roleIds)
       const grants = await grantsForRoles(tx, touched)
-      assertCanChangeRoles(actor, visible, grants, system.tenantAdmin)
+      assertCanChangeRoles({ ...actor, features: new Set(context.policy.enabledFeatures) }, context.visible, grants, system.tenantAdmin, context)
     }
     try {
       const roleIdsArray = `{${finalRoleIds.join(',')}}`
@@ -110,8 +109,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
     otherActiveAdminCount: 1,
   })
 
-  await withTenant(actor.tenantId, async tx => {
-    await lockTenantPolicy(tx)
+  await withTenantFeature(actor, 'set-user-status', async tx => {
     if (!actor.isAdmin) {
       const system = await getSystemRoleIds(tx)
       assertCanChangeStatus(actor, await userIsAdmin(tx, userId, system.tenantAdmin))
@@ -151,8 +149,7 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
 
   // Account (se manca), token d'invito e appartenenza nascono in una transazione sola, nel tenant
   // dell'attore, insieme alla voce del registro: o tutto o niente (MT5-DEC-15).
-  const invitation = await withTenant(actor.tenantId, async tx => {
-    await lockTenantPolicy(tx)
+  const invitation = await withTenantFeature(actor, 'invite-users', async tx => {
     // Un tenant sospeso o archiviato non manda inviti né aggiunge persone (MT5-DEC-25).
     await assertTenantActive(tx)
     // In assistenza, non il proprio account: prima di creare token o appartenenze.

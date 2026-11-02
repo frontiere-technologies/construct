@@ -25,8 +25,10 @@ const DECLARATION_MODULES: Record<string, Record<string, 'awaited' | 'sync'>> = 
   '@/lib/rbac/auth-guard': {
     requirePermission: 'awaited',
     requirePagePermission: 'awaited',
-    requireAdministrator: 'awaited',
-    requireAdministratorPage: 'awaited',
+    requireAdministratorFeature: 'awaited',
+    requireAdministratorFeaturePage: 'awaited',
+    requireSupportConsentManager: 'awaited',
+    requireTenantSettingsPage: 'awaited',
     requirePlatformAdmin: 'awaited',
     requirePlatformAdminPage: 'awaited',
     requireSupportExit: 'awaited',
@@ -48,7 +50,7 @@ interface DeclarationBinding {
 type ImportedDeclarations = ReadonlyMap<string, DeclarationBinding>
 
 /** Le dichiarazioni che chiedono un codice del catalogo: per loro conta anche quale. */
-const CODE_DECLARATIONS = new Set(['requirePermission', 'requirePagePermission'])
+const CODE_DECLARATIONS = new Set(['requirePermission', 'requirePagePermission', 'requireAdministratorFeature', 'requireAdministratorFeaturePage'])
 
 function isNestedFunction(node: ts.Node): boolean {
   return ts.isArrowFunction(node) || ts.isFunctionExpression(node)

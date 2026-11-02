@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { featureKeySchema, type FeatureKey } from '@/lib/tenancy/feature-catalog'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole } from '@/lib/db/schema'
 import type { AuditActor } from '@/lib/audit/audit-types'
@@ -15,6 +16,7 @@ import type { SystemRoleIds } from '@/lib/tenancy/system-roles'
 type UserAuthorization = { accountActive: boolean; roleIds: number[]; isAdmin: boolean; isPlatformAdmin: boolean }
 
 export interface AuthorizationSnapshot {
+  enabledFeatures: FeatureKey[]
   userExists: boolean
   status: number | null
   membershipStatus: MembershipStatus | null
@@ -36,6 +38,7 @@ export interface AuthorizationSnapshot {
 }
 
 type SnapshotRow = {
+  enabled_features: string[]
   registered: string | null
   tenant_admin: string | null
   user_exists: boolean
@@ -84,6 +87,7 @@ export async function selectAuthorizationSnapshot(
     : sql`null::text`
   const [row] = await tx.execute<SnapshotRow>(sql`
     select
+      array(select f.code from app_private.effective_tenant_feature_codes() f) as enabled_features,
       (select max(r.id_role) from public.role r where r.system_key = 'REGISTERED')::text as registered,
       (select max(r.id_role) from public.role r where r.system_key = 'TENANT_ADMIN')::text as tenant_admin,
       exists (select 1 from public.users u where u.id = ${userId}) as user_exists,
@@ -97,6 +101,7 @@ export async function selectAuthorizationSnapshot(
   `)
   if (row.registered === null || row.tenant_admin === null) throw new Error('system roles missing')
   return {
+    enabledFeatures: row.enabled_features.map(code => featureKeySchema.parse(code)),
     userExists: row.user_exists,
     status: row.status === null ? null : Number(row.status),
     // La RLS lascia vedere solo l'appartenenza al tenant corrente.

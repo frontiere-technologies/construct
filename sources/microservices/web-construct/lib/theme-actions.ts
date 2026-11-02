@@ -2,11 +2,11 @@
 
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
-import { withTenant } from '@/lib/db/tenant-db'
 import { appTheme } from '@/lib/db/schema'
-import { requireAdministrator } from '@/lib/rbac/auth-guard'
+import { requireAdministratorFeature } from '@/lib/rbac/auth-guard'
 import { createLogger } from '@/lib/logger'
 import { themeContrastWarnings, type AppTheme, type ContrastWarning, type SurfaceOverrides } from '@/lib/theme-vars'
 
@@ -57,7 +57,7 @@ export type SaveThemeResult = ThemeSaved | ThemeRefused | ThemeNeedsAcknowledgem
 
 /**
  * Il tema dell'app, uno per tutti (DEC-1, DEC-9): colore principale e superfici.
- * `requireAdministrator` e non `session.user.isAdmin`: verifica i ruoli sul database,
+ * `requireAdministratorFeature` e non `session.user.isAdmin`: verifica i ruoli sul database,
  * quindi un admin declassato con un JWT ancora valido viene rifiutato. Il tema non ha un
  * codice nel catalogo (DEC-23 del piano 2026-10-12): resta all'Amministratore.
  *
@@ -72,7 +72,7 @@ export async function saveAppTheme(
 ): Promise<SaveThemeResult> {
   // La guardia deve essere la prima istruzione (guards/permission-declared.test.ts), quindi il
   // rifiuto si cattura qui con `.catch` e non con un try attorno.
-  const actor = await requireAdministrator().catch((err: unknown) => {
+  const actor = await requireAdministratorFeature('manage-tenant-theme').catch((err: unknown) => {
     // Un rifiuto vero e' normale; qualunque altro errore (database fuori uso) va
     // lasciato in traccia, anche se all'utente si risponde nello stesso modo.
     if (!(err instanceof Error && err.message === 'Unauthorized')) log.error({ err }, 'admin check failed')
@@ -95,7 +95,7 @@ export async function saveAppTheme(
   if (warnings.length > 0 && !acknowledged) return { saved: false, error: null, warnings }
 
   try {
-    const rows = await withTenant(actor.tenantId, async tx => {
+    const rows = await withTenantFeature(actor, 'manage-tenant-theme', async tx => {
       const updated = await tx.update(appTheme).set({
         primaryColor,
         primaryDark,

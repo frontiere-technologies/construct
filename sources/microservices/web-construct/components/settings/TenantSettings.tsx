@@ -31,8 +31,9 @@ export interface TenantSupportState {
  * principale si entra nel predefinito (MT4-DEC-9). Lì al posto dell'interruttore c'è una riga che lo
  * spiega.
  */
-export const TenantSettings: React.FC<{ initialEnabled: boolean; selfRegistrationApplies: boolean; support: TenantSupportState }> = ({
+export const TenantSettings: React.FC<{ initialEnabled: boolean; canManageSettings: boolean; selfRegistrationApplies: boolean; support: TenantSupportState }> = ({
   initialEnabled,
+  canManageSettings,
   selfRegistrationApplies,
   support,
 }) => {
@@ -65,7 +66,7 @@ export const TenantSettings: React.FC<{ initialEnabled: boolean; selfRegistratio
 
   return (
     <PageContainer title={t('tenancy.settings.title')}>
-      {selfRegistrationApplies ? (
+      {canManageSettings && (selfRegistrationApplies ? (
         <>
           <SettingsRow label={t('tenancy.settings.self_registration')} hint={t('tenancy.settings.self_registration_hint')}>
             <button
@@ -92,7 +93,7 @@ export const TenantSettings: React.FC<{ initialEnabled: boolean; selfRegistratio
             {t('tenancy.settings.self_registration_no_address')}
           </p>
         </SettingsRow>
-      )}
+      ))}
       <SupportConsent initial={support} />
     </PageContainer>
   )

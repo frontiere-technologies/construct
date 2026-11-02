@@ -1,16 +1,15 @@
 import { TenantSettings } from '@/components/settings/TenantSettings'
 import { withTenant } from '@/lib/db/tenant-db'
-import { requirePagePermission } from '@/lib/rbac/auth-guard'
+import { requireTenantSettingsPage } from '@/lib/rbac/auth-guard'
 import { readSupportConsent, readSupportInProgress } from '@/lib/tenancy/support-consent'
 import { readSelfRegistration, selfRegistrationApplies } from '@/lib/tenancy/tenant-settings'
 
 /**
- * Le impostazioni del tenant (MT4-DEC-10; pezzo 5a, §3.4): solo chi ha `manage-tenant-settings`, e
- * solo del proprio tenant. Il permesso di assistenza si legge nel tenant dell'attore; la piattaforma
- * in assistenza (MT5-DEC-12) lo vede ma non lo cambia.
+ * Pagina comune: impostazioni opzionali e consenso essenziale hanno deleghe indipendenti.
+ * Ogni sezione riceve i propri flag server; l'assistenza vede il consenso senza modificarlo.
  */
 export default async function TenantSettingsPage() {
-  const actor = await requirePagePermission('manage-tenant-settings')
+  const actor = await requireTenantSettingsPage()
 
   const [enabled, applies, support] = await Promise.all([
     readSelfRegistration(actor.tenantId),
@@ -23,8 +22,9 @@ export default async function TenantSettingsPage() {
   return (
     <TenantSettings
       initialEnabled={enabled}
+      canManageSettings={actor.permissions.has('manage-tenant-settings')}
       selfRegistrationApplies={applies}
-      support={{ ...support, locked: actor.support === true }}
+      support={{ ...support, locked: actor.support === true || !actor.canManageSupportConsent }}
     />
   )
 }

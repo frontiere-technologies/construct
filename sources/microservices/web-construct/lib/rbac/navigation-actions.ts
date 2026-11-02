@@ -2,13 +2,13 @@
 
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
+import { withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
+import type { TenantTx } from '@/lib/db/tenant-db'
 import { selectTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
 import { mainBaseUrl } from '@/lib/tenancy/tenant-base-url'
-import { lockTenantPolicy } from '@/lib/tenancy/tenant-policy-lock'
 import { menuEntry } from '@/lib/db/schema'
 import { normalizeMenuTargetUrl } from './menu-target-url'
 import { bindMenuTarget, canUseMenuEntry } from './menu-feature-binding'
@@ -132,9 +132,7 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   }
 
   try {
-    const created = await withTenant(actor.tenantId, async tx => {
-      await lockTenantPolicy(tx)
-
+    const created = await withTenantFeature(actor, 'manage-menu', async tx => {
       // Le voci di primo livello hanno id_parent nullo: append-at-end fra i fratelli veri
       // (quelli sotto lo stesso genitore, root incluso), non un ordine fisso a 0.
       const binding = await bindTarget(tx, input, input.areaKey)
@@ -184,8 +182,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
   const actor = await requirePermission('manage-menu')
   if (!input.name.trim()) throw new Error('Name is required')
   try {
-    await withTenant(actor.tenantId, async tx => {
-      await lockTenantPolicy(tx)
+    await withTenantFeature(actor, 'manage-menu', async tx => {
       await assertMutable(id, tx)
 
       const items = await loadMenuItems(tx)
@@ -256,8 +253,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
 
 export async function moveNavigationItem(id: number, move: MoveInput): Promise<void> {
   const actor = await requirePermission('manage-menu')
-  await withTenant(actor.tenantId, async tx => {
-    await lockTenantPolicy(tx)
+  await withTenantFeature(actor, 'manage-menu', async tx => {
     await assertMutable(id, tx)
     const items = await loadMenuItems(tx)
     const before = items.find(i => i.id_menu_entry === id)
@@ -276,8 +272,7 @@ export async function moveNavigationItem(id: number, move: MoveInput): Promise<v
 export async function deleteNavigationItem(id: number): Promise<void> {
   const actor = await requirePermission('manage-menu')
   try {
-    await withTenant(actor.tenantId, async tx => {
-      await lockTenantPolicy(tx)
+    await withTenantFeature(actor, 'manage-menu', async tx => {
       const items = await loadMenuItems(tx)
       if (!items.some(i => i.id_menu_entry === id)) return
       if (!canDeleteSubtree(items, id)) throw new Error('This item (or a descendant) is immutable and cannot be deleted')

@@ -6,14 +6,14 @@ import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { tenantSettings } from '@/lib/db/schema'
 import { withTenant } from '@/lib/db/tenant-db'
 import type { Actor } from '@/lib/rbac/actor'
-import { requirePermission } from '@/lib/rbac/auth-guard'
+import { requireSupportConsentManager } from '@/lib/rbac/auth-guard'
 import { isoTimestamp } from './support-consent'
 import { isSupportDuration, SUPPORT_DURATION_INTERVAL, type SupportDuration } from './support-consent-durations'
 
 /**
  * Il permesso di assistenza alla piattaforma, dalle impostazioni del tenant (specifica 2026-10-26,
  * §3.4, MT5-DEC-10, MT5-DEC-12, MT5-DEC-20). Come `setSelfRegistration`: lo concede chi ha
- * `manage-tenant-settings`, nel tenant del suo attore (nessun parametro dice quale), e la voce va
+ * `manage-support-consent`, nel tenant del suo attore (nessun parametro dice quale), e la voce va
  * nel registro del tenant nella stessa transazione.
  *
  * La piattaforma in assistenza ha i permessi di un amministratore, `manage-tenant-settings`
@@ -32,7 +32,7 @@ function refuseDuringSupport(actor: Actor): void {
  * a lungo: vale l'ultima scelta. Restituisce la scadenza scritta.
  */
 export async function grantSupportConsent(duration: SupportDuration): Promise<{ ok: true; until: string }> {
-  const actor = await requirePermission('manage-tenant-settings')
+  const actor = await requireSupportConsentManager()
   refuseDuringSupport(actor)
   // Un'azione server riceve quello che manda il client, non quello che dice il tipo.
   if (!isSupportDuration(duration)) throw new Error('Durata non valida')
@@ -65,7 +65,7 @@ export async function grantSupportConsent(duration: SupportDuration): Promise<{ 
  * permesso che non vale già (mai concesso, scaduto o revocato) non cambia niente e non lascia voci.
  */
 export async function revokeSupportConsent(): Promise<{ ok: true }> {
-  const actor = await requirePermission('manage-tenant-settings')
+  const actor = await requireSupportConsentManager()
   refuseDuringSupport(actor)
 
   await withTenant(actor.tenantId, async tx => {

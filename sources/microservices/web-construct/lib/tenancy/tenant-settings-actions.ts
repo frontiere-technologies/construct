@@ -1,8 +1,8 @@
 'use server'
 
 import { sql } from 'drizzle-orm'
+import { withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
 import { tenantSettings } from '@/lib/db/schema'
-import { withTenant } from '@/lib/db/tenant-db'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
@@ -18,7 +18,7 @@ export async function setSelfRegistration(enabled: boolean): Promise<void> {
   const actor = await requirePermission('manage-tenant-settings')
   // Un'azione server riceve quello che manda il client, non quello che dice il tipo.
   const selfRegistration = enabled === true
-  await withTenant(actor.tenantId, async tx => {
+  await withTenantFeature(actor, 'manage-tenant-settings', async tx => {
     await tx.insert(tenantSettings)
       .values({ selfRegistration })
       // `id_tenant` si compila dal contesto (default `app_private.current_tenant_id()`), il conflitto cade sulla chiave.

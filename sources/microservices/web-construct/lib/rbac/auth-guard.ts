@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
+import type { FeatureKey } from '@/lib/tenancy/feature-catalog'
 import { getSession } from '@/lib/auth-session'
 import { isSupportSession, tenantFromSession } from '@/lib/tenancy/request-tenant'
 import { resolveActor, resolveSupportActor, type Actor } from './actor'
@@ -38,19 +39,6 @@ export async function requirePermission(code: PermissionCode): Promise<Actor> {
 export async function requirePagePermission(code: PermissionCode): Promise<Actor> {
   const actor = await currentActor()
   if (!actor || !actor.permissions.has(code)) redirect('/')
-  return actor
-}
-
-/** Solo per ciò che non ha un codice nel catalogo: oggi il tema dell'app (DEC-23). */
-export async function requireAdministrator(): Promise<Actor> {
-  const actor = await currentActor()
-  if (!actor || !actor.isAdmin) throw new Error('Unauthorized')
-  return actor
-}
-
-export async function requireAdministratorPage(): Promise<Actor> {
-  const actor = await currentActor()
-  if (!actor || !actor.isAdmin) redirect('/')
   return actor
 }
 
@@ -101,4 +89,29 @@ export async function requirePlatformAdminPage(): Promise<PlatformActor> {
   const admin = await currentPlatformAdmin('closed')
   if (!admin) notFound()
   return admin
+}
+
+/** La capacità del tenant viene controllata anche per l'amministratore e l'assistenza. */
+export async function requireAdministratorFeature(feature: FeatureKey): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || !actor.isAdmin || !actor.features.has(feature)) throw new Error('Unauthorized')
+  return actor
+}
+
+export async function requireAdministratorFeaturePage(feature: FeatureKey): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || !actor.isAdmin || !actor.features.has(feature)) redirect('/')
+  return actor
+}
+
+export async function requireSupportConsentManager(): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || actor.support === true || !actor.canManageSupportConsent) throw new Error('Unauthorized')
+  return actor
+}
+
+export async function requireTenantSettingsPage(): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || !(actor.permissions.has('manage-tenant-settings') || actor.canManageSupportConsent || (actor.support === true && actor.isAdmin))) redirect('/')
+  return actor
 }

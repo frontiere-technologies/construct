@@ -1,4 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm'
+import { featureKeySchema, type FeatureKey } from '@/lib/tenancy/feature-catalog'
 import type { PlatformAuditTx } from '@/lib/audit/audit-types'
 import { ACTIVE_USER_STATUS } from '@/lib/auth-policy'
 import type { TenantTx } from '@/lib/db/tenant-db'
@@ -86,6 +87,7 @@ export async function readSupportInProgress(tx: TenantTx): Promise<boolean> {
 
 /** Tutto ciò che decide l'assistenza di una persona nel tenant della transazione, letto in un'istruzione sola. */
 export interface SupportAccess {
+  enabledFeatures: FeatureKey[]
   tenantName: string
   isTemplate: boolean
   tenantActive: boolean
@@ -111,6 +113,7 @@ export interface SupportAccess {
 const ENTRY_WINDOW = '2 minutes'
 
 type AccessRow = {
+  enabled_features: string[]
   tenant_name: string
   is_template: boolean
   tenant_active: boolean
@@ -159,6 +162,7 @@ export async function selectSupportAccess(
     : null
   const [row] = await tx.execute<AccessRow>(sql`
     select
+      array(select f.code from app_private.effective_tenant_feature_codes() f) as enabled_features,
       t.name as tenant_name,
       t.is_template,
       t.status = 'active' as tenant_active,
@@ -179,6 +183,7 @@ export async function selectSupportAccess(
     where t.id = app_private.current_tenant_id()`)
   if (!row) return null
   return {
+    enabledFeatures: row.enabled_features.map(code => featureKeySchema.parse(code)),
     tenantName: row.tenant_name,
     isTemplate: row.is_template,
     tenantActive: row.tenant_active,

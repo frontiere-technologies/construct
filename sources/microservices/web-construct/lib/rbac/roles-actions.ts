@@ -1,17 +1,17 @@
 'use server'
 
 import { eq, inArray, sql } from 'drizzle-orm'
+import { withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
-import { lockTenantPolicy } from '@/lib/tenancy/tenant-policy-lock'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
+import type { TenantTx } from '@/lib/db/tenant-db'
 import { permission, menuEntry, role, roleType } from '@/lib/db/schema'
 import { rolePermissionDeltasSchema, roleIdSchema } from './action-input-schemas'
 import {
   assertCanGrantFunctionalities, assertCanGrantPermissions,
 } from './grant-guards'
-import { functionalityIdsForRoles, permissionCodesByIds } from './grant-service'
+import { selectTenantGrantContext, permissionCodesByIds } from './grant-service'
 import type { RolePermissionDeltas, RoleType as RoleTypeStr } from './types'
 
 /** `{id_role, ids}` → il letterale di array che Postgres si aspetta. `drizzle-orm`'s `sql`
@@ -49,8 +49,7 @@ export async function createRole(roleName: string): Promise<{ id: number }> {
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
   try {
-    return await withTenant(actor.tenantId, async tx => {
-      await lockTenantPolicy(tx)
+    return await withTenantFeature(actor, 'manage-roles', async tx => {
       const [created] = await tx.insert(role).values({ description: name, idRoleType: ROLE_TYPE_SERVICE }).returning({ idRole: role.idRole })
       await recordTenantAudit(tx, auditActorOf(actor), {
         operation: 'role.create', objectType: 'role', objectId: created.idRole, details: { name },
@@ -66,8 +65,7 @@ export async function renameRole(roleId: number, roleName: string): Promise<void
   const actor = await requirePermission('manage-roles')
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
-  await withTenant(actor.tenantId, async tx => {
-    await lockTenantPolicy(tx)
+  await withTenantFeature(actor, 'manage-roles', async tx => {
     const before = await loadRole(tx, roleId)
     if (before.type !== 'SERVICE') throw new Error('This role cannot be renamed')
     try {
@@ -88,21 +86,8 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
     throw new Error('Invalid input')
   }
 
-  await withTenant(actor.tenantId, async tx => {
-    await lockTenantPolicy(tx)
+  await withTenantFeature(actor, 'grant-role-permissions', async tx => {
     if ((await getRoleType(tx, roleId)) === 'SYSTEM') throw new Error('System roles cannot be edited')
-
-    // Non si concede ciò che non si possiede (DEC-6, DEC-29): vale per chi concede, non per chi
-    // revoca, e l'Amministratore ne è esente. Viene prima delle scritture perché è un rifiuto
-    // dell'intera chiamata, come il controllo sulle cartelle che segue.
-    if (!actor.isAdmin) {
-      const grantedOperations = deltas.operations.filter(d => d.authorization).map(d => d.idItem)
-      const grantedFunctionalities = deltas.functionalities.filter(d => d.authorization).map(d => d.idItem)
-      const codes = await permissionCodesByIds(tx, grantedOperations)
-      const visible = await functionalityIdsForRoles(tx, actor.roleIds)
-      assertCanGrantPermissions(actor, codes)
-      assertCanGrantFunctionalities(actor, visible, grantedFunctionalities)
-    }
 
     // Una cartella non riceve mai una riga di concessione (DEC-20). L'invariante viveva solo
     // nelle funzioni pure lato client, ed è la classe di errore che ha prodotto HOLE-5: una
@@ -138,6 +123,19 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
       if (containerIds.length) {
         throw new Error(`Cannot grant or revoke container menu entry(ies): ${containerIds.join(', ')}`)
       }
+    }
+
+    // Non si concede ciò che non si possiede (DEC-6, DEC-29): vale per chi concede, non per chi
+    // revoca. Il limite del tenant vale anche per l’amministratore, che resta esente soltanto
+    // dal possesso individuale. Tutti i rifiuti precedono le scritture.
+    {
+      const grantedOperations = deltas.operations.filter(d => d.authorization).map(d => d.idItem)
+      const grantedFunctionalities = deltas.functionalities.filter(d => d.authorization).map(d => d.idItem)
+      const codes = await permissionCodesByIds(tx, grantedOperations)
+      const context = await selectTenantGrantContext(tx, actor.roleIds)
+      const effectiveActor = { ...actor, features: new Set(context.policy.enabledFeatures) }
+      assertCanGrantPermissions(effectiveActor, codes)
+      assertCanGrantFunctionalities(effectiveActor, context.visible, grantedFunctionalities, context)
     }
 
     // Le due funzioni del database, nella stessa transazione: un rifiuto su un albero non
@@ -177,8 +175,7 @@ export async function updateRolePermissions(roleId: number, deltas: RolePermissi
 
 export async function deleteRole(roleId: number): Promise<void> {
   const actor = await requirePermission('manage-roles')
-  await withTenant(actor.tenantId, async tx => {
-    await lockTenantPolicy(tx)
+  await withTenantFeature(actor, 'manage-roles', async tx => {
     const before = await loadRole(tx, roleId)
     if (before.type === 'SYSTEM') throw new Error('System roles cannot be deleted')
     try {

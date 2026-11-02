@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FEATURE_KEYS } from '@/lib/tenancy/feature-catalog'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import type { Actor } from '@/lib/rbac/actor'
 import { auditActorOf, sanitizeAuditDetails } from './audit-types'
@@ -31,7 +32,7 @@ describe('sanitizeAuditDetails', () => {
 
 describe('auditActorOf', () => {
   it('presents a tenant actor as a person, whose email is read from the account when the row is written', () => {
-    const actor: Actor = {
+    const actor: Actor = { features: new Set(FEATURE_KEYS), canManageSupportConsent: false,
       userId: 'u1', tenantId: defaultTestTenant(), roleIds: [], isAdmin: true, isPlatformAdmin: false, permissions: new Set(),
     }
     expect(auditActorOf(actor)).toEqual({ userId: 'u1', email: null, kind: 'person' })
@@ -43,7 +44,7 @@ describe('auditActorOf', () => {
   })
 
   it('decides by the tenant the actor is bound to, not by which other fields it carries', () => {
-    const tenantActor = {
+    const tenantActor = { features: new Set(FEATURE_KEYS), canManageSupportConsent: false,
       userId: 'u3', tenantId: defaultTestTenant(), roleIds: [], isAdmin: false, isPlatformAdmin: false,
       permissions: new Set<never>(), email: 'would-be-extra-field@example.test',
     }
@@ -52,7 +53,7 @@ describe('auditActorOf', () => {
 
   // Pezzo 5a, Task 9 (MT5-DEC-12, MT5-DEC-14): in assistenza l'attore è del tenant ma agisce come piattaforma.
   it('presents a platform admin in support as the platform, by the explicit support marker', () => {
-    const supportActor: Actor = {
+    const supportActor: Actor = { features: new Set(FEATURE_KEYS), canManageSupportConsent: false,
       userId: 'u4', tenantId: defaultTestTenant(), roleIds: [1], isAdmin: true, isPlatformAdmin: true, permissions: new Set(), support: true,
     }
     expect(auditActorOf(supportActor)).toEqual({ userId: 'u4', email: null, kind: 'platform' })
