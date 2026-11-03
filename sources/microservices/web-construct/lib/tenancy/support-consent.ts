@@ -51,10 +51,11 @@ export async function readSupportConsent(tx: ConsentTx): Promise<{ until: string
  * Gli alias `e`, `s`, `t` sono quelli delle istruzioni che la usano.
  */
 const ENTRY_STILL_OPEN = sql`(
-  (t.is_template or e.occurred_at >= s.support_granted_at)
+  e.origin = 'live'
+  and (t.is_template or e.occurred_at >= s.support_granted_at)
   and not exists (
     select 1 from public.tenant_audit_event x
-    where x.id_tenant = e.id_tenant and x.id > e.id
+    where x.id_tenant = e.id_tenant and x.id > e.id and x.origin = 'live'
       and ((x.operation = 'support.exit' and x.actor_user_id = e.actor_user_id)
         or x.operation in ('support.revoke', 'tenant.status'))
   )
@@ -79,7 +80,7 @@ export async function readSupportInProgress(tx: TenantTx): Promise<boolean> {
       join public.tenant_settings s on s.id_tenant = t.id
       join public.tenant_audit_event e on e.id_tenant = t.id
       where t.id = app_private.current_tenant_id() and s.support_until > now()
-        and e.operation = 'support.enter' and e.actor_kind = 'platform'
+        and e.operation = 'support.enter' and e.actor_kind = 'platform' and e.origin = 'live'
         and ${ENTRY_STILL_OPEN}
     ) as in_progress`)
   return row?.in_progress === true
@@ -158,7 +159,7 @@ export async function selectSupportAccess(
           e.details->>'reason' as reason
         from public.tenant_audit_event e
         where e.id_tenant = t.id and e.actor_user_id = ${userId}::uuid and e.actor_kind = 'platform'
-          and e.operation = 'support.enter'
+          and e.operation = 'support.enter' and e.origin = 'live'
         order by e.id desc
         limit 1
       )`

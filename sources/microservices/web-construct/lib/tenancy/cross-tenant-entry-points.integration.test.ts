@@ -15,6 +15,7 @@ import EmbeddedItemPage from '@/app/(protected)/embedded/[itemId]/page'
 import SelectTenantPage from '@/app/select-tenant/page'
 import { POST as sendInvite } from '@/app/api/admin/send-invite/route'
 import { POST as tenantAuditGrid } from '@/app/api/audit/tenant-grid/route'
+import { GET as tenantExport } from '@/app/api/tenant/export/route'
 import { POST as rolesGrid } from '@/app/api/rbac/roles-grid/route'
 import { POST as usersGrid } from '@/app/api/rbac/users-grid/route'
 import { appTheme, menuEntry, role, roleFunctionality, tenantAuditEvent, tenantMembership, tenantSettings, userRole, users } from '@/lib/db/schema'
@@ -342,6 +343,18 @@ function collectIds(tree: Array<{ id: number; children?: unknown[] }>): number[]
 }
 
 const CASES: Record<string, CrossTenantCase> = {
+  'app/api/tenant/export/route.ts#GET': {
+    entry: tenantExport,
+    run: async () => {
+      const response = await tenantExport(new Request(`http://localhost:3001/api/tenant/export?tenantId=${B}`))
+      expect(response.status).toBe(200)
+      const archive = await response.json() as { sourceTenant: { id: string }; identities: { id: string }[]; tables: Record<string, { id_tenant: string }[]> }
+      expect(archive.sourceTenant.id).toBe(String(A))
+      for (const rows of Object.values(archive.tables)) expect(rows.every(row => row.id_tenant === String(A))).toBe(true)
+      expect(archive.identities.map(row => row.id)).not.toContain(bUser)
+      expectNoTraceOfB(archive)
+    },
+  },
   // --- Azioni del server -------------------------------------------------------------------------
   'lib/rbac/users-actions.ts#updateUserRoles': {
     entry: updateUserRoles,
@@ -727,7 +740,7 @@ const CASES: Record<string, CrossTenantCase> = {
       // L'interruttore di A (spento, quello di B è acceso); A non ha un indirizzo dedicato. Il
       // permesso di assistenza è quello di A (nessuno), non quello di B (valido).
       expect(propsOf<{ initialEnabled: boolean; selfRegistrationApplies: boolean }>(await TenantSettingsPage()))
-        .toEqual({ initialEnabled: false, canManageSettings: true, selfRegistrationApplies: false, support: { until: null, exportAllowed: false, inProgress: false, locked: false } })
+        .toEqual({ initialEnabled: false, canManageSettings: true, canExport: true, selfRegistrationApplies: false, support: { until: null, exportAllowed: false, inProgress: false, locked: false } })
     },
   },
   'app/(protected)/(admin)/admin/theme/page.tsx#default': {

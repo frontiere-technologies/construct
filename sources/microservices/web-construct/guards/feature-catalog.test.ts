@@ -11,6 +11,7 @@ const ACCESS_DECLARATIONS = new Set([
   'allowSelfService', 'allowAnonymous', 'allowAnyAuthenticated',
   'manage-tenant-theme', 'requireTenantSettingsPage',
   'requirePlatformAdmin', 'requirePlatformAdminPage', 'requireSupportExit',
+  'requireTenantExporter',
 ])
 
 async function loadCatalog() {

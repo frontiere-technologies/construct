@@ -199,6 +199,7 @@ const AUDIT_OPERATION_FILES = [
   'lib/platform/support-actions.ts',
   'lib/tenancy/support-consent.ts',
   'lib/tenancy/support-consent-actions.ts',
+  'lib/tenancy/tenant-export-service.ts',
 ]
 const NOT_A_KEY = [
   // Structured-log field names for pino, not user-facing copy.

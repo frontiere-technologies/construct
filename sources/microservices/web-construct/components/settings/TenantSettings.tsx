@@ -8,6 +8,7 @@ import { useI18n } from '@/context/I18nContext'
 import { SUPPORT_DURATIONS, type SupportDuration } from '@/lib/tenancy/support-consent-durations'
 import { grantSupportConsent, revokeSupportConsent } from '@/lib/tenancy/support-consent-actions'
 import { setSelfRegistration } from '@/lib/tenancy/tenant-settings-actions'
+import { TenantDataExport } from './TenantDataExport'
 
 type SaveStatus = 'idle' | 'success' | 'error'
 
@@ -33,11 +34,12 @@ export interface TenantSupportState {
  * principale si entra nel predefinito (MT4-DEC-9). Lì al posto dell'interruttore c'è una riga che lo
  * spiega.
  */
-export const TenantSettings: React.FC<{ initialEnabled: boolean; canManageSettings: boolean; selfRegistrationApplies: boolean; support: TenantSupportState }> = ({
+export const TenantSettings: React.FC<{ initialEnabled: boolean; canManageSettings: boolean; selfRegistrationApplies: boolean; support: TenantSupportState; canExport?: boolean }> = ({
   initialEnabled,
   canManageSettings,
   selfRegistrationApplies,
   support,
+  canExport = false,
 }) => {
   const { t } = useI18n()
   const [enabled, setEnabled] = useState(initialEnabled)
@@ -97,6 +99,7 @@ export const TenantSettings: React.FC<{ initialEnabled: boolean; canManageSettin
         </SettingsRow>
       ))}
       <SupportConsent initial={support} />
+      {canExport && <TenantDataExport />}
     </PageContainer>
   )
 }

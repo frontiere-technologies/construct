@@ -76,6 +76,18 @@ describe('findDeclaration / inspectExports', () => {
     expect(inspectExports(source, 'probe.ts').undeclared).toEqual(['save'])
   })
 
+  it('recognizes only the lexical export scope with its guard first and no work in its signal argument', () => {
+    const imports = "import { withTenantExportScope as scope } from '@/lib/db/tenant-export-scope'; import { requireTenantExporter } from '@/lib/tenancy/tenant-export-access'"
+    expect(inspectExports(`${imports}; export async function GET(request: Request) { return await scope(request.signal, async () => { const actor = await requireTenantExporter(); return actor }) }`, 'probe.ts').declared).toEqual({ GET: 'requireTenantExporter' })
+    for (const body of [
+      'return await scope(request.signal, async () => { await read(); await requireTenantExporter() })',
+      'return await scope(await read(), async () => { await requireTenantExporter() })',
+      'return scope(request.signal, async () => { await requireTenantExporter() })',
+    ]) expect(inspectExports(`${imports}; export async function GET(request: Request) { ${body} }`, 'probe.ts').undeclared).toEqual(['GET'])
+    const wrong = imports.replace('@/lib/db/tenant-export-scope', '@/lib/other')
+    expect(inspectExports(`${wrong}; export async function GET(request: Request) { return await scope(request.signal, async () => { await requireTenantExporter() }) }`, 'probe.ts').undeclared).toEqual(['GET'])
+  })
+
   it('rejects a require call nobody awaits: the check starts and the write goes ahead', () => {
     const source = probe(
       "export async function a() { requirePermission('manage-menu'); await db.write() }",
@@ -177,6 +189,7 @@ describe('findDeclaration / inspectExports', () => {
  * Una porta nuova senza riga, una porta tolta o un codice cambiato fanno fallire il test.
  */
 const EXPECTED_DECLARATIONS: Record<string, string> = {
+  'app/api/tenant/export/route.ts#GET': 'requireTenantExporter',
   'app/(protected)/(admin)/admin/audit/page.tsx#default': 'read-tenant-audit',
   'app/(protected)/(admin)/admin/languages/page.tsx#default': 'read-languages',
   'app/(protected)/(admin)/admin/tenant-settings/page.tsx#default': 'requireTenantSettingsPage',

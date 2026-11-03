@@ -2,6 +2,7 @@ import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { resolveDatabaseUrl } from '@/lib/test-database'
 import * as schema from './schema'
+import { scopedTenantExportDatabase } from './tenant-export-scope'
 
 export type Database = PostgresJsDatabase<typeof schema>
 
@@ -48,4 +49,13 @@ export function createDatabase(
 }
 
 /** Un client per la vita del pod (processo Node di lunga durata), non per richiesta. */
-export const db: Database = createDatabase(resolveDatabaseUrl(process.env)).database
+const applicationDatabase = createDatabase(resolveDatabaseUrl(process.env)).database
+export const db: Database = new Proxy(applicationDatabase, {
+  get(target, key) {
+    if (key === 'transaction') {
+      const database = scopedTenantExportDatabase() ?? target
+      return database.transaction.bind(database)
+    }
+    return Reflect.get(target, key)
+  },
+})

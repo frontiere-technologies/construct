@@ -135,6 +135,9 @@ export const tenantAuditEvent = pgTable('tenant_audit_event', {
   objectType: text('object_type'),
   objectId: text('object_id'),
   details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
+  origin: text('origin', { enum: ['live', 'restored'] }).notNull().default('live'),
+  sourceTenantId: text('source_tenant_id'),
+  sourceEventId: text('source_event_id'),
 }, (t) => [
   primaryKey({ columns: [t.idTenant, t.id] }),
   index('tenant_audit_event_occurred_idx').on(t.idTenant, t.occurredAt.desc()),

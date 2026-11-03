@@ -25,6 +25,7 @@ export default async function TenantSettingsPage() {
       canManageSettings={actor.permissions.has('manage-tenant-settings')}
       selfRegistrationApplies={applies}
       support={{ ...support, locked: actor.support === true || !actor.canManageSupportConsent }}
+      canExport={actor.isAdmin && (actor.support !== true || support.exportAllowed)}
     />
   )
 }
