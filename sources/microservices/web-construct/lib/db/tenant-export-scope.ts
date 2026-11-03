@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { Socket } from 'node:net'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { resolveDatabaseUrl } from '@/lib/test-database'
@@ -13,8 +14,8 @@ interface ExportScope {
 
 const scopes = new AsyncLocalStorage<ExportScope>()
 interface ExportExecutor {
-  client: postgres.Sql
-  waitForClose: () => Promise<void>
+  reserve: () => Promise<postgres.ReservedSql>
+  close: () => Promise<void>
 }
 
 let executor: ExportExecutor | undefined
@@ -81,45 +82,99 @@ function admit(scope: ExportScope): Promise<() => void> {
 export async function closeTenantExportExecutor(): Promise<void> {
   const current = executor
   executor = undefined
-  await current?.client.end({ timeout: 0 })
+  await current?.close()
+}
+
+/** postgres.js replaces the raw socket's listeners when upgrading it to TLS. Observe the
+ * transport's close event without depending on a listener that the upgrade removes. */
+class ExportSocket extends Socket {
+  host?: string
+  port?: number
+  private notifyClosed!: () => void
+  readonly transportClosed = new Promise<void>(resolve => { this.notifyClosed = resolve })
+
+  override emit(event: string | symbol, ...args: unknown[]): boolean {
+    if (event === 'close') this.notifyClosed()
+    return super.emit(event, ...args)
+  }
 }
 
 function createExecutor(): ExportExecutor {
-  let notifyClosed: (() => void) | undefined
-  const client = postgres(resolveDatabaseUrl(process.env), {
+  const sockets = new Set<ExportSocket>()
+  let retired = false
+  let reserving = false
+  let activeHost = 0
+  let nextHost = 0
+  const options = {
     max: 1, prepare: false, connect_timeout: 5,
-    onclose: () => {
-      notifyClosed?.()
-      notifyClosed = undefined
+    // Public postgres.js socket factory. Only the TCP/Unix dial belongs to this adapter;
+    // the driver still owns SSL negotiation, certificate validation and PostgreSQL startup.
+    socket: ({ host, port, path }: Pick<postgres.ParsedOptions, 'host' | 'port' | 'path'>) => {
+      if (retired) throw new Error('tenant export executor retired')
+      if (reserving) {
+        activeHost = nextHost
+        nextHost = (nextHost + 1) % port.length
+      }
+      // A CancelRequest is a separate connection, directed to the same backend endpoint.
+      const socket = new ExportSocket()
+      sockets.add(socket)
+      void socket.transportClosed.then(() => sockets.delete(socket))
+      try {
+        if (path) socket.connect(path)
+        else {
+          socket.host = host[activeHost] // SNI input used by the driver when it upgrades to TLS.
+          socket.port = port[activeHost]
+          socket.connect(socket.port, socket.host)
+        }
+      } catch (error) {
+        socket.destroy()
+        throw error
+      }
+      return socket
     },
-  })
+  }
+  const client = postgres(resolveDatabaseUrl(process.env), options)
   // Apply Drizzle's codecs to the real connection as well as to its transaction adapter.
   drizzle(client)
-  return { client, waitForClose: () => new Promise(resolve => { notifyClosed = resolve }) }
+  return {
+    async reserve() {
+      reserving = true
+      try { return await client.reserve() } finally { reserving = false }
+    },
+    async close() {
+      // Gate first: end() settles driver waiters but may leave a retry callback scheduled.
+      retired = true
+      try { await client.end({ timeout: 0 }) } finally {
+        const transports = [...sockets]
+        for (const socket of transports) socket.destroy()
+        await Promise.all(transports.map(socket => socket.transportClosed))
+      }
+    },
+  }
 }
 
 async function begin<T>(scope: ExportScope, work: (client: postgres.TransactionSql) => Promise<T>): Promise<T> {
   const release = await admit(scope)
   let reserved: postgres.ReservedSql | undefined
-  let reservation: ExportExecutor | undefined
+  let reserving = false
   let closing: Promise<void> | undefined
   const active = new Set<PromiseLike<unknown> & { cancel(): void }>()
   const abort = () => {
     for (const query of active) query.cancel()
-    if (reservation) {
-      // Forced end settles the driver's reserve waiter, but may resolve before a connecting
-      // socket closes. Subscribe to this pool's actual close before ending it. Only the one
-      // in-flight reserve has a close waiter; a settled reserve takes the normal cleanup path.
-      const closed = reservation.waitForClose()
-      closing = closeTenantExportExecutor().finally(() => closed)
-    }
+    if (reserving) closing = closeTenantExportExecutor()
   }
   scope.controller.signal.addEventListener('abort', abort)
   try {
     check(scope)
     const pool = executor ??= createExecutor()
-    reservation = pool
-    try { reserved = await pool.client.reserve() } finally { reservation = undefined }
+    reserving = true
+    try {
+      reserved = await pool.reserve()
+    } catch (error) {
+      // A failed startup can leave the driver's retry queued even without a request abort.
+      closing ??= closeTenantExportExecutor()
+      throw error
+    } finally { reserving = false }
     check(scope)
     const connection = reserved
     const run = async (query: PromiseLike<unknown> & { cancel(): void }) => {

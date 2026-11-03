@@ -1,5 +1,5 @@
 import { once } from 'node:events'
-import { createServer, type Socket } from 'node:net'
+import { createServer, Socket } from 'node:net'
 import { afterAll, expect, it, vi } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { eq } from 'drizzle-orm'
@@ -9,6 +9,13 @@ import { withTenant } from './tenant-db'
 import { closeOwner, withOwner } from './testing'
 import { tenant } from './schema'
 
+function isCanonicalLocalFixture(): boolean {
+  try {
+    const target = new URL(process.env.TEST_DATABASE_URL ?? '')
+    return target.hostname === '127.0.0.1' && target.port === '55432' && target.pathname === '/construct_test'
+  } catch { return false }
+}
+
 describeIntegration('export executor cancellation and connection lifecycle', () => {
   afterAll(async () => {
     await closeOwner()
@@ -16,14 +23,11 @@ describeIntegration('export executor cancellation and connection lifecycle', () 
     await scopeAccess.closeTenantExportExecutor()
   })
 
-  it('keeps the slot until a cancelled PostgreSQL startup handshake has closed', async () => {
+  it.skipIf(!isCanonicalLocalFixture())('keeps the slot until a cancelled PostgreSQL startup handshake has closed', async () => {
     const f = await createPolicyFixture('export-handshake')
     const scopeAccess = await import('./tenant-export-scope')
     const target = new URL(process.env.TEST_DATABASE_URL!)
-    if (target.hostname !== '127.0.0.1' || target.port !== '55432' || target.pathname !== '/construct_test') throw new Error('handshake test requires the disposable local DB')
     let peer: Socket | undefined
-    let allowPeerClose = false
-    let peerEnded = false
     const order: string[] = []
     let startup!: () => void
     const started = new Promise<void>(resolve => { startup = resolve })
@@ -32,11 +36,7 @@ describeIntegration('export executor cancellation and connection lifecycle', () 
       socket.on('error', () => socket.destroy())
       order.push('first accepted')
       socket.once('data', startup) // Hold PostgreSQL startup, without retaining any protocol bytes.
-      socket.once('end', () => {
-        peerEnded = true
-        if (allowPeerClose) socket.end()
-      })
-      socket.once('close', () => { order.push('first disconnected') })
+      socket.once('end', () => { order.push('first disconnected'); socket.end() })
     })
     const controller = new AbortController()
     const operations: Promise<unknown>[] = []
@@ -60,13 +60,8 @@ describeIntegration('export executor cancellation and connection lifecycle', () 
         return tx.execute<{ n: number }>(sql`select 42::int as n`)
       }))
       operations.push(second)
-      await new Promise(resolve => setTimeout(resolve, 50))
-      const beforeClose = [...order]
-      allowPeerClose = true
-      if (peerEnded) peer?.end()
       expect(await first).toBe('rejected')
       expect((await second)[0].n).toBe(42)
-      expect(beforeClose).toEqual(['first accepted'])
       expect(order).toEqual(['first accepted', 'first disconnected', 'second entered'])
     } finally {
       controller.abort()
@@ -78,6 +73,122 @@ describeIntegration('export executor cancellation and connection lifecycle', () 
       await f.close()
     }
   }, 15_000)
+
+  it('prevents a queued reconnect from dialing after the startup executor has been discarded', async () => {
+    const scopeAccess = await import('./tenant-export-scope')
+    const controller = new AbortController()
+    const nativeTimeout = globalThis.setTimeout
+    const peers = new Set<Socket>()
+    let accepted = 0
+    let startup!: (socket: Socket) => void
+    const started = new Promise<Socket>(resolve => { startup = resolve })
+    const server = createServer(socket => {
+      accepted++
+      peers.add(socket)
+      socket.on('error', () => socket.destroy())
+      socket.once('data', () => startup(socket))
+    })
+    let endScheduled!: () => void
+    let retryScheduled!: () => void
+    const ending = new Promise<void>(resolve => { endScheduled = resolve })
+    const retrying = new Promise<void>(resolve => { retryScheduled = resolve })
+    let forceEnd: (() => void) | undefined
+    let reconnect: (() => void) | undefined
+    let operation: Promise<string> | undefined
+    const parkedTimers: ReturnType<typeof setTimeout>[] = []
+    try {
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+      const address = server.address()
+      if (!address || typeof address === 'string') throw new Error('missing synthetic startup endpoint')
+      vi.stubEnv('TEST_DATABASE_URL', `postgresql://fixture@127.0.0.1:${address.port}/fixture?backoff=0.5`)
+      // Hold the two driver timers to reproduce the interleaving without relying on TCP timing.
+      vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, milliseconds, ...args) => {
+        if (controller.signal.aborted && callback.name === 'destroy' && milliseconds === 0 && !forceEnd) {
+          forceEnd = () => { callback(...args) }
+          endScheduled()
+        } else if (controller.signal.aborted && callback.name === 'connect' && !reconnect) {
+          reconnect = () => { callback(...args) }
+          retryScheduled()
+        } else return nativeTimeout(callback, milliseconds, ...args)
+        const parked = nativeTimeout(() => undefined, 10_000)
+        parkedTimers.push(parked)
+        return parked
+      })
+      operation = scopeAccess.withTenantExportScope(controller.signal, () => scopeAccess.scopedTenantExportDatabase()!
+        .transaction(async () => 'completed')).catch(() => 'rejected')
+      const peer = await started
+      controller.abort()
+      await ending
+      peer.resetAndDestroy()
+      await retrying
+      forceEnd?.()
+      expect(await operation).toBe('rejected')
+      const dial = vi.spyOn(Socket.prototype, 'connect')
+      reconnect?.()
+      // Flush the driver's async createSocket continuation. Check the dial itself as well as
+      // the peer so that a slow accept cannot make this assertion pass accidentally.
+      await new Promise<void>(resolve => setImmediate(resolve))
+      expect(dial).not.toHaveBeenCalled()
+      expect(accepted).toBe(1)
+    } finally {
+      controller.abort()
+      forceEnd?.()
+      for (const socket of peers) socket.destroy()
+      await operation
+      await scopeAccess.closeTenantExportExecutor()
+      for (const timer of parkedTimers) clearTimeout(timer)
+      vi.restoreAllMocks()
+      vi.unstubAllEnvs()
+      await new Promise<void>(resolve => server.close(() => resolve()))
+    }
+  }, 10_000)
+
+  it('closes the raw transport after postgres has wrapped it for a stalled TLS handshake', async () => {
+    const scopeAccess = await import('./tenant-export-scope')
+    const controller = new AbortController()
+    let peer: Socket | undefined
+    let observedSni = false
+    let tlsStarted!: () => void
+    let peerClosed!: () => void
+    const handshake = new Promise<void>(resolve => { tlsStarted = resolve })
+    const disconnected = new Promise<void>(resolve => { peerClosed = resolve })
+    const server = createServer(socket => {
+      peer = socket
+      socket.on('error', () => socket.destroy())
+      socket.once('close', peerClosed)
+      socket.once('data', () => {
+        // Accept SSLRequest, then hold ClientHello without a certificate or authentication.
+        socket.once('data', (hello: Buffer) => {
+          observedSni = hello.includes('localhost')
+          tlsStarted()
+        })
+        socket.write('S')
+      })
+    })
+    let operation: Promise<string> | undefined
+    try {
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+      const address = server.address()
+      if (!address || typeof address === 'string') throw new Error('missing synthetic TLS endpoint')
+      vi.stubEnv('TEST_DATABASE_URL', `postgresql://fixture@localhost:${address.port}/fixture?sslmode=require`)
+      operation = scopeAccess.withTenantExportScope(controller.signal, () => scopeAccess.scopedTenantExportDatabase()!
+        .transaction(async () => 'completed')).catch(() => 'rejected')
+      await handshake
+      expect(observedSni).toBe(true)
+      controller.abort()
+      expect(await operation).toBe('rejected')
+      await disconnected
+    } finally {
+      controller.abort()
+      peer?.destroy()
+      await operation
+      await scopeAccess.closeTenantExportExecutor()
+      vi.unstubAllEnvs()
+      await new Promise<void>(resolve => server.close(() => resolve()))
+    }
+  }, 4_000)
 
   it.each(['request abort', 'deadline timer'])('cancels an active query for %s, rolls back and recovers without a late cancel', async mode => {
     const f = await createPolicyFixture('export-cancel')
