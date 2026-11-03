@@ -11,7 +11,8 @@ export type AvailableTenant = { tenantId: TenantId; name: string; isAdmin: boole
 /** In single solo l'host dell'origine configurata è un ingresso valido. */
 export function isCanonicalTenantHost(host: string | null): boolean {
   const canonical = normalizeHost(new URL(mainBaseUrl()).host)
-  return canonical !== null && normalizeHost(host) === canonical
+  // readRequestHost restituisce già IPv6 senza parentesi: quella forma non va rinormalizzata.
+  return canonical !== null && (host === canonical || normalizeHost(host) === canonical)
 }
 
 /**
