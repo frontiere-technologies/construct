@@ -18,6 +18,7 @@ interface ExportExecutor {
   close: () => Promise<void>
 }
 
+const CONNECT_TIMEOUT_SECONDS = 5
 let executor: ExportExecutor | undefined
 let occupied = false
 const queue: { signal: AbortSignal; admit: () => void }[] = []
@@ -99,18 +100,26 @@ class ExportSocket extends Socket {
   }
 }
 
+type SocketOptions = Pick<postgres.ParsedOptions, 'host' | 'port' | 'path' | 'ssl'> & { sslnegotiation?: string }
+
+function usesDirectTls({ ssl, sslnegotiation }: Pick<SocketOptions, 'ssl' | 'sslnegotiation'>): boolean {
+  return Boolean(ssl && sslnegotiation === 'direct')
+}
+
 function createExecutor(): ExportExecutor {
   const sockets = new Set<ExportSocket>()
   let retired = false
   let reserving = false
   let activeHost = 0
   let nextHost = 0
+  let retirement: Promise<void> | undefined
   const options = {
-    max: 1, prepare: false, connect_timeout: 5,
+    max: 1, prepare: false, connect_timeout: CONNECT_TIMEOUT_SECONDS,
     // Public postgres.js socket factory. Only the TCP/Unix dial belongs to this adapter;
     // the driver still owns SSL negotiation, certificate validation and PostgreSQL startup.
-    socket: ({ host, port, path }: Pick<postgres.ParsedOptions, 'host' | 'port' | 'path'>) => {
+    socket: (connection: SocketOptions) => {
       if (retired) throw new Error('tenant export executor retired')
+      const { host, port, path } = connection
       if (reserving) {
         activeHost = nextHost
         nextHost = (nextHost + 1) % port.length
@@ -119,37 +128,80 @@ function createExecutor(): ExportExecutor {
       const socket = new ExportSocket()
       sockets.add(socket)
       void socket.transportClosed.then(() => sockets.delete(socket))
-      try {
-        if (path) socket.connect(path)
-        else {
-          socket.host = host[activeHost] // SNI input used by the driver when it upgrades to TLS.
-          socket.port = port[activeHost]
-          socket.connect(socket.port, socket.host)
+      const dial = () => {
+        try {
+          if (path) socket.connect(path)
+          else {
+            socket.host = host[activeHost] // SNI input used by the driver when it upgrades to TLS.
+            socket.port = port[activeHost]
+            socket.connect(socket.port, socket.host)
+          }
+        } catch (error) {
+          socket.destroy()
+          throw error
         }
-      } catch (error) {
-        socket.destroy()
-        throw error
       }
-      return socket
+      if (!usesDirectTls(connection)) {
+        dial()
+        return socket
+      }
+      // Unlike SSLRequest, direct TLS wraps the socket as soon as the factory resolves.
+      // Wait for the winning TCP handle after Node's address-family fallback.
+      return new Promise<ExportSocket>((resolve, reject) => {
+        // Startup has the reserve timer below. A separate direct-TLS CancelRequest has
+        // no reserve, so bound its whole transport lifetime independently from its own dial.
+        const cancelTimeout = reserving ? undefined : setTimeout(() => socket.destroy(), CONNECT_TIMEOUT_SECONDS * 1000)
+        socket.once('connect', () => resolve(socket))
+        socket.once('error', reject)
+        void socket.transportClosed.then(() => {
+          clearTimeout(cancelTimeout)
+          reject(new Error('tenant export TCP transport closed'))
+        })
+        dial()
+      })
     },
   }
   const client = postgres(resolveDatabaseUrl(process.env), options)
   // Apply Drizzle's codecs to the real connection as well as to its transaction adapter.
   drizzle(client)
-  return {
-    async reserve() {
-      reserving = true
-      try { return await client.reserve() } finally { reserving = false }
-    },
-    async close() {
-      // Gate first: end() settles driver waiters but may leave a retry callback scheduled.
-      retired = true
+  function close(): Promise<void> {
+    if (retirement) return retirement
+    // Gate first: end() settles driver waiters but may leave a retry callback scheduled.
+    retired = true
+    retirement = (async () => {
       try { await client.end({ timeout: 0 }) } finally {
         const transports = [...sockets]
         for (const socket of transports) socket.destroy()
         await Promise.all(transports.map(socket => socket.transportClosed))
       }
+    })()
+    return retirement
+  }
+  return {
+    async reserve() {
+      reserving = true
+      let startupCleanup: Promise<void> | undefined
+      // The driver starts its own timer after an async factory resolves. Keep one budget
+      // from before DNS/TCP through TLS and PostgreSQL startup, with cleanup before release.
+      const deadline = usesDirectTls(client.options) ? performance.now() + CONNECT_TIMEOUT_SECONDS * 1000 : undefined
+      const timer = deadline !== undefined ? setTimeout(function onStartupTimeout() {
+        startupCleanup = close()
+      }, CONNECT_TIMEOUT_SECONDS * 1000) : undefined
+      try {
+        const connection = await client.reserve()
+        if (deadline !== undefined && performance.now() >= deadline) startupCleanup ??= close()
+        if (startupCleanup) throw new Error('tenant export startup timeout')
+        return connection
+      } catch (error) {
+        if (startupCleanup) throw new Error('tenant export startup timeout')
+        throw error
+      } finally {
+        clearTimeout(timer)
+        reserving = false
+        await startupCleanup
+      }
     },
+    close,
   }
 }
 

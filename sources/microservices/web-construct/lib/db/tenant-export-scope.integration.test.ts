@@ -1,5 +1,5 @@
 import { once } from 'node:events'
-import { createServer, Socket } from 'node:net'
+import { createServer, Socket, type TcpSocketConnectOpts } from 'node:net'
 import { afterAll, expect, it, vi } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { eq } from 'drizzle-orm'
@@ -144,11 +144,22 @@ describeIntegration('export executor cancellation and connection lifecycle', () 
     }
   }, 10_000)
 
-  it('closes the raw transport after postgres has wrapped it for a stalled TLS handshake', async () => {
+  it.each([
+    { negotiation: 'postgres', end: 'abort' },
+    { negotiation: 'direct', end: 'abort' },
+    { negotiation: 'direct', end: 'startup timeout' },
+    { negotiation: 'direct', end: 'pending DNS abort' },
+  ])('closes a stalled $negotiation TLS handshake ($end) and preserves SNI', async ({ negotiation, end }) => {
     const scopeAccess = await import('./tenant-export-scope')
     const controller = new AbortController()
     let peer: Socket | undefined
     let observedSni = false
+    let refusedFirstAddress = false
+    let budgetBeforeDns = false
+    let releaseLookup: (() => void) | undefined
+    let lookupStarted!: () => void
+    const lookupPending = new Promise<void>(resolve => { lookupStarted = resolve })
+    const startupTimers: { duration: number | undefined; expire: () => void }[] = []
     let tlsStarted!: () => void
     let peerClosed!: () => void
     const handshake = new Promise<void>(resolve => { tlsStarted = resolve })
@@ -157,12 +168,14 @@ describeIntegration('export executor cancellation and connection lifecycle', () 
       peer = socket
       socket.on('error', () => socket.destroy())
       socket.once('close', peerClosed)
-      socket.once('data', () => {
+      const hello = (chunk: Buffer) => {
+        observedSni = chunk.includes('localhost')
+        tlsStarted()
+      }
+      if (negotiation === 'direct') socket.once('data', hello)
+      else socket.once('data', () => {
         // Accept SSLRequest, then hold ClientHello without a certificate or authentication.
-        socket.once('data', (hello: Buffer) => {
-          observedSni = hello.includes('localhost')
-          tlsStarted()
-        })
+        socket.once('data', hello)
         socket.write('S')
       })
     })
@@ -172,19 +185,67 @@ describeIntegration('export executor cancellation and connection lifecycle', () 
       await once(server, 'listening')
       const address = server.address()
       if (!address || typeof address === 'string') throw new Error('missing synthetic TLS endpoint')
-      vi.stubEnv('TEST_DATABASE_URL', `postgresql://fixture@localhost:${address.port}/fixture?sslmode=require`)
+      if (end === 'startup timeout') {
+        const nativeTimeout = globalThis.setTimeout
+        vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, milliseconds, ...args) => {
+          if (callback.name === 'onStartupTimeout') startupTimers.push({ duration: milliseconds, expire: () => callback(...args) })
+          return nativeTimeout(callback, milliseconds, ...args)
+        })
+      }
+      if (negotiation === 'direct') {
+        const originalConnect = Socket.prototype.connect
+        vi.spyOn(Socket.prototype, 'connect').mockImplementation(function (this: Socket, ...args: unknown[]) {
+          if (args[0] !== address.port || args[1] !== 'localhost') return Reflect.apply(originalConnect, this, args)
+          this.once('connectionAttemptFailed', (ip: string) => { refusedFirstAddress = ip === '::1' })
+          const options: TcpSocketConnectOpts = {
+            port: address.port, host: 'localhost', autoSelectFamily: true,
+            lookup: (_host, _options, callback) => {
+              budgetBeforeDns = startupTimers.length === 1
+              const answer = () => callback(null, [{ address: '::1', family: 6 }, { address: '127.0.0.1', family: 4 }])
+              if (end === 'pending DNS abort') {
+                releaseLookup = answer
+                lookupStarted()
+              } else answer()
+            },
+          }
+          return Reflect.apply(originalConnect, this, [options])
+        })
+      }
+      const tls = negotiation === 'direct' ? '&sslnegotiation=direct' : ''
+      vi.stubEnv('TEST_DATABASE_URL', `postgresql://fixture@localhost:${address.port}/fixture?sslmode=require${tls}`)
       operation = scopeAccess.withTenantExportScope(controller.signal, () => scopeAccess.scopedTenantExportDatabase()!
-        .transaction(async () => 'completed')).catch(() => 'rejected')
-      await handshake
+        .transaction(async () => 'completed')).catch((error: unknown) => error instanceof Error ? error.message : 'rejected')
+      if (end === 'pending DNS abort') {
+        await lookupPending
+        controller.abort()
+        expect(await operation).not.toBe('completed')
+        releaseLookup?.()
+        await new Promise<void>(resolve => setImmediate(resolve))
+        expect(peer).toBeUndefined()
+        return
+      }
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('TLS ClientHello did not reach the peer')), 1_000)
+        void handshake.then(() => { clearTimeout(timeout); resolve() })
+      })
+      if (negotiation === 'direct') expect(refusedFirstAddress).toBe(true)
       expect(observedSni).toBe(true)
-      controller.abort()
-      expect(await operation).toBe('rejected')
+      if (end === 'startup timeout') {
+        expect(budgetBeforeDns).toBe(true)
+        expect(startupTimers.map(timer => timer.duration)).toEqual([5_000])
+        startupTimers[0].expire()
+        expect(await operation).toBe('tenant export startup timeout')
+      } else {
+        controller.abort()
+        expect(await operation).not.toBe('completed')
+      }
       await disconnected
     } finally {
       controller.abort()
       peer?.destroy()
       await operation
       await scopeAccess.closeTenantExportExecutor()
+      vi.restoreAllMocks()
       vi.unstubAllEnvs()
       await new Promise<void>(resolve => server.close(() => resolve()))
     }
