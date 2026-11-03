@@ -1,4 +1,7 @@
 import type { NextFetchEvent, NextMiddleware, NextRequest } from 'next/server'
+import { isMultiTenantEnabled } from '@/lib/tenancy/tenancy-mode'
+import { isCanonicalTenantHost } from '@/lib/tenancy/host-tenants'
+import { hostFromHeaders } from '@/lib/tenancy/request-host'
 import { auth } from '@/lib/auth'
 import { keepOnRequestHost } from '@/lib/auth-host-redirect'
 
@@ -13,6 +16,12 @@ const authMiddleware = auth as unknown as NextMiddleware
  * che Next attribuisce alla richiesta, così Next stesso accorcia il rinvio in un percorso relativo.
  */
 export default async function proxy(request: NextRequest, event: NextFetchEvent) {
+  if (!isMultiTenantEnabled()) {
+    const path = request.nextUrl.pathname
+    if (!isCanonicalTenantHost(hostFromHeaders(request.headers)) || path === '/select-tenant' || path.startsWith('/select-tenant/') || path === '/platform' || path.startsWith('/platform/')) {
+      return new Response(null, { status: 404 })
+    }
+  }
   const response = await authMiddleware(request, event)
   return response instanceof Response ? keepOnRequestHost(request, response, request.nextUrl.origin) : response
 }

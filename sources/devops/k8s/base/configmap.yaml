@@ -5,6 +5,7 @@ metadata:
   namespace: construct
 data:
   NODE_ENV: "production"
+  CONSTRUCT_TENANCY_MODE: "multi"
   LOG_LEVEL: "info"
   # Enable only after every pre-policy instance has been replaced.
   CONSTRUCT_PLATFORM_POLICY_WRITES: "0"

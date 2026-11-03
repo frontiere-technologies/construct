@@ -60,6 +60,12 @@ afterEach(() => {
 })
 
 describe('TenantSwitcher', () => {
+  it('hides every tenant control when the server disables multi tenancy', () => {
+    act(() => root?.render(<TenantSwitcher current={ALFA} tenants={[ALFA, BETA]} collapsed={false} isMultiTenantEnabled={false} />))
+    expect(container!.textContent).toBe('')
+    expect(trigger()).toBeNull()
+  })
+
   it('shows the current tenant name and no list with a single tenant', () => {
     render({ tenants: [ALFA] })
 

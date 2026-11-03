@@ -1,4 +1,5 @@
 import type { Session } from 'next-auth'
+import { isMultiTenantEnabled } from '@/lib/tenancy/tenancy-mode'
 import { getI18n } from '@/lib/i18n/server'
 import { resolvePlatformAdmin } from '@/lib/rbac/platform-admin'
 import { listAvailableTenants } from '@/lib/tenancy/host-tenants'
@@ -15,6 +16,7 @@ import { platformEntryItem } from './platform-menu'
  * ancora lo afferma ma un attributo tolto nel frattempo non mostra la voce.
  */
 export async function platformMenuEntry(session: Session | null): Promise<MenuItem | null> {
+  if (!isMultiTenantEnabled()) return null
   const userId = session?.user?.id
   if (!userId || session?.user?.isPlatformAdmin !== true) return null
   // In assistenza la console è chiusa: niente voce, e nessuna lettura per deciderlo.

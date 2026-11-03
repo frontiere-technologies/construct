@@ -1,3 +1,4 @@
+import { isMultiTenantEnabled } from '@/lib/tenancy/tenancy-mode'
 import { getSession } from '@/lib/auth-session'
 import { createLogger } from '@/lib/logger'
 import { getSidebarMenu } from '@/lib/rbac/navigation-service'
@@ -18,6 +19,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   const roleIds = (session?.user as { roleIds?: number[] })?.roleIds ?? []
   const tenantId = await resolveRequestTenant()
   const userId = session?.user?.id
+  const multiTenantEnabled = isMultiTenantEnabled()
 
   // Il selettore in cima alla barra (MT4-DEC-5) legge il tenant corrente e l'elenco dal server, non
   // dalla sessione del client, che dopo un cambio resta indietro. Un'istruzione per pagina: è
@@ -35,7 +37,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       normalizeNavigationLocale(language.code),
       normalizeNavigationLocale(defaultLanguage.code),
     ),
-    userId
+    multiTenantEnabled && userId
       ? readRequestHost().then(host => listAvailableTenants(userId, host)).catch((err: unknown) => {
         log.error({ err }, 'failed to list the available tenants for the tenant switcher')
         return []
@@ -58,7 +60,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
     : undefined
 
   return (
-    <Layout menuItems={menuItems} tenantSwitcher={current ? { current, tenants } : undefined} banner={banner}>
+    <Layout menuItems={menuItems} tenantSwitcher={current ? { current, tenants, isMultiTenantEnabled: multiTenantEnabled } : undefined} banner={banner}>
       {children}
     </Layout>
   )

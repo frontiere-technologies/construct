@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { isMultiTenantEnabled } from '@/lib/tenancy/tenancy-mode'
 import { featureKeySchema, type FeatureKey } from '@/lib/tenancy/feature-catalog'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { userRole } from '@/lib/db/schema'
@@ -6,7 +7,8 @@ import type { AuditActor } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { evaluateAuthorization, isActiveAccount } from '@/lib/auth-policy'
 import { ensureDefaultMembership, isMembershipStatus, type MembershipStatus } from '@/lib/tenancy/membership'
-import type { TenantId } from '@/lib/tenancy/tenant-id'
+import { isCanonicalTenantHost } from '@/lib/tenancy/host-tenants'
+import { DEFAULT_TENANT_SLUG, type TenantId } from '@/lib/tenancy/tenant-id'
 import type { SystemRoleIds } from '@/lib/tenancy/system-roles'
 
 /**
@@ -80,7 +82,12 @@ export async function selectAuthorizationSnapshot(
     : sql`'{}'::text[]`
   const checkHost = options.host !== undefined
   const tenantEligible = checkHost
-    ? sql`(app_private.current_tenant_id() in (select h.id from public.host_tenant_ids(${options.host}::text) as h(id)))`
+    ? isMultiTenantEnabled()
+      ? sql`(app_private.current_tenant_id() in (select h.id from public.host_tenant_ids(${options.host}::text) as h(id)))`
+      : sql`(${isCanonicalTenantHost(options.host ?? null)} and exists (
+          select 1 from public.tenant t where t.id = app_private.current_tenant_id()
+            and t.slug = ${DEFAULT_TENANT_SLUG} and t.status = 'active' and not t.is_template
+        ))`
     : sql`null::boolean`
   const tenantName = checkHost
     ? sql`(select t.name from public.tenant t where t.id = app_private.current_tenant_id())`
@@ -122,6 +129,7 @@ export async function selectUserAuthorization(
 ): Promise<UserAuthorization> {
   // Solo all'accesso (callback jwt con ensureRegisteredRole): prima l'appartenenza al tenant
   // predefinito (MT2-DEC-12), perché il ruolo base esiste solo per chi è membro.
+  ensureRegisteredRole = ensureRegisteredRole && isMultiTenantEnabled()
   if (ensureRegisteredRole) await ensureDefaultMembership(tx, userId)
   const snapshot = await selectAuthorizationSnapshot(tx, userId)
   if (!snapshot.userExists) return { ...evaluateAuthorization(null, null, [], snapshot.system.tenantAdmin), isPlatformAdmin: false }
@@ -168,6 +176,7 @@ export type TenantAuthorization = UserAuthorization & { tenantEligible: boolean;
  * La rivalidazione a ogni richiesta del callback `jwt` (pezzo 4, §3.1, MT4-DEC-7): in un'istruzione
  * sola account, appartenenza e ruoli nel tenant del token e idoneità del tenant sull'indirizzo della
  * richiesta. Stessi viaggi della lettura di prima: il controllo del tenant non ne aggiunge.
+ * In single il predicato controlla default e host canonico senza consultare il registro degli host.
  */
 export async function resolveTenantAuthorization(
   tenantId: TenantId,

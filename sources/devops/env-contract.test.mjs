@@ -211,3 +211,12 @@ test('inventory: variables documented in a template and read by nobody', () => {
       + 'CONSUMED_OUTSIDE_THE_CODE entry')
   }
 })
+
+test('installation tenancy mode stays private and defaults to multi in deployment templates', () => {
+  const web = readFileSync(resolve(root, TEMPLATES.next), 'utf8')
+  const config = readFileSync(resolve(root, 'sources/devops/k8s/base/configmap.yaml'), 'utf8')
+  assert.match(web, /^CONSTRUCT_TENANCY_MODE=multi$/m)
+  assert.match(config, /^  CONSTRUCT_TENANCY_MODE: "multi"$/m)
+  assert.doesNotMatch(web, /^NEXT_PUBLIC_.*TENANCY/m)
+  assert.doesNotMatch(config, /^  NEXT_PUBLIC_.*TENANCY/m)
+})

@@ -252,6 +252,7 @@ const readCollapse = (key: string, defaultValue: boolean): boolean => {
 
 /** Il tenant corrente e quelli sull'indirizzo, letti dal server (MT4-DEC-5): il selettore in cima. */
 export interface SidebarTenantSwitcher {
+  isMultiTenantEnabled?: boolean
   current: { id: number; name: string }
   tenants: { id: number; name: string }[]
 }
@@ -515,6 +516,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuItems, tenantSwitcher }) =
 
         {tenantSwitcher && (
           <TenantSwitcher
+            isMultiTenantEnabled={tenantSwitcher.isMultiTenantEnabled}
             current={tenantSwitcher.current}
             tenants={tenantSwitcher.tenants}
             collapsed={effCol1Collapsed}

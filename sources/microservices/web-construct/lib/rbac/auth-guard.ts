@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import type { FeatureKey } from '@/lib/tenancy/feature-catalog'
+import { isMultiTenantEnabled } from '@/lib/tenancy/tenancy-mode'
 import { getSession } from '@/lib/auth-session'
 import { isSupportSession, tenantFromSession } from '@/lib/tenancy/request-tenant'
 import { resolveActor, resolveSupportActor, type Actor } from './actor'
@@ -53,6 +54,7 @@ export async function requirePagePermission(code: PermissionCode): Promise<Actor
  * l'uscita (`requireSupportExit`) la accetta in ogni stato.
  */
 async function currentPlatformAdmin(support: 'closed' | 'any'): Promise<PlatformActor | null> {
+  if (!isMultiTenantEnabled()) return null
   const session = await getSession()
   const userId = session?.user?.id
   if (!session || !userId) return null

@@ -7,6 +7,7 @@ import { hasDeactivatedMembershipOnHost, hasInactiveMembershipOnHost, listAvaila
 import { ensureDefaultMembership } from './membership'
 import { normalizeHost } from './request-host'
 import { selectSupportAccess, supportConditionsHold, type SupportAccess } from './support-consent'
+import { isMultiTenantEnabled } from './tenancy-mode'
 import { toTenantId } from './tenant-id'
 import { selectTenant, type TenantState } from './tenant-selection'
 
@@ -84,13 +85,23 @@ async function readPerson(userId: string, host: string | null): Promise<Person |
   return row
 }
 
+/** Un token single non valido resta senza tenant finché la persona chiede un ricalcolo esplicito. */
+async function singleTenantUnavailable(userId: string, host: string | null, reason: TenantNoneReason = null): Promise<TokenTenant> {
+  const person = await readPerson(userId, host)
+  return {
+    tenantId: null, tenantState: 'none', tenantHost: host, tenantName: null,
+    accountActive: isActiveAccount(person?.status), roleIds: [], tenantNoneReason: reason,
+    isPlatformAdmin: false, ...NO_SUPPORT,
+  }
+}
+
 /**
  * L'indizio per il proxy fuori da `ready`: l'attributo vale solo con l'account globale attivo e
  * sull'indirizzo principale. Su un indirizzo dedicato la console risponde 404 (MT5-DEC-3): mandarci
  * la persona le toglierebbe il messaggio "Non sei configurato" e il suo pulsante di uscita.
  */
 function platformAdminOf(person: Person | undefined): boolean {
-  return person !== undefined && person.isPlatformAdmin && isActiveAccount(person.status) && !person.onDedicatedHost
+  return isMultiTenantEnabled() && person !== undefined && person.isPlatformAdmin && isActiveAccount(person.status) && !person.onDedicatedHost
 }
 
 /**
@@ -119,7 +130,8 @@ export async function enterTenant(
   host: string | null,
   options: { current: number | null; firstEntry: boolean; revalidationFailed?: boolean },
 ): Promise<TokenTenant> {
-  if (options.firstEntry) {
+  const multi = isMultiTenantEnabled()
+  if (multi && options.firstEntry) {
     const hostTenant = await resolveHostTenant(host)
     await withTenant(hostTenant, tx => ensureDefaultMembership(tx, userId))
   }
@@ -128,7 +140,7 @@ export async function enterTenant(
     available,
     lastTenantId: person?.lastTenantId ?? null,
     current: options.current,
-    revalidationFailed: options.revalidationFailed,
+    revalidationFailed: multi && options.revalidationFailed,
   })
   if (selection.state !== 'ready') {
     return {
@@ -144,7 +156,7 @@ export async function enterTenant(
       ...NO_SUPPORT,
     }
   }
-  const authorization = await resolveUserAuthorization(selection.tenantId, userId, options.firstEntry)
+  const authorization = await resolveUserAuthorization(selection.tenantId, userId, multi && options.firstEntry)
   return {
     tenantId: selection.tenantId,
     tenantState: 'ready',
@@ -153,7 +165,7 @@ export async function enterTenant(
     accountActive: authorization.accountActive,
     roleIds: authorization.roleIds,
     tenantNoneReason: null,
-    isPlatformAdmin: authorization.isPlatformAdmin,
+    isPlatformAdmin: isMultiTenantEnabled() && authorization.isPlatformAdmin,
     ...NO_SUPPORT,
   }
 }
@@ -175,13 +187,21 @@ export async function enterTenant(
  *   direttamente in un altro tenant (MT4-DEC-7): la persona deve accorgersi di aver lasciato il
  *   tenant in cui lavorava. Solo allora una lettura in più.
  * - `choose` e `none`: si rilegge solo lo stato globale dell'account; la pagina di scelta elenca i
- *   tenant da sé.
+ *   tenant da sé. In single B/assistenza diventano none e vi rimangono fino a un ricalcolo
+ *   esplicito; ready controlla default/host nello stesso snapshot, senza enumerazione dei tenant.
  */
 export async function revalidateTokenTenant(
   userId: string,
   token: Partial<Record<keyof TokenTenant, unknown>>,
   host: string | null,
 ): Promise<TokenTenant> {
+  const multi = isMultiTenantEnabled()
+  if (!multi) {
+    if (token.tenantState === 'support' || token.tenantState === 'none') {
+      return singleTenantUnavailable(userId, host, token.tenantState === 'none' && token.tenantNoneReason === 'suspended' ? 'suspended' : null)
+    }
+    if (token.tenantState === 'choose') return enterTenant(userId, host, { current: null, firstEntry: false })
+  }
   if (!isTenantState(token.tenantState)) return enterTenant(userId, host, { current: null, firstEntry: true })
   // L'assistenza si rivalida da sé, anche l'indirizzo (MT5-DEC-19): prima del confronto con l'indirizzo del token.
   if (token.tenantState === 'support') return revalidateSupport(userId, token, host)
@@ -191,12 +211,13 @@ export async function revalidateTokenTenant(
   }
 
   const current = typeof token.tenantId === 'number' ? token.tenantId : null
-  if (token.tenantHost !== host) return enterTenant(userId, host, { current, firstEntry: false })
+  if (multi && token.tenantHost !== host) return enterTenant(userId, host, { current, firstEntry: false })
 
   if (token.tenantState === 'ready') {
-    if (current === null) return enterTenant(userId, host, { current: null, firstEntry: false })
+    if (current === null) return multi ? enterTenant(userId, host, { current: null, firstEntry: false }) : singleTenantUnavailable(userId, host)
     const authorization = await resolveTenantAuthorization(toTenantId(current), userId, host)
     if (!authorization.tenantEligible || !authorization.accountActive) {
+      if (!multi) return singleTenantUnavailable(userId, host)
       return enterTenant(userId, host, { current, firstEntry: false, revalidationFailed: true })
     }
     return {
@@ -207,7 +228,7 @@ export async function revalidateTokenTenant(
       accountActive: true,
       roleIds: authorization.roleIds,
       tenantNoneReason: null,
-      isPlatformAdmin: authorization.isPlatformAdmin,
+      isPlatformAdmin: isMultiTenantEnabled() && authorization.isPlatformAdmin,
       ...NO_SUPPORT,
     }
   }
@@ -259,6 +280,13 @@ export async function updateTokenTenant(
   host: string | null,
   payload: unknown,
 ): Promise<TokenTenant> {
+  if (!isMultiTenantEnabled()) {
+    // «Riprova» non sceglie un tenant e non scrive l'ultimo usato: ricalcola solo il default.
+    if (token.tenantState === 'none' && requestedTenantId(payload) === null && requestedSupport(payload) === null) {
+      return enterTenant(userId, host, { current: null, firstEntry: false })
+    }
+    return revalidateTokenTenant(userId, token, host)
+  }
   // L'assistenza (pezzo 5a, §3.2): un ingresso o un'uscita chiesti da `startSupport` / `endSupport`.
   const support = requestedSupport(payload)
   if (support !== null) {
@@ -290,7 +318,7 @@ export async function updateTokenTenant(
     accountActive: authorization.accountActive,
     roleIds: authorization.roleIds,
     tenantNoneReason: null,
-    isPlatformAdmin: authorization.isPlatformAdmin,
+    isPlatformAdmin: isMultiTenantEnabled() && authorization.isPlatformAdmin,
     ...NO_SUPPORT,
   }
 }

@@ -4,6 +4,7 @@ import { tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
+import { isMultiTenantEnabled } from './tenancy-mode'
 import { lockTenantPolicy } from './tenant-policy-lock'
 
 /** Lo stato di un'appartenenza a un tenant (specifica 2026-10-20, §2.1). */
@@ -31,6 +32,7 @@ export function isMembershipStatus(value: unknown): value is MembershipStatus {
  * comune (appartenenza già presente) non c'è nessuna scrittura.
  */
 export async function ensureDefaultMembership(tx: TenantTx, userId: string): Promise<MembershipStatus | null> {
+  if (!isMultiTenantEnabled()) return null
   const [row] = await tx.execute<{ status: string | null; existed: boolean }>(
     sql`select public.ensure_default_membership(${userId}::uuid) as status,
       exists (select 1 from public.tenant_membership m where m.user_id = ${userId}::uuid) as existed`)
@@ -77,6 +79,7 @@ export async function tenantMemberEmail(tenantId: TenantId, userId: string): Pro
  * do nothing`, e almeno una delle due transazioni la vede nascere).
  */
 export async function joinTenantByRegistration(userId: string, tenantId: TenantId): Promise<MembershipStatus | null> {
+  if (!isMultiTenantEnabled()) return null
   return withTenant(tenantId, async tx => {
     const [existing] = await tx.select({ status: tenantMembership.status }).from(tenantMembership)
       .where(eq(tenantMembership.userId, userId)).limit(1)

@@ -22,6 +22,10 @@ import { USER_STATUS_ACTIVE, USER_STATUS_DEACTIVATED } from './types'
 const TENANT = defaultTestTenant()
 const ROLE_TYPE_SYSTEM = 1
 const ROLE_TYPE_SERVICE = 2
+// Questi quattro codici non sono capacità del tenant (T04); ogni altro codice resta atteso.
+const TENANT_PERMISSION_CODES = PERMISSION_CODES.filter(code => ![
+  'edit-translations', 'manage-languages', 'manage-permissions', 'manage-translation-keys',
+].includes(code))
 
 let system: SystemRoleIds
 let readerRoleId: number
@@ -86,6 +90,15 @@ async function rolesOf(userId: string): Promise<number[]> {
   return rows.map(row => row.idRole).sort((a, b) => a - b)
 }
 
+/** I tenant sintetici mantengono ruoli distinti, con la policy iniziale delle migrazioni 0064–0066. */
+async function initializePolicy(tenantId: TenantId): Promise<void> {
+  await withOwner(async tx => {
+    await tx.execute(sql`insert into public.tenant_platform_policy (id_tenant) values (${tenantId})`)
+    await tx.execute(sql`insert into public.tenant_area_entitlement (id_tenant, area_code, enabled)
+      select ${tenantId}, code, true from public.feature_area`)
+  }, tenantId)
+}
+
 describeIntegration('authorization reads', () => {
   beforeAll(async () => {
     system = await withTenant(TENANT, tx => getSystemRoleIds(tx))
@@ -117,12 +130,14 @@ describeIntegration('authorization reads', () => {
       .values({ slug: `zzz-authroles-${unique()}`.slice(0, 40), name: 'Authorization without system roles' })
       .returning({ id: tenant.id }))
     emptyTenant = tenantIdForTest(created.id)
+    await initializePolicy(emptyTenant)
 
     // Il tenant B: una volta creato l'id, la pulizia lo trova anche se i passi dopo falliscono.
     const [other] = await withOwner(tx => tx.insert(tenant)
       .values({ slug: `zzz-authroles-b-${unique()}`.slice(0, 40), name: 'Authorization other tenant' })
       .returning({ id: tenant.id }))
     otherTenant = tenantIdForTest(other.id)
+    await initializePolicy(otherTenant)
     bothTenantsUserId = await createUser(USER_STATUS_ACTIVE)
     adminInAOnlyUserId = await createUser(USER_STATUS_ACTIVE)
     await grantRoles(bothTenantsUserId, [readerRoleId])
@@ -168,9 +183,9 @@ describeIntegration('authorization reads', () => {
         await tx.delete(userRole).where(eq(userRole.idTenant, otherTenant!))
         await tx.delete(role).where(eq(role.idTenant, otherTenant!))
       }, otherTenant))
-      await step(() => withOwner(tx => tx.delete(tenant).where(eq(tenant.id, otherTenant!))))
+      await step(() => deleteTenantForTest(otherTenant!))
     }
-    if (emptyTenant !== undefined) await step(() => withOwner(tx => tx.delete(tenant).where(eq(tenant.id, emptyTenant!))))
+    if (emptyTenant !== undefined) await step(() => deleteTenantForTest(emptyTenant!))
     await step(() => closeOwner())
     if (errors.length > 0) throw errors[0]
   })
@@ -184,7 +199,7 @@ describeIntegration('authorization reads', () => {
     })
     const actor = await resolveActor(TENANT, adminUserId)
     expect(actor?.isAdmin).toBe(true)
-    expect([...(actor?.permissions ?? [])].sort()).toEqual([...PERMISSION_CODES].sort())
+    expect([...(actor?.permissions ?? [])].sort()).toEqual([...TENANT_PERMISSION_CODES].sort())
   })
 
   it('an active user whose role grants read-menu gets that role and that code only', async () => {
@@ -222,7 +237,7 @@ describeIntegration('authorization reads', () => {
   it('a revocation between two calls takes effect on the second call', async () => {
     const before = await authorizationOf(revokedAdminUserId)
     expect(before.isAdmin).toBe(true)
-    expect([...((await resolveActor(TENANT, revokedAdminUserId))?.permissions ?? [])].sort()).toEqual([...PERMISSION_CODES].sort())
+    expect([...((await resolveActor(TENANT, revokedAdminUserId))?.permissions ?? [])].sort()).toEqual([...TENANT_PERMISSION_CODES].sort())
 
     await withTenant(TENANT, tx => tx.delete(userRole)
       .where(and(eq(userRole.userId, revokedAdminUserId), eq(userRole.idRole, system.tenantAdmin))))
@@ -272,7 +287,7 @@ describeIntegration('authorization reads', () => {
   it('administrator in one tenant is not administrator in another', async () => {
     const inA = await resolveActor(TENANT, adminInAOnlyUserId)
     expect(inA?.isAdmin).toBe(true)
-    expect([...(inA?.permissions ?? [])].sort()).toEqual([...PERMISSION_CODES].sort())
+    expect([...(inA?.permissions ?? [])].sort()).toEqual([...TENANT_PERMISSION_CODES].sort())
 
     const inB = await resolveActor(otherTenant!, adminInAOnlyUserId)
     expect(inB?.isAdmin).toBe(false)

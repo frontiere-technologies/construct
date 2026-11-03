@@ -63,6 +63,7 @@ describe('ProtectedLayout', () => {
     const props = await renderLayout()
 
     expect(props.tenantSwitcher).toEqual({
+      isMultiTenantEnabled: true,
       current: { id: 7, name: 'Alfa' },
       tenants: [{ id: 7, name: 'Alfa' }, { id: 9, name: 'Beta' }],
     })
@@ -155,5 +156,24 @@ describe('ProtectedLayout', () => {
     mocks.listAvailableTenants.mockResolvedValue([])
     mocks.session = { user: { id: 'u1', roleIds: [1], tenantState: 'ready' } }
     expect((await renderLayout()).banner).toBeUndefined()
+  })
+})
+
+
+describe('single installation layout', () => {
+  it('hides switcher and platform entry using the server mode, even for a confirmed admin', async () => {
+    vi.stubEnv('CONSTRUCT_TENANCY_MODE', 'single')
+    mocks.session = { user: { id: 'u1', roleIds: [1], isPlatformAdmin: true } }
+    mocks.listAvailableTenants.mockResolvedValue([{ tenantId: tenantIdForTest(7), name: 'Default', isAdmin: true }])
+    mocks.resolvePlatformAdmin.mockResolvedValue({ userId: 'u1', email: 'p@example.test' })
+    try {
+      const props = await renderLayout()
+      expect(props.tenantSwitcher).toBeUndefined()
+      expect(props.menuItems).toEqual([{ id: 1 }])
+      expect(mocks.listAvailableTenants).not.toHaveBeenCalled()
+      expect(mocks.resolvePlatformAdmin).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })

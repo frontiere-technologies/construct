@@ -236,3 +236,19 @@ it('admits a settings delegate without giving them essential consent management'
   await expect(requireTenantSettingsPage()).resolves.toMatchObject({ canManageSupportConsent: false })
   await expect(requireSupportConsentManager()).rejects.toThrow('Unauthorized')
 })
+
+describe('single installation closes every common platform gate', () => {
+  it('rejects actions, global catalogs, support exit and pages even for a platform admin', async () => {
+    vi.stubEnv('CONSTRUCT_TENANCY_MODE', 'single')
+    mocks.getSession.mockResolvedValue(READY_SESSION)
+    mocks.resolvePlatformAdmin.mockResolvedValue({ userId: 'u1', email: 'admin@example.test' })
+    try {
+      await expect(requirePlatformAdmin()).rejects.toThrow('Unauthorized')
+      const { requireSupportExit } = await import('./auth-guard')
+      await expect(requireSupportExit()).rejects.toThrow('Unauthorized')
+      await expect(requirePlatformAdminPage()).rejects.toThrow('NEXT_NOT_FOUND')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+})
