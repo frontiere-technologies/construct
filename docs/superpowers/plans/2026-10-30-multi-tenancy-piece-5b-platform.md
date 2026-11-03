@@ -14,7 +14,7 @@
 
 T01–T06 realizzano catalogo, menu, autorizzazione, gestione e limiti. T07 realizza la modalità singola. T08 collega i controlli alle schermate. T09–T12 completano consenso ed esportazione, ripristino ed eliminazione; dipendono dai dati e dai vincoli dei primi task. T13 chiude verifiche, guida e rilascio. Un solo piano mantiene coerenti le interfacce condivise; ogni task termina con un risultato verificabile e un commit locale.
 
-Stato al 2026-11-02: T01–T08 realizzati e approvati con revisione indipendente; prossimoT09, T09–T13 aperti. Lo sviluppo resta alla 0063 e non è stato attivato il 5b. Le sole attività davvero completate e verificate sono spuntate sotto; i criteri complessivi della specifica rimangono aperti fino alle prove finali.
+Stato al 2026-11-02: T01–T09 realizzati e approvati con revisione indipendente; prossimoT10, T10–T13 aperti. Lo sviluppo resta alla 0063 e non è stato attivato il 5b. Le sole attività davvero completate e verificate sono spuntate sotto; i criteri complessivi della specifica rimangono aperti fino alle prove finali.
 
 ## Vincoli globali
 
@@ -316,13 +316,13 @@ Decisione di esecuzione T08 (registro, Ruling20): la0068 ancora bozza non distri
 
 ## Task 9 — T09 — Consenso esplicito all'esportazione
 
-- [ ] ID=MT5B-T09, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=days, Title=Consenso distinto e rivalidato, Fix description=Estendere l'assistenza senza ampliare retroattivamente i consensi; copre MT5B-OK-6 e RF-1.
+- [✅] ID=MT5B-T09, Severity=Critical, Complexity=Medium, Priority=P0, Estimate=days, Title=Consenso distinto e rivalidato, Fix description=Estendere l'assistenza senza ampliare retroattivamente i consensi; copre MT5B-OK-6 e RF-1.
 
 **File:** C `D/migrations/0069_tenant_export_consent.sql`; M `W/lib/db/schema.ts`, `W/lib/tenancy/{support-consent,support-consent-actions}.ts`, `W/components/settings/TenantSettings.tsx`, `W/lib/platform/tenant-service.ts`; C `W/lib/tenancy/tenant-export-access.ts`; T `W/lib/tenancy/tenant-export-access.integration.test.ts`, test impostazioni.
 
 **Interfacce:** `tenant_settings.support_export_allowed boolean not null default false`. `grantSupportConsent(duration: SupportDuration, options?: { allowExport: boolean }): Promise<{ ok: true; until: string }>`; assenza opzioni = false, rinnovo con false toglie l'estensione. `requireTenantExporter(): Promise<Actor>` richiede amministratore del tenant o assistenza con estensione valida; `assertTenantExportStillAllowed(actor: Actor): Promise<void>` rilegge in nuova transazione, senza cache React né fotografia della preparazione. La guardia del consenso usa T04 e rifiuta la piattaforma in assistenza.
 
-- [ ] T09.1 Scrivere test per consenso 5a (false dopo migrazione), concesso, scaduto, revocato, rinnovato senza estensione, amministratore tenant senza assistenza e piattaforma con assistenza ma senza estensione. Modello sempre rifiutato. Il tentativo della piattaforma di concedersi l'estensione è rifiutato e non lascia registri.
+- [✅] T09.1 Scrivere test per consenso 5a (false dopo migrazione), concesso, scaduto, revocato, rinnovato senza estensione, amministratore tenant senza assistenza e piattaforma con assistenza ma senza estensione. Modello sempre rifiutato. Il tentativo della piattaforma di concedersi l'estensione è rifiutato e non lascia registri.
 
 Con `fixture` T02, intestazioni dell'indirizzo principale e sessione sostituita al confine come nei test 5a:
 ```ts
@@ -335,10 +335,10 @@ mocks.session = { user: { id: fixture.platformAdminId, tenantId: fixture.tenantI
 await expect(requireTenantExporter()).rejects.toThrow('Unauthorized')
 ```
 `'1h'` è il letterale già presente in `support-consent-durations.ts`; `startSupport` è l'azione esistente `lib/platform/support-actions.ts`. La negazione deve dipendere dall'estensione mancante, non da un ingresso di assistenza assente.
-- [ ] T09.2 Eseguire integrazione del task e test impostazioni in sequenza: falliscono sui nuovi casi.
-- [ ] T09.3 Implementare dato, letture, guardie e casella esplicita inizialmente spenta; registrare la scelta, usare l'orologio del database e le regole di ingresso aperto già esistenti. Nessuna estensione scritta dal file di ripristino. La piattaforma legge solo stato/scadenza consentiti, non dati del tenant senza assistenza.
-- [ ] T09.4 Ripetere test e aggiungere revoca/account disattivato/ruolo rimosso tra due controlli. Il secondo controllo vede il nuovo stato anche se la fotografia di esportazione è antecedente.
-- [ ] T09.5 Commit locale `feat(tenancy): require explicit consent for platform exports`.
+- [✅] T09.2 Eseguire integrazione del task e test impostazioni in sequenza: falliscono sui nuovi casi.
+- [✅] T09.3 Implementare dato, letture, guardie e casella esplicita inizialmente spenta; registrare la scelta, usare l'orologio del database e le regole di ingresso aperto già esistenti. Nessuna estensione scritta dal file di ripristino. La piattaforma legge solo stato/scadenza consentiti, non dati del tenant senza assistenza.
+- [✅] T09.4 Ripetere test e aggiungere revoca/account disattivato/ruolo rimosso tra due controlli. Il secondo controllo vede il nuovo stato anche se la fotografia di esportazione è antecedente.
+- [✅] T09.5 Commit locale `feat(tenancy): require explicit consent for platform exports`.
 
 ## Task 10 — T10 — Archivio versione 1 ed esportazione autenticata
 

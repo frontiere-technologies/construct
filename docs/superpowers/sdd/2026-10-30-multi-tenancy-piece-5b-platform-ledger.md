@@ -350,3 +350,13 @@ Task 8: fix round1/5 (1addressed,0open — T08-REV-1; commitsa7c4229..ed04fd4). 
 Task 8: complete (commitsd2c9e9b..ed04fd4, review clean)
 
 T08 e passi spuntati dopo prove e riesame. GUI sospensione/purge/quote/ruoli/menu con i18n reale verificata; codice/applicazione sulla prova0068, sviluppo0063 invariato, nessuna attivazione remota. Segreto test fornito dal proprietario rimane privato/gitignorato, disponibile per futuri browser senza nuova richiesta. Tutti i revisori GPT-6.1/high. ProssimoT09, consenso export esplicito; build e verifiche complete restanoT13 con controlloMT5B-XLOCK-1.
+
+Task 9: in progress — BASEd35ae99 (chiusura T08); esecutore /root/mt5b_t09_implementer, gpt-6.1-sol/high. Brief task-9-brief.md, contesto task-9-context.md, rapporto task-9-report.md. Esclusiva integrazione locale assegnata, nessun browser/altro esecutore; nuova0069 del task,0001–0068 immutate. Consenso export distinto e verifica corrente fuori snapshot; revisione successiva GPT-6.1/high.
+
+Task 9: implementation done — commit62bc73a6395fd55270549106dc2d36c8e983b36c,15file. Report task-9-report.md verificato; nuova0069 provata inrollback (vecchio consenso false,4chiavi/8valori) e applicata solo prova,0001–0068immutate. Finali1700unità/172file unica completa,109DBmirati su4file (27exportaccess+21support+11T04+50crossTenant),56UI compresi nella suite,42contratti,lint/tipi/schema/boundary0. Tre casiT05 aggiunti a CASES crossTenant senza indebolire scanner/assert, rifiuto esattoUnauthorized e fingerprintB. Diagnostici attesi e tentativi/test fixture corretti dichiarati; modello ripulito soltanto da eventi dei primi fixture del task. Verificati SHA/stat/show--check, soli3documenti coordinatore sporchi. Package review-d35ae99..62bc73a.diff; revisore /root/mt5b_t09_reviewer_61,gpt-6.1-sol/high. Nessun browser/server/integrazione attivo; T09 resta aperto fino al verdetto.
+
+Task 9: review GPT-6.1/high — conforme,Approved;0Critical/Important,1MinorT09-MINOR1 differito (diagnostici attesi già noti). Nessun requisitoT09 scoperto. ⚠storiaoperativa/stateDB attestati dai log degli esecutori; nessun nuovo accesso richiesto al revisore. Integrazione delle due guardie, limiti/annullamento e consegna sono obblighiT10, non verificabili prima della loro implementazione.
+
+Task 9: complete (commitsd35ae99..62bc73a, review clean)
+
+T09 e passi spuntati dopo verifiche/revisione. Nuova0069 solo prova, sviluppo0063immutato. ProssimoT10: archivioJSONv1, copertura dati, limiti reali, cancellazione query e autorizzazione aggiornata prima consegna. Tutti i revisori GPT-6.1/high.

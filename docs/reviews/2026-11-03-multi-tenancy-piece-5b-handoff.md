@@ -1,6 +1,6 @@
 # Multi-tenancy 5b — stato e ripresa del 3 novembre 2026
 
-T01–T08 sono conclusi e approvati. Ultimi commit del codice: a7c4229 (schermate) ed ed04fd4 (area omessa nell’edit menu), entrambi rivisti con GPT-6.1/high. ProssimoT09: consenso esplicito all’esportazione; T09–T13 restano aperti. Il limite d’uso precedente è stato ripristinato dal proprietario; alla verifica del3novembre14:55 l’uso era consentito. Nessun reset o cambio di account/modello eseguito dall’assistente.
+T01–T09 sono conclusi e approvati. Ultimi commit del codice: a7c4229 (schermate) ed ed04fd4 (area omessa nell’edit menu), entrambi rivisti con GPT-6.1/high. T09 approvato nel commit62bc73a,1700unità e109DBmirati verdi. ProssimoT10, T10–T13 aperti; prova0069, sviluppo0063 invariato. Il limite d’uso precedente è stato ripristinato dal proprietario; alla verifica del3novembre14:55 l’uso era consentito. Nessun reset o cambio di account/modello eseguito dall’assistente.
 
 Area da riusare: /Users/mario.stefanutti/.codex/worktrees/multi-tenancy-piece-5b/construct, ramo feature/multi-tenancy-piece-5b. Nessun nuovo worktree necessario; checkout originale, stash e file del proprietario restano fuori dall’esecuzione.
 
@@ -34,3 +34,5 @@ Resta aperto nel piano il controllo trasversale MT5B-XLOCK-1 di T13: verificare 
 Il segreto Auth.js di prova è stato inserito dal proprietario e la presenza non vuota verificata. File privato sources/tests/e2e/.env.test escluso daGit; valore mai mostrato o generato dall’assistente. Server3001/E2E autorizzati dopo integrazioni concluse, senza altre conferme. Tutti i revisori/riesaminatori/finale usano GPT-6.1 con ragionamento alto.
 
 Stato T08 finale:1689unità,84integrazioni più20finali,2E2E e62mirati del fix verdi; modello peer e riesame GPT-6.1/high.0068approvata e applicata solo alla prova, server3001fermato. Rapporto task-8-report.md, review task-8-review.md e task-8-r1-review.md nell’area del piano. Per ripresa usare il task9 del piano, non le azioni storiche T07 sopra.
+
+T09 completato: nuova estensione di consenso defaultfalse e guardie fresche approvate; rapporto task-9-report.md/review task-9-review.md. Per la ripresa proseguire dal task10 del piano.
