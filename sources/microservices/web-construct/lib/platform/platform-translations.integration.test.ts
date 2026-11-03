@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { withGlobal } from '@/lib/db/tenant-db'
+import { interpolate } from '@/lib/i18n/interpolate'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
 
 /**
@@ -14,7 +15,7 @@ const seed = /apply_translation_seed\(\$seed\$([\s\S]*?)\$seed\$/.exec(migration
 const seeded = JSON.parse(seed) as { key: string; it: string; en: string }[]
 
 // Le etichette delle operazioni del registro vengono anche dalle migrazioni dopo la 0059 (0063: platform.admin.invite).
-const AUDIT_LABEL_MIGRATIONS = ['0059_platform_translations.sql', '0063_platform_admin_reinvite.sql']
+const AUDIT_LABEL_MIGRATIONS = ['0059_platform_translations.sql', '0063_platform_admin_reinvite.sql', '0068_tenant_policy_ui.sql']
 const labelKeys = new Set(AUDIT_LABEL_MIGRATIONS.flatMap(file => {
   const text = readFileSync(resolve(__dirname, '../../../../devops/db/migrations', file), 'utf8')
   return (JSON.parse(/apply_translation_seed\(\$seed\$([\s\S]*?)\$seed\$/.exec(text)![1]) as { key: string }[]).map(entry => entry.key)
@@ -59,5 +60,29 @@ describeIntegration('the piece 5a translations', () => {
   it('has a label for every audit operation code', async () => {
     const { AUDIT_OPERATIONS } = await import('@/lib/audit/audit-types')
     expect(AUDIT_OPERATIONS.filter(code => !labelKeys.has(`audit.operation.${code}`))).toEqual([])
+  })
+})
+
+const policyMigration = readFileSync(resolve(__dirname, '../../../../devops/db/migrations/0068_tenant_policy_ui.sql'), 'utf8')
+const policySeed = JSON.parse(policyMigration.match(/\$seed\$([\s\S]*?)\$seed\$/)![1]) as { key: string; it: string; en: string }[]
+describeIntegration('the T08 policy UI translations', () => {
+  it('applies every final seed value and interpolates real purge counts in both base languages', async () => {
+    const rows = await withGlobal(tx => tx.execute<{ key: string; code: string; value: string }>(sql`
+      select k.key, l.code, v.value from public.translation_key k
+      join public.translation_value v using (id_translation_key)
+      join public.app_language l using (id_language)
+      where k.key in (${sql.join(policySeed.map(entry => sql`${entry.key}`), sql`, `)}) and l.code in ('it', 'en')`))
+    expect(rows).toHaveLength(policySeed.length * 2)
+    for (const entry of policySeed) for (const code of ['it', 'en'] as const) {
+      expect(rows.find(row => row.key === entry.key && row.code === code)?.value).toBe(entry[code])
+    }
+    for (const code of ['it', 'en']) {
+      const text = rows.find(row => row.key === 'platform.policy.purge.counts' && row.code === code)!.value
+      const result = interpolate(text, { roles: 2, permissions: 5, menus: 4 }, code === 'it' ? 'it-IT' : 'en-US')
+      expect(result).not.toContain('{')
+      expect(result).toContain('2')
+      expect(result).toContain('5')
+      expect(result).toContain('4')
+    }
   })
 })

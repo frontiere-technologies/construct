@@ -6,6 +6,7 @@ import { requirePlatformAdmin } from '@/lib/rbac/auth-guard'
 import { DEFAULT_TENANT_SLUG } from '@/lib/tenancy/tenant-id'
 import { existingTenantId } from '@/lib/tenancy/platform-tenant'
 import { selectTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
+import { selectTenantUsage, type TenantUsage } from '@/lib/tenancy/tenant-limits'
 import type { TenantPolicySnapshot } from '@/lib/tenancy/tenant-policy-types'
 import { readSupportConsent } from '@/lib/tenancy/support-consent'
 import { withPlatform } from './db'
@@ -180,4 +181,11 @@ export async function readTenantPolicyForPlatform(tenantId: number): Promise<Ten
   await requirePlatformAdmin()
   const tenantKey = await existingTenantId(tenantIdArgSchema.parse(tenantId))
   return withPlatform(selectTenantPolicy, tenantKey)
+}
+
+/** Conteggi aggregati, con lo stesso confine autorizzato della fotografia della policy. */
+export async function readTenantUsageForPlatform(tenantId: number): Promise<TenantUsage> {
+  await requirePlatformAdmin()
+  const tenantKey = await existingTenantId(tenantIdArgSchema.parse(tenantId))
+  return withPlatform(selectTenantUsage, tenantKey)
 }

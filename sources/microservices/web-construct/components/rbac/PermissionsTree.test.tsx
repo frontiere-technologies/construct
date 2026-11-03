@@ -139,3 +139,16 @@ describe('PermissionsTree, ciò che non si può concedere', () => {
     expect(toggle('nodo-5').getAttribute('title')).toBe('roles.detail.not_grantable_hint')
   })
 })
+
+it('labels saved suspended assignments, permits revocation and blocks new suspended grants', () => {
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  const change = vi.fn()
+  act(() => root?.render(<PermissionsTree trees={trees} map={new Map([[6, true]])} onChange={change} editable suspendedIds={[6, 7]} canGrantNode={() => false} />))
+  expect(container.textContent).toContain('roles.detail.suspended_badge')
+  expect(toggle('nodo-6').disabled).toBe(false)
+  expect(toggle('nodo-7').disabled).toBe(true)
+  act(() => toggle('nodo-6').click())
+  expect(change.mock.calls[0][0].get(6)).toBe(false)
+})

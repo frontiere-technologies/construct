@@ -18,6 +18,9 @@ import {
 import type { PlatformTenantDetail } from '@/lib/platform/tenant-service'
 import type { PlatformTenantStatus } from '@/lib/platform/tenants-grid-query'
 import { emailSchema } from '@/lib/rbac/action-input-schemas'
+import type { TenantUsage } from '@/lib/tenancy/tenant-limits'
+import type { TenantPolicySnapshot } from '@/lib/tenancy/tenant-policy-types'
+import { TenantPolicyEditor } from './TenantPolicyEditor'
 import { TenantStatusBadge } from './TenantStatusBadge'
 
 type Notice = { kind: 'ok' | 'error'; text: string } | null
@@ -40,6 +43,8 @@ const HOST_ERRORS: Record<'taken' | 'invalid' | 'primary', string> = {
 
 interface Props {
   tenant: PlatformTenantDetail
+  policy?: TenantPolicySnapshot
+  usage?: TenantUsage
 }
 
 /**
@@ -52,7 +57,7 @@ interface Props {
  * perché. L'assistenza (MT5-DEC-10, MT5-DEC-11): lo stato del permesso del tenant e l'ingresso,
  * con un motivo scritto; il modello si apre sempre. Il registro del modello sta sotto la sua scheda (la pagina), non qui.
  */
-export function TenantDetail({ tenant }: Props) {
+export function TenantDetail({ tenant, policy, usage }: Props) {
   const { t, fmt } = useI18n()
   const router = useRouter()
   const [notice, setNotice] = useState<Notice>(null)
@@ -191,6 +196,8 @@ export function TenantDetail({ tenant }: Props) {
         </p>
         {!canEnterSupport && <p id={supportHintId} className="mt-2 text-sm text-muted-foreground">{t('platform.support.disabled_hint')}</p>}
       </section>
+
+      {policy && usage && <TenantPolicyEditor key={policy.revision} tenantId={tenant.id} initialPolicy={policy} usage={usage} />}
 
       {statusChange && (
         <StatusDialog

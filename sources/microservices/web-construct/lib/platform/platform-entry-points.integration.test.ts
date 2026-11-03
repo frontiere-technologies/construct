@@ -29,6 +29,7 @@ import { createTranslationKey, deleteTranslationKey, saveTranslations } from '@/
 import { addPlatformAdmin, removePlatformAdmin } from './platform-admin-actions'
 import { endSupport, startSupport } from './support-actions'
 import { addTenantAdmin, addTenantHost, createTenant, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus } from './tenant-actions'
+import { saveTenantPolicy, previewTenantGrantPurge, purgeTenantGrants } from './tenant-policy-actions'
 import { getTenantForPlatform, listTenantsForPlatform } from './tenant-service'
 
 /**
@@ -169,6 +170,13 @@ const DOORS: Record<string, Door> = {
   'lib/platform/platform-admin-actions.ts#removePlatformAdmin': { entry: removePlatformAdmin, call: () => removePlatformAdmin(victimAdmin.id) },
   'lib/platform/support-actions.ts#endSupport': { entry: endSupport, call: () => endSupport(), worksInSupport: true },
   'lib/platform/support-actions.ts#startSupport': { entry: startSupport, call: () => startSupport(Number(target), 'prova') },
+  'lib/platform/tenant-policy-actions.ts#saveTenantPolicy': { entry: saveTenantPolicy, call: () => saveTenantPolicy(Number(target), {
+    expectedRevision: 1,
+    areas: { people: false, roles: false, navigation: false, appearance: false, catalogs: false, 'tenant-settings': false },
+    overrides: {}, limits: { maxMembers: null, maxRoles: null, maxMenuEntries: null, queryTimeoutMs: null },
+  }) },
+  'lib/platform/tenant-policy-actions.ts#previewTenantGrantPurge': { entry: previewTenantGrantPurge, call: () => previewTenantGrantPurge(Number(target), ['read-users']) },
+  'lib/platform/tenant-policy-actions.ts#purgeTenantGrants': { entry: purgeTenantGrants, call: () => purgeTenantGrants(Number(target), { revision: 1, keys: ['read-users'], roleCount: 0, permissionGrantCount: 0, menuGrantCount: 0, fingerprint: 'a'.repeat(64) }) },
   'lib/platform/tenant-actions.ts#addTenantAdmin': { entry: addTenantAdmin, call: () => addTenantAdmin(Number(target), `${PREFIX}ta_${unique()}@example.test`) },
   'lib/platform/tenant-actions.ts#addTenantHost': { entry: addTenantHost, call: () => addTenantHost(Number(target), `zzz-pep-${unique()}.example.test`, false) },
   'lib/platform/tenant-actions.ts#createTenant': {

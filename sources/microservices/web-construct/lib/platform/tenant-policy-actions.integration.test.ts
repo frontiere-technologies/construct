@@ -9,7 +9,7 @@ import type { TenantPolicyDraft } from '@/lib/tenancy/tenant-policy-types'
 import { grantSupportConsent } from '@/lib/tenancy/support-consent-actions'
 import { closePlatform } from './db'
 import { saveTenantPolicy, previewTenantGrantPurge, purgeTenantGrants } from './tenant-policy-actions'
-import { readTenantPolicyForPlatform } from './tenant-service'
+import { readTenantPolicyForPlatform, readTenantUsageForPlatform } from './tenant-service'
 
 const mocks = vi.hoisted(() => ({ session: null as unknown, failTenantAudit: false }))
 vi.mock('@/lib/auth-session', () => ({ getSession: async () => mocks.session }))
@@ -84,6 +84,20 @@ describeIntegration('platform tenant policy actions', () => {
   })
   afterEach(async () => { mocks.failTenantAudit = false; try { await cleanup?.() } finally { vi.unstubAllEnvs() } })
   afterAll(async () => { await closePlatform(); await closeOwner() })
+
+  it('reads tenant-wide usage through a guarded platform port and rejects a tenant administrator', async () => {
+    const usage = await readTenantUsageForPlatform(fixture.tenantId)
+    const actual = await withTenant(fixture.tenantId, async tx => {
+      const [row] = await tx.execute<{ members: number; roles: number; menuEntries: number }>(sql`select
+        (select count(*)::int from public.tenant_membership) as members,
+        (select count(*)::int from public.role) as roles,
+        (select count(*)::int from public.menu_entry) as "menuEntries"`)
+      return row
+    })
+    expect(usage).toEqual(actual)
+    signIn(fixture.adminId, fixture.tenantId)
+    await expect(readTenantUsageForPlatform(-1)).rejects.toThrow('Unauthorized')
+  })
 
   it('rejects a second administrator saving from the same revision', async () => {
     const value = await draft()

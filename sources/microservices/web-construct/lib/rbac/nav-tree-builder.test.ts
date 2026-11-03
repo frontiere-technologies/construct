@@ -107,3 +107,8 @@ describe('selectableParents', () => {
     expect(selectableParents(untranslated)).toEqual([{ id: 20, name: 'Raw', navbarPosition: null }])
   })
 })
+
+it('retains the authoritative area and feature bindings in the authoring DTO', () => {
+  const tree = buildNavTree([row(91, null, false, 'Synthetic', { area_key: 'people', feature_key: 'read-users' })], new Map())
+  expect(tree[0]).toMatchObject({ areaKey: 'people', featureKey: 'read-users' })
+})

@@ -84,6 +84,8 @@ export interface UserNavigationTreeDto {
   parentId: number | null
   authorization: boolean
   children: UserNavigationTreeDto[]
+  areaKey?: AreaKey | null
+  featureKey?: FeatureKey | null
   // Phase 2 (optional — Phase 1 consumers don't set these):
   description?: string | null
   functionalityType?: FunctionalityType | null

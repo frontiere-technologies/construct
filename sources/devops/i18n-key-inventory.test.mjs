@@ -195,6 +195,7 @@ const AUDIT_OPERATION_FILES = [
   'lib/i18n/translation-actions.ts',
   'lib/platform/platform-admin-actions.ts',
   'lib/platform/tenant-actions.ts',
+  'lib/platform/tenant-policy-actions.ts',
   'lib/platform/support-actions.ts',
   'lib/tenancy/support-consent.ts',
   'lib/tenancy/support-consent-actions.ts',
@@ -210,6 +211,9 @@ const NOT_A_KEY = [
   { file: 'lib/db/testing.ts', pattern: /^app\.tenant_id$/, why: 'name of the Postgres setting that carries the tenant' },
   { file: 'lib/db/platform-database.ts', pattern: /^app\.tenant_id$/, why: 'name of the Postgres setting that carries the tenant' },
   { file: 'lib/db/schema.ts', pattern: /^public\.s_id_tenant$/, why: 'schema-qualified sequence name in a column default' },
+  // Binding menu: nome di impostazione PostgreSQL, non testo mostrato all’utente.
+  { file: 'lib/platform/tenant-actions.ts', pattern: /^app\.menu_origin$/, why: 'Postgres setting for menu target origin' },
+  { file: 'lib/rbac/navigation-actions.ts', pattern: /^app\.menu_origin$/, why: 'Postgres setting for menu target origin' },
   // A CSS length that happens to be lowercase digits around a dot.
   { file: 'components/grid/data-grid-config.ts', pattern: /^0\.875rem$/, why: 'ag-grid font size in rem' },
 ]

@@ -27,6 +27,7 @@ vi.mock('@/lib/platform/tenant-actions', () => ({
   addTenantAdmin: vi.fn(), addTenantHost: vi.fn(), removeTenantHost: vi.fn(),
   resendTenantInvite: vi.fn(), setPrimaryHost: vi.fn(), setTenantStatus: vi.fn(),
 }))
+vi.mock('./TenantPolicyEditor', () => ({ TenantPolicyEditor: () => <section data-testid="tenant-policy-editor" /> }))
 vi.mock('@/lib/platform/support-actions', () => ({ startSupport: vi.fn() }))
 // jsdom non naviga: l'ingresso carica la home del tenant da capo, nel browser.
 vi.mock('@/components/tenancy/load-page', () => ({ loadPage: vi.fn() }))
@@ -407,4 +408,13 @@ describe('TenantDetail: support', () => {
     expect(supportSection().textContent).toContain('platform.support.template')
     expect(need('platform.support.enter').disabled).toBe(false)
   })
+})
+
+it('mounts the policy editor when the platform loader supplies its policy and usage', () => {
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  const policy = { revision: 1, areas: { people: true, roles: true, navigation: true, appearance: true, catalogs: true, 'tenant-settings': true }, overrides: {}, limits: { maxMembers: null, maxRoles: null, maxMenuEntries: null, queryTimeoutMs: null }, enabledFeatures: [] }
+  act(() => root?.render(<TenantDetail tenant={ACME} policy={policy} usage={{ members: 1, roles: 3, menuEntries: 4 }} />))
+  expect(document.querySelector('[data-testid="tenant-policy-editor"]')).not.toBeNull()
 })

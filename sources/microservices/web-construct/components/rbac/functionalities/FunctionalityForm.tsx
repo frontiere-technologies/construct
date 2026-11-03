@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { areaKeySchema, type AreaKey } from '@/lib/tenancy/feature-catalog'
 import { createNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'
 import { isGenitoreLocked, buildGenitoreOptions, genitoreValue, parseGenitoreSelection } from '@/lib/rbac/genitore-lock'
 import { isTypeLocked, resolveItemType, typeOptionsFor } from '@/lib/rbac/item-type-options'
@@ -19,6 +20,7 @@ import TagInput from './TagInput'
 import IconPicker from './IconPicker'
 
 interface Initial {
+  areaKey?: AreaKey | null
   description: string; idItemType: 1 | 2; idFunctionalityType: number | null
   functionalityLink: string; iconPath: string; idItemParent: number | null
   /** External links only: open the URL in a new tab (the default) instead of in this one. */
@@ -27,11 +29,12 @@ interface Initial {
 }
 
 export default function FunctionalityForm(
-  { mode, funcId, initial, parents, locales }:
-  { mode: 'create' | 'edit'; funcId?: number; initial: Initial; parents: ParentOption[]; locales: NavigationLocale[] },
+  { mode, funcId, initial, parents, locales, availableAreas }:
+  { mode: 'create' | 'edit'; funcId?: number; initial: Initial; parents: ParentOption[]; locales: NavigationLocale[]; availableAreas: { category: AreaKey[]; content: AreaKey[] } },
 ) {
   const { t } = useI18n()
   const router = useRouter()
+  const areaId = useId()
   const genitoreLocked = isGenitoreLocked(parents.length)
   const itemTypeLabels: Record<string, string> = {
     category: t('functionalities.item_type.category'),
@@ -67,6 +70,8 @@ export default function FunctionalityForm(
   // null while no tipologia has been picked yet — the dropdown then shows its placeholder
   // instead of a type the item doesn't actually have, and the Link field stays hidden.
   const selectedType = resolveItemType(f.idItemType, f.idFunctionalityType)
+  const areaOptions = selectedType?.key === 'category' ? availableAreas.category : availableAreas.content
+  const hasHistoricalArea = f.areaKey != null && !areaOptions.includes(f.areaKey)
   const isFunc = selectedType?.idItemType === ITEM_TYPE_FUNCTIONALITY
   const defaultLocale = defaultNavigationLocale(locales)
   const primaryName = f.translations[defaultLocale]?.name ?? ''
@@ -82,6 +87,7 @@ export default function FunctionalityForm(
       if (mode === 'edit') {
         if (funcId == null) { setError(t('functionalities.form.missing_id_error')); return }
         const input: CreateNavItemInput = {
+          areaKey: f.areaKey ?? null,
           name: primaryName, idItemType: f.idItemType,
           idFunctionalityType: isFunc ? f.idFunctionalityType : null,
           functionalityLink: isFunc ? f.functionalityLink : null,
@@ -92,6 +98,7 @@ export default function FunctionalityForm(
         await updateNavigationItem(funcId, input)
       } else {
         const input: CreateNavItemInput = {
+          areaKey: f.areaKey ?? null,
           name: primaryName, idItemType: f.idItemType,
           idFunctionalityType: isFunc ? f.idFunctionalityType : null,
           functionalityLink: isFunc ? f.functionalityLink : null,
@@ -163,6 +170,15 @@ export default function FunctionalityForm(
               disabled={typeLocked}
               title={typeLocked ? t('functionalities.form.type_locked_edit_hint') : undefined}
             />
+            <div>
+              <label htmlFor={areaId} className="mb-1 block text-sm">{t('functionalities.form.area')}</label>
+              <select id={areaId} data-testid="menu-area" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={f.areaKey ?? ''} onChange={event => set('areaKey', event.target.value === '' ? null : areaKeySchema.parse(event.target.value))}>
+                <option value="">{t('functionalities.form.area_automatic')}</option>
+                {areaOptions.map(area => <option key={area} value={area}>{t(`platform.policy.area.${area.replaceAll('-', '_')}`)}</option>)}
+                {hasHistoricalArea && <option value={f.areaKey!} disabled>{t(`platform.policy.area.${f.areaKey?.replaceAll('-', '_')}`)} — {t('functionalities.form.area_unavailable')}</option>}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">{t('functionalities.form.area_hint')}</p>
+            </div>
             {isFunc && (
               <Input value={f.functionalityLink} onChange={e => set('functionalityLink', e.target.value)} placeholder={t('functionalities.form.link_placeholder')}
                 className="bg-transparent" />

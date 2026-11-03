@@ -14,6 +14,7 @@ interface PermissionsTreeProps {
   /** Le foglie che l'attore può accendere; assente vuol dire tutte (DEC-6: spegnere resta sempre
    *  ammesso). La pagina lo ricava dall'Actor con le regole di `grant-guards.ts` (DEC-32). */
   canGrantNode?: CanGrant
+  suspendedIds?: number[]
 }
 
 /** L'aspetto è lo stesso per foglie e cartelle, e deve restare identico al selettore del tema
@@ -54,15 +55,16 @@ const Track: React.FC<{
   </button>
 )
 
-export default function PermissionsTree({ trees, map, onChange, editable, canGrantNode }: PermissionsTreeProps) {
+export default function PermissionsTree({ trees, map, onChange, editable, canGrantNode, suspendedIds = [] }: PermissionsTreeProps) {
   const { t } = useI18n()
+  const suspended = new Set(suspendedIds)
   return (
     <NavigationTree
       nodes={trees}
       // Il `title` dell'interruttore disabilitato si scopre solo passandoci sopra, e in tema
       // scuro l'interruttore spento si distingue poco: la riga lo dice anche a parole.
       renderNameSuffix={node =>
-        node.type === 'CATEGORY' && folderState(node, map) === 'empty' ? (
+        suspended.has(node.id) ? <span className="shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground" title={t('roles.detail.suspended_hint')}>{t('roles.detail.suspended_badge')}</span> : node.type === 'CATEGORY' && folderState(node, map) === 'empty' ? (
           <span
             data-testid="perm-empty-badge"
             className="shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground"

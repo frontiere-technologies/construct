@@ -4,7 +4,7 @@ import { TenantDetail } from '@/components/platform/TenantDetail'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { parseAuditGridUrlParams } from '@/lib/audit/audit-grid-query'
 import { getI18n } from '@/lib/i18n/server'
-import { getTenantForPlatform } from '@/lib/platform/tenant-service'
+import { getTenantForPlatform, readTenantPolicyForPlatform, readTenantUsageForPlatform } from '@/lib/platform/tenant-service'
 import { requirePlatformAdminPage } from '@/lib/rbac/auth-guard'
 
 /**
@@ -21,10 +21,11 @@ export default async function PlatformTenantPage({ params }: { params: Promise<{
   const id = /^[1-9]\d{0,14}$/.test(tenantId) ? Number(tenantId) : null
   const tenant = id === null ? null : await getTenantForPlatform(id)
   if (!tenant) notFound()
+  const [policy, usage] = await Promise.all([readTenantPolicyForPlatform(tenant.id), readTenantUsageForPlatform(tenant.id)])
 
   return (
     <PageContainer title={tenant.name} subtitle={tenant.slug}>
-      <TenantDetail tenant={tenant} />
+      <TenantDetail tenant={tenant} policy={policy} usage={usage} />
       {tenant.isTemplate ? (
         <section aria-labelledby="template-audit" className="mt-6">
           <h2 id="template-audit" className="mb-3 text-base font-semibold">{t('audit.title')}</h2>

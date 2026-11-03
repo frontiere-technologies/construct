@@ -3,7 +3,10 @@ import { asc } from 'drizzle-orm'
 import { allInTransaction } from '@/lib/db/all-in-transaction'
 import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
 import { menuEntry, menuEntryTag } from '@/lib/db/schema'
+import { AREA_KEYS } from '@/lib/tenancy/feature-catalog'
+import { selectTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
+import { canUseMenuEntry } from './menu-feature-binding'
 import { toMenuEntryRow } from './nav-row-mapper'
 import { buildNavTree, mapRowToDto, selectableParents } from './nav-tree-builder'
 import { type UserNavigationTreeDto, type ParentOption } from './types'
@@ -49,3 +52,12 @@ export const getParentList = cache(async (tenantId: TenantId, excludeSubtreeOf?:
   const { items } = await withTenant(tenantId, loadNavAndTags)
   return selectableParents(items, excludeSubtreeOf)
 })
+
+/** Le scelte derivano dalla stessa regola del binding convalidato dal server. */
+export const getMenuEditorAreas = cache(async (tenantId: TenantId) => withTenant(tenantId, async tx => {
+  const policy = await selectTenantPolicy(tx)
+  return {
+    category: AREA_KEYS.filter(areaKey => canUseMenuEntry(policy, { areaKey, featureKey: null })),
+    content: AREA_KEYS.filter(areaKey => canUseMenuEntry(policy, { areaKey, featureKey: 'use-custom-content' })),
+  }
+}))
