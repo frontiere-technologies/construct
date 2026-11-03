@@ -44,6 +44,7 @@ export default function FunctionalityForm(
   }
   const [f, setF] = useState<Initial>(() =>
     mode === 'create' && parents.length === 0 ? { ...initial, idItemParent: null } : initial)
+  const [hasSelectedArea, setHasSelectedArea] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const set = <K extends keyof Initial>(k: K, v: Initial[K]) => setF(prev => ({ ...prev, [k]: v }))
@@ -87,7 +88,9 @@ export default function FunctionalityForm(
       if (mode === 'edit') {
         if (funcId == null) { setError(t('functionalities.form.missing_id_error')); return }
         const input: CreateNavItemInput = {
-          areaKey: f.areaKey ?? null,
+          // L'area caricata non è una scelta nuova: omessa, il server deriva quella
+          // del nuovo target interno o conserva quella storica per categorie/contenuti.
+          ...(hasSelectedArea ? { areaKey: f.areaKey ?? null } : {}),
           name: primaryName, idItemType: f.idItemType,
           idFunctionalityType: isFunc ? f.idFunctionalityType : null,
           functionalityLink: isFunc ? f.functionalityLink : null,
@@ -172,7 +175,10 @@ export default function FunctionalityForm(
             />
             <div>
               <label htmlFor={areaId} className="mb-1 block text-sm">{t('functionalities.form.area')}</label>
-              <select id={areaId} data-testid="menu-area" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={f.areaKey ?? ''} onChange={event => set('areaKey', event.target.value === '' ? null : areaKeySchema.parse(event.target.value))}>
+              <select id={areaId} data-testid="menu-area" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={f.areaKey ?? ''} onChange={event => {
+                setHasSelectedArea(true)
+                set('areaKey', event.target.value === '' ? null : areaKeySchema.parse(event.target.value))
+              }}>
                 <option value="">{t('functionalities.form.area_automatic')}</option>
                 {areaOptions.map(area => <option key={area} value={area}>{t(`platform.policy.area.${area.replaceAll('-', '_')}`)}</option>)}
                 {hasHistoricalArea && <option value={f.areaKey!} disabled>{t(`platform.policy.area.${f.areaKey?.replaceAll('-', '_')}`)} — {t('functionalities.form.area_unavailable')}</option>}
