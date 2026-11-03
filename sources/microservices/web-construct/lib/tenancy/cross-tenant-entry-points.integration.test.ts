@@ -29,6 +29,8 @@ import PlatformTenantPage from '@/app/platform/tenants/[tenantId]/page'
 import {
   addTenantAdmin, addTenantHost, createTenant as createPlatformTenant, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus,
 } from '@/lib/platform/tenant-actions'
+import { previewTenantGrantPurge, purgeTenantGrants, saveTenantPolicy } from '@/lib/platform/tenant-policy-actions'
+import { readTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
 import { saveAppTheme } from '@/lib/theme-actions'
 import { endSupport, startSupport } from '@/lib/platform/support-actions'
 import { getSystemRoleIds } from './system-roles'
@@ -542,6 +544,30 @@ const CASES: Record<string, CrossTenantCase> = {
       await expect(resendTenantInvite(Number(B), bUser)).rejects.toThrow('Unauthorized')
     },
   },
+  'lib/platform/tenant-policy-actions.ts#saveTenantPolicy': {
+    entry: saveTenantPolicy,
+    run: async () => {
+      const policy = await readTenantPolicy(B)
+      await expect(saveTenantPolicy(Number(B), {
+        expectedRevision: policy.revision,
+        areas: { ...policy.areas, appearance: false }, overrides: policy.overrides, limits: policy.limits,
+      })).rejects.toThrow(/^Unauthorized$/)
+    },
+  },
+  'lib/platform/tenant-policy-actions.ts#previewTenantGrantPurge': {
+    entry: previewTenantGrantPurge,
+    run: async () => { await expect(previewTenantGrantPurge(Number(B), ['read-users'])).rejects.toThrow(/^Unauthorized$/) },
+  },
+  'lib/platform/tenant-policy-actions.ts#purgeTenantGrants': {
+    entry: purgeTenantGrants,
+    run: async () => {
+      const policy = await readTenantPolicy(B)
+      await expect(purgeTenantGrants(Number(B), {
+        revision: policy.revision, keys: ['read-users'], roleCount: 0, permissionGrantCount: 0,
+        menuGrantCount: 0, fingerprint: 'a'.repeat(64),
+      })).rejects.toThrow(/^Unauthorized$/)
+    },
+  },
   // L'ingresso di assistenza (Task 9): l'amministratore di A non è amministratore di piattaforma, e
   // nemmeno con il permesso valido di B entra in B o scrive nei suoi registri.
   'lib/platform/support-actions.ts#startSupport': {
@@ -701,7 +727,7 @@ const CASES: Record<string, CrossTenantCase> = {
       // L'interruttore di A (spento, quello di B è acceso); A non ha un indirizzo dedicato. Il
       // permesso di assistenza è quello di A (nessuno), non quello di B (valido).
       expect(propsOf<{ initialEnabled: boolean; selfRegistrationApplies: boolean }>(await TenantSettingsPage()))
-        .toEqual({ initialEnabled: false, canManageSettings: true, selfRegistrationApplies: false, support: { until: null, inProgress: false, locked: false } })
+        .toEqual({ initialEnabled: false, canManageSettings: true, selfRegistrationApplies: false, support: { until: null, exportAllowed: false, inProgress: false, locked: false } })
     },
   },
   'app/(protected)/(admin)/admin/theme/page.tsx#default': {

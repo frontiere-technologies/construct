@@ -117,7 +117,7 @@ export type PlatformTenantDetail = {
   hosts: { host: string; isPrimary: boolean }[]
   admins: PlatformTenantAdmin[]
   /** Lo stato del permesso di assistenza (MT5-DEC-6): la scadenza, se vale. Chi l'ha concesso resta del tenant (MT5-OK-2). */
-  support: { until: string | null }
+  support: { until: string | null; exportAllowed: boolean }
 }
 
 /**
@@ -159,7 +159,7 @@ export async function getTenantForPlatform(tenantId: number): Promise<PlatformTe
     }
 
     // Il modello non ha bisogno del permesso (MT5-DEC-11): la scheda lo dice da sé.
-    const consent = row.isTemplate ? { until: null } : await readSupportConsent(tx)
+    const consent = row.isTemplate ? { until: null, exportAllowed: false } : await readSupportConsent(tx)
 
     return {
       id: row.id,
@@ -171,7 +171,7 @@ export async function getTenantForPlatform(tenantId: number): Promise<PlatformTe
       createdAt: new Date(row.createdAt).toISOString(),
       hosts,
       admins,
-      support: { until: consent.until },
+      support: { until: consent.until, exportAllowed: consent.exportAllowed },
     }
   }, tenantKey)
 }

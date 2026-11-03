@@ -396,7 +396,7 @@ describeIntegration('support access only with the tenant consent (MT5-DEC-10, MT
 
     await signIn(platformAdmin)
     // La scheda della console mostra lo stato del permesso, e nient'altro di chi l'ha concesso (MT5-OK-2).
-    expect((await getTenantForPlatform(Number(tenant)))?.support).toEqual({ until: granted.until })
+    expect((await getTenantForPlatform(Number(tenant)))?.support).toEqual({ until: granted.until, exportAllowed: false })
     expect(await startSupport(Number(tenant), 'verifica di un menu')).toEqual({ state: 'support' })
     const system = await withTenant(tenant, tx => getSystemRoleIds(tx))
     expect(mocks.token).toMatchObject({

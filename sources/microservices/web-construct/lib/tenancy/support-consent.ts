@@ -24,12 +24,12 @@ type ConsentTx = TenantTx | PlatformAuditTx
  * l'ha concesso (id dell'account). È tutto ciò che la console può sapere del tenant oltre ai suoi
  * dati (MT5-OK-2): chi l'ha concesso non esce dalla scheda della console.
  */
-export async function readSupportConsent(tx: ConsentTx): Promise<{ until: string | null; grantedBy: string | null }> {
-  const [row] = await tx.execute<{ until: string | null; granted_by: string | null }>(sql`
-    select ${isoTimestamp(sql`s.support_until`)} as until, s.support_granted_by::text as granted_by
+export async function readSupportConsent(tx: ConsentTx): Promise<{ until: string | null; grantedBy: string | null; exportAllowed: boolean }> {
+  const [row] = await tx.execute<{ until: string | null; granted_by: string | null; export_allowed: boolean }>(sql`
+    select ${isoTimestamp(sql`s.support_until`)} as until, s.support_granted_by::text as granted_by, s.support_export_allowed as export_allowed
     from public.tenant_settings s
     where s.id_tenant = app_private.current_tenant_id() and s.support_until > now()`)
-  return { until: row?.until ?? null, grantedBy: row?.granted_by ?? null }
+  return { until: row?.until ?? null, grantedBy: row?.granted_by ?? null, exportAllowed: row?.export_allowed === true }
 }
 
 /**
@@ -94,6 +94,8 @@ export interface SupportAccess {
   /** La scadenza del permesso se vale ancora (mai per il modello, che non ne ha bisogno). */
   until: string | null
   consentValid: boolean
+  /** Estensione distinta: vale solo insieme al consenso e a un ingresso aperto. */
+  exportAllowed: boolean
   /** L'attributo dell'account e l'account attivo. */
   platformAdmin: boolean
   accountActive: boolean
@@ -119,6 +121,7 @@ type AccessRow = {
   tenant_active: boolean
   until: string | null
   consent_valid: boolean
+  export_allowed: boolean
   platform_admin: boolean
   account_active: boolean
   main_address: boolean
@@ -168,6 +171,7 @@ export async function selectSupportAccess(
       t.status = 'active' as tenant_active,
       ${isoTimestamp(sql`s.support_until`)} as until,
       coalesce(s.support_until > now(), false) as consent_valid,
+      coalesce(s.support_export_allowed and s.support_until > now(), false) as export_allowed,
       coalesce((select u.is_platform_admin from public.users u where u.id = ${userId}::uuid), false) as platform_admin,
       coalesce((select u.id_user_status = ${ACTIVE_USER_STATUS} from public.users u where u.id = ${userId}::uuid), false) as account_active,
       not exists (select 1 from public.tenant_host h where h.host = ${host}::text) as main_address,
@@ -189,6 +193,7 @@ export async function selectSupportAccess(
     tenantActive: row.tenant_active,
     until: row.is_template ? null : (row.consent_valid ? row.until : null),
     consentValid: row.consent_valid,
+    exportAllowed: row.export_allowed,
     platformAdmin: row.platform_admin && row.account_active,
     accountActive: row.account_active,
     mainAddress: row.main_address,

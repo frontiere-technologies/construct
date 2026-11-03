@@ -115,6 +115,7 @@ export const tenantSettings = pgTable('tenant_settings', {
   supportUntil: timestamp('support_until', { withTimezone: true, mode: 'string' }),
   supportGrantedBy: uuid('support_granted_by').references(() => users.id, { onDelete: 'set null' }),
   supportGrantedAt: timestamp('support_granted_at', { withTimezone: true, mode: 'string' }),
+  supportExportAllowed: boolean('support_export_allowed').notNull().default(false),
 })
 
 /**

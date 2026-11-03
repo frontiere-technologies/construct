@@ -15,6 +15,8 @@ type SaveStatus = 'idle' | 'success' | 'error'
 export interface TenantSupportState {
   /** La scadenza, se il permesso vale. */
   until: string | null
+  /** Stato salvato dell’estensione: ogni nuovo consenso richiede una scelta esplicita. */
+  exportAllowed: boolean
   /** C'è un'assistenza in corso (un'indicazione dal registro del tenant). */
   inProgress: boolean
   /** Chi guarda è la piattaforma in assistenza: vede il permesso, non lo cambia (MT5-DEC-12). */
@@ -109,6 +111,8 @@ function SupportConsent({ initial }: { initial: TenantSupportState }) {
   const { t, fmt } = useI18n()
   const [until, setUntil] = useState(initial.until)
   const [inProgress, setInProgress] = useState(initial.inProgress)
+  const [exportAllowed, setExportAllowed] = useState(initial.exportAllowed)
+  const [allowExport, setAllowExport] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
 
@@ -118,8 +122,8 @@ function SupportConsent({ initial }: { initial: TenantSupportState }) {
     try {
       const next = await change()
       setUntil(next)
-      // Una revoca fa uscire la piattaforma alla richiesta successiva.
-      if (next === null) setInProgress(false)
+      // Revoca e rinnovo chiudono gli ingressi del consenso precedente.
+      setInProgress(false)
     } catch {
       setFailed(true)
     } finally {
@@ -127,8 +131,18 @@ function SupportConsent({ initial }: { initial: TenantSupportState }) {
     }
   }
 
-  const grant = (duration: SupportDuration) => run(async () => (await grantSupportConsent(duration)).until)
-  const revoke = () => run(async () => { await revokeSupportConsent(); return null })
+  const grant = (duration: SupportDuration) => run(async () => {
+    const result = await grantSupportConsent(duration, { allowExport })
+    setExportAllowed(allowExport)
+    setAllowExport(false)
+    return result.until
+  })
+  const revoke = () => run(async () => {
+    await revokeSupportConsent()
+    setExportAllowed(false)
+    setAllowExport(false)
+    return null
+  })
 
   return (
     <section className="mt-8 space-y-4">
@@ -146,6 +160,18 @@ function SupportConsent({ initial }: { initial: TenantSupportState }) {
           </div>
         )}
       </SettingsRow>
+      {!initial.locked && (
+        <SettingsRow label={t('tenancy.support.allow_export')} hint={t('tenancy.support.allow_export_hint')}>
+          <input
+            type="checkbox"
+            aria-label={t('tenancy.support.allow_export')}
+            checked={allowExport}
+            disabled={busy}
+            onChange={event => setAllowExport(event.target.checked)}
+            className="size-4 accent-primary"
+          />
+        </SettingsRow>
+      )}
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <p data-testid="tenant-support-state" className="text-foreground">
           {until ? t('tenancy.support.granted_until', { time: fmt.dateTime(until) }) : t('tenancy.support.not_granted')}
@@ -154,6 +180,7 @@ function SupportConsent({ initial }: { initial: TenantSupportState }) {
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void revoke()}>{t('tenancy.support.revoke')}</Button>
         )}
       </div>
+      {until && <p className="text-sm text-muted-foreground">{t(exportAllowed ? 'tenancy.support.export_allowed' : 'tenancy.support.export_not_allowed')}</p>}
       {until && inProgress && <p className="text-sm text-warning-muted-foreground">{t('tenancy.support.in_progress')}</p>}
       {failed && <p role="alert" className="text-sm text-destructive-muted-foreground">{t('tenancy.support.error')}</p>}
     </section>

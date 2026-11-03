@@ -16,7 +16,7 @@ export default async function TenantSettingsPage() {
     selfRegistrationApplies(actor.tenantId),
     withTenant(actor.tenantId, async tx => {
       const consent = await readSupportConsent(tx)
-      return { until: consent.until, inProgress: await readSupportInProgress(tx) }
+      return { until: consent.until, exportAllowed: consent.exportAllowed, inProgress: await readSupportInProgress(tx) }
     }),
   ])
   return (

@@ -47,7 +47,7 @@ const ACME: PlatformTenantDetail = {
   id: 7, slug: 'acme', name: 'Acme', status: 'active', isTemplate: false, isDefault: false, createdAt: '2026-07-01T10:00:00Z',
   hosts: [{ host: 'acme.example.test', isPrimary: true }, { host: 'acme2.example.test', isPrimary: false }],
   admins: [{ userId: 'u-1', email: 'capo@acme.test', hasPassword: true }, { userId: 'u-2', email: 'nuovo@acme.test', hasPassword: false }],
-  support: { until: null },
+  support: { until: null, exportAllowed: false },
 }
 
 let root: Root | undefined
@@ -347,7 +347,7 @@ describe('TenantDetail: the template', () => {
 
 // Pezzo 5a, Task 9 (MT5-DEC-6, MT5-DEC-10, MT5-DEC-11): lo stato del permesso e l'ingresso di assistenza.
 describe('TenantDetail: support', () => {
-  const CONSENT = { ...ACME, support: { until: '2026-10-28T10:00:00.000Z' } }
+  const CONSENT = { ...ACME, support: { until: '2026-10-28T10:00:00.000Z', exportAllowed: false } }
   const supportSection = () => sectionOf('platform.tenant.detail.support')
 
   it('without consent says so, and the enter button is off with the reason written in the page', () => {

@@ -31,11 +31,13 @@ function refuseDuringSupport(actor: Actor): void {
  * l'orologio del database. Un permesso nuovo sostituisce il precedente, anche se valeva ancora più
  * a lungo: vale l'ultima scelta. Restituisce la scadenza scritta.
  */
-export async function grantSupportConsent(duration: SupportDuration): Promise<{ ok: true; until: string }> {
+export async function grantSupportConsent(duration: SupportDuration, options?: { allowExport: boolean }): Promise<{ ok: true; until: string }> {
   const actor = await requireSupportConsentManager()
   refuseDuringSupport(actor)
   // Un'azione server riceve quello che manda il client, non quello che dice il tipo.
   if (!isSupportDuration(duration)) throw new Error('Durata non valida')
+  if (options !== undefined && typeof options?.allowExport !== 'boolean') throw new Error('Consenso esportazione non valido')
+  const allowExport = options?.allowExport ?? false
   const interval = SUPPORT_DURATION_INTERVAL[duration]
 
   return withTenant(actor.tenantId, async tx => {
@@ -43,6 +45,7 @@ export async function grantSupportConsent(duration: SupportDuration): Promise<{ 
       supportUntil: sql`now() + ${interval}::interval`,
       supportGrantedBy: actor.userId,
       supportGrantedAt: sql`now()`,
+      supportExportAllowed: allowExport,
       updatedAt: sql`now()`,
     }
     const [row] = await tx.insert(tenantSettings)
@@ -54,7 +57,7 @@ export async function grantSupportConsent(duration: SupportDuration): Promise<{ 
     if (until === null) throw new Error('support consent not written')
     await recordTenantAudit(tx, auditActorOf(actor), {
       operation: 'support.grant', objectType: 'tenant_settings', objectId: actor.tenantId,
-      details: { duration, until },
+      details: { duration, until, allowExport },
     })
     return { ok: true as const, until }
   })
@@ -70,7 +73,7 @@ export async function revokeSupportConsent(): Promise<{ ok: true }> {
 
   await withTenant(actor.tenantId, async tx => {
     const revoked = await tx.update(tenantSettings)
-      .set({ supportUntil: null, updatedAt: sql`now()` })
+      .set({ supportUntil: null, supportExportAllowed: false, updatedAt: sql`now()` })
       .where(and(isNotNull(tenantSettings.supportUntil), gt(tenantSettings.supportUntil, sql`now()`)))
       .returning({ idTenant: tenantSettings.idTenant })
     if (revoked.length === 0) return
