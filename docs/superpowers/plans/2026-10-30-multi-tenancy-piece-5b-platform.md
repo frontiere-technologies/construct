@@ -14,7 +14,7 @@
 
 T01–T06 realizzano catalogo, menu, autorizzazione, gestione e limiti. T07 realizza la modalità singola. T08 collega i controlli alle schermate. T09–T12 completano consenso ed esportazione, ripristino ed eliminazione; dipendono dai dati e dai vincoli dei primi task. T13 chiude verifiche, guida e rilascio. Un solo piano mantiene coerenti le interfacce condivise; ogni task termina con un risultato verificabile e un commit locale.
 
-Stato al 2026-11-02: T01–T07 realizzati e approvati con revisione indipendente; prossimoT08, T08–T13 aperti. Lo sviluppo resta alla 0063 e non è stato attivato il 5b. Le sole attività davvero completate e verificate sono spuntate sotto; i criteri complessivi della specifica rimangono aperti fino alle prove finali.
+Stato al 2026-11-02: T01–T08 realizzati e approvati con revisione indipendente; prossimoT09, T09–T13 aperti. Lo sviluppo resta alla 0063 e non è stato attivato il 5b. Le sole attività davvero completate e verificate sono spuntate sotto; i criteri complessivi della specifica rimangono aperti fino alle prove finali.
 
 ## Vincoli globali
 
@@ -292,13 +292,13 @@ Decisione di esecuzione T07 (registro, Ruling 19): il ramo ready single rivalida
 
 ## Task 8 — T08 — Schermata concessioni e limiti, editor del tenant
 
-- [ ] ID=MT5B-T08, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Gestione comprensibile delle concessioni, Fix description=Collegare T05/T06 alle schermate e distinguere sospensione da cancellazione; copre MT5B-OK-2/3/7.
+- [✅] ID=MT5B-T08, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Gestione comprensibile delle concessioni, Fix description=Collegare T05/T06 alle schermate e distinguere sospensione da cancellazione; copre MT5B-OK-2/3/7.
 
 **File:** C `W/components/platform/TenantPolicyEditor.tsx`, `W/components/platform/TenantGrantPurgeDialog.tsx`, relativi test; M `W/components/platform/TenantDetail.tsx`, `W/app/platform/tenants/[tenantId]/page.tsx`, `W/components/rbac/roles/RoleDetailClient.tsx`, `W/components/rbac/PermissionsTree.tsx`, `W/components/rbac/functionalities/FunctionalityForm.tsx`, `W/components/rbac/NavigationTree.tsx`, `W/app/(protected)/(admin)/admin/tenant-settings/page.tsx`; C migrazione `D/migrations/0068_tenant_policy_ui.sql`; T `sources/tests/e2e/test_tenant_policies.py`.
 
 **Interfacce:** `TenantPolicyEditor({ tenantId, initialPolicy, usage }: { tenantId: number; initialPolicy: TenantPolicySnapshot; usage: TenantUsage })`; `TenantGrantPurgeDialog({ tenantId, preview, onComplete }: { tenantId: number; preview: PurgePreview; onComplete: () => void })`. Riutilizzare le azioni T05 e i tipi T01/T06, nessuna seconda regola client di autorizzazione.
 
-- [ ] T08.1 Scrivere test delle opzioni Eredita/Consenti/Nega, provenienza del valore, dipendenze, assegnazioni sospese, avviso di quota inferiore all'uso e conflitto di revisione. Il click «Salva» non chiama mai la pulizia. La conferma di pulizia mostra numero di ruoli e singole assegnazioni.
+- [✅] T08.1 Scrivere test delle opzioni Eredita/Consenti/Nega, provenienza del valore, dipendenze, assegnazioni sospese, avviso di quota inferiore all'uso e conflitto di revisione. Il click «Salva» non chiama mai la pulizia. La conferma di pulizia mostra numero di ruoli e singole assegnazioni.
 
 Nel test del componente con azioni sostituite e invocazione del salvataggio secondo i test React già presenti, le asserzioni di `it('save never purges role assignments')` sono:
 ```ts
@@ -306,11 +306,13 @@ expect(saveTenantPolicy).toHaveBeenCalledOnce()
 expect(purgeTenantGrants).not.toHaveBeenCalled()
 ```
 Ripetere lo stesso comportamento reale nel browser: una sospensione conserva il numero di assegnazioni prima/dopo «Salva».
-- [ ] T08.2 Eseguire i soli test dei nuovi componenti: falliscono prima dei componenti.
-- [ ] T08.3 Implementare componenti con primitive già presenti, controlli accessibili e traduzioni. Nei ruoli mostrare assegnazioni sospese revocabili e impedire nuove concessioni; nell'editor menu usare T03 per le aree disponibili. Il tasto per gestire il consenso rimane accessibile se la registrazione autonoma non è concessa. Nessun `--theme-*`, nessuna nuova griglia artigianale.
+- [✅] T08.2 Eseguire i soli test dei nuovi componenti: falliscono prima dei componenti.
+- [✅] T08.3 Implementare componenti con primitive già presenti, controlli accessibili e traduzioni. Nei ruoli mostrare assegnazioni sospese revocabili e impedire nuove concessioni; nell'editor menu usare T03 per le aree disponibili. Il tasto per gestire il consenso rimane accessibile se la registrazione autonoma non è concessa. Nessun `--theme-*`, nessuna nuova griglia artigianale.
 La pagina delle impostazioni usa `requireTenantSettingsPage` T04; la sezione registrazione autonoma verifica il permesso effettivo, quella consenso usa il flag dedicato e rifiuta le modifiche in assistenza. Nei test coprire sia persona delegata sia assistenza senza consentire auto-autorizzazione.
-- [ ] T08.4 Ripetere unità, poi integrazione mirata se cambia una porta e soltanto dopo avviare E2E contro la prova. Casi `test_suspend_restore_and_purge_grants` e `test_policy_conflict_and_quota_notice`; invocazione `uv run pytest sources/tests/e2e/test_tenant_policies.py`. Salvare immagini della verifica con dati sintetici. Non riusare il server localhost:3000 collegato allo sviluppo.
-- [ ] T08.5 Commit locale `feat(platform): expose tenant feature policies and limits`.
+Decisione di esecuzione T08 (registro, Ruling20): la0068 ancora bozza non distribuita/non committata può essere corretta per i difetti reali dei seed emersi prima del gate (placeholder e due etichette audit). Prima trial in rollback, poi ricostruzione coordinata della sola prova a server/test fermi; nessuna modifica manuale a checksum/storia,0001–0067 immutate. Non aggiungere0069 o rinumerare i task futuri per iterare questa bozza.
+
+- [✅] T08.4 Ripetere unità, poi integrazione mirata se cambia una porta e soltanto dopo avviare E2E contro la prova. Casi `test_suspend_restore_and_purge_grants` e `test_policy_conflict_and_quota_notice`; invocazione `uv run pytest sources/tests/e2e/test_tenant_policies.py`. Salvare immagini della verifica con dati sintetici. Non riusare il server localhost:3000 collegato allo sviluppo.
+- [✅] T08.5 Commit locale `feat(platform): expose tenant feature policies and limits`.
 
 ## Task 9 — T09 — Consenso esplicito all'esportazione
 
