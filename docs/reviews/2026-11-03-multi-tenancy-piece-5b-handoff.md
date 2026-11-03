@@ -1,6 +1,6 @@
 # Multi-tenancy 5b — stato e ripresa del 3 novembre 2026
 
-T01–T09 sono conclusi e approvati. Ultimi commit del codice: a7c4229 (schermate) ed ed04fd4 (area omessa nell’edit menu), entrambi rivisti con GPT-6.1/high. T09 approvato nel commit62bc73a,1700unità e109DBmirati verdi. ProssimoT10, T10–T13 aperti; prova0069, sviluppo0063 invariato. Il limite d’uso precedente è stato ripristinato dal proprietario; alla verifica del3novembre14:55 l’uso era consentito. Nessun reset o cambio di account/modello eseguito dall’assistente.
+T01–T09 sono conclusi e approvati. T09 nel commit62bc73a, con 1700 test unitari e 109 prove DB mirate superati; chiusura documentale81297a7. T10 è in corso presso /root/mt5b_t10_implementer: formato e prime prove presenti, servizio ancora da completare; T11–T13 non avviati. Prova0069, sviluppo0063 invariato. Alla verifica del 3 novembre alle15:32 l'uso era consentito (65% finestra breve,26% settimanale) e l'agente attivo: nessun blocco attuale dei crediti osservato. Nessun reset o cambio di account/modello eseguito dall’assistente.
 
 Area da riusare: /Users/mario.stefanutti/.codex/worktrees/multi-tenancy-piece-5b/construct, ramo feature/multi-tenancy-piece-5b. Nessun nuovo worktree necessario; checkout originale, stash e file del proprietario restano fuori dall’esecuzione.
 
@@ -35,4 +35,4 @@ Il segreto Auth.js di prova è stato inserito dal proprietario e la presenza non
 
 Stato T08 finale:1689unità,84integrazioni più20finali,2E2E e62mirati del fix verdi; modello peer e riesame GPT-6.1/high.0068approvata e applicata solo alla prova, server3001fermato. Rapporto task-8-report.md, review task-8-review.md e task-8-r1-review.md nell’area del piano. Per ripresa usare il task9 del piano, non le azioni storiche T07 sopra.
 
-T09 completato: nuova estensione di consenso defaultfalse e guardie fresche approvate; rapporto task-9-report.md/review task-9-review.md. Per la ripresa proseguire dal task10 del piano.
+T09 completato: nuova estensione di consenso defaultfalse e guardie fresche approvate; rapporto task-9-report.md/review task-9-review.md. Per la ripresa continuare lo stesso esecutore T10, BASE81297a7, con task-10-brief.md e task-10-context.md. Non avviare un secondo esecutore né rifare T01–T09. Ruling21 nel registro definisce l'esecutore DB export isolato e annullabile, da provare prima del servizio; il semplice end della connessione non è prova sufficiente. Le prime prove del formato sono parziali, non un'approvazione T10. Dopo implementazione serve revisione indipendente GPT-6.1/high.
