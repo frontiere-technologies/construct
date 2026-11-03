@@ -1,6 +1,6 @@
-# T07 — Rapporto conservato, revisione in corso
+# T07 — Rapporto conservato e revisione conclusa
 
-Copia del rapporto dell’esecutore al commit `5046512deb8a4ddaeddde840e0b40a17b8ca7451`. Implementazione e prove concluse; **la revisione indipendente non è ancora conclusa**. DONE nel rapporto non significa approvazione del gate. Base `dcfbabc44ccc264da7d391e9051b1039b8ae7f6b`; rapporto del revisore atteso `task-7-review.md`.
+T07 concluso e approvato dopo fix IPv6. Codice5046512 e fix0711843. Revisore e riesaminatore GPT-6.1/high secondo richiesta del proprietario: T07-I1 ADDRESSED, nessuna nuova rottura. Prove iniziali1659unità/31DBfinali e fix26mirati,lint/tipi0. Limiti finali complessivi e rumore preesistente restano al gateT13.
 
 # T07 — Modalità singola dell'installazione
 
@@ -111,3 +111,31 @@ Riletto diff di produzione, fixture e nuovi test; nessuna dipendenza, nessun any
 `5046512deb8a4ddaeddde840e0b40a17b8ca7451` — `feat(tenancy): add single-organization installation mode`.
 
 Commit uscita0,24file propri,621inserimenti/25rimozioni. Evidenza `logs/t07-commit.log`. Dopo il commit `git -c core.fsmonitor=false status --short` mostra soltanto i tre documenti del coordinatore già presenti: handoff, piano e ledger. Nessun altro file proprio sporco, nessuna migrazione modificata, nessun push/PR/merge. Nessun dubbio irrisolto; integrazione completa/E2E e prova browser dei processi distinti multi/single rimangono al gate T13 concordato.
+
+## Fix round1 — T07-I1 — confronto host canonico IPv6
+
+Review `task-7-review.md`, FIX_BASE `5046512deb8a4ddaeddde840e0b40a17b8ca7451`; HEAD di partenza del round `69a8ff9` (checkpoint documentale). Unico finding produttivo trattato: T07-I1, Important. T07-M1 è rumore preesistente differito, non modificato.
+
+Causa verificata leggendo e riproducendo il percorso reale: con AUTH_URL `http://[::1]:3000` e Host `[::1]:3000`, hostFromHeaders restituisce correttamente `::1`. isCanonicalTenantHost normalizzava una seconda volta questa forma, ottenendo null, e il proxy rifiutava con404. La regressione attraversa gli helper reali hostFromHeaders e isCanonicalTenantHost e il proxy reale; soltanto Auth.js e il confine DB restano sostituiti, senza accessi a database.
+
+Fix minimo: confrontare prima anche l'uguaglianza esatta con la forma canonica già normalizzata, mantenendo il fallback normalizeHost per gli input raw. Il valore canonico deriva sempre dalla URL configurata e validata, quindi l'uguaglianza diretta non ammette valori malformati. Nessuna modifica al normalizzatore request-host.ts, al predicato SQL, alle firme, alla modalità multi o alla DDL.
+
+Cronologia e prove reali, comandi dal microservizio:
+
+| Fase | Comando | Risultato / uscita | Log |
+|---|---|---|---|
+| ROSSO prima del fix | `npm test -- lib/tenancy/single-tenant-proxy.test.ts` | 1:2falliti/16passati. Helper false anziché true per `::1`; proxy404 anziché normale passaggio all'autenticazione | logs/t07-r1-red.log |
+| VERDE dopo il fix | `npm test -- lib/tenancy/single-tenant-proxy.test.ts lib/tenancy/request-host.test.ts` | 0:26/26 (proxy18, request-host8), nessun errore o avviso | logs/t07-r1-green.log |
+| Lint mirato | `npx eslint lib/tenancy/host-tenants.ts lib/tenancy/single-tenant-proxy.test.ts` | 0: output vuoto | logs/t07-r1-lint.log |
+| Tipi | `npm run typecheck` | 0:tsc --noEmit, nessun errore | logs/t07-r1-types.log |
+
+Copertura aggiunta: confronto di `::1` prodotto dal vero header resolver; origine/Host IPv6 canonici nel vero proxy; rifiuto di `[::2]:3000`, `[:::1]:3000`, `[::1]/path`, `user@[::1]`, `[::1]:not-a-port` in entrambe le parti della pipeline; ammissione multi invariata su IPv6 non canonico. Non rieseguita suite completa o integrazioni; nessun DB, browser o servizio avviato per il round.
+
+Autolettura: diff circoscritto ai due file sottostanti; nessuna dipendenza e nessun indebolimento della validazione o dei tipi. `git -c core.fsmonitor=false diff --check` uscita0. File propri espliciti per il commit del round:
+
+- sources/microservices/web-construct/lib/tenancy/host-tenants.ts
+- sources/microservices/web-construct/lib/tenancy/single-tenant-proxy.test.ts
+
+Rapporto/log restano nell'area locale ignorata .superpowers; tutti i documenti sporchi del coordinatore esclusi. Nessun dubbio irrisolto per T07-I1.
+
+Commit del round: `0711843082db3e3fca1c409a4c7e888b4d86bf55` — `fix(tenancy): accept normalized canonical IPv6 hosts` (uscita0;2file,34inserimenti/1rimozione). Evidenza `logs/t07-r1-commit.log`. Dopo il commit restano sporchi soltanto i tre documenti del coordinatore già esclusi. Stato del fix: DONE, pronto per il riesame previsto; nessun push/PR/merge.

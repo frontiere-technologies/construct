@@ -14,9 +14,11 @@
 
 T01–T06 realizzano catalogo, menu, autorizzazione, gestione e limiti. T07 realizza la modalità singola. T08 collega i controlli alle schermate. T09–T12 completano consenso ed esportazione, ripristino ed eliminazione; dipendono dai dati e dai vincoli dei primi task. T13 chiude verifiche, guida e rilascio. Un solo piano mantiene coerenti le interfacce condivise; ogni task termina con un risultato verificabile e un commit locale.
 
-Stato al 2026-11-02: T01–T06 realizzati e approvati con revisione indipendente; T07 in corso, T08–T13 aperti. Lo sviluppo resta alla 0063 e non è stato attivato il 5b. Le sole attività davvero completate e verificate sono spuntate sotto; i criteri complessivi della specifica rimangono aperti fino alle prove finali.
+Stato al 2026-11-02: T01–T07 realizzati e approvati con revisione indipendente; prossimoT08, T08–T13 aperti. Lo sviluppo resta alla 0063 e non è stato attivato il 5b. Le sole attività davvero completate e verificate sono spuntate sotto; i criteri complessivi della specifica rimangono aperti fino alle prove finali.
 
 ## Vincoli globali
+
+Preferenza esplicita del proprietario del 3novembre: tutti i revisori, compresi riesami e revisione finale, usano GPT-6.1 con ragionamento alto (gpt-6.1-sol/high). Non usare GPT-6 Astra Alto per le revisioni.
 
 RLS forzata, chiavi composte, contesto di tenant locale alla transazione, funzioni `security invoker`, connessione di piattaforma separata e registro nella transazione della modifica sono vincoli di ogni task. Nessuna policy per persona, nessuna funzione `security definer`, nessun privilegio di operatore nel processo web.
 
@@ -263,13 +265,13 @@ Decisione di esecuzione T06 (registro, Ruling 16): READ COMMITTED è richiesto p
 
 ## Task 7 — T07 — Modalità dell'installazione con una sola organizzazione
 
-- [ ] ID=MT5B-T07, Severity=High, Complexity=Medium, Priority=P1, Estimate=days, Title=Modalità singola senza privilegi impliciti, Fix description=Disabilitare davvero gli ingressi multi-tenant mantenendo default e isolamento; copre MT5B-OK-5 e RF-5.
+- [✅] ID=MT5B-T07, Severity=High, Complexity=Medium, Priority=P1, Estimate=days, Title=Modalità singola senza privilegi impliciti, Fix description=Disabilitare davvero gli ingressi multi-tenant mantenendo default e isolamento; copre MT5B-OK-5 e RF-5.
 
 **File:** C `W/lib/tenancy/tenancy-mode.ts`, relativi test unitari/d'integrazione; M `W/lib/tenancy/{host-tenants,token-tenant,tenant-selection,tenant-actions}.ts`, `W/lib/rbac/auth-guard.ts`, `W/lib/platform/platform-access.ts`, `W/components/{Sidebar,TenantSwitcher}.tsx`, `W/app/select-tenant/page.tsx`, `W/proxy.ts`, `W/.env.template`, `sources/devops/k8s/base/configmap.yaml`, `sources/devops/env-contract.test.mjs`; T `W/lib/tenancy/single-tenant-mode.integration.test.ts`.
 
 **Interfacce:** `readTenancyMode(): 'multi' | 'single'` legge solo `CONSTRUCT_TENANCY_MODE`, predefinito `multi`; valori diversi fanno fallire la configurazione esplicitamente. `isMultiTenantEnabled(): boolean`. Nessun valore dal client.
 
-- [ ] T07.1 Scrivere test di token già su B e in assistenza, URL dedicato, account senza membership default, amministratore di piattaforma senza membership e ritorno a multi. In single tutte le guardie della piattaforma/selector rifiutano anche richieste dirette; la modalità non crea righe in `tenant_membership`.
+- [✅] T07.1 Scrivere test di token già su B e in assistenza, URL dedicato, account senza membership default, amministratore di piattaforma senza membership e ritorno a multi. In single tutte le guardie della piattaforma/selector rifiutano anche richieste dirette; la modalità non crea righe in `tenant_membership`.
 
 ```ts
 it('rejects an unknown installation mode instead of silently enabling tenants', () => {
@@ -277,16 +279,16 @@ it('rejects an unknown installation mode instead of silently enabling tenants', 
   expect(() => readTenancyMode()).toThrow()
 })
 ```
-- [ ] T07.2 Eseguire unità e integrazione del task; fallimento atteso prima della nuova modalità.
-- [ ] T07.3 Implementare risoluzione a default e controllo dell'origine canonica; prima del vecchio ramo che assicura la membership predefinita all'accesso, applicare il divieto di crearla automaticamente in single. Eliminare il ripiego verso B dai percorsi di token e host; i token non validi richiedono nuovo accesso o rimangono senza tenant. Nascondere selettore/console e chiudere guardie e azioni, incluse quelle dei cataloghi globali. Lasciare disponibili i comandi operativi con i loro controlli.
+- [✅] T07.2 Eseguire unità e integrazione del task; fallimento atteso prima della nuova modalità.
+- [✅] T07.3 Implementare risoluzione a default e controllo dell'origine canonica; prima del vecchio ramo che assicura la membership predefinita all'accesso, applicare il divieto di crearla automaticamente in single. Eliminare il ripiego verso B dai percorsi di token e host; i token non validi richiedono nuovo accesso o rimangono senza tenant. Nascondere selettore/console e chiudere guardie e azioni, incluse quelle dei cataloghi globali. Lasciare disponibili i comandi operativi con i loro controlli.
 Decisione di esecuzione T07 (registro, Ruling 17): in single non si assicura automaticamente neppure il ruolo REGISTERED a un membro esistente. Nessun privilegio implicito; righe esistenti invariate, multi conserva il comportamento precedente. Il file membership.ts e prove dei due percorsi canonici entrano nel task. Prima dell’attivazione gli accessi/ruoli necessari vanno predisposti esplicitamente, come documenterà T13.
 
 Decisione di esecuzione T07 (registro, Ruling 18): refreshTenant è ricalcolo essenziale autenticato e rimane disponibile anche in single, senza input di scelta e senza scrittura lastTenantId. «Riprova» usa solo il resolver single verso default/host canonico, con membership/ruoli preesistenti; nessun token B/assistenza o creazione implicita. chooseTenant, selettore e console restano chiusi.
 
 Decisione di esecuzione T07 (registro, Ruling 19): il ramo ready single rivalida default/host canonico nello snapshot di autorizzazione già accorpato, senza enumerazione dei tenant o lookup aggiuntivo a ogni richiesta. Predicato multi invariato, budget conservato e misurato; nessun caching o privilegio implicito. Sono ammessi modifica circoscritta dello snapshot e test dei due modi.
 
-- [ ] T07.4 Ripetere test e contratto variabili; verificare le stesse policy RLS e connessioni prima/dopo. Le righe di B sono invariate.
-- [ ] T07.5 Commit locale `feat(tenancy): add single-organization installation mode`.
+- [✅] T07.4 Ripetere test e contratto variabili; verificare le stesse policy RLS e connessioni prima/dopo. Le righe di B sono invariate.
+- [✅] T07.5 Commit locale `feat(tenancy): add single-organization installation mode`.
 
 ## Task 8 — T08 — Schermata concessioni e limiti, editor del tenant
 
