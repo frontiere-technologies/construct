@@ -89,7 +89,7 @@ function projection(fields: Record<string, FieldSchema>, isAudit = false): SQL {
     const field = inner(schema)
     const value = isAudit && name === 'details' ? auditDetails()
       : field['x-bigint'] ? sql`${column}::text`
-        : field.format === 'date-time' ? sql`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`
+        : field.format === 'date-time' ? sql`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
           : column
     return [sql`${name}::text`, value]
   })
@@ -128,7 +128,7 @@ const identitySource = sql`
   select ref.id,
     case when m.user_id is not null then u.email else
       (select e.actor_email from public.tenant_audit_event e where e.actor_user_id = ref.id order by e.id desc limit 1) end as email,
-    u.name, u.first_name, u.last_name, u.username
+    u.first_name, u.last_name
   from (
     select user_id as id from public.tenant_membership
     union select support_granted_by from public.tenant_settings where support_granted_by is not null

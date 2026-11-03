@@ -29,12 +29,10 @@
         "properties": {
           "id": {"type":"string","format":"uuid"},
           "email": {"anyOf":[{"type":"string"},{"type":"null"}]},
-          "name": {"anyOf":[{"type":"string"},{"type":"null"}]},
           "first_name": {"anyOf":[{"type":"string"},{"type":"null"}]},
-          "last_name": {"anyOf":[{"type":"string"},{"type":"null"}]},
-          "username": {"anyOf":[{"type":"string"},{"type":"null"}]}
+          "last_name": {"anyOf":[{"type":"string"},{"type":"null"}]}
         },
-        "required": ["id","email","name","first_name","last_name","username"]
+        "required": ["id","email","first_name","last_name"]
       }
     },
     "tables": {
@@ -1737,7 +1735,12 @@
     "permission": {"source":"permission","referenceOnly":true,"key":"id_permission","meaning":"resolve by stable code; never import the catalog"},
     "role_type": {"source":"role_type","referenceOnly":true,"key":"id_role_type"},
     "functionality_type": {"source":"functionality_type","referenceOnly":true,"key":"id_functionality_type"},
-    "app_language": {"source":"app_language","referenceOnly":true,"key":"code"},
+    "app_language": {
+      "source":"app_language",
+      "referenceOnly":true,
+      "key":"code",
+      "meaning":"Exact case-sensitive union of menu tag language codes and item translation keys, including historical uppercase spellings. Resolve references against the target catalog during restore."
+    },
     "hosts": {"source":"tenant_host","metadataOnly":true,"meaning":"never activate or attach source hosts on restore"},
     "audit": {"meaning":"historical provenance is not authorization; restore forces origin=restored"},
     "policy": {"meaning":"preserve limits and disabled assignments as data; restore does not trust them as authority"}

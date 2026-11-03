@@ -14,7 +14,7 @@ export function validArchive() {
   return {
     formatVersion: 1, schemaVersion: '0070', catalogVersion: 1, exportedAt: at,
     sourceTenant: { id: '42', slug: 'sample-a', name: 'Sample A', status: 'active', created_at: at, updated_at: at },
-    identities: [{ id: person, email: 'person@example.test', name: 'Sample Person', first_name: 'Sample', last_name: 'Person', username: null }],
+    identities: [{ id: person, email: 'person@example.test', first_name: 'Sample', last_name: 'Person' }],
     tables: {
       role: [{ id_tenant: '42', id_role: '9007199254740993', id_role_type: '2', description: 'Sample role', system_key: null, date_ins: at, date_mod: null }],
       user_role: [{ id_tenant: '42', user_id: person, id_role: '9007199254740993', date_ins: at }],
@@ -33,7 +33,7 @@ export function validArchive() {
     counts: { role: 1, user_role: 1, role_permission: 1, menu_entry: 1, menu_entry_tag: 1, role_functionality: 1, app_theme: 1, tenant_membership: 1, tenant_settings: 1, tenant_audit_event: 1, tenant_platform_policy: 1, tenant_area_entitlement: 1, tenant_entitlement: 1 },
     globalReferences: {
       permission: [{ id_permission: '1', code: 'read-users' }], role_type: [{ id_role_type: '2' }],
-      functionality_type: [{ id_functionality_type: '3' }], app_language: [{ code: 'en' }],
+      functionality_type: [{ id_functionality_type: '3' }], app_language: [{ code: 'EN' }, { code: 'en' }],
     },
     hosts: [{ host: 'a.example.test', is_primary: true, created_at: at }],
   }
@@ -53,9 +53,18 @@ describe('tenant archive format v1', () => {
     expect(() => parseTenantArchive({ ...archive, isPlatformAdmin: true })).toThrow()
   })
 
-  it.each(['password_hash', 'token', 'auth_provider', 'is_platform_admin', 'last_tenant_id'])('rejects identity field %s', field => {
+  it.each(['password_hash', 'token', 'auth_provider', 'is_platform_admin', 'last_tenant_id', 'name', 'username'])('rejects identity field %s', field => {
     const archive = validArchive()
     expect(() => parseTenantArchive({ ...archive, identities: [{ ...archive.identities[0], [field]: 'forbidden' }] })).toThrow()
+  })
+
+  it.each([
+    ['missing', [{ code: 'en' }]],
+    ['extra', [{ code: 'EN' }, { code: 'en' }, { code: 'it' }]],
+    ['duplicate', [{ code: 'EN' }, { code: 'en' }, { code: 'EN' }]],
+  ])('rejects %s language references with historical uppercase and lowercase present', (_reason, appLanguage) => {
+    const archive = validArchive()
+    expect(() => parseTenantArchive({ ...archive, globalReferences: { ...archive.globalReferences, app_language: appLanguage } })).toThrow(/language reference/)
   })
 
   it('rejects fields, unknown tables, codes, numbers for bigint and non-JSON values', () => {

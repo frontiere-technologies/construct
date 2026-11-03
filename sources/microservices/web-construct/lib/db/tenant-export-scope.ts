@@ -12,7 +12,12 @@ interface ExportScope {
 }
 
 const scopes = new AsyncLocalStorage<ExportScope>()
-let executor: postgres.Sql | undefined
+interface ExportExecutor {
+  client: postgres.Sql
+  waitForClose: () => Promise<void>
+}
+
+let executor: ExportExecutor | undefined
 let occupied = false
 const queue: { signal: AbortSignal; admit: () => void }[] = []
 
@@ -76,32 +81,45 @@ function admit(scope: ExportScope): Promise<() => void> {
 export async function closeTenantExportExecutor(): Promise<void> {
   const current = executor
   executor = undefined
-  await current?.end({ timeout: 0 })
+  await current?.client.end({ timeout: 0 })
+}
+
+function createExecutor(): ExportExecutor {
+  let notifyClosed: (() => void) | undefined
+  const client = postgres(resolveDatabaseUrl(process.env), {
+    max: 1, prepare: false, connect_timeout: 5,
+    onclose: () => {
+      notifyClosed?.()
+      notifyClosed = undefined
+    },
+  })
+  // Apply Drizzle's codecs to the real connection as well as to its transaction adapter.
+  drizzle(client)
+  return { client, waitForClose: () => new Promise(resolve => { notifyClosed = resolve }) }
 }
 
 async function begin<T>(scope: ExportScope, work: (client: postgres.TransactionSql) => Promise<T>): Promise<T> {
   const release = await admit(scope)
   let reserved: postgres.ReservedSql | undefined
-  let reserving = true
+  let reservation: ExportExecutor | undefined
   let closing: Promise<void> | undefined
   const active = new Set<PromiseLike<unknown> & { cancel(): void }>()
   const abort = () => {
     for (const query of active) query.cancel()
-    // reserve() has no cancellation API. There is no server query yet; closing this sole executor
-    // settles allocation. Once reserved, wait for cancellation/rollback before discarding it.
-    if (reserving) closing = closeTenantExportExecutor()
+    if (reservation) {
+      // Forced end settles the driver's reserve waiter, but may resolve before a connecting
+      // socket closes. Subscribe to this pool's actual close before ending it. Only the one
+      // in-flight reserve has a close waiter; a settled reserve takes the normal cleanup path.
+      const closed = reservation.waitForClose()
+      closing = closeTenantExportExecutor().finally(() => closed)
+    }
   }
   scope.controller.signal.addEventListener('abort', abort)
   try {
     check(scope)
-    if (!executor) {
-      executor = postgres(resolveDatabaseUrl(process.env), { max: 1, prepare: false, connect_timeout: 5 })
-      // Drizzle configures codecs on the client it receives. Apply those to the real executor
-      // as well as the transaction adapter, or the driver serializes Drizzle's JSON a second time.
-      drizzle(executor)
-    }
-    reserved = await executor.reserve()
-    reserving = false
+    const pool = executor ??= createExecutor()
+    reservation = pool
+    try { reserved = await pool.client.reserve() } finally { reservation = undefined }
     check(scope)
     const connection = reserved
     const run = async (query: PromiseLike<unknown> & { cancel(): void }) => {

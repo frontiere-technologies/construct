@@ -37,8 +37,8 @@ async function seed(f: PolicyFixture) {
       select ${f.roleId}, id_permission from public.permission where code = 'read-users' on conflict do nothing`)
     await tx.execute(sql`insert into public.role_functionality (id_role, id_menu_entry) values (${f.roleId}, ${f.menuEntryId})`)
     await tx.execute(sql`insert into public.menu_entry_tag (id_menu_entry, tag_lan, tag) values (${f.menuEntryId}, 'en', 'export')`)
-    await tx.execute(sql`insert into public.tenant_audit_event (actor_user_id, actor_email, actor_kind, operation, object_type, object_id, details)
-      values (${f.adminId}, 'sample@example.test', 'person', 'role.create', 'role', ${String(f.roleId)},
+    await tx.execute(sql`insert into public.tenant_audit_event (actor_user_id, actor_email, actor_kind, operation, object_type, object_id, occurred_at, details)
+      values (${f.adminId}, 'sample@example.test', 'person', 'role.create', 'role', ${String(f.roleId)}, '2026-11-03 10:00:00.123456+00',
         '{"name":"Allowed sample","surprise":"MUST_NOT_EXPORT","password":"MUST_NOT_EXPORT"}'::jsonb)`)
     await tx.execute(sql`insert into public.role (id_role, id_role_type, description) values (9007199254740993, 2, 'Large exact id')`)
     await tx.execute(sql`insert into public.tenant_host (host, id_tenant) values (${`${f.slug}.example.test`}, ${f.tenantId})`)
@@ -59,6 +59,8 @@ describeIntegration('tenant export: bounded repeatable snapshot and isolated arc
     try {
       await seed(a)
       await withOwner(tx => tx.execute(sql`insert into public.tenant_membership (user_id) values (${a.memberId})`), b.tenantId)
+      await withOwner(tx => tx.execute(sql`update public.users set name = 'PRIVATE_SHARED_NAME', username = 'PRIVATE_SHARED_USERNAME',
+        first_name = 'Shared', last_name = 'Member', email = 'shared-member@example.test' where id = ${a.memberId}`))
       request.session.user = { id: a.adminId, tenantId: a.tenantId, tenantState: 'ready' }
       const actor = await resolveActor(a.tenantId, a.adminId)
       expect(actor).not.toBeNull()
@@ -71,11 +73,12 @@ describeIntegration('tenant export: bounded repeatable snapshot and isolated arc
         expect(rows.every(row => row.id_tenant === String(a.tenantId))).toBe(true)
       }
       expect(archive.tables.role.some(row => row.id_role === '9007199254740993')).toBe(true)
-      expect(archive.identities.map(row => row.id)).toContain(a.memberId)
+      expect.soft(archive.identities.find(row => row.id === a.memberId)).toEqual({ id: a.memberId, first_name: 'Shared', last_name: 'Member', email: 'shared-member@example.test' })
       expect(archive.identities.map(row => row.id)).not.toContain(b.adminId)
       expect(archive.tables.tenant_audit_event[0].details).toEqual({ name: 'Allowed sample' })
+      expect.soft(archive.tables.tenant_audit_event[0].occurred_at).toBe('2026-11-03T10:00:00.123456Z')
       expect(archive.tables.tenant_audit_event.some(row => row.operation === 'tenant.export.prepare')).toBe(false)
-      expect(raw).not.toMatch(/MUST_NOT_EXPORT|password|auth_provider|is_platform_admin|last_tenant_id/)
+      expect(raw).not.toMatch(/MUST_NOT_EXPORT|PRIVATE_SHARED_NAME|PRIVATE_SHARED_USERNAME|password|auth_provider|is_platform_admin|last_tenant_id/)
       expect(raw).not.toContain(b.slug)
       const [prepared] = await withTenant(a.tenantId, tx => tx.execute<{ count: number }>(sql`
         select count(*)::int as count from public.tenant_audit_event where operation = 'tenant.export.prepare'`))
@@ -131,7 +134,10 @@ describeIntegration('tenant export: bounded repeatable snapshot and isolated arc
       const raw = new TextDecoder().decode(bytes)
       const archive = parseTenantArchive(JSON.parse(raw))
       expect(raw).not.toContain('PRIVATE_PLATFORM_PROFILE')
-      expect(archive.identities.find(row => row.id === a.platformAdminId)).toMatchObject({ name: null, first_name: null, last_name: null, username: null })
+      const event = archive.tables.tenant_audit_event.find(row => row.operation === 'support.enter')
+      expect(archive.identities.find(row => row.id === a.platformAdminId)).toEqual({
+        id: a.platformAdminId, email: event?.actor_email, first_name: null, last_name: null,
+      })
       expect(archive.tables.tenant_audit_event.map(row => row.operation)).toEqual(['support.grant', 'support.enter'])
       const [counts] = await withOwner(tx => tx.execute<{ tenant: number; platform: number }>(sql`select
         (select count(*)::int from public.tenant_audit_event where operation = 'tenant.export.prepare') as tenant,

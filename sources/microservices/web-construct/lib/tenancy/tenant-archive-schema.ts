@@ -43,6 +43,17 @@ export function parseTenantArchive(value: unknown): TenantArchive {
     id_permission: unique(archive.globalReferences.permission, ['id_permission']),
     id_functionality_type: unique(archive.globalReferences.functionality_type, ['id_functionality_type']),
   }
+  // The same case-sensitive union as the exporter. Legacy EN and current en are retained
+  // as written. Catalog resolution belongs to restore, including customizable languages.
+  const expectedLanguages = new Set(archive.tables.menu_entry_tag.map(row => String(row.tag_lan)))
+  for (const row of archive.tables.menu_entry) {
+    if (row.item_translation !== null && typeof row.item_translation === 'object') {
+      for (const code of Object.keys(row.item_translation)) expectedLanguages.add(code)
+    }
+  }
+  const languages = archive.globalReferences.app_language.map(row => String(row.code))
+  if (new Set(languages).size !== languages.length || languages.length !== expectedLanguages.size
+    || languages.some(code => !expectedLanguages.has(code))) throw new Error('invalid archive language reference set')
   for (const name of Object.keys(contract.properties.tables.properties) as TenantArchiveTable[]) {
     const rows = archive.tables[name]
     if (rows.length !== archive.counts[name]) throw new Error(`archive count mismatch: ${name}`)

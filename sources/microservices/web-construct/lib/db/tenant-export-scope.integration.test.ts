@@ -1,3 +1,5 @@
+import { once } from 'node:events'
+import { createServer, type Socket } from 'node:net'
 import { afterAll, expect, it, vi } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { eq } from 'drizzle-orm'
@@ -13,6 +15,69 @@ describeIntegration('export executor cancellation and connection lifecycle', () 
     const scopeAccess = await import('./tenant-export-scope')
     await scopeAccess.closeTenantExportExecutor()
   })
+
+  it('keeps the slot until a cancelled PostgreSQL startup handshake has closed', async () => {
+    const f = await createPolicyFixture('export-handshake')
+    const scopeAccess = await import('./tenant-export-scope')
+    const target = new URL(process.env.TEST_DATABASE_URL!)
+    if (target.hostname !== '127.0.0.1' || target.port !== '55432' || target.pathname !== '/construct_test') throw new Error('handshake test requires the disposable local DB')
+    let peer: Socket | undefined
+    let allowPeerClose = false
+    let peerEnded = false
+    const order: string[] = []
+    let startup!: () => void
+    const started = new Promise<void>(resolve => { startup = resolve })
+    const server = createServer({ allowHalfOpen: true }, socket => {
+      peer = socket
+      socket.on('error', () => socket.destroy())
+      order.push('first accepted')
+      socket.once('data', startup) // Hold PostgreSQL startup, without retaining any protocol bytes.
+      socket.once('end', () => {
+        peerEnded = true
+        if (allowPeerClose) socket.end()
+      })
+      socket.once('close', () => { order.push('first disconnected') })
+    })
+    const controller = new AbortController()
+    const operations: Promise<unknown>[] = []
+    try {
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+      const address = server.address()
+      if (!address || typeof address === 'string') throw new Error('missing local TCP endpoint')
+      const stalled = new URL(target)
+      stalled.port = String(address.port)
+      vi.stubEnv('TEST_DATABASE_URL', stalled.toString())
+      const query = (signal: AbortSignal) => scopeAccess.withTenantExportScope(signal,
+        () => withTenant(f.tenantId, tx => tx.execute<{ n: number }>(sql`select 42::int as n`)))
+      const first = query(controller.signal).then(() => 'completed', () => 'rejected')
+      operations.push(first)
+      await started
+      controller.abort()
+      vi.stubEnv('TEST_DATABASE_URL', target.toString())
+      const second = scopeAccess.withTenantExportScope(new AbortController().signal, () => withTenant(f.tenantId, tx => {
+        order.push('second entered')
+        return tx.execute<{ n: number }>(sql`select 42::int as n`)
+      }))
+      operations.push(second)
+      await new Promise(resolve => setTimeout(resolve, 50))
+      const beforeClose = [...order]
+      allowPeerClose = true
+      if (peerEnded) peer?.end()
+      expect(await first).toBe('rejected')
+      expect((await second)[0].n).toBe(42)
+      expect(beforeClose).toEqual(['first accepted'])
+      expect(order).toEqual(['first accepted', 'first disconnected', 'second entered'])
+    } finally {
+      controller.abort()
+      peer?.destroy()
+      await Promise.allSettled(operations)
+      await scopeAccess.closeTenantExportExecutor()
+      await new Promise<void>(resolve => server.close(() => resolve()))
+      vi.unstubAllEnvs()
+      await f.close()
+    }
+  }, 15_000)
 
   it.each(['request abort', 'deadline timer'])('cancels an active query for %s, rolls back and recovers without a late cancel', async mode => {
     const f = await createPolicyFixture('export-cancel')
