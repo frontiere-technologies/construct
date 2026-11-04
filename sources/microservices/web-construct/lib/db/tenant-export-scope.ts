@@ -110,6 +110,7 @@ function createExecutor(): ExportExecutor {
   const sockets = new Set<ExportSocket>()
   let retired = false
   let reserving = false
+  let startupDeadline: number | undefined
   let activeHost = 0
   let nextHost = 0
   let retirement: Promise<void> | undefined
@@ -118,22 +119,25 @@ function createExecutor(): ExportExecutor {
     // Public postgres.js socket factory. Only the TCP/Unix dial belongs to this adapter;
     // the driver still owns SSL negotiation, certificate validation and PostgreSQL startup.
     socket: (connection: SocketOptions) => {
-      if (retired) throw new Error('tenant export executor retired')
+      checkDialAllowed()
       const { host, port, path } = connection
-      if (reserving) {
-        activeHost = nextHost
+      function advanceHost(): number {
+        const index = nextHost
         nextHost = (nextHost + 1) % port.length
+        return index
       }
-      // A CancelRequest is a separate connection, directed to the same backend endpoint.
-      const socket = new ExportSocket()
-      sockets.add(socket)
-      void socket.transportClosed.then(() => sockets.delete(socket))
-      const dial = () => {
+      function createSocket(): ExportSocket {
+        const socket = new ExportSocket()
+        sockets.add(socket)
+        void socket.transportClosed.then(() => sockets.delete(socket))
+        return socket
+      }
+      function dial(socket: ExportSocket, index: number): void {
         try {
           if (path) socket.connect(path)
           else {
-            socket.host = host[activeHost] // SNI input used by the driver when it upgrades to TLS.
-            socket.port = port[activeHost]
+            socket.host = host[index] // SNI input used by the driver when it upgrades to TLS.
+            socket.port = port[index]
             socket.connect(socket.port, socket.host)
           }
         } catch (error) {
@@ -142,28 +146,64 @@ function createExecutor(): ExportExecutor {
         }
       }
       if (!usesDirectTls(connection)) {
-        dial()
+        if (reserving) activeHost = advanceHost()
+        const socket = createSocket()
+        dial(socket, activeHost)
         return socket
       }
+      // A CancelRequest is a separate connection, directed only to the winning endpoint.
+      return reserving ? connectStartup(startupDeadline) : connectDirect(activeHost, true)
+
+      async function connectStartup(deadline: number | undefined): Promise<ExportSocket> {
+        // A rejected async factory gives the driver no socket whose close can trigger failover.
+        // Try each configured endpoint here only until TCP connects. TLS stays with the driver.
+        for (let remaining = path ? 1 : port.length; ; remaining--) {
+          checkDialAllowed(deadline)
+          const index = advanceHost()
+          let socket: ExportSocket
+          try {
+            socket = await connectDirect(index, false)
+          } catch (error) {
+            if (remaining === 1) throw error
+            continue
+          }
+          checkDialAllowed(deadline)
+          activeHost = index
+          return socket
+        }
+      }
+
       // Unlike SSLRequest, direct TLS wraps the socket as soon as the factory resolves.
       // Wait for the winning TCP handle after Node's address-family fallback.
-      return new Promise<ExportSocket>((resolve, reject) => {
-        // Startup has the reserve timer below. A separate direct-TLS CancelRequest has
-        // no reserve, so bound its whole transport lifetime independently from its own dial.
-        const cancelTimeout = reserving ? undefined : setTimeout(() => socket.destroy(), CONNECT_TIMEOUT_SECONDS * 1000)
-        socket.once('connect', () => resolve(socket))
-        socket.once('error', reject)
-        void socket.transportClosed.then(() => {
-          clearTimeout(cancelTimeout)
-          reject(new Error('tenant export TCP transport closed'))
-        })
-        dial()
-      })
+      async function connectDirect(index: number, isCancellation: boolean): Promise<ExportSocket> {
+        const socket = createSocket()
+        try {
+          return await new Promise<ExportSocket>((resolve, reject) => {
+            // Startup shares the reserve timer. Bound the CancelRequest's lifetime separately.
+            const cancelTimeout = isCancellation ? setTimeout(() => socket.destroy(), CONNECT_TIMEOUT_SECONDS * 1000) : undefined
+            socket.once('connect', () => resolve(socket))
+            socket.once('error', reject)
+            void socket.transportClosed.then(() => {
+              clearTimeout(cancelTimeout)
+              reject(new Error('tenant export TCP transport closed'))
+            })
+            dial(socket, index)
+          })
+        } catch (error) {
+          socket.destroy()
+          await socket.transportClosed
+          throw error
+        }
+      }
     },
   }
   const client = postgres(resolveDatabaseUrl(process.env), options)
   // Apply Drizzle's codecs to the real connection as well as to its transaction adapter.
   drizzle(client)
+  function checkDialAllowed(deadline?: number): void {
+    if (retired) throw new Error('tenant export executor retired')
+    if (deadline !== undefined && performance.now() >= deadline) throw new Error('tenant export startup timeout')
+  }
   function close(): Promise<void> {
     if (retirement) return retirement
     // Gate first: end() settles driver waiters but may leave a retry callback scheduled.
@@ -184,6 +224,7 @@ function createExecutor(): ExportExecutor {
       // The driver starts its own timer after an async factory resolves. Keep one budget
       // from before DNS/TCP through TLS and PostgreSQL startup, with cleanup before release.
       const deadline = usesDirectTls(client.options) ? performance.now() + CONNECT_TIMEOUT_SECONDS * 1000 : undefined
+      startupDeadline = deadline
       const timer = deadline !== undefined ? setTimeout(function onStartupTimeout() {
         startupCleanup = close()
       }, CONNECT_TIMEOUT_SECONDS * 1000) : undefined
@@ -198,6 +239,7 @@ function createExecutor(): ExportExecutor {
       } finally {
         clearTimeout(timer)
         reserving = false
+        startupDeadline = undefined
         await startupCleanup
       }
     },

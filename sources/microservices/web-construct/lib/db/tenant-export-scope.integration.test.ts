@@ -251,6 +251,73 @@ describeIntegration('export executor cancellation and connection lifecycle', () 
     }
   }, 4_000)
 
+  it('tries the next hostname after a direct TLS startup dial fails', async () => {
+    const scopeAccess = await import('./tenant-export-scope')
+    const controller = new AbortController()
+    const order: string[] = []
+    let peer: Socket | undefined
+    let receiveHello!: (chunk: Buffer) => void
+    const hello = new Promise<Buffer>(resolve => { receiveHello = resolve })
+    const server = createServer(socket => {
+      peer = socket
+      socket.on('error', () => socket.destroy())
+      let record = Buffer.alloc(0)
+      socket.on('data', function readHello(chunk: Buffer) {
+        record = Buffer.concat([record, chunk])
+        if (record.length < 5 || record.length < 5 + record.readUInt16BE(3)) return
+        socket.removeListener('data', readHello)
+        receiveHello(record)
+      })
+    })
+    let operation: Promise<unknown> | undefined
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    try {
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+      const address = server.address()
+      if (!address || typeof address === 'string') throw new Error('missing synthetic TLS endpoint')
+      const originalConnect = Socket.prototype.connect
+      vi.spyOn(Socket.prototype, 'connect').mockImplementation(function (this: Socket, ...args: unknown[]) {
+        const hostname = args[1]
+        if (args[0] !== address.port || (hostname !== 'first.test' && hostname !== 'second.test')) {
+          return Reflect.apply(originalConnect, this, args)
+        }
+        order.push(hostname)
+        if (hostname === 'first.test') {
+          this.once('error', (error: NodeJS.ErrnoException) => { order.push(error.code ?? 'unknown TCP error') })
+          this.once('close', () => { order.push('first closed') })
+        }
+        const options: TcpSocketConnectOpts = {
+          port: address.port, host: hostname, autoSelectFamily: false,
+          lookup: (_host, _options, callback) => {
+            if (hostname === 'first.test') callback(null, '::1', 6)
+            else callback(null, '127.0.0.1', 4)
+          },
+        }
+        return Reflect.apply(originalConnect, this, [options])
+      })
+      vi.stubEnv('TEST_DATABASE_URL', `postgresql://fixture@first.test:${address.port},second.test:${address.port}/fixture?sslmode=require&sslnegotiation=direct`)
+      operation = scopeAccess.withTenantExportScope(controller.signal, () => scopeAccess.scopedTenantExportDatabase()!
+        .transaction(async () => 'completed')).catch(() => 'rejected')
+      const chunk = await Promise.race([hello, new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`second hostname received no ClientHello (${order.join(', ')})`)), 1_000)
+      })])
+      expect(order).toEqual(['first.test', 'ECONNREFUSED', 'first closed', 'second.test'])
+      expect(chunk[0]).toBe(22) // TLS handshake record.
+      expect(chunk[5]).toBe(1) // ClientHello.
+      expect(chunk.includes('second.test')).toBe(true)
+    } finally {
+      clearTimeout(timeout)
+      controller.abort()
+      peer?.destroy()
+      await operation
+      await scopeAccess.closeTenantExportExecutor()
+      vi.restoreAllMocks()
+      vi.unstubAllEnvs()
+      await new Promise<void>(resolve => server.close(() => resolve()))
+    }
+  }, 4_000)
+
   it.each(['request abort', 'deadline timer'])('cancels an active query for %s, rolls back and recovers without a late cancel', async mode => {
     const f = await createPolicyFixture('export-cancel')
     const controller = new AbortController()
