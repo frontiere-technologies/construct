@@ -14,13 +14,6 @@ const migration = readFileSync(resolve(__dirname, '../../../../devops/db/migrati
 const seed = /apply_translation_seed\(\$seed\$([\s\S]*?)\$seed\$/.exec(migration)![1]
 const seeded = JSON.parse(seed) as { key: string; it: string; en: string }[]
 
-// Le etichette delle operazioni del registro vengono anche dalle migrazioni dopo la 0059 (0063: platform.admin.invite).
-const AUDIT_LABEL_MIGRATIONS = ['0059_platform_translations.sql', '0063_platform_admin_reinvite.sql', '0068_tenant_policy_ui.sql']
-const labelKeys = new Set(AUDIT_LABEL_MIGRATIONS.flatMap(file => {
-  const text = readFileSync(resolve(__dirname, '../../../../devops/db/migrations', file), 'utf8')
-  return (JSON.parse(/apply_translation_seed\(\$seed\$([\s\S]*?)\$seed\$/.exec(text)![1]) as { key: string }[]).map(entry => entry.key)
-}))
-
 const placeholders = (text: string) => [...text.matchAll(/\{\{(\w+)\}\}/g)].map(match => match[1]).sort()
 
 describeIntegration('the piece 5a translations', () => {
@@ -59,7 +52,15 @@ describeIntegration('the piece 5a translations', () => {
 
   it('has a label for every audit operation code', async () => {
     const { AUDIT_OPERATIONS } = await import('@/lib/audit/audit-types')
-    expect(AUDIT_OPERATIONS.filter(code => !labelKeys.has(`audit.operation.${code}`))).toEqual([])
+    const rows = await withGlobal(tx => tx.execute<{ key: string; code: string }>(sql`
+      select k.key, l.code
+      from public.translation_key k
+      join public.translation_value v using (id_translation_key)
+      join public.app_language l using (id_language)
+      where k.key like 'audit.operation.%' and l.code in ('it', 'en') and btrim(v.value) <> ''`))
+    const labels = new Set(rows.map(row => `${row.key}:${row.code}`))
+    const expected = AUDIT_OPERATIONS.flatMap(code => ['it', 'en'].map(locale => `audit.operation.${code}:${locale}`))
+    expect(expected.filter(label => !labels.has(label))).toEqual([])
   })
 })
 

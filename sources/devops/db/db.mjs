@@ -907,6 +907,20 @@ function tenantLinkBase(configured, host) {
   return url.href.replace(/\/$/, '')
 }
 
+async function runTenantRestoreCommand(connectionUrl, args) {
+  const { parseTenantRestoreArguments, runTenantRestore } = await import('./tenant-archive.mjs')
+  const options = parseTenantRestoreArguments(args)
+  const sql = postgres(connectionUrl, {
+    max: 1, prepare: false, connect_timeout: 15, idle_timeout: 5, onnotice: () => {},
+  })
+  try {
+    const report = await runTenantRestore(sql, options)
+    console.log(JSON.stringify(report, null, 2))
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
+}
+
 /** Un indirizzo è uno solo in tutto il registro: se è già di qualcuno il comando si ferma. */
 async function assertHostFree(tx, host) {
   const [taken] = await tx`
@@ -1252,6 +1266,7 @@ const supported = new Set([
   'schema-write',
   'tenant-create',
   'tenant-host-add',
+  'tenant-restore',
   'test-apply',
   'test-query',
   'test-reset-e2e',
@@ -1262,10 +1277,11 @@ const supported = new Set([
   'test-tenant-host-add',
   'test-tenant-member-add',
   'test-tenant-delete',
+  'test-tenant-restore',
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | provision-platform-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | platform-admin-add --email <email> | platform-admin-remove --email <email> | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-platform-admin-add --email <email> | test-platform-admin-remove --email <email> | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...]')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | provision-platform-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | platform-admin-add --email <email> | platform-admin-remove --email <email> | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-platform-admin-add --email <email> | test-platform-admin-remove --email <email> | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...] | (test-)tenant-restore --file <archive.json> --slug <slug> --name <name> --user-map <map.json> [--actor <uuid>] [--apply --accept-policy]')
   process.exit(2)
 }
 
@@ -1289,6 +1305,8 @@ try {
   else if (command === 'test-platform-admin-remove') await runPlatformAdminRemove(testMigrationDatabaseUrl(), parsePlatformAdminArguments(commandArguments))
   else if (command === 'test-tenant-member-add') await runTestTenantMemberAdd(testMigrationDatabaseUrl(), parseTenantMemberArguments(commandArguments))
   else if (command === 'test-tenant-delete') await runTestTenantDelete(testMigrationDatabaseUrl(), parseTenantDeleteArguments(commandArguments))
+  else if (command === 'tenant-restore') await runTenantRestoreCommand(migrationDatabaseUrl(), commandArguments)
+  else if (command === 'test-tenant-restore') await runTenantRestoreCommand(testMigrationDatabaseUrl(), commandArguments)
   else await runDatabaseCommand(command, argument)
 } catch (err) {
   console.error(`ERROR: ${err.message}`)
