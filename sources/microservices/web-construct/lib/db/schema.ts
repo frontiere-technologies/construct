@@ -151,6 +151,7 @@ export const tenantAuditEvent = pgTable('tenant_audit_event', {
 export const platformAuditEvent = pgTable('platform_audit_event', {
   id: bigint('id', { mode: 'number' }).generatedAlwaysAsIdentity().primaryKey(),
   idTenant: bigint('id_tenant', { mode: 'number' }).references(() => tenant.id),
+  sourceTenantId: text('source_tenant_id'),
   occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
   actorUserId: uuid('actor_user_id'),
   actorEmail: text('actor_email'),
@@ -162,6 +163,8 @@ export const platformAuditEvent = pgTable('platform_audit_event', {
 }, (t) => [
   index('platform_audit_event_occurred_idx').on(t.occurredAt.desc()),
   index('platform_audit_event_tenant_idx').on(t.idTenant, t.occurredAt.desc()),
+  index('platform_audit_event_source_tenant_idx').on(t.sourceTenantId).where(sql`${t.sourceTenantId} is not null`),
+  uniqueIndex('platform_audit_event_deleted_tenant_idx').on(t.objectId).where(sql`${t.operation} = 'tenant.delete'::text`),
 ])
 
 /** Il colore principale dell'app: una riga per tenant (0046; era una riga sola, 0031). */

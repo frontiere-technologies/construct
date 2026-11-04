@@ -29,6 +29,7 @@ import { createTranslationKey, deleteTranslationKey, saveTranslations } from '@/
 import { addPlatformAdmin, removePlatformAdmin } from './platform-admin-actions'
 import { endSupport, startSupport } from './support-actions'
 import { addTenantAdmin, addTenantHost, createTenant, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus } from './tenant-actions'
+import { deleteTenantPermanently } from './tenant-delete-actions'
 import { saveTenantPolicy, previewTenantGrantPurge, purgeTenantGrants } from './tenant-policy-actions'
 import { getTenantForPlatform, listTenantsForPlatform } from './tenant-service'
 
@@ -109,6 +110,7 @@ interface Door {
 const createdTenants: TenantId[] = []
 const createdUserIds: string[] = []
 let target: TenantId
+let targetSlug: string
 let dedicatedHost: string
 let victimAdmin: Person
 let someKeyId: number
@@ -187,6 +189,9 @@ const DOORS: Record<string, Door> = {
   'lib/platform/tenant-actions.ts#resendTenantInvite': { entry: resendTenantInvite, call: () => resendTenantInvite(Number(target), victimAdmin.id) },
   'lib/platform/tenant-actions.ts#setPrimaryHost': { entry: setPrimaryHost, call: () => setPrimaryHost(Number(target), dedicatedHost) },
   'lib/platform/tenant-actions.ts#setTenantStatus': { entry: setTenantStatus, call: () => setTenantStatus(Number(target), 'archived', 'prova') },
+  'lib/platform/tenant-delete-actions.ts#deleteTenantPermanently': {
+    entry: deleteTenantPermanently, call: () => deleteTenantPermanently(Number(target), targetSlug),
+  },
 }
 
 type SessionState = 'none' | 'choose' | 'ready' | 'support'
@@ -257,6 +262,8 @@ async function tenantContentFootprint(tenantId: TenantId): Promise<Record<string
 
 beforeAll(async () => {
   target = await createTenantFromTemplate('target')
+  const [row] = await withOwner(tx => tx.execute<{ slug: string }>(sql`select slug from public.tenant where id = ${target}`))
+  targetSlug = row.slug
   dedicatedHost = `zzz-pep-${unique()}.example.test`
   await withOwner(tx => tx.execute(sql`insert into public.tenant_host (host, id_tenant, is_primary) values (${dedicatedHost}, ${target}, true)`))
   victimAdmin = await createUser('victim', { platformAdmin: true })

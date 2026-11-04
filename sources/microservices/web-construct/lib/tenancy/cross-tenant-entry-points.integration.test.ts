@@ -30,6 +30,7 @@ import PlatformTenantPage from '@/app/platform/tenants/[tenantId]/page'
 import {
   addTenantAdmin, addTenantHost, createTenant as createPlatformTenant, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus,
 } from '@/lib/platform/tenant-actions'
+import { deleteTenantPermanently } from '@/lib/platform/tenant-delete-actions'
 import { previewTenantGrantPurge, purgeTenantGrants, saveTenantPolicy } from '@/lib/platform/tenant-policy-actions'
 import { readTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
 import { saveAppTheme } from '@/lib/theme-actions'
@@ -532,6 +533,13 @@ const CASES: Record<string, CrossTenantCase> = {
     run: async () => {
       await expect(setTenantStatus(Number(B), 'suspended')).rejects.toThrow('Unauthorized')
       await expect(setTenantStatus(Number(B), 'archived', 'preso da A')).rejects.toThrow('Unauthorized')
+    },
+  },
+  'lib/platform/tenant-delete-actions.ts#deleteTenantPermanently': {
+    entry: deleteTenantPermanently,
+    run: async () => {
+      const [target] = await withOwner(tx => tx.execute<{ slug: string }>(sql`select slug from public.tenant where id = ${B}`))
+      await expect(deleteTenantPermanently(Number(B), target.slug)).rejects.toThrow('Unauthorized')
     },
   },
   'lib/platform/tenant-actions.ts#addTenantHost': {

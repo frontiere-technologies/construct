@@ -261,6 +261,7 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/platform/tenant-policy-actions.ts#purgeTenantGrants': 'requirePlatformAdmin',
   'lib/platform/tenant-actions.ts#setPrimaryHost': 'requirePlatformAdmin',
   'lib/platform/tenant-actions.ts#setTenantStatus': 'requirePlatformAdmin',
+  'lib/platform/tenant-delete-actions.ts#deleteTenantPermanently': 'requirePlatformAdmin',
   'lib/profile-actions.ts#saveProfile': 'allowSelfService',
   'lib/rbac/navigation-actions.ts#createNavigationItem': 'manage-menu',
   'lib/rbac/navigation-actions.ts#deleteNavigationItem': 'manage-menu',

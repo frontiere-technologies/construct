@@ -185,7 +185,7 @@ describeIntegration('tenant restore command', () => {
       hosts: await tx.execute(sql`select host from public.tenant_host where id_tenant = ${id}`),
       audit: await tx.execute(sql`select operation, origin, actor_user_id::text, source_tenant_id, source_event_id,
         to_char(occurred_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at from public.tenant_audit_event order by id`),
-      platform: await tx.execute(sql`select operation, details from public.platform_audit_event where id_tenant = ${id}`),
+      platform: await tx.execute(sql`select operation, source_tenant_id, details from public.platform_audit_event where id_tenant = ${id}`),
     }), id)
     const sourceRoleIds = archive.tables.role.map(role => role.id_role)
     const restoredRoleIds = restored.roles.map(role => role.id)
@@ -211,7 +211,7 @@ describeIntegration('tenant restore command', () => {
       expect.objectContaining({ operation: 'tenant.create', origin: 'live', actor_user_id: b.platformAdminId,
         source_tenant_id: String(a.tenantId), source_event_id: null }),
     ]))
-    expect(restored.platform).toEqual([{ operation: 'tenant.restore', details: { sourceTenantId: String(a.tenantId) } }])
+    expect(restored.platform).toEqual([{ operation: 'tenant.restore', source_tenant_id: String(a.tenantId), details: {} }])
   }, 25_000)
 
   it('rejects unknown destination references, an incomplete map and insufficient quotas without writing', async () => {

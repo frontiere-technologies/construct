@@ -207,6 +207,8 @@ const NOT_A_KEY = [
   // The stable operation codes of the audit log (lib/audit/audit-types.ts): same shape as a key,
   // written into the audit tables, never shown through t(). One entry per file that names one.
   ...AUDIT_OPERATION_FILES.map(file => ({ file, pattern: AUDIT_OPERATION, why: 'audit operation code' })),
+  { file: 'lib/db/schema.ts', pattern: /^tenant\.delete$/, why: 'operation in the permanent deletion audit index' },
+  { file: 'lib/platform/audit-service.ts', pattern: /^tenant\.delete$/, why: 'operation in the permanent deletion audit projection' },
   // Tenant context: a Postgres setting name and a sequence name, not copy.
   { file: 'lib/db/tenant-db.ts', pattern: /^app\.tenant_id$/, why: 'name of the Postgres setting that carries the tenant' },
   { file: 'lib/db/testing.ts', pattern: /^app\.tenant_id$/, why: 'name of the Postgres setting that carries the tenant' },

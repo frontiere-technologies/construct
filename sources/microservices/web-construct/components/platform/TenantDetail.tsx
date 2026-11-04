@@ -20,6 +20,7 @@ import type { PlatformTenantStatus } from '@/lib/platform/tenants-grid-query'
 import { emailSchema } from '@/lib/rbac/action-input-schemas'
 import type { TenantUsage } from '@/lib/tenancy/tenant-limits'
 import type { TenantPolicySnapshot } from '@/lib/tenancy/tenant-policy-types'
+import { TenantDeleteDialog } from './TenantDeleteDialog'
 import { TenantPolicyEditor } from './TenantPolicyEditor'
 import { TenantStatusBadge } from './TenantStatusBadge'
 
@@ -62,6 +63,7 @@ export function TenantDetail({ tenant, policy, usage }: Props) {
   const router = useRouter()
   const [notice, setNotice] = useState<Notice>(null)
   const [statusChange, setStatusChange] = useState<StatusChange | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [addingHost, setAddingHost] = useState(false)
   const [addingAdmin, setAddingAdmin] = useState(false)
   const [hostToMakePrimary, setHostToMakePrimary] = useState<string | null>(null)
@@ -71,6 +73,7 @@ export function TenantDetail({ tenant, policy, usage }: Props) {
   const supportHintId = useId()
 
   const fixed = tenant.isTemplate || tenant.isDefault
+  const canDelete = !fixed && tenant.status === 'archived'
   const takesPeople = !tenant.isTemplate && tenant.status === 'active'
   // Lo stesso controllo del server (che decide comunque): tenant attivo e permesso valido, o il modello.
   const canEnterSupport = tenant.status === 'active' && (tenant.isTemplate || tenant.support.until !== null)
@@ -122,6 +125,11 @@ export function TenantDetail({ tenant, policy, usage }: Props) {
                 {t(`platform.tenant.status.${change}`)}
               </Button>
             ))}
+            {canDelete && (
+              <Button size="sm" variant="destructive" onClick={() => setDeleting(true)}>
+                {t('platform.tenant.delete.open')}
+              </Button>
+            )}
           </div>
         )}
       </section>
@@ -207,6 +215,10 @@ export function TenantDetail({ tenant, policy, usage }: Props) {
         />
       )}
       {enteringSupport && <SupportDialog tenantId={tenant.id} onClose={() => setEnteringSupport(false)} />}
+      {canDelete && deleting && (
+        <TenantDeleteDialog tenantId={tenant.id} slug={tenant.slug} onClose={() => setDeleting(false)}
+          onDeleted={() => loadPage('/platform')} />
+      )}
       {addingHost && <AddHostDialog tenantId={tenant.id} onClose={() => setAddingHost(false)} onAdded={done} />}
       {addingAdmin && <AddAdminDialog tenantId={tenant.id} onClose={() => setAddingAdmin(false)} onAdded={done} />}
       {hostToMakePrimary && (

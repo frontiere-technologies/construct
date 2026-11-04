@@ -29,6 +29,7 @@ vi.mock('@/lib/platform/tenant-actions', () => ({
 }))
 vi.mock('./TenantPolicyEditor', () => ({ TenantPolicyEditor: () => <section data-testid="tenant-policy-editor" /> }))
 vi.mock('@/lib/platform/support-actions', () => ({ startSupport: vi.fn() }))
+vi.mock('@/lib/platform/tenant-delete-actions', () => ({ deleteTenantPermanently: () => Promise.resolve({ ok: true }) }))
 // jsdom non naviga: l'ingresso carica la home del tenant da capo, nel browser.
 vi.mock('@/components/tenancy/load-page', () => ({ loadPage: vi.fn() }))
 
@@ -80,6 +81,34 @@ function type(input: HTMLInputElement | HTMLTextAreaElement, text: string) {
 const dialog = () => document.querySelector('[role="dialog"]')!
 const alertText = () => document.querySelector('[role="alert"]')?.textContent
 const statusText = () => document.querySelector('[role="status"]')?.textContent
+
+describe('TenantDetail: permanent deletion', () => {
+  it('offers deletion only after archiving and keeps protected tenants safe', () => {
+    render()
+    expect(buttonNamed('platform.tenant.delete.open')).toBeUndefined()
+    act(() => root?.render(<TenantDetail tenant={{ ...ACME, status: 'archived', isDefault: true }} />))
+    expect(buttonNamed('platform.tenant.delete.open')).toBeUndefined()
+    act(() => root?.render(<TenantDetail tenant={{ ...ACME, status: 'archived', isTemplate: true }} />))
+    expect(buttonNamed('platform.tenant.delete.open')).toBeUndefined()
+    act(() => root?.render(<TenantDetail tenant={{ ...ACME, status: 'archived' }} />))
+    expect(buttonNamed('platform.tenant.delete.open')?.disabled).toBe(false)
+  })
+
+  it('describes the consequences and requires the exact slug before submitting', async () => {
+    render({ ...ACME, status: 'archived' })
+    await click(need('platform.tenant.delete.open'))
+    const field = dialog().querySelector('input')!
+    const submit = dialog().querySelector<HTMLButtonElement>('button[type="submit"]')!
+    expect(dialog().textContent).toContain('platform.tenant.delete.warning')
+    expect(document.activeElement).toBe(field)
+    type(field, 'acme ')
+    expect(submit.disabled).toBe(true)
+    type(field, 'acme')
+    expect(submit.disabled).toBe(false)
+    await click(submit)
+    expect(load).toHaveBeenCalledWith('/platform')
+  })
+})
 
 describe('TenantDetail: data', () => {
   it('shows the name, the slug, the status and the creation date, with a link back to the list', () => {

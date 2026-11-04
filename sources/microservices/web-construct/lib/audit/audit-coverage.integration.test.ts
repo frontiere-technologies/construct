@@ -86,7 +86,7 @@ vi.mock('@/lib/auth-rate-limit', () => ({
 }))
 
 // ---------------------------------------------------------------------------------------------
-// Le porte che non scrivono nel registro, ciascuna con il motivo.
+// Le porte esentate da questa matrice, ciascuna con il motivo.
 // ---------------------------------------------------------------------------------------------
 const PERSONAL = 'preferenza personale (MT5-DEC-14): agisce solo sulla riga globale della persona della sessione, e le preferenze non si registrano'
 const PASSWORD = 'password della persona (MT5-DEC-14): non si registra, e nel registro non deve mai finire un segreto (MT5-RISK-4)'
@@ -114,6 +114,7 @@ const EXEMPT: Record<string, string> = {
   'lib/tenancy/tenant-actions.ts#chooseTenant': `${PERSONAL}: scrive l'ultimo tenant scelto (users.last_tenant_id), e l'ingresso in un tenant è un accesso`,
   'lib/tenancy/tenant-actions.ts#refreshTenant': 'non scrive dati: chiede al callback jwt di ricalcolare il token',
   'lib/platform/tenant-policy-actions.ts#previewTenantGrantPurge': `${READ}; l'anteprima verifica le assegnazioni senza rimuoverle, la cancellazione ha il proprio caso`,
+  'lib/platform/tenant-delete-actions.ts#deleteTenantPermanently': 'il caso dedicato tenant-delete-actions.integration.test.ts verifica la sola traccia minima e il rollback quando fallisce il suo inserimento',
 }
 
 // ---------------------------------------------------------------------------------------------
