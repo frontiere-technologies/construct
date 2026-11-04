@@ -291,7 +291,51 @@ describeIntegration('platform tenant policy actions', () => {
     expect(await audits()).toEqual(before)
   })
 
-  it('returns a stable rejection when a role creation loses its capability while waiting on the policy lock', async () => {
+  const creationCases = [
+    { area: 'roles', attempt: () => createRole('Creation during policy change') },
+    { area: 'navigation', attempt: () => createNavigationItem({
+      name: 'Creation during policy change', description: 'Test category', idItemType: 1, idFunctionalityType: null,
+      functionalityLink: null, iconPath: null, idItemParent: null, itemTranslation: {}, tagTranslations: {},
+    }) },
+    { area: 'people', attempt: () => addUserByEmail(`${fixture.slug}-member@example.test`) },
+  ] as const
+
+  it.each(creationCases)('reports a committed $area revocation to a previously authorized actor', async ({ area, attempt }) => {
+    const value = await draft()
+    signIn(fixture.adminId, fixture.tenantId)
+    expect(await attempt()).toMatchObject(area === 'people' ? { ok: true } : { id: expect.any(Number) })
+
+    signIn()
+    value.areas[area] = false
+    if (area === 'roles') value.overrides['assign-user-roles'] = false
+    expect(await saveTenantPolicy(fixture.tenantId, value)).toEqual({ ok: true, revision: 2 })
+    const usage = await readTenantUsageForPlatform(fixture.tenantId)
+    const before = await audits()
+    const unavailable = { ok: false, reason: 'capability_unavailable' }
+    signIn(fixture.adminId, fixture.tenantId)
+    await expect(attempt()).resolves.toEqual(unavailable)
+    if (area === 'people') {
+      const existing = `${fixture.slug}-platform@example.test`
+      const unknown = `${fixture.slug}-unknown@example.test`
+      await expect(addUserByEmail(existing)).resolves.toEqual(unavailable)
+      await expect(addUserByEmail(unknown)).resolves.toEqual(unavailable)
+      expect(await withOwner(tx => tx.execute(sql`
+        select id from public.users where email = ${unknown}
+        union all
+        select t.id from public.password_set_tokens t join public.users u on u.id = t.user_id where u.email = ${existing}
+      `))).toHaveLength(0)
+    }
+
+    signIn(fixture.platformAdminId, fixture.tenantId) // Account with no membership in this tenant.
+    await expect(attempt()).rejects.toThrow('Unauthorized')
+    mocks.session = null
+    await expect(attempt()).rejects.toThrow('Unauthorized')
+    signIn()
+    expect(await readTenantUsageForPlatform(fixture.tenantId)).toEqual(usage)
+    expect(await audits()).toEqual(before)
+  })
+
+  it.each(creationCases)('reports a $area revocation while creation waits on the policy lock', async ({ area, attempt }) => {
     const usage = await readTenantUsageForPlatform(fixture.tenantId)
     const before = await audits()
     signIn(fixture.adminId, fixture.tenantId)
@@ -300,7 +344,7 @@ describeIntegration('platform tenant policy actions', () => {
       await withOwner(async tx => {
         await tx.execute(sql`select app_private.lock_tenant_policy()`)
         const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_catalog.pg_backend_pid() as pid`)
-        pending = createRole('Revoked while waiting').then(
+        pending = attempt().then(
           result => ({ status: 'fulfilled', result }), error => ({ status: 'rejected', error }),
         )
         await vi.waitFor(async () => {
@@ -309,8 +353,9 @@ describeIntegration('platform tenant policy actions', () => {
               where ${pid} = any(pg_catalog.pg_blocking_pids(a.pid))) as waiting`)
           expect(waiting).toBe(true)
         })
-        await tx.execute(sql`insert into public.tenant_entitlement (feature_code, allowed) values ('manage-roles', false)
-          on conflict (id_tenant, feature_code) do update set allowed = false`)
+        await tx.execute(sql`update public.tenant_area_entitlement set enabled = false where area_code = ${area}`)
+        if (area === 'roles') await tx.execute(sql`insert into public.tenant_entitlement (feature_code, allowed)
+          values ('assign-user-roles', false) on conflict (id_tenant, feature_code) do update set allowed = false`)
       }, fixture.tenantId)
       expect(await pending).toEqual({ status: 'fulfilled', result: { ok: false, reason: 'capability_unavailable' } })
       signIn()

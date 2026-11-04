@@ -227,6 +227,57 @@ def test_role_quota_rejection_refreshes_the_grid_and_keeps_the_dialog(
         assert _scalar(policy_tenant, "select count(*) from role") == count
 
 
+@pytest.mark.parametrize("area", ["roles", "people", "navigation"])
+def test_revoking_area_keeps_open_creation_editor_until_explicit_reload(
+    area, browser, platform_page, base_url, policy_tenant, test_email, test_email_user,
+):
+    admin_email = f"e2e-console-admin@{test_email.split('@', 1)[1]}"
+    tenant_url = _on_host(base_url, "e2e-console.localhost")
+    path = {
+        "roles": "/roles-permissions",
+        "people": "/user-management",
+        "navigation": "/functionalities/create",
+    }[area]
+    editor = _open(platform_page, base_url, policy_tenant)
+    with _signed_in(browser, tenant_url, admin_email) as admin:
+        nav(admin, f"{tenant_url}{path}")
+        if area == "roles":
+            admin.get_by_test_id("create-role").click()
+            form = admin.get_by_role("dialog")
+            field = form.get_by_placeholder("Nome ruolo")
+            value = "E2E revoked role"
+        elif area == "people":
+            admin.get_by_role("button", name="Aggiungi persona", exact=True).click()
+            form = admin.get_by_role("dialog")
+            field = form.get_by_label("Email", exact=True)
+            value = test_email_user
+        else:
+            form = admin
+            field = form.get_by_placeholder("Nome funzionalità *")
+            value = "E2E revoked category"
+            form.get_by_placeholder("Descrizione *").fill("E2E policy revocation")
+            _select_tipologia(form, "Category")
+
+        field.fill(value)
+        submit = form.get_by_role("button", name="Aggiungi" if area == "people" else "Salva", exact=True)
+        expect(submit).to_be_enabled()
+        editor.locator(f'input[data-area="{area}"]').uncheck()
+        if area == "roles":
+            editor.locator('select[data-feature="assign-user-roles"]').select_option("deny")
+        _save(editor)
+        expect(editor.locator(f'input[data-area="{area}"]')).not_to_be_checked()
+
+        stale_url = admin.url
+        submit.click()
+        message = "La concessione necessaria per questa operazione non è più disponibile."
+        expect(form.get_by_role("alert").filter(has_text=message)).to_have_text(message)
+        expect(admin).to_have_url(stale_url)
+        expect(field).to_have_value(value)
+        expect(submit).to_be_disabled()
+        form.get_by_role("button", name="Ricarica dati", exact=True).click()
+        expect(admin).to_have_url(f"{tenant_url}/")
+
+
 def test_template_quota_rejection_is_localized_and_atomic(platform_page, base_url):
     page = platform_page
     model_id = _scalar(1, "select id from tenant where is_template")

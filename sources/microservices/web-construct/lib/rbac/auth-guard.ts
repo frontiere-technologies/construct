@@ -31,10 +31,14 @@ async function currentActor(): Promise<Actor | null> {
   return isSupportSession(session) ? resolveSupportActor(tenantId, userId) : resolveActor(tenantId, userId)
 }
 
-export async function requirePermission(code: PermissionCode): Promise<Actor> {
+export function requirePermission(code: PermissionCode): Promise<Actor>
+/** Per i form aperti: esito indistinto per un attore presente a cui manca il permesso effettivo. */
+export function requirePermission(code: PermissionCode, options: { onDenied: 'return' }): Promise<Actor | null>
+export async function requirePermission(code: PermissionCode, options?: { onDenied: 'return' }): Promise<Actor | null> {
   const actor = await currentActor()
-  if (!actor || !actor.permissions.has(code)) throw new Error('Unauthorized')
-  return actor
+  if (actor?.permissions.has(code)) return actor
+  if (actor && options?.onDenied === 'return') return null
+  throw new Error('Unauthorized')
 }
 
 export async function requirePagePermission(code: PermissionCode): Promise<Actor> {

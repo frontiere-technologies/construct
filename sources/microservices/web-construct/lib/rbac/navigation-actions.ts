@@ -114,7 +114,8 @@ async function reparent(
 export async function createNavigationItem(input: CreateNavItemInput): Promise<
   { id: number } | { ok: false; reason: 'menu_quota' | 'capability_unavailable' | 'target_unavailable' }
 > {
-  const actor = await requirePermission('manage-menu')
+  const actor = await requirePermission('manage-menu', { onDenied: 'return' })
+  if (!actor) return { ok: false, reason: 'capability_unavailable' }
   if (!input.name.trim()) throw new Error('Name is required')
   // Una categoria di menu non è un permesso: raggruppa voci, non protegge niente.
   const isCategory = input.idItemType === ITEM_TYPE_CATEGORY

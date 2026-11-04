@@ -104,6 +104,18 @@ describe('add user dialog', () => {
     expect(onRefresh).not.toHaveBeenCalled()
   })
 
+  it('keeps the revocation visible without refreshing the page that owns the dialog', async () => {
+    addUser.mockResolvedValue({ ok: false, reason: 'capability_unavailable' })
+    const { onRefresh } = render()
+    type(emailField(), 'persona@esempio.it')
+    await submit()
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('tenant.creation.capability_unavailable')
+    expect(emailField().value).toBe('persona@esempio.it')
+    expect(submitButton().disabled).toBe(true)
+    expect(onRefresh).not.toHaveBeenCalled()
+  })
+
   it('forgets the previous outcome when the person types again', async () => {
     addUser.mockResolvedValue({ ok: true })
     render()

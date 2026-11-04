@@ -14,17 +14,22 @@ export default function CreateRoleModal({ onClose, onRefresh }: { onClose: () =>
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [errorKey, setErrorKey] = useState<string | null>(null)
+  const hasLostCapability = errorKey === 'tenant.creation.capability_unavailable'
   const titleId = useId()
   const descriptionId = useId()
 
   const submit = async () => {
-    if (!name.trim()) return
+    if (busy || hasLostCapability || !name.trim()) return
     setBusy(true)
     setErrorKey(null)
     try {
       const result = await createRole(name)
       if ('reason' in result) {
-        setErrorKey(result.reason === 'role_quota' ? 'roles.form.quota' : 'tenant.creation.capability_unavailable')
+        if (result.reason === 'capability_unavailable') {
+          setErrorKey('tenant.creation.capability_unavailable')
+          return
+        }
+        setErrorKey('roles.form.quota')
         router.refresh()
         onRefresh()
         return
@@ -47,12 +52,13 @@ export default function CreateRoleModal({ onClose, onRefresh }: { onClose: () =>
         <p id={descriptionId} className="text-sm text-muted-foreground mb-4">{t('roles.form.create_subtitle')}</p>
         <Input
           data-dialog-initial-focus value={name} onChange={e => { setName(e.target.value); setErrorKey(null) }} placeholder={t('roles.form.name')}
-          className="mb-6"
+          className="mb-6" disabled={hasLostCapability}
         />
         {errorKey && <p role="alert" className="mb-4 text-sm text-destructive-muted-foreground">{t(errorKey)}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" data-dialog-close onClick={onClose}>{t('common.actions.cancel')}</Button>
-          <Button onClick={submit} disabled={!name.trim() || busy}>{t('common.actions.save')}</Button>
+          {hasLostCapability && <Button variant="outline" onClick={() => window.location.reload()}>{t('platform.policy.reload')}</Button>}
+          <Button onClick={submit} disabled={!name.trim() || busy || hasLostCapability}>{t('common.actions.save')}</Button>
         </div>
     </AccessibleDialog>
   )

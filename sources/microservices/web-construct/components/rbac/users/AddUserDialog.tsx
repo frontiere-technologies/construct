@@ -28,19 +28,20 @@ function AddUserForm({ canInvite, onClose, onRefresh }: Omit<Props, 'open'>) {
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<Outcome>(null)
+  const hasLostCapability = outcome?.kind === 'capability_unavailable'
   const titleId = useId()
   const fieldId = useId()
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (busy || !canInvite) return
+    if (busy || !canInvite || hasLostCapability) return
     // Lo stesso schema del server: l'indirizzo scritto male non parte nemmeno.
     if (!emailSchema.safeParse(email).success) { setOutcome({ kind: 'invalid' }); return }
     setBusy(true); setOutcome(null)
     try {
       const result = await addUserByEmail(email)
       setOutcome({ kind: result.ok ? 'done' : result.reason })
-      onRefresh()
+      if (result.ok || result.reason === 'member_quota') onRefresh()
     } catch {
       // Il messaggio dell'azione non arriva in produzione e non va mostrato: l'esito è neutro.
       setOutcome({ kind: 'error' })
@@ -61,7 +62,7 @@ function AddUserForm({ canInvite, onClose, onRefresh }: Omit<Props, 'open'>) {
         </label>
         <Input
           id={fieldId} type="email" autoComplete="off" data-dialog-initial-focus value={email}
-          onChange={e => { setEmail(e.target.value); setOutcome(null) }} disabled={!canInvite}
+          onChange={e => { setEmail(e.target.value); setOutcome(null) }} disabled={!canInvite || hasLostCapability}
         />
         <div className="mt-3 min-h-5 text-sm">
           {outcome?.kind === 'done' && <p role="status" className="text-foreground">{t('users.add.done')}</p>}
@@ -80,7 +81,8 @@ function AddUserForm({ canInvite, onClose, onRefresh }: Omit<Props, 'open'>) {
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <Button type="button" variant="outline" data-dialog-close onClick={onClose}>{t('common.actions.close')}</Button>
-          <Button type="submit" disabled={busy || !canInvite || !email.trim()}>{t('users.add.submit')}</Button>
+          {hasLostCapability && <Button type="button" variant="outline" onClick={() => window.location.reload()}>{t('platform.policy.reload')}</Button>}
+          <Button type="submit" disabled={busy || !canInvite || hasLostCapability || !email.trim()}>{t('users.add.submit')}</Button>
         </div>
       </form>
     </AccessibleDialog>

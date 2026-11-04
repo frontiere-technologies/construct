@@ -82,7 +82,7 @@ export default function FunctionalityForm(
     && (!isFunc || f.functionalityLink.trim().length > 0)
 
   const submit = async () => {
-    if (!valid) return
+    if (!valid || busy || needsRefresh) return
     setBusy(true)
     try {
       setError(null)
@@ -230,7 +230,7 @@ export default function FunctionalityForm(
           <Button variant="outline" onClick={() => router.push('/functionalities')}>
             {t('common.actions.cancel')}
           </Button>
-          {needsRefresh && <Button variant="outline" onClick={() => { setNeedsRefresh(false); router.refresh() }}>{t('platform.policy.reload')}</Button>}
+          {needsRefresh && <Button variant="outline" onClick={() => window.location.reload()}>{t('platform.policy.reload')}</Button>}
           <Button onClick={submit} disabled={!valid || busy || needsRefresh}>
             {t('common.actions.save')}
           </Button>

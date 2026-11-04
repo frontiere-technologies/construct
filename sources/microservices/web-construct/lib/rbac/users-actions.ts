@@ -143,7 +143,8 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
  * il contenuto della risposta no. È lo stesso limite di oggi della registrazione.
  */
 export async function addUserByEmail(email: string): Promise<{ ok: true } | { ok: false; reason: 'member_quota' | 'capability_unavailable' }> {
-  const actor = await requirePermission('invite-users')
+  const actor = await requirePermission('invite-users', { onDenied: 'return' })
+  if (!actor) return { ok: false, reason: 'capability_unavailable' }
   const parsed = emailSchema.safeParse(email)
   if (!parsed.success) throw new Error('Email non valida')
   const normalizedEmail = parsed.data

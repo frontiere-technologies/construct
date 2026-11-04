@@ -46,7 +46,8 @@ async function getRoleType(tx: TenantTx, roleId: number): Promise<RoleTypeStr> {
 }
 
 export async function createRole(roleName: string): Promise<{ id: number } | { ok: false; reason: 'role_quota' | 'capability_unavailable' }> {
-  const actor = await requirePermission('manage-roles')
+  const actor = await requirePermission('manage-roles', { onDenied: 'return' })
+  if (!actor) return { ok: false, reason: 'capability_unavailable' }
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
   try {
