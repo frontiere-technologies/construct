@@ -1,12 +1,12 @@
 # Multi-tenancy 5b — stato e ripresa del 3 novembre 2026
 
-Aggiornamento del 4 novembre 2026. T01–T12 sono conclusi e rivisti. Prova locale 0072, sviluppo 0063. Resta T13.
+Aggiornamento del 4 novembre 2026. T01–T12 e la parte locale di T13 sono completati e rivisti. Ultimo codice verificato 9cb49ed, prova locale 0074, sviluppo 0063. Restano T13.6 operativo e la verifica sul collegamento Supavisor di destinazione.
 
 Area da riusare: /Users/mario.stefanutti/.codex/worktrees/multi-tenancy-piece-5b/construct, ramo feature/multi-tenancy-piece-5b. Nessun nuovo worktree necessario; checkout originale, stash e file del proprietario restano fuori dall’esecuzione.
 
 ## Punto attuale
 
-T10 approvato. Base 81297a7, implementazione 365f53a e quattro correzioni fino a 86a19de. Il riesame finale GPT-6.1 con ragionamento alto ha approvato il passaggio fra host in TLS diretto. Ultime prove mirate 13/13, lint e tipi superati. I rapporti task-10-report.md e task-10-r4-review.md sono nell’area del piano. T11 ripristino approvato nei commit 011bf20 e 00fb381, parser 5/5 e 11 integrazioni finali. Restano i fallimenti delle fixture RBAC elencati nel registro per T13. T12 approvato nei commit b5ad61c e 420b002, browser1/1, mirati19/19 nel giro finale. Proseguire con T13, prova upgrade dalla0063, MT5B-XLOCK-1, fixture RBAC e suite complete. Catena certificati, pooler e cancellazione TLS sul percorso di destinazione sono verifiche esplicite di T13.
+Il ramo locale feature/multi-tenancy-piece-5b è pronto per la richiesta di autorizzazione all’invio. I rapporti final-branch-review.md, final-fix-review.md e final-revocation-review.md sono nell’area del piano. I due rilievi importanti sono chiusi. Le correzioni sono 5e97d4c e 9cb49ed. Upgrade 0063→0074 verificato, 1.732 unitari e 242 integrazioni mirate dopo l’ultima correzione, 9 prove browser dei flussi interessati. La completa precedente conta 816 integrazioni. Il browser completo ha avuto 167/168, poi 3/3 dopo correzione dell’attesa sulla pagina incorporata. Server di prova spento. Vedi il registro per prove e decisioni, e la guida docs/runbooks/tenant-data-lifecycle.md per la sequenza operativa. Le sezioni successive documentano passaggi storici.
 
 ## Registro storico T07 — concluso, da non riavviare
 

@@ -18,7 +18,7 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
   [piano operativo](../../superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md) approvati.
   Metodo scelto: agenti con revisione per ogni attività. T01 (catalogo), T02 (configurazione
   protetta, copia iniziale e blocchi per tenant) e T03 (menu e destinazioni canoniche) realizzati
-  e rivisti; T04 (limite per tutti gli attori e nuovi grant SQL) e T05 (modifica atomica e cancellazione selettiva delle assegnazioni) conclusi e rivisti; anche T06 (quote e tempo delle query) e T07 (modalità singola) approvati; anche T08 (schermate e editor) e T09 (consenso export distinto) conclusi e rivisti. Anche T10 (esportazione con consenso, limiti e annullamento) è verificato e rivisto. T11 (ripristino isolato in un nuovo tenant sospeso) approvato. T12 (cancellazione di tenant archiviati e traccia minima) approvato. Prova alla 0072. Resta T13: aggiornamento e verifiche complessive. Lo sviluppo resta alla 0063.
+  e rivisti. T01–T12 e la parte locale di T13 sono completati e rivisti. L’aggiornamento dalla 0063 alla 0074 è verificato sulla prova. Restano invio, richiesta di unione, unione, verifica sul collegamento Supavisor di destinazione e attivazione autorizzata.
 
 ## Come si legge
 
@@ -63,10 +63,10 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
 | [✅] | MT-5.4 | 5a | Accesso di assistenza | "Entra come piattaforma" con motivo, durata limitata e fascia visibile; permette di modificare il modello dall'app. | P1 | days | DEF-5.5 | |
 | [✅] | MT-5.5 | 5a | Registro delle operazioni | Tabella `audit_event` scritta nella stessa transazione della modifica. | P1 | days | DEF-5.6 | |
 | [✅] | MT-5.6 | 5a | Cataloghi comuni alla piattaforma | Lingue e traduzioni modificabili dall'amministratore di piattaforma, non più dal solo predefinito. | P1 | hours | final review pezzo 4 | |
-| [~] | MT-5.7 | 5b | Funzioni concesse per tenant | Quali aree dell'app un tenant può usare, rispettate nei controlli e nel database. | P1 | days | DEF-5.2, DEF-5.4, MT-DEC-04, specifica e piano 5b | Catalogo, persistenza, menu, controlli degli attori e nuovi grant SQL realizzati/rivisti (T01–T05), comprese le azioni di gestione della policy; schermate e editor completati/rivisti in T08, verifiche globali e attivazione ancora separate |
-| [~] | MT-5.8 | 5b | Interruttore delle funzioni di tenant | Spegnere console e selettore per un'applicazione derivata con un solo tenant. | P2 | hours | DEF-5.7 | Modalità single realizzata/rivista (T07), processi browser e verifica complessiva restano T13 |
-| [~] | MT-5.9 | 5b | Limiti per tenant | Tempo massimo delle query, quote su utenti, ruoli, voci di menu. | P2 | days | DEF-5.8 | Vincoli SQL e timeout transazionale realizzati/rivisti (T06); schermata completata/rivista in T08; verifiche complessive e attivazione restano T13 |
-| [ ] | MT-5.10 | 5b | Esportazione ed eliminazione di un tenant | Esportazione completa, prova di ripristino, eliminazione sicura. | P2 | days | DEF-5.9 | |
+| [✅] | MT-5.7 | 5b | Funzioni concesse per tenant | Aree e capacità rispettate nell’app e nel database, con sospensione e pulizia distinta. | P1 | days | DEF-5.2, DEF-5.4, MT-DEC-04 | Codice e verifiche locali conclusi, fino alla 0074. |
+| [✅] | MT-5.8 | 5b | Interruttore delle funzioni di tenant | Modalità singola sul tenant predefinito e sul suo indirizzo canonico. | P2 | hours | DEF-5.7 | Verificato anche il ritorno a più tenant in processi distinti. |
+| [~] | MT-5.9 | 5b | Limiti per tenant | Tempo massimo delle query e quote su appartenenze, ruoli e menu. | P2 | days | DEF-5.8 | Verificato su PostgreSQL diretto. Resta il collegamento Supavisor di destinazione. |
+| [✅] | MT-5.10 | 5b | Esportazione ed eliminazione di un tenant | Esportazione con consenso, ripristino isolato e cancellazione con traccia minima. | P2 | days | DEF-5.9 | Implementato e verificato sulla prova locale. |
 | [ ] | MT-6.1 | 6 | Sottodomini e domini dedicati | Domini veri con certificati automatici su Kubernetes. | P1 | days | DEF-6.1, WL-03 | |
 | [ ] | MT-6.2 | 6 | Accesso unico su più domini | Dominio di accesso centrale; Google utilizzabile anche sugli indirizzi dedicati. | P1 | days | DEF-6.2 | Oggi Google solo sull'indirizzo principale |
 | [ ] | MT-6.3 | 6 | Brand prima dell'accesso | Logo e pagina d'ingresso per tenant; pagina "organizzazione non trovata" sui sottodomini sconosciuti. | P2 | days | DEF-6.3, WL-02, TB-DEC-05 | |
