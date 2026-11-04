@@ -271,6 +271,7 @@ jobs:
         # PLATFORM_DATABASE_URL è l'identità di piattaforma (construct_platform, provisionata
         # sopra, lib/platform/db.ts) per la console di test_platform.py: mai il superutente.
         env:
+          CONSTRUCT_PLATFORM_POLICY_WRITES: "1"
           # Il processo dell'app non eredita le stringhe del superutente e delle migrazioni che il job
           # tiene per i passi di database (e per pytest, che le legge dal proprio passo): un'identità
           # più forte di quelle due non deve nemmeno essere nell'ambiente del server.
