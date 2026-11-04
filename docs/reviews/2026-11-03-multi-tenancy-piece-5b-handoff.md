@@ -21,7 +21,7 @@ Verifiche:1659 unità in164file, single10/10 e auth-roles21/21, host13/13 e azio
 
 ## Documenti e decisioni
 
-Piano: docs/superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md. Specifica: docs/superpowers/specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md. Registro completo e costi delle decisioni1–19: docs/superpowers/sdd/2026-10-30-multi-tenancy-piece-5b-platform-ledger.md. Le decisioni e la rettifica del Ruling15 sono vincolanti; non ricostruirle dalla sola memoria.
+Piano: docs/superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md. Specifica: docs/superpowers/specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md. Registro completo e costi delle decisioni1–19: docs/reviews/2026-10-30-multi-tenancy-piece-5b-platform-ledger.md. Le decisioni e la rettifica del Ruling15 sono vincolanti; non ricostruirle dalla sola memoria.
 
 Ruling17: single non crea membership né REGISTERED automaticamente, neppure per un membro esistente. Ruling18: refreshTenant è ricalcolo essenziale senza scelta o lastTenantId, quindi «Riprova» resta disponibile solo verso default/host canonico con diritti già presenti. Ruling19: ready single rivalida tutto nello snapshot accorpato, senza nuovo lookup o scansione per richiesta. Multi conserva il proprio percorso. Le prove coprono tokenB/assistenza e richiesta successiva senza tenant.
 
