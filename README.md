@@ -163,6 +163,8 @@ login e senza BYPASSRLS), e `db.mjs apply` esegue ogni migrazione successiva con
 `set local role construct_owner`. L'utente di `MIGRATION_DATABASE_URL` ne diventa membro con la
 `0045` stessa. Se in un ambiente le migrazioni le esegue un utente diverso da quello che ha
 applicato la `0045`, va concesso a mano: `grant construct_owner to <utente>;`.
+La scelta del ruolo segue la versione nel database di destinazione. Anche su un server
+che ha già il ruolo di gruppo, fino alla 0045 compresa opera il login delle migrazioni.
 
 ### Rilascio in produzione: tre tappe (isolamento per tenant, migrazioni 0044-0047)
 
@@ -250,7 +252,7 @@ The generated module comes from the application TypeScript source
 `lib/rbac/menu-target-url.ts`; regenerate it with
 `node sources/devops/db/generate-menu-target-url.mjs`, or use `--check` to verify it.
 Generation uses the existing development TypeScript dependency; the operator runtime
-imports plain ECMAScript and needs no TypeScript loader. `test:migrations` checks drift.
+imports plain ECMAScript and needs no TypeScript loader. CI runs the drift check in `test:migrations`.
 
 ### Identità di piattaforma
 
@@ -484,6 +486,12 @@ amministratore di piattaforma. Il database della console è il login `construct_
   quello del tenant.
 - **In assistenza la console è chiusa.** Finché si è in un tenant la sezione "Piattaforma" non è
   raggiungibile: si preme prima "Esci" dalla fascia di assistenza, poi si torna alla console.
+
+Concessioni, quote e pulizia delle assegnazioni si gestiscono dalla scheda del tenant.
+L'amministratore del tenant può scaricare un archivio JSON e scegliere se estendere all'export
+il consenso per l'assistenza. Il ripristino da CLI crea un nuovo tenant sospeso e la
+cancellazione definitiva richiede un tenant già archiviato. La guida descrive le esclusioni
+dell'archivio, i registri e la sequenza di rilascio dalla 0063. [Ciclo di vita dei dati di un tenant](docs/runbooks/tenant-data-lifecycle.md)
 
 ## Local Docker with Supabase
 
@@ -719,6 +727,13 @@ set -a && . sources/devops/db/local-test.env && set +a && caffeinate -dims uv ru
 ```
 
 Integrazione ed E2E usano lo stesso database: non farli girare insieme.
+
+Prima delle due suite, la prova di aggiornamento usa `node sources/devops/db/verify-tenant-upgrade.mjs`.
+Impostare `TEST_DATABASE_DISPOSABLE=1`, `TEST_MIGRATION_DATABASE_URL` con destinazione
+`construct_upgrade_test` sul PostgreSQL di prova in ascolto su `127.0.0.1` e `AUTH_URL`
+con l'origine di prova. Il login deve poter creare la banca dati dedicata. Il runner rifiuta
+un database preesistente e rimuove quello che ha creato al termine della prova 0063→0073.
+In CI la prova affianca l'installazione nuova e `boundary-check` sul servizio usa e getta.
 
 ## Adding application pages
 

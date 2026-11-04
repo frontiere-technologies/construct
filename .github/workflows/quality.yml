@@ -5,6 +5,9 @@ on:
     paths:
       - "sources/libraries/**"
       - "sources/microservices/**"
+      - "sources/devops/**"
+      - "sources/tests/e2e/**"
+      - ".github/workflows/quality.yml"
   # Anche dopo il merge su development: le cache salvate lì (browser di Playwright) sono leggibili da
   # tutte le pull request, quelle salvate da una pull request solo da quella pull request.
   push:
@@ -12,6 +15,9 @@ on:
     paths:
       - "sources/libraries/**"
       - "sources/microservices/**"
+      - "sources/devops/**"
+      - "sources/tests/e2e/**"
+      - ".github/workflows/quality.yml"
 
 permissions:
   contents: read
@@ -216,6 +222,15 @@ jobs:
           insert into tenant_membership(user_id, status) select id, 'active' from users where email in ('admin-e2e@example.com','user-e2e@example.com') on conflict do nothing;
           insert into user_role(user_id,id_role) select u.id, r.id_role from users u join role r on r.id_tenant = app_private.current_tenant_id() and r.system_key = 'REGISTERED' where u.email in ('admin-e2e@example.com','user-e2e@example.com') on conflict do nothing;
           insert into user_role(user_id,id_role) select u.id, r.id_role from users u join role r on r.id_tenant = app_private.current_tenant_id() and r.system_key = 'TENANT_ADMIN' where u.email = 'admin-e2e@example.com' on conflict do nothing;"
+      - name: Verify the provisioned database privilege boundaries
+        env:
+          DATABASE_URL: postgresql://construct_app:construct-app-ci-runtime-password@127.0.0.1:5432/construct_test
+          PLATFORM_DATABASE_URL: postgresql://construct_platform:construct-platform-ci-password@127.0.0.1:5432/construct_test
+        run: node sources/devops/db/db.mjs boundary-check
+      - name: Verify tenant data survives the 0063 upgrade
+        env:
+          TEST_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/construct_upgrade_test
+        run: node sources/devops/db/verify-tenant-upgrade.mjs
       - name: Run database integration tests
         # Sovrascrive TEST_DATABASE_URL del job (il superutente) col login
         # limitato appena provisionato: è la connessione che la prova

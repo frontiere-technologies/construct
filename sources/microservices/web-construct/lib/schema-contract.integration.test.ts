@@ -3,10 +3,12 @@ import { afterAll, expect, it } from 'vitest'
 import { is, SQL, sql } from 'drizzle-orm'
 import { getTableConfig, getViewConfig, PgDialect, PgTable, PgView } from 'drizzle-orm/pg-core'
 import type { IndexedColumn } from 'drizzle-orm/pg-core'
+import { AUDIT_OPERATIONS } from '@/lib/audit/audit-types'
 import { closeOwner, withOwner } from '@/lib/db/testing'
 import { withGlobal } from '@/lib/db/tenant-db'
 import * as drizzleSchema from '@/lib/db/schema'
 import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
+import tenantArchiveContract from '@/lib/tenancy/tenant-archive-contract.json'
 import { assertExactCatalogSection } from './schema-contract'
 
 const TENANT_POLICY_BOUNDARY_PROBE = readFileSync(
@@ -446,30 +448,42 @@ describeIntegration('database runtime boundary', () => {
     expect(violations).toEqual([])
   })
 
-  /**
-   * Un registro di tenant è una tabella di tenant come le altre (stesse policy, controllate sopra)
-   * con un privilegio in meno: il ruolo dell'app inserisce e legge, mai modifica né cancella
-   * (specifica 2026-10-26, MT5-DEC-15). L'elenco è esplicito e controllato qui e in
-   * `db.mjs boundary-check`: una tabella di tenant nuova che dovesse essere solo accodabile va
-   * aggiunta in entrambi.
-   */
-  it('keeps tenant policies read-only and their helpers restricted to the runtime and owner', async () => {
+  it('keeps tenant policies read-only, helpers restricted, and database guards enabled', async () => {
     const violations = await withGlobal(tx => tx.execute<{ name: string; problem: string }>(sql.raw(TENANT_POLICY_BOUNDARY_PROBE)))
     expect(violations).toEqual([])
   })
 
-  it('detects a writable tenant policy with the shared operational probe and rolls the grant back', async () => {
+  it('detects unsafe policy, lifecycle helper and quota trigger changes with the shared operational probe', async () => {
     const rollback = new Error('rollback-policy-boundary-probe')
     await expect(withOwner(async tx => {
       await tx.execute(sql`grant update on public.tenant_platform_policy to construct_runtime`)
+      await tx.execute(sql`grant execute on function app_private.erase_tenant(bigint,text,uuid) to construct_runtime`)
+      await tx.execute(sql`alter table public.role disable trigger tenant_resource_write_lock`)
       const violations = await tx.execute<{ name: string; problem: string }>(sql.raw(TENANT_POLICY_BOUNDARY_PROBE))
-      expect(violations).toEqual([{ name: 'tenant_platform_policy', problem: 'the runtime can write' }])
+      expect(violations).toEqual([
+        { name: 'app_private.erase_tenant(bigint,text,uuid)', problem: 'helper boundary differs' },
+        { name: 'role', problem: 'missing or disabled trigger tenant_resource_write_lock' },
+        { name: 'tenant_platform_policy', problem: 'the runtime can write' },
+      ])
       throw rollback
     })).rejects.toBe(rollback)
     const afterRollback = await withGlobal(tx => tx.execute(sql.raw(TENANT_POLICY_BOUNDARY_PROBE)))
     expect(afterRollback).toEqual([])
   })
 
+  it('classifies every audit operation in the tenant archive or platform constraint', async () => {
+    const [{ definition }] = await withGlobal(tx => tx.execute<{ definition: string }>(sql`
+      select pg_get_constraintdef(oid) as definition from pg_constraint
+      where conrelid = 'public.platform_audit_event'::regclass
+        and conname = 'platform_audit_event_tenant_association_check'`))
+    const platform = [...definition.matchAll(/'([a-z]+(?:\.[a-z_]+)+)'/g)].map(match => match[1])
+    const archive = tenantArchiveContract.properties.tables.properties.tenant_audit_event.items.properties.operation.enum
+    expect(archive).not.toContain('tenant.restore')
+    expect(archive).not.toContain('tenant.delete')
+    expect([...new Set([...platform, ...archive])].sort()).toEqual([...AUDIT_OPERATIONS].sort())
+  })
+
+  // Il runtime inserisce e legge il registro di tenant. La CLI verifica lo stesso confine.
   it('keeps the tenant audit tables append-only for the runtime role', async () => {
     const violations = await withGlobal(tx => tx.execute<{ name: string; problem: string }>(sql`
       select t.name, 'not a classified tenant table' as problem

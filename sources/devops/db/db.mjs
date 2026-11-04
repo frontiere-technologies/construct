@@ -138,13 +138,10 @@ function migrationAdapter(sql) {
         // migrazioni successive, che scriverebbero nel suo tenant invece di fallire con 42501
         // (Review Focus 2).
         await sql`select set_config('app.tenant_id', '', false), set_config('app.menu_origin', ${menuOrigin()}, true)`
-        // Dalla 0045 in poi ogni migrazione lavora come construct_owner, che possiede gli oggetti e
-        // non ha BYPASSRLS: la RLS forzata vale anche qui (specifica 2026-10-13, §2.1). La 0045
-        // stessa gira ancora come utente delle migrazioni, perché il ruolo non esiste ancora.
-        const [{ ownerExists }] = await sql`
-          select exists (select 1 from pg_roles where rolname = 'construct_owner') as "ownerExists"
-        `
-        if (ownerExists) await sql`set local role construct_owner`
+        // La 0045 trasferisce gli oggetti dal login delle migrazioni a construct_owner, che
+        // non ha BYPASSRLS. Il ruolo può già esistere nel cluster, quindi conta la versione
+        // applicata a questa banca dati: la 0045 usa ancora il login, dalla 0046 serve l'owner.
+        if (migration.version > '0045') await sql`set local role construct_owner`
         if (migration.version === '0065') await prepareMenuTargetBackfill(sql, menuOrigin())
         await sql.unsafe(migration.sql).simple()
         // La cronologia resta dell'utente delle migrazioni, non del proprietario.
@@ -724,7 +721,7 @@ async function boundaryCheck() {
       // Query condivisa con schema-contract: esecuzione e reporting restano propri della CLI.
       const policyViolations = await sql.unsafe(readFileSync(
         new URL('./probes/tenant-policy-boundary.sql', import.meta.url), 'utf8'))
-      report('tenant policies are read-only and policy helpers preserve the privilege boundary', !policyViolations.length,
+      report('tenant policies, lifecycle helpers and database guards preserve the privilege boundary', !policyViolations.length,
         policyViolations.map(row => row.name + ': ' + row.problem).join(', '))
       // Specchio di 'keeps the tenant audit tables append-only for the runtime role': i registri di
       // tenant sono tabelle di tenant con un privilegio in meno, e l'elenco è esplicito.

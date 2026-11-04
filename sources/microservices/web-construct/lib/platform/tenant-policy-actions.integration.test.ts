@@ -321,6 +321,84 @@ describeIntegration('platform tenant policy actions', () => {
     }
   })
 
+  it.each([
+    ['role_permission', 'id_permission', 'apply_role_permission_deltas'],
+    ['role_functionality', 'id_menu_entry', 'apply_role_functionality_deltas'],
+  ] as const)('does not deadlock when purge follows a %s delta paused after DELETE', async (table, key, delta) => {
+    await seedGrants()
+    const value = await draft()
+    value.areas.people = false
+    expect(await saveTenantPolicy(fixture.tenantId, value)).toEqual({ ok: true, revision: 2 })
+    const preview = await previewTenantGrantPurge(fixture.tenantId, ['read-users'])
+    const before = await grants()
+    const beforeAudits = await audits()
+    const targetTable = sql`public.${sql.identifier(table)}`
+    // The two-argument key has a separate namespace from the production policy lock.
+    const barrier = sql`(7313, pg_catalog.pg_backend_pid())`
+    await withOwner(async tx => {
+      await tx.execute(sql`create function app_private.test_pause_delta_delete() returns trigger
+        language plpgsql set search_path = '' as $$
+        declare holder integer := nullif(current_setting('app.test_delta_barrier', true), '')::integer;
+        begin
+          if holder is not null then perform pg_catalog.pg_advisory_xact_lock(7313, holder); end if;
+          return null;
+        end $$`)
+      await tx.execute(sql`create trigger test_pause_delta_delete after delete on ${targetTable}
+        for each row execute function app_private.test_pause_delta_delete()`)
+    })
+    let revocation: Promise<unknown> | undefined
+    let confirmation: ReturnType<typeof purgeTenantGrants> | undefined
+    try {
+      await withOwner(async holder => {
+        const [{ pid: holderPid }] = await holder.execute<{ pid: number }>(sql`select pg_catalog.pg_backend_pid() as pid`)
+        await holder.execute(sql`select pg_catalog.pg_advisory_xact_lock${barrier}`)
+        let identify!: (pid: number) => void
+        const revoker = new Promise<number>(resolve => { identify = resolve })
+        revocation = withTenant(fixture.tenantId, async tx => {
+          const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_catalog.pg_backend_pid() as pid`)
+          const [{ id }] = await tx.execute<{ id: string }>(sql`
+            select ${sql.identifier(key)}::text as id from ${targetTable} where id_role = ${fixture.roleId}
+              and ${sql.identifier(key)} = ${table === 'role_permission'
+                ? sql`(select id_permission from public.permission where code = 'read-users')`
+                : sql`${fixture.menuEntryId}::bigint`}`)
+          await tx.execute(sql`select set_config('app.test_delta_barrier', ${String(holderPid)}, true)`)
+          identify(pid)
+          await tx.execute(sql`select public.${sql.identifier(delta)}(${fixture.roleId}::bigint, '{}'::bigint[], array[${id}::bigint])`)
+        })
+        const revokerPid = await Promise.race([revoker, revocation.then(() => { throw new Error('delta did not reach the barrier') })])
+        await vi.waitFor(async () => {
+          const [{ waiting }] = await holder.execute<{ waiting: boolean }>(sql`
+            select ${holderPid} = any(pg_catalog.pg_blocking_pids(${revokerPid})) as waiting`)
+          expect(waiting).toBe(true)
+        }, { timeout: 2500 })
+        // In 0072 the purge reaches the grant's row lock. With the repair it waits
+        // earlier on the same revoker, at the policy lock. Either wait is observable.
+        confirmation = purgeTenantGrants(fixture.tenantId, preview)
+        void confirmation.catch(() => undefined)
+        await vi.waitFor(async () => {
+          const [{ waiting }] = await holder.execute<{ waiting: boolean }>(sql`
+            select exists(select 1 from pg_catalog.pg_stat_activity a
+              where ${revokerPid} = any(pg_catalog.pg_blocking_pids(a.pid))) as waiting`)
+          expect(waiting).toBe(true)
+        }, { timeout: 2500 })
+      })
+      const results = await Promise.allSettled([revocation, confirmation])
+      for (const result of results) {
+        if (result.status === 'rejected') throw (result.reason as Error).cause ?? result.reason
+      }
+      expect(await confirmation).toEqual({ ok: false, reason: 'conflict' })
+      expect(await grants()).toEqual({
+        ...before,
+        ...(table === 'role_permission' ? { permissions: before.permissions.filter(code => code !== 'read-users') } : { menus: [] }),
+      })
+      expect((await readTenantPolicy(fixture.tenantId)).revision).toBe(2)
+      expect(await audits()).toEqual(beforeAudits)
+    } finally {
+      await Promise.allSettled([revocation, confirmation])
+      await withOwner(tx => tx.execute(sql`drop function app_private.test_pause_delta_delete() cascade`))
+    }
+  }, 12_000)
+
   it('rejects stale fingerprints even when counts match and accepts canonical menu aliases', async () => {
     await seedGrants()
     const [alias] = await withOwner(tx => tx.execute<{ id: number }>(sql`insert into public.menu_entry

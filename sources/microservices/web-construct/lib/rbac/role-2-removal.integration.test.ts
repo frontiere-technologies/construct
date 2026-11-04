@@ -59,11 +59,14 @@ async function giveRole2(tenantId: TenantId): Promise<number> {
     }
     await tx.execute(sql`
       insert into public.role_permission (id_role, id_permission)
-      select ${roleId}, p.id_permission from public.permission p order by p.id_permission limit 1
+      select ${roleId}, p.id_permission from public.permission p where p.code = 'read-users'
       on conflict do nothing`)
+    const [{ id }] = await tx.execute<{ id: string }>(sql`
+      insert into public.menu_entry (name, id_functionality_type, functionality_link)
+      values ('role 2 fixture', 3, '/user-management') returning id_menu_entry::text as id`)
     await tx.execute(sql`
       insert into public.role_functionality (id_role, id_menu_entry)
-      select ${roleId}, m.id_menu_entry from public.menu_entry m order by m.id_menu_entry limit 1
+      values (${roleId}, ${id}::bigint)
       on conflict do nothing`)
     return roleId
   }, tenantId)

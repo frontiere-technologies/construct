@@ -33,6 +33,7 @@ import {
 import { deleteTenantPermanently } from '@/lib/platform/tenant-delete-actions'
 import { previewTenantGrantPurge, purgeTenantGrants, saveTenantPolicy } from '@/lib/platform/tenant-policy-actions'
 import { readTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
+import type { TenantArchive } from '@/lib/tenancy/tenant-archive-types'
 import { saveAppTheme } from '@/lib/theme-actions'
 import { endSupport, startSupport } from '@/lib/platform/support-actions'
 import { getSystemRoleIds } from './system-roles'
@@ -245,7 +246,8 @@ function sessionOf(userId: string, tenantState: 'ready' | 'choose' = 'ready') {
 /**
  * L'impronta di B: per ogni tabella di tenant del registro l'md5 delle righe di B (la RLS forzata
  * vale anche per il proprietario), più le righe globali che appartengono a B: la riga di `tenant`,
- * i suoi indirizzi, le sue persone e i loro token. Un'istruzione sola, costruita una volta.
+ * i suoi indirizzi, le sue persone, i loro token e gli eventi di piattaforma in cui B compare
+ * come destinazione o origine. Un'istruzione sola, costruita una volta.
  */
 async function fingerprintOfB(): Promise<Record<string, string | null>> {
   const people = `{${[bUser, bOther].join(',')}}`
@@ -256,6 +258,8 @@ async function fingerprintOfB(): Promise<Record<string, string | null>> {
       (select md5(string_agg(t::text, '|' order by t::text)) from public.tenant t where t.id = ${B}) as tenant_row,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_host t
         where t.id_tenant = ${B}) as tenant_host,
+      (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.platform_audit_event t
+        where t.id_tenant = ${B} or t.source_tenant_id = ${String(B)}) as platform_audit,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.users t
         where t.id = any(${people}::uuid[])) as people,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.password_set_tokens t
@@ -347,12 +351,28 @@ const CASES: Record<string, CrossTenantCase> = {
   'app/api/tenant/export/route.ts#GET': {
     entry: tenantExport,
     run: async () => {
-      const response = await tenantExport(new Request(`http://localhost:3001/api/tenant/export?tenantId=${B}`))
+      const url = `http://localhost:3000/api/tenant/export?tenantId=${B}`
+      mocks.session = sessionOf(memberA)
+      const denied = await tenantExport(new Request(url))
+      expect(denied.status).toBe(403)
+      expect(denied.headers.get('content-disposition')).toBeNull()
+      mocks.session = sessionOf(adminA)
+      const response = await tenantExport(new Request(url))
       expect(response.status).toBe(200)
-      const archive = await response.json() as { sourceTenant: { id: string }; identities: { id: string }[]; tables: Record<string, { id_tenant: string }[]> }
+      const archive = await response.json() as TenantArchive
       expect(archive.sourceTenant.id).toBe(String(A))
-      for (const rows of Object.values(archive.tables)) expect(rows.every(row => row.id_tenant === String(A))).toBe(true)
-      expect(archive.identities.map(row => row.id)).not.toContain(bUser)
+      expect(Object.keys(archive.tables).sort()).toEqual([...tenantTables].sort())
+      for (const name of Object.keys(archive.tables) as Array<keyof TenantArchive['tables']>) {
+        expect(archive.tables[name].map(row => row.id_tenant)).toEqual(Array(archive.counts[name]).fill(String(A)))
+      }
+      expect(archive.tables.tenant_membership.map(row => row.user_id).sort()).toEqual([adminA, memberA].sort())
+      const identitiesInA = new Set([
+        adminA, memberA, ...archive.tables.tenant_audit_event.map(row => row.actor_user_id),
+        ...archive.tables.tenant_settings.map(row => row.support_granted_by),
+      ])
+      identitiesInA.delete(null)
+      expect(archive.identities.map(row => row.id).sort()).toEqual([...identitiesInA].sort())
+      expect(identitiesInA.has(bUser) || identitiesInA.has(bOther)).toBe(false)
       expectNoTraceOfB(archive)
     },
   },
@@ -877,6 +897,10 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
       actorKind: 'person', actorEmail: `zzz_${MARK_B}@example.test`, operation: 'role.create', objectType: 'role', objectId: 'b-audit',
       details: { name: MARK_B },
     }), B)
+    await withOwner(tx => tx.execute(sql`insert into public.platform_audit_event
+      (id_tenant, actor_kind, operation, object_type, object_id, source_tenant_id) values
+      (${B}, 'command', 'tenant.create', 'tenant', ${String(B)}, null),
+      (${A}, 'command', 'tenant.restore', 'tenant', ${String(A)}, ${String(B)})`))
 
     const bRoles = await withOwner(tx => tx.select({ id: role.idRole }).from(role), B)
     bRoleIds = bRoles.map(row => row.id)
@@ -957,6 +981,9 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
       expect((await sendInvite(jsonRequest('/api/admin/send-invite', { userId: bUser }))).status).toBe(404)
       const audit = await tenantAuditGrid(jsonRequest('/api/audit/tenant-grid', { page: 0, size: 200 }))
       expectNoTraceOfB(await audit.json())
+      const exportResponse = await tenantExport(new Request(`http://localhost:3000/api/tenant/export?tenantId=${B}`))
+      expect(exportResponse.status).toBe(403)
+      expect(exportResponse.headers.get('content-disposition')).toBeNull()
       // Da dentro l'assistenza la console è chiusa: nemmeno B si apre da lì.
       await expect(startSupport(Number(B), 'dall\'assistenza')).rejects.toThrow('Unauthorized')
       // L'ingresso in A ha lasciato le sue voci in A: B (l'impronta) non ne ha.
