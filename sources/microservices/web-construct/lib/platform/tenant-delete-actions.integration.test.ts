@@ -1,11 +1,16 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { withTenant } from '@/lib/db/tenant-db'
-import { closeOwner, withOwner } from '@/lib/db/testing'
-import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
+import { closeTenantExportExecutor } from '@/lib/db/tenant-export-scope'
+import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
+import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
+import { resolveActor } from '@/lib/rbac/actor'
 import { createPolicyFixture, type PolicyFixture } from '@/lib/tenancy/policy-test-fixture'
 import contract from '@/lib/tenancy/tenant-archive-contract.json'
+import { parseTenantArchive } from '@/lib/tenancy/tenant-archive-schema'
+import { prepareTenantExport } from '@/lib/tenancy/tenant-export-service'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
+import { tenantIdForTest } from '@/lib/tenancy/testing'
 import { listPlatformAudit, listPlatformAuditForTenant } from './audit-service'
 import { closePlatform, withPlatform } from './db'
 import { deleteTenantPermanently as action } from './tenant-delete-actions'
@@ -65,7 +70,7 @@ describeIntegration('permanent tenant erasure', () => {
     }
   })
 
-  afterAll(async () => { await closePlatform(); await closeOwner() })
+  afterAll(async () => { await closeTenantExportExecutor(); await closePlatform(); await closeOwner() })
 
   it('keeps exactly one minimal deletion event', async () => {
     b = await createPolicyFixture('erase-b')
@@ -241,24 +246,70 @@ describeIntegration('permanent tenant erasure', () => {
     expect((await snapshot(a.tenantId)).tables).toEqual(ownedTables.map(() => []))
   })
 
-  it('rejects a concurrent restore origin and removes it on a subsequent restore after erasure', async () => {
-    b = await createPolicyFixture('erase-b')
-    const destination = b.tenantId
-    await archive()
-    const before = await snapshot(destination)
-    const restoreAudit = () => withPlatform(tx => tx.execute(sql`
-      insert into public.platform_audit_event (id_tenant, actor_kind, operation, object_type, object_id, details)
-      values (${destination}, 'command', 'tenant.restore', 'tenant', ${String(destination)},
-        jsonb_build_object('sourceTenantId', ${String(a.tenantId)}::text))`), destination)
+  it('rolls back a concurrent archive restore, then restores without reintroducing its erased platform origin', async () => {
     await withOwner(async tx => {
-      await tx.execute(sql`select id from public.tenant where id = ${a.tenantId} for update`)
-      await expect(restoreAudit()).rejects.toMatchObject({ cause: { code: '55P03' } })
-      await tx.execute(eraseSql())
+      await tx.execute(sql`update public.users set last_tenant_id = ${a.tenantId} where id = ${a.memberId}`)
+      await tx.execute(sql`insert into public.tenant_audit_event (actor_kind, operation)
+        values ('platform', 'support.enter')`)
     }, a.tenantId)
-    expect(await snapshot(destination)).toEqual(before)
-    await restoreAudit()
-    expect((await snapshot(destination)).audit).toEqual([{ row: expect.objectContaining({
-      operation: 'tenant.restore', source_tenant_id: null, details: {},
-    }) }])
+    const actor = await resolveActor(a.tenantId, a.adminId)
+    if (!actor) throw new Error('Missing source administrator')
+    const bytes = await prepareTenantExport(actor, new AbortController().signal)
+    const fixtureArchive = parseTenantArchive(JSON.parse(new TextDecoder().decode(bytes)))
+    const userMap = { [a.adminId]: a.adminId, [a.memberId]: a.memberId }
+    await archive()
+
+    const slug = `zzz-erase-restore-${unique()}`
+    const restore = () => withOwner(async tx => {
+      await tx.execute(sql`set local lock_timeout = '2s'`)
+      const [row] = await tx.execute<{ id: string }>(sql`
+        select app_private.restore_tenant_archive(
+          ${JSON.stringify(fixtureArchive)}::jsonb, ${slug}, 'Restored after erasure',
+          ${JSON.stringify(userMap)}::jsonb, ${a.platformAdminId}::uuid
+        )::text as id`)
+      return tenantIdForTest(Number(row.id))
+    })
+    const lastTenantSequenceValue = async () => {
+      const [row] = await withOwner(tx => tx.execute<{ id: string }>(sql`select last_value::text as id from public.s_id_tenant`))
+      return tenantIdForTest(Number(row.id))
+    }
+
+    try {
+      const before = await lastTenantSequenceValue()
+      await withPlatform(async tx => {
+        await tx.execute(sql`select app_private.lock_tenant_policy()`)
+        await tx.execute(sql`select id from public.tenant where id = ${a.tenantId} for update`)
+        // The barrier stays held until restore rejects. A blocking lock would hit
+        // lock_timeout and report a different message, even though the SQLSTATE is also 55P03.
+        await expect(restore()).rejects.toMatchObject({
+          cause: { code: '55P03', message: 'could not obtain lock on row in relation "tenant"' },
+        })
+        const rolledBackId = await lastTenantSequenceValue()
+        expect(rolledBackId).toBeGreaterThan(before)
+        expect(await snapshot(rolledBackId)).toEqual({ tables: ownedTables.map(() => []), tenant: [], hosts: [], audit: [] })
+        expect(await withOwner(owner => owner.execute(sql`select last_tenant_id::text from public.users where id = ${a.memberId}`)))
+          .toEqual([{ last_tenant_id: String(a.tenantId) }])
+        await tx.execute(eraseSql())
+      }, a.tenantId)
+
+      const destination = await restore()
+      expect(await withOwner(tx => tx.execute(sql`select last_tenant_id from public.users where id = ${a.memberId}`)))
+        .toEqual([{ last_tenant_id: null }])
+      const restored = await snapshot(destination)
+      expect(restored.tenant).toEqual([{ row: expect.objectContaining({ slug, status: 'suspended' }) }])
+      expect(restored.tables[ownedTables.indexOf('tenant_membership')]).toEqual(expect.arrayContaining([
+        { row: expect.objectContaining({ user_id: a.memberId }) },
+        { row: expect.objectContaining({ user_id: a.adminId }) },
+      ]))
+      expect(restored.tables[ownedTables.indexOf('tenant_audit_event')]).toContainEqual({
+        row: expect.objectContaining({ operation: 'support.enter', origin: 'restored', source_tenant_id: String(a.tenantId) }),
+      })
+      expect(restored.audit).toEqual([{ row: expect.objectContaining({
+        id_tenant: destination, object_id: String(destination), operation: 'tenant.restore', source_tenant_id: null, details: {},
+      }) }])
+    } finally {
+      const [row] = await withOwner(tx => tx.execute<{ id: string }>(sql`select id::text as id from public.tenant where slug = ${slug}`))
+      if (row) await deleteTenantForTest(tenantIdForTest(Number(row.id)))
+    }
   })
 })
