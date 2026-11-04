@@ -1,10 +1,14 @@
 # Multi-tenancy 5b — stato e ripresa del 3 novembre 2026
 
-T01–T09 sono conclusi e approvati. T09 nel commit62bc73a, con 1700 test unitari e 109 prove DB mirate superati; chiusura documentale81297a7. T10 è in corso presso /root/mt5b_t10_implementer: formato e prime prove presenti, servizio ancora da completare; T11–T13 non avviati. Prova0069, sviluppo0063 invariato. Alla verifica del 3 novembre alle15:32 l'uso era consentito (65% finestra breve,26% settimanale) e l'agente attivo: nessun blocco attuale dei crediti osservato. Nessun reset o cambio di account/modello eseguito dall’assistente.
+Aggiornamento del 4 novembre 2026. T01–T10 sono conclusi e rivisti. Prova locale 0070, sviluppo 0063. Restano T11–T13.
 
 Area da riusare: /Users/mario.stefanutti/.codex/worktrees/multi-tenancy-piece-5b/construct, ramo feature/multi-tenancy-piece-5b. Nessun nuovo worktree necessario; checkout originale, stash e file del proprietario restano fuori dall’esecuzione.
 
 ## Punto attuale
+
+T10 approvato. Base 81297a7, implementazione 365f53a e quattro correzioni fino a 86a19de. Il riesame finale GPT-6.1 con ragionamento alto ha approvato il passaggio fra host in TLS diretto. Ultime prove mirate 13/13, lint e tipi superati. I rapporti task-10-report.md e task-10-r4-review.md sono nell’area del piano. Proseguire con T11, ripristino in un nuovo tenant sospeso. Catena certificati, pooler e cancellazione TLS sul percorso di destinazione sono verifiche esplicite di T13.
+
+## Registro storico T07 — concluso, da non riavviare
 
 Codice T07: commit5046512deb8a4ddaeddde840e0b40a17b8ca7451 e correzione0711843082db3e3fca1c409a4c7e888b4d86bf55. Base del task: dcfbabc44ccc264da7d391e9051b1039b8ae7f6b. Il checkpoint dei documenti è nel commit locale69a8ff9; **non usare HEAD~1 per costruire il diff**.
 
@@ -36,3 +40,5 @@ Il segreto Auth.js di prova è stato inserito dal proprietario e la presenza non
 Stato T08 finale:1689unità,84integrazioni più20finali,2E2E e62mirati del fix verdi; modello peer e riesame GPT-6.1/high.0068approvata e applicata solo alla prova, server3001fermato. Rapporto task-8-report.md, review task-8-review.md e task-8-r1-review.md nell’area del piano. Per ripresa usare il task9 del piano, non le azioni storiche T07 sopra.
 
 T09 completato: nuova estensione di consenso defaultfalse e guardie fresche approvate; rapporto task-9-report.md/review task-9-review.md. Per la ripresa continuare lo stesso esecutore T10, BASE81297a7, con task-10-brief.md e task-10-context.md. Non avviare un secondo esecutore né rifare T01–T09. Ruling21 nel registro definisce l'esecutore DB export isolato e annullabile, da provare prima del servizio; il semplice end della connessione non è prova sufficiente. Le prime prove del formato sono parziali, non un'approvazione T10. Dopo implementazione serve revisione indipendente GPT-6.1/high.
+
+Aggiornamento T10 delle15:38: prova preliminare annullamento/rollback/riuso/coda2/2 superata, log letto; servizio ora in sviluppo.0070 applicata solo alla prova dopo trial con rollback verificato. Nessuna modifica a0001–0069. Le verifiche complessive T10 e la revisione restano aperte.

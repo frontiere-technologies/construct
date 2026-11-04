@@ -18,7 +18,7 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
   [piano operativo](../../superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md) approvati.
   Metodo scelto: agenti con revisione per ogni attività. T01 (catalogo), T02 (configurazione
   protetta, copia iniziale e blocchi per tenant) e T03 (menu e destinazioni canoniche) realizzati
-  e rivisti; T04 (limite per tutti gli attori e nuovi grant SQL) e T05 (modifica atomica e cancellazione selettiva delle assegnazioni) conclusi e rivisti; anche T06 (quote e tempo delle query) e T07 (modalità singola) approvati; anche T08 (schermate e editor) e T09 (consenso export distinto) conclusi e rivisti, T10–T13 ancora aperti. La prova è alla0069; ultimi controlliT09:1700unità e109integrazioni mirate verdi, guardie/consensi approvati. I2E2EdiT08 restano verificati; esportazione e ciclo dati ancora da realizzare. Lo sviluppo resta alla 0063.
+  e rivisti; T04 (limite per tutti gli attori e nuovi grant SQL) e T05 (modifica atomica e cancellazione selettiva delle assegnazioni) conclusi e rivisti; anche T06 (quote e tempo delle query) e T07 (modalità singola) approvati; anche T08 (schermate e editor) e T09 (consenso export distinto) conclusi e rivisti. Anche T10 (esportazione con consenso, limiti e annullamento) è verificato e rivisto. Prova alla 0070. T11–T13 ancora aperti: ripristino, cancellazione e verifiche complessive. Lo sviluppo resta alla 0063.
 
 ## Come si legge
 
