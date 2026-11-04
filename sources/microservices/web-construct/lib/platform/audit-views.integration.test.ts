@@ -146,7 +146,7 @@ beforeAll(async () => {
   await withOwner(tx => tx.insert(platformAuditEvent).values([
     { actorKind: 'platform', actorEmail: `zzz_${MARK_PLATFORM}@example.test`, operation: 'tenant.create', objectType: 'tenant', objectId: `${MARK_PLATFORM}1`, idTenant: B, details: { name: MARK_PLATFORM } },
     { actorKind: 'platform', actorEmail: `zzz_${MARK_PLATFORM}@example.test`, operation: 'language.create', objectType: 'language', objectId: `${MARK_PLATFORM}2` },
-    { actorKind: 'platform', actorEmail: `zzz_${MARK_PLATFORM_A}@example.test`, operation: 'tenant.update', objectType: 'tenant', objectId: `${MARK_PLATFORM_A}1`, idTenant: A, details: { name: MARK_PLATFORM_A } },
+    { actorKind: 'platform', actorEmail: `zzz_${MARK_PLATFORM_A}@example.test`, operation: 'tenant.status', objectType: 'tenant', objectId: `${MARK_PLATFORM_A}1`, idTenant: A, details: { name: MARK_PLATFORM_A } },
   ]))
 }, 90_000)
 

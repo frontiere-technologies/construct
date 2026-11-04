@@ -2,19 +2,42 @@
 
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
+import { TenantFeatureUnavailableError, withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
+import { tenantQuotaReason } from '@/lib/tenancy/tenant-quota-reason'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { withTenant, type TenantTx } from '@/lib/db/tenant-db'
+import type { TenantTx } from '@/lib/db/tenant-db'
+import { selectTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
+import { mainBaseUrl } from '@/lib/tenancy/tenant-base-url'
 import { menuEntry } from '@/lib/db/schema'
+import { normalizeMenuTargetUrl } from './menu-target-url'
+import { bindMenuTarget, canUseMenuEntry } from './menu-feature-binding'
+import { menuAreaSchema } from './action-input-schemas'
 import { toMenuEntryRow } from './nav-row-mapper'
 import { sanitizeSvg } from './svg-sanitize'
 import { canDeleteSubtree, hasChildren, isDescendant } from './nav-tree-builder'
 import type { CreateNavItemInput, UpdateNavItemInput, MoveInput, MenuEntryRow } from './types'
 import { ITEM_TYPE_CATEGORY } from './types'
 
-async function lockNavigationWrites(tx: TenantTx) {
-  await tx.execute(sql`select pg_advisory_xact_lock(49374201)`)
+class MenuTargetUnavailableError extends Error {}
+
+async function bindTarget(
+  tx: TenantTx,
+  input: CreateNavItemInput,
+  areaKey: CreateNavItemInput['areaKey'],
+  previousAreaKey?: MenuEntryRow['area_key'],
+) {
+  const origin = process.env.AUTH_URL || process.env.NEXTAUTH_URL ? new URL(mainBaseUrl()).origin : ''
+  await tx.execute(sql`select set_config('app.menu_origin', ${origin}, true)`)
+  const binding = bindMenuTarget({ link: input.functionalityLink, functionalityType: input.idFunctionalityType, areaKey: menuAreaSchema.parse(areaKey ?? null) }, origin)
+  // Solo contenuti propri e categorie conservano un'area di presentazione scelta in precedenza.
+  // Un nuovo URL interno prende sempre l'area della propria capacità.
+  if (areaKey === undefined && previousAreaKey !== undefined && (binding.featureKey === 'use-custom-content' || binding.featureKey === null)) {
+    binding.areaKey = previousAreaKey
+  }
+  if (!canUseMenuEntry(await selectTenantPolicy(tx), binding)) throw new MenuTargetUnavailableError('menu_capability_unavailable')
+  return { ...binding, canonicalLink: normalizeMenuTargetUrl(input.functionalityLink, input.idFunctionalityType ?? null, origin) }
 }
 
 async function writeMenuEntryTags(tx: TenantTx, idMenuEntry: number, tagTranslations: Record<string, string[]>) {
@@ -88,8 +111,11 @@ async function reparent(
   }
 }
 
-export async function createNavigationItem(input: CreateNavItemInput): Promise<{ id: number }> {
-  const actor = await requirePermission('manage-menu')
+export async function createNavigationItem(input: CreateNavItemInput): Promise<
+  { id: number } | { ok: false; reason: 'menu_quota' | 'capability_unavailable' | 'target_unavailable' }
+> {
+  const actor = await requirePermission('manage-menu', { onDenied: 'return' })
+  if (!actor) return { ok: false, reason: 'capability_unavailable' }
   if (!input.name.trim()) throw new Error('Name is required')
   // Una categoria di menu non è un permesso: raggruppa voci, non protegge niente.
   const isCategory = input.idItemType === ITEM_TYPE_CATEGORY
@@ -112,11 +138,10 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
   }
 
   try {
-    const created = await withTenant(actor.tenantId, async tx => {
-      await lockNavigationWrites(tx)
-
+    const created = await withTenantFeature(actor, 'manage-menu', async tx => {
       // Le voci di primo livello hanno id_parent nullo: append-at-end fra i fratelli veri
       // (quelli sotto lo stesso genitore, root incluso), non un ordine fisso a 0.
+      const binding = await bindTarget(tx, input, input.areaKey)
       const siblings = await loadMenuItems(tx)
       const nextOrder = siblings
         .filter(i => i.id_parent === input.idItemParent)
@@ -129,6 +154,9 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
           name: input.name.trim(),
           idFunctionalityType: input.idFunctionalityType,
           functionalityLink: input.functionalityLink,
+          areaKey: binding.areaKey,
+          featureKey: binding.featureKey,
+          canonicalLink: binding.canonicalLink,
           iconPath: sanitizeSvg(input.iconPath),
           openInNewTab: input.openInNewTab === false ? 0 : 1,
           itemTranslation: input.itemTranslation,
@@ -146,7 +174,10 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
     revalidatePath('/', 'layout')
     return { id: created.id }
   } catch (err) {
-    throw new Error(`Failed to create item: ${err instanceof Error ? err.message : String(err)}`)
+    if (err instanceof TenantFeatureUnavailableError) return { ok: false, reason: 'capability_unavailable' }
+    if (err instanceof MenuTargetUnavailableError) return { ok: false, reason: 'target_unavailable' }
+    if (tenantQuotaReason(err) === 'menu_quota') return { ok: false, reason: 'menu_quota' }
+    throw new Error('Failed to create item')
   }
 }
 
@@ -160,8 +191,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
   const actor = await requirePermission('manage-menu')
   if (!input.name.trim()) throw new Error('Name is required')
   try {
-    await withTenant(actor.tenantId, async tx => {
-      await lockNavigationWrites(tx)
+    await withTenantFeature(actor, 'manage-menu', async tx => {
       await assertMutable(id, tx)
 
       const items = await loadMenuItems(tx)
@@ -192,12 +222,22 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
         await reparent(tx, items, id, input.idItemParent, siblings)
       }
 
+      const isTargetChanged = current.functionality_link !== input.functionalityLink
+        || current.id_functionality_type !== (input.idFunctionalityType ?? null)
+        || input.areaKey !== undefined && input.areaKey !== current.area_key
+      const binding = isTargetChanged
+        ? await bindTarget(tx, input, input.areaKey, wasCategory || current.feature_key === 'use-custom-content' ? current.area_key : undefined)
+        : { areaKey: current.area_key, featureKey: current.feature_key, canonicalLink: current.canonical_link }
+
       await tx
         .update(menuEntry)
         .set({
           name: input.name.trim(),
           idFunctionalityType: input.idFunctionalityType,
           functionalityLink: input.functionalityLink,
+          areaKey: binding.areaKey,
+          featureKey: binding.featureKey,
+          canonicalLink: binding.canonicalLink,
           iconPath: sanitizeSvg(input.iconPath),
           openInNewTab: input.openInNewTab === false ? 0 : 1,
           itemTranslation: input.itemTranslation,
@@ -222,8 +262,7 @@ export async function updateNavigationItem(id: number, input: UpdateNavItemInput
 
 export async function moveNavigationItem(id: number, move: MoveInput): Promise<void> {
   const actor = await requirePermission('manage-menu')
-  await withTenant(actor.tenantId, async tx => {
-    await lockNavigationWrites(tx)
+  await withTenantFeature(actor, 'manage-menu', async tx => {
     await assertMutable(id, tx)
     const items = await loadMenuItems(tx)
     const before = items.find(i => i.id_menu_entry === id)
@@ -242,8 +281,7 @@ export async function moveNavigationItem(id: number, move: MoveInput): Promise<v
 export async function deleteNavigationItem(id: number): Promise<void> {
   const actor = await requirePermission('manage-menu')
   try {
-    await withTenant(actor.tenantId, async tx => {
-      await lockNavigationWrites(tx)
+    await withTenantFeature(actor, 'manage-menu', async tx => {
       const items = await loadMenuItems(tx)
       if (!items.some(i => i.id_menu_entry === id)) return
       if (!canDeleteSubtree(items, id)) throw new Error('This item (or a descendant) is immutable and cannot be deleted')

@@ -120,6 +120,7 @@ export function TenantsTableClient(props: TenantsUrlParams) {
         <NewTenantDialog
           onClose={() => setCreating(false)}
           onCreated={() => gridApi?.refreshInfiniteCache()}
+          onQuotaRejected={() => { router.refresh(); gridApiRef.current?.refreshInfiniteCache() }}
         />
       )}
     </>

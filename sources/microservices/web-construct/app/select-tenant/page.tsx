@@ -1,4 +1,5 @@
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { isMultiTenantEnabled } from '@/lib/tenancy/tenancy-mode'
 import { getSession } from '@/lib/auth-session'
 import { allowAnyAuthenticated } from '@/lib/rbac/access-declarations'
 import { listAvailableTenants } from '@/lib/tenancy/host-tenants'
@@ -14,6 +15,7 @@ import { TenantNotConfigured } from '@/components/tenancy/TenantNotConfigured'
  */
 export default async function SelectTenantPage() {
   allowAnyAuthenticated()
+  if (!isMultiTenantEnabled()) notFound()
   const session = await getSession()
   const userId = session?.user?.id
   if (!session || !userId || !session.user.accountActive) redirect('/login')

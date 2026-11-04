@@ -498,3 +498,22 @@ test('every command audit operation is an operation of the application audit log
     assert.ok(declared.includes(`'${operation}'`), operation)
   }
 })
+
+test('menu origin uses the public auth URL and refuses unsafe origins', async () => {
+  const { menuOrigin } = await import('./migration-lib.mjs')
+  assert.equal(menuOrigin({ AUTH_URL: 'https://Construct.Example:443/base' }), 'https://construct.example')
+  assert.equal(menuOrigin({ NEXTAUTH_URL: 'http://localhost:3001/' }), 'http://localhost:3001')
+  assert.equal(menuOrigin({}), '')
+  assert.throws(() => menuOrigin({ AUTH_URL: 'javascript:alert(1)' }), /AUTH_URL/)
+  assert.throws(() => menuOrigin({ AUTH_URL: 'https://user:pass@example.test' }), /AUTH_URL/)
+})
+
+test('the CLI menu target artifact matches its single TypeScript source', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const generator = new URL('./generate-menu-target-url.mjs', import.meta.url)
+  execFileSync(process.execPath, [generator.pathname, '--check'], { stdio: 'pipe' })
+  const { normalizeMenuTargetUrl } = await import('./menu-target-url.generated.mjs')
+  assert.equal(normalizeMenuTargetUrl('https://bücher.example/page', 2, 'https://construct.example.test'), 'https://xn--bcher-kva.example/page')
+  assert.equal(normalizeMenuTargetUrl('///construct.example.test/user-management', 2, 'https://construct.example.test'), '//construct.example.test/user-management')
+  assert.equal(normalizeMenuTargetUrl('mailto:person@example.test', 2, ''), '/mailto:person@example.test')
+})

@@ -1,4 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
+import type { FeatureKey } from '@/lib/tenancy/feature-catalog'
+import { isMultiTenantEnabled } from '@/lib/tenancy/tenancy-mode'
 import { getSession } from '@/lib/auth-session'
 import { isSupportSession, tenantFromSession } from '@/lib/tenancy/request-tenant'
 import { resolveActor, resolveSupportActor, type Actor } from './actor'
@@ -29,28 +31,19 @@ async function currentActor(): Promise<Actor | null> {
   return isSupportSession(session) ? resolveSupportActor(tenantId, userId) : resolveActor(tenantId, userId)
 }
 
-export async function requirePermission(code: PermissionCode): Promise<Actor> {
+export function requirePermission(code: PermissionCode): Promise<Actor>
+/** Per i form aperti: esito indistinto per un attore presente a cui manca il permesso effettivo. */
+export function requirePermission(code: PermissionCode, options: { onDenied: 'return' }): Promise<Actor | null>
+export async function requirePermission(code: PermissionCode, options?: { onDenied: 'return' }): Promise<Actor | null> {
   const actor = await currentActor()
-  if (!actor || !actor.permissions.has(code)) throw new Error('Unauthorized')
-  return actor
+  if (actor?.permissions.has(code)) return actor
+  if (actor && options?.onDenied === 'return') return null
+  throw new Error('Unauthorized')
 }
 
 export async function requirePagePermission(code: PermissionCode): Promise<Actor> {
   const actor = await currentActor()
   if (!actor || !actor.permissions.has(code)) redirect('/')
-  return actor
-}
-
-/** Solo per ciò che non ha un codice nel catalogo: oggi il tema dell'app (DEC-23). */
-export async function requireAdministrator(): Promise<Actor> {
-  const actor = await currentActor()
-  if (!actor || !actor.isAdmin) throw new Error('Unauthorized')
-  return actor
-}
-
-export async function requireAdministratorPage(): Promise<Actor> {
-  const actor = await currentActor()
-  if (!actor || !actor.isAdmin) redirect('/')
   return actor
 }
 
@@ -65,6 +58,7 @@ export async function requireAdministratorPage(): Promise<Actor> {
  * l'uscita (`requireSupportExit`) la accetta in ogni stato.
  */
 async function currentPlatformAdmin(support: 'closed' | 'any'): Promise<PlatformActor | null> {
+  if (!isMultiTenantEnabled()) return null
   const session = await getSession()
   const userId = session?.user?.id
   if (!session || !userId) return null
@@ -101,4 +95,29 @@ export async function requirePlatformAdminPage(): Promise<PlatformActor> {
   const admin = await currentPlatformAdmin('closed')
   if (!admin) notFound()
   return admin
+}
+
+/** La capacità del tenant viene controllata anche per l'amministratore e l'assistenza. */
+export async function requireAdministratorFeature(feature: FeatureKey): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || !actor.isAdmin || !actor.features.has(feature)) throw new Error('Unauthorized')
+  return actor
+}
+
+export async function requireAdministratorFeaturePage(feature: FeatureKey): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || !actor.isAdmin || !actor.features.has(feature)) redirect('/')
+  return actor
+}
+
+export async function requireSupportConsentManager(): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || actor.support === true || !actor.canManageSupportConsent) throw new Error('Unauthorized')
+  return actor
+}
+
+export async function requireTenantSettingsPage(): Promise<Actor> {
+  const actor = await currentActor()
+  if (!actor || !(actor.permissions.has('manage-tenant-settings') || actor.canManageSupportConsent || (actor.support === true && actor.isAdmin))) redirect('/')
+  return actor
 }

@@ -8,14 +8,16 @@ import { useI18n } from '@/context/I18nContext'
 import { createTenantInputSchema } from '@/lib/platform/tenant-action-schemas'
 import { createTenant } from '@/lib/platform/tenant-actions'
 import { suggestSlug } from '@/lib/platform/tenant-slug'
+import type { TenantQuotaReason } from '@/lib/tenancy/tenant-quota-reason'
 
 interface Props {
   onClose: () => void
   /** Il tenant è stato creato: la pagina si aggiorna. */
   onCreated: (tenantId: number) => void
+  onQuotaRejected: () => void
 }
 
-type Outcome = { kind: 'invited' | 'existing' | 'invite_failed' | 'taken' | 'bad_host' | 'invalid' | 'error' } | null
+type Outcome = { kind: 'invited' | 'existing' | 'invite_failed' | 'taken' | 'bad_host' | 'invalid' | 'error' | TenantQuotaReason } | null
 
 /**
  * Il modulo "Nuovo tenant" (specifica 2026-10-26, MT5-DEC-5): nome, slug (proposto dal nome finché
@@ -25,7 +27,7 @@ type Outcome = { kind: 'invited' | 'existing' | 'invite_failed' | 'taken' | 'bad
  * loro messaggio, perché l'azione li restituisce come risultato. Dopo la creazione il modulo sparisce
  * e resta l'esito: il tenant non si crea due volte.
  */
-export function NewTenantDialog({ onClose, onCreated }: Props) {
+export function NewTenantDialog({ onClose, onCreated, onQuotaRejected }: Props) {
   const { t } = useI18n()
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
@@ -58,7 +60,11 @@ export function NewTenantDialog({ onClose, onCreated }: Props) {
     setBusy(true); setOutcome(null)
     try {
       const result = await createTenant(input)
-      if (!result.ok) { setOutcome({ kind: result.reason === 'invalid' ? 'bad_host' : result.reason }); return }
+      if (!result.ok) {
+        setOutcome({ kind: result.reason === 'invalid' ? 'bad_host' : result.reason })
+        if (result.reason !== 'invalid' && result.reason !== 'taken') onQuotaRejected()
+        return
+      }
       setOutcome({ kind: result.inviteFailed ? 'invite_failed' : result.invited ? 'invited' : 'existing' })
       onCreated(result.tenantId)
     } catch {
@@ -97,6 +103,9 @@ export function NewTenantDialog({ onClose, onCreated }: Props) {
             {outcome?.kind === 'taken' && <p role="alert" className="text-destructive-muted-foreground">{t('platform.tenant.new.error_taken')}</p>}
             {outcome?.kind === 'bad_host' && <p role="alert" className="text-destructive-muted-foreground">{t('platform.tenant.new.host_invalid')}</p>}
             {outcome?.kind === 'error' && <p role="alert" className="text-destructive-muted-foreground">{t('platform.tenant.new.error')}</p>}
+            {(outcome?.kind === 'role_quota' || outcome?.kind === 'menu_quota' || outcome?.kind === 'member_quota') && (
+              <p role="alert" className="text-destructive-muted-foreground">{t(`platform.tenant.new.${outcome.kind}`)}</p>
+            )}
           </div>
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="outline" data-dialog-close onClick={onClose}>{t('common.actions.cancel')}</Button>

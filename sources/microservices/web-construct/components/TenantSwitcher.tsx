@@ -39,8 +39,10 @@ const TRIGGER_CLS =
 export function TenantSwitcher({
   current,
   tenants,
+  isMultiTenantEnabled = true,
   collapsed,
 }: {
+  isMultiTenantEnabled?: boolean
   current: TenantRef
   tenants: TenantRef[]
   collapsed: boolean
@@ -62,6 +64,8 @@ export function TenantSwitcher({
       loadPage('/')
     })
   }
+
+  if (!isMultiTenantEnabled) return null
 
   const currentLabel = `${t('tenancy.switch.current')}: ${current.name}`
 

@@ -11,6 +11,7 @@ import {
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import {
+  createdId,
   cleanupTestData, describeIntegration, TEST_ACTOR_ID, testKey, unique,
 } from '@/lib/i18n/test-support/db-fixtures'
 import { createLanguage, deleteLanguage, setDefaultLanguage, setLanguageActive, updateLanguage } from '@/lib/i18n/language-actions'
@@ -26,6 +27,10 @@ import { addUserByEmail, setUserStatus, updateUserRoles } from '@/lib/rbac/users
 import { saveAppTheme } from '@/lib/theme-actions'
 import { POST as sendInvite } from '@/app/api/admin/send-invite/route'
 import { POST as register } from '@/app/api/auth/register/route'
+import { GET as exportTenantData } from '@/app/api/tenant/export/route'
+import { closeTenantExportExecutor } from '@/lib/db/tenant-export-scope'
+import { previewTenantGrantPurge, purgeTenantGrants, saveTenantPolicy } from '@/lib/platform/tenant-policy-actions'
+import { readTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
 import { enterTenant } from '@/lib/tenancy/token-tenant'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { setSelfRegistration } from '@/lib/tenancy/tenant-settings-actions'
@@ -82,7 +87,7 @@ vi.mock('@/lib/auth-rate-limit', () => ({
 }))
 
 // ---------------------------------------------------------------------------------------------
-// Le porte che non scrivono nel registro, ciascuna con il motivo.
+// Le porte esentate da questa matrice, ciascuna con il motivo.
 // ---------------------------------------------------------------------------------------------
 const PERSONAL = 'preferenza personale (MT5-DEC-14): agisce solo sulla riga globale della persona della sessione, e le preferenze non si registrano'
 const PASSWORD = 'password della persona (MT5-DEC-14): non si registra, e nel registro non deve mai finire un segreto (MT5-RISK-4)'
@@ -109,6 +114,8 @@ const EXEMPT: Record<string, string> = {
   'lib/profile-actions.ts#saveProfile': PERSONAL,
   'lib/tenancy/tenant-actions.ts#chooseTenant': `${PERSONAL}: scrive l'ultimo tenant scelto (users.last_tenant_id), e l'ingresso in un tenant è un accesso`,
   'lib/tenancy/tenant-actions.ts#refreshTenant': 'non scrive dati: chiede al callback jwt di ricalcolare il token',
+  'lib/platform/tenant-policy-actions.ts#previewTenantGrantPurge': `${READ}; l'anteprima verifica le assegnazioni senza rimuoverle, la cancellazione ha il proprio caso`,
+  'lib/platform/tenant-delete-actions.ts#deleteTenantPermanently': 'il caso dedicato tenant-delete-actions.integration.test.ts verifica la sola traccia minima e il rollback quando fallisce il suo inserimento',
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -273,9 +280,21 @@ interface AuditCase {
 }
 
 const CASES: Record<string, AuditCase> = {
+  'app/api/tenant/export/route.ts#GET': {
+    entry: exportTenantData, sink: 'tenant',
+    run: async () => {
+      const headers = mocks.headers
+      mocks.headers = new Headers({ host: hostA })
+      try {
+        const response = await exportTenantData(new Request(`http://${hostA}:3001/api/tenant/export`))
+        expect(response.status).toBe(200)
+      } finally { mocks.headers = headers }
+    },
+    expected: [{ operation: 'tenant.export.prepare', objectType: 'tenant', objectId: () => A }],
+  },
   'lib/rbac/roles-actions.ts#createRole': {
     entry: createRole, sink: 'tenant',
-    run: async () => { state.roleId = (await createRole(`ZZZ ruolo ${unique()}`)).id },
+    run: async () => { state.roleId = createdId(await createRole(`ZZZ ruolo ${unique()}`)) },
     expected: [{ operation: 'role.create', objectType: 'role', objectId: () => state.roleId }],
   },
   'lib/rbac/roles-actions.ts#renameRole': {
@@ -285,7 +304,7 @@ const CASES: Record<string, AuditCase> = {
   },
   'lib/rbac/navigation-actions.ts#createNavigationItem': {
     entry: createNavigationItem, sink: 'tenant',
-    run: async () => { state.navId = (await createNavigationItem(navInput(`ZZZ voce ${unique()}`))).id },
+    run: async () => { state.navId = createdId(await createNavigationItem(navInput(`ZZZ voce ${unique()}`))) },
     expected: [{ operation: 'menu.create', objectType: 'menu_entry', objectId: () => state.navId }],
   },
   'lib/rbac/navigation-actions.ts#updateNavigationItem': {
@@ -552,6 +571,34 @@ const CASES: Record<string, AuditCase> = {
     run: async () => { expect(await setTenantStatus(state.consoleTenantId, 'suspended', 'prova')).toEqual({ ok: true }) },
     expected: [{ operation: 'tenant.status', objectType: 'tenant', objectId: () => state.consoleTenantId }],
   },
+  'lib/platform/tenant-policy-actions.ts#saveTenantPolicy': {
+    entry: saveTenantPolicy, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    arrange: async () => {
+      vi.stubEnv('CONSTRUCT_PLATFORM_POLICY_WRITES', '1')
+      await withOwner(async tx => {
+        const [created] = await tx.execute<{ id: string }>(sql`insert into public.role (id_role_type, description)
+          values (2, 'ZZZ audit policy grant') returning id_role::text as id`)
+        await tx.execute(sql`insert into public.role_permission (id_role, id_permission)
+          select ${created.id}::bigint, id_permission from public.permission where code = 'read-users'`)
+      }, tenantIdForTest(state.consoleTenantId))
+    },
+    run: async () => {
+      const policy = await readTenantPolicy(tenantIdForTest(state.consoleTenantId))
+      expect(await saveTenantPolicy(state.consoleTenantId, {
+        expectedRevision: policy.revision, areas: { ...policy.areas, people: false }, overrides: policy.overrides, limits: policy.limits,
+      })).toMatchObject({ ok: true })
+    },
+    expected: [{ operation: 'tenant.policy.save', objectType: 'tenant_platform_policy', objectId: () => state.consoleTenantId }],
+  },
+  'lib/platform/tenant-policy-actions.ts#purgeTenantGrants': {
+    entry: purgeTenantGrants, sink: 'platform', as: 'platformAdmin', kind: 'platform',
+    run: async () => {
+      const preview = await previewTenantGrantPurge(state.consoleTenantId, ['read-users'])
+      expect(preview.permissionGrantCount).toBeGreaterThan(0)
+      expect(await purgeTenantGrants(state.consoleTenantId, preview)).toMatchObject({ ok: true })
+    },
+    expected: [{ operation: 'tenant.grants.purge', objectType: 'tenant_platform_policy', objectId: () => state.consoleTenantId }],
+  },
 }
 
 function languageInput(over: Partial<{ name: string; isActive: boolean }> = {}) {
@@ -574,8 +621,10 @@ const entryKey = (entry: { file: string; name: string }) => `${entry.file}#${ent
 
 /** Le pagine e i gestori di sola lettura non modificano dati: non hanno bisogno di caso né esenzione. */
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+// Preparing an archive records a preparation event even though delivery is an HTTP GET.
+const AUDITED_READS = new Set(['app/api/tenant/export/route.ts#GET'])
 const writingDoors = () => listEntryPoints().filter(entry =>
-  entry.kind === 'action' || (entry.kind === 'route' && !READ_METHODS.has(entry.name)))
+  entry.kind === 'action' || (entry.kind === 'route' && (!READ_METHODS.has(entry.name) || AUDITED_READS.has(entryKey(entry)))))
 
 describe('audit coverage of the entry points', () => {
   it('every door that can write has an audit case or a motivated exemption', () => {
@@ -661,6 +710,8 @@ describeIntegration('every door that writes records its audit row in the same tr
     }
     for (const id of createdTenants) await step(() => deleteTenantForTest(id))
     await step(() => closeOwner())
+    await step(closeTenantExportExecutor)
+    vi.unstubAllEnvs()
     if (errors.length > 0) throw errors[0]
   }, 60_000)
 
@@ -703,7 +754,7 @@ describeIntegration('every door that writes records its audit row in the same tr
     const defaultBefore = await tenantRows(DEFAULT)
     const platformBefore = await platformRows()
     const name = `ZZZ ruolo per il registro ${unique()}`
-    const { id } = await createRole(name)
+    const id = createdId(await createRole(name))
 
     const written = (await tenantRows()).filter(row => row.operation === 'role.create' && row.objectId === String(id))
     expect(written).toHaveLength(1)

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FEATURE_KEYS } from '@/lib/tenancy/feature-catalog'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { buildActor, hasPermission } from './actor'
 import { PERMISSION_CODES } from './permission-catalog'
@@ -8,45 +9,45 @@ const CATALOG_WRITES = ['manage-languages', 'edit-translations', 'manage-transla
 
 describe('buildActor', () => {
   it('keeps only the catalog codes the roles grant', () => {
-    const actor = buildActor('u1', defaultTestTenant(), active, ['read-menu', 'read-roles'])
+    const actor = buildActor('u1', defaultTestTenant(), active, ['read-menu', 'read-roles'], FEATURE_KEYS)
     expect(actor && [...actor.permissions].sort()).toEqual(['read-menu', 'read-roles'])
   })
 
   it('carries the tenant it was built for', () => {
-    expect(buildActor('u1', defaultTestTenant(), active, [])?.tenantId).toBe(defaultTestTenant())
+    expect(buildActor('u1', defaultTestTenant(), active, [], FEATURE_KEYS)?.tenantId).toBe(defaultTestTenant())
   })
 
   it('ignores a code that is not in the catalog: a database row the source no longer knows', () => {
-    const actor = buildActor('u1', defaultTestTenant(), active, ['read-menu', 'export-files'])
+    const actor = buildActor('u1', defaultTestTenant(), active, ['read-menu', 'export-files'], FEATURE_KEYS)
     expect(actor && [...actor.permissions]).toEqual(['read-menu'])
   })
 
-  it('gives the Administrator every catalog code, with or without rows (DEC-5)', () => {
-    const actor = buildActor('u1', defaultTestTenant(), { accountActive: true, roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false }, [])
-    expect(actor && [...actor.permissions].sort()).toEqual([...PERMISSION_CODES].sort())
+  it('gives the Administrator every active mapped catalog code, with or without rows (DEC-5)', () => {
+    const actor = buildActor('u1', defaultTestTenant(), { accountActive: true, roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false }, [], FEATURE_KEYS)
+    expect(actor && [...actor.permissions].sort()).toEqual(PERMISSION_CODES.filter(code => !['manage-permissions', ...CATALOG_WRITES].includes(code)).sort())
   })
 
   // I cataloghi globali di lingue e traduzioni sono della piattaforma (MT5-DEC-17): nessuna regola
   // sul tenant predefinito. I loro permessi restano nel catalogo ma nessuna porta li chiede più
   // (le scritture chiedono l'amministratore di piattaforma): il tenant non li concede né li toglie.
-  it('does not treat the global catalog permissions specially in any tenant', () => {
-    const admin = buildActor('u1', defaultTestTenant(), { accountActive: true, roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false }, [])
-    expect(admin && [...admin.permissions].sort()).toEqual([...PERMISSION_CODES].sort())
-    const granted = buildActor('u1', defaultTestTenant(), active, ['read-menu', ...CATALOG_WRITES])
-    expect(granted && [...granted.permissions].sort()).toEqual(['read-menu', ...CATALOG_WRITES].sort())
+  it('keeps unused global catalog write codes outside effective tenant permissions', () => {
+    const admin = buildActor('u1', defaultTestTenant(), { accountActive: true, roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false }, [], FEATURE_KEYS)
+    expect(admin && [...admin.permissions].sort()).toEqual(PERMISSION_CODES.filter(code => !['manage-permissions', ...CATALOG_WRITES].includes(code)).sort())
+    const granted = buildActor('u1', defaultTestTenant(), active, ['read-menu', ...CATALOG_WRITES], FEATURE_KEYS)
+    expect(granted && [...granted.permissions].sort()).toEqual(['read-menu'])
   })
 
   it('returns no actor for a deactivated account, whatever its roles grant', () => {
-    expect(buildActor('u1', defaultTestTenant(), { accountActive: false, roleIds: [], isAdmin: false, isPlatformAdmin: false }, ['read-menu'])).toBeNull()
+    expect(buildActor('u1', defaultTestTenant(), { accountActive: false, roleIds: [], isAdmin: false, isPlatformAdmin: false }, ['read-menu'], FEATURE_KEYS)).toBeNull()
   })
 })
 
 describe('buildActor and the platform admin attribute', () => {
   it('carries the attribute without turning it into a tenant permission', () => {
-    const actor = buildActor('u1', defaultTestTenant(), { ...active, isPlatformAdmin: true }, ['read-menu'])
+    const actor = buildActor('u1', defaultTestTenant(), { ...active, isPlatformAdmin: true }, ['read-menu'], FEATURE_KEYS)
     expect(actor?.isPlatformAdmin).toBe(true)
     expect(actor && [...actor.permissions]).toEqual(['read-menu'])
-    expect(buildActor('u1', defaultTestTenant(), active, [])?.isPlatformAdmin).toBe(false)
+    expect(buildActor('u1', defaultTestTenant(), active, [], FEATURE_KEYS)?.isPlatformAdmin).toBe(false)
   })
 })
 
@@ -56,8 +57,33 @@ describe('hasPermission', () => {
   })
 
   it('reads the permission set', () => {
-    const actor = buildActor('u1', defaultTestTenant(), active, ['read-menu'])
+    const actor = buildActor('u1', defaultTestTenant(), active, ['read-menu'], FEATURE_KEYS)
     expect(hasPermission(actor, 'read-menu')).toBe(true)
     expect(hasPermission(actor, 'manage-menu')).toBe(false)
+  })
+})
+
+describe('tenant feature ceiling', () => {
+  it.each([false, true])('intersects permissions for administrator=%s and preserves essential consent authority', isAdmin => {
+    const actor = buildActor('u1', defaultTestTenant(), { ...active, isAdmin }, ['read-users', 'manage-support-consent', 'read-tenant-audit'], ['core-app', 'manage-support-consent', 'read-tenant-audit'])
+    expect(actor?.permissions.has('read-users')).toBe(false)
+    expect(actor?.permissions.has('manage-tenant-settings')).toBe(false)
+    expect(actor?.permissions.has('read-tenant-audit')).toBe(true)
+    expect(actor?.canManageSupportConsent).toBe(true)
+    expect(actor?.features.has('manage-tenant-theme')).toBe(false)
+  })
+})
+
+
+describe('independent essential consent permission', () => {
+  it('does not grant consent to a new optional settings delegate', () => {
+    const actor = buildActor('u1', defaultTestTenant(), active, ['manage-tenant-settings'], FEATURE_KEYS)
+    expect(actor?.permissions.has('manage-tenant-settings')).toBe(true)
+    expect(actor?.canManageSupportConsent).toBe(false)
+  })
+  it('preserves consent after the optional grant is removed and the area is disabled', () => {
+    const actor = buildActor('u1', defaultTestTenant(), active, ['manage-support-consent'], ['core-app', 'manage-support-consent'])
+    expect(actor?.canManageSupportConsent).toBe(true)
+    expect(actor?.permissions.has('manage-tenant-settings')).toBe(false)
   })
 })

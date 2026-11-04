@@ -87,13 +87,12 @@ describe('rename delle tabelle RBAC', () => {
     const [createdRole] = await withTenant(defaultTestTenant(), tx => tx.insert(role)
       .values({ description: 'zzz_rbac_rename_test_role' })
       .returning({ idRole: role.idRole }))
-    const [createdPermission] = await withOwner(tx => tx.insert(permission)
-      .values({ name: 'zzz_rbac_rename_test_permission', kind: 'CATEGORY' })
-      .returning({ idPermission: permission.idPermission }))
     try {
+      const [grant] = await withGlobal(tx => tx.select({ idPermission: permission.idPermission }).from(permission)
+        .where(eq(permission.code, 'read-users')))
       await withTenant(defaultTestTenant(), tx => tx.insert(rolePermission).values({
         idRole: createdRole.idRole,
-        idPermission: createdPermission.idPermission,
+        idPermission: grant.idPermission,
       }))
       const [row] = await withTenant(defaultTestTenant(), tx => tx.select({ hasPermissions: roleListView.hasPermissions })
         .from(roleListView)
@@ -101,7 +100,6 @@ describe('rename delle tabelle RBAC', () => {
       expect(row?.hasPermissions).toBe(true)
     } finally {
       await withTenant(defaultTestTenant(), tx => tx.delete(rolePermission).where(eq(rolePermission.idRole, createdRole.idRole)))
-      await withOwner(tx => tx.delete(permission).where(eq(permission.idPermission, createdPermission.idPermission)))
       await withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, createdRole.idRole)))
     }
   })
@@ -281,9 +279,9 @@ describe('travaso in menu_entry', () => {
     // È irraggiungibile oggi (0001_baseline.sql semina -1 prima), ma solo la metà positiva se
     // ne accorgerebbe: operations, le cinque categorie e i quindici permessi del catalogo che la
     // 0041 ha messo al posto degli otto segnaposto della baseline, più manage-tenant-settings
-    // della 0053, più read-tenant-audit della 0057: ventitré righe in tutto.
+    // della 0053, read-tenant-audit della 0057 e manage-support-consent della 0066.
     const [{ totali }] = await withGlobal(tx => tx.execute(sql`select count(*)::int as totali from public.permission`))
-    expect(totali).toBe(23)
+    expect(totali).toBe(24)
   })
 
   it('non ha più una colonna id_permission su menu_entry (MIG-4)', async () => {
@@ -560,7 +558,8 @@ describe('role_functionality (0024)', () => {
       .insert(role)
       .values({ description: `${PREFIX}solo_menu`, idRoleType: 2 })
       .returning({ idRole: role.idRole }))
-    const [entry] = await withTenant(defaultTestTenant(), tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1))
+    const [entry] = await withTenant(defaultTestTenant(), tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry)
+      .where(eq(menuEntry.featureKey, 'read-users')).orderBy(menuEntry.idMenuEntry).limit(1))
 
     await withTenant(defaultTestTenant(), tx => tx.insert(roleFunctionality).values({ idRole: created.idRole, idMenuEntry: entry.id }))
 
@@ -575,7 +574,8 @@ describe('role_functionality (0024)', () => {
       .insert(role)
       .values({ description: `${PREFIX}cascata`, idRoleType: 2 })
       .returning({ idRole: role.idRole }))
-    const [entry] = await withTenant(defaultTestTenant(), tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1))
+    const [entry] = await withTenant(defaultTestTenant(), tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry)
+      .where(eq(menuEntry.featureKey, 'read-users')).orderBy(menuEntry.idMenuEntry).limit(1))
     await withTenant(defaultTestTenant(), tx => tx.insert(roleFunctionality).values({ idRole: created.idRole, idMenuEntry: entry.id }))
 
     await withTenant(defaultTestTenant(), tx => tx.delete(role).where(eq(role.idRole, created.idRole)))
@@ -589,7 +589,8 @@ describe('role_functionality (0024)', () => {
       .insert(role)
       .values({ description: `${PREFIX}deltas`, idRoleType: 2 })
       .returning({ idRole: role.idRole }))
-    const [entry] = await withTenant(defaultTestTenant(), tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry).limit(1))
+    const [entry] = await withTenant(defaultTestTenant(), tx => tx.select({ id: menuEntry.idMenuEntry }).from(menuEntry)
+      .where(eq(menuEntry.featureKey, 'read-users')).orderBy(menuEntry.idMenuEntry).limit(1))
 
     await withTenant(defaultTestTenant(), tx => tx.execute(sql`select public.apply_role_functionality_deltas(${created.idRole}, ${`{${entry.id}}`}::bigint[], '{}'::bigint[])`))
     expect(await withTenant(defaultTestTenant(), tx => tx.select().from(roleFunctionality).where(eq(roleFunctionality.idRole, created.idRole)))).toHaveLength(1)

@@ -7,6 +7,7 @@ import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescrip
 // proprietario (lib/db/testing): chi li importa da codice dell'app riapre la porta che il confine
 // del tenant chiude. Solo i file di test possono usarli.
 const TESTING_PATHS = [
+  { name: '@/lib/tenancy/policy-test-fixture', message: 'Il fixture di policy crea dati con il proprietario: si importa solo nei file di test.' },
   { name: '@/lib/tenancy/testing', message: 'Gli helper di lib/tenancy/testing costruiscono un TenantId da un numero: si importano solo nei file di test.' },
   { name: '@/lib/db/testing', message: 'Gli helper di lib/db/testing scrivono come proprietario, fuori dal confine del tenant: si importano solo nei file di test.' },
 ]
@@ -193,6 +194,21 @@ const config = [
           group: ['../*', '../**'],
           message: 'Niente risalita nei percorsi relativi: usa l\'alias @/ fra feature, e i relativi (./) solo dentro lo stesso modulo locale.',
         }],
+      }],
+    },
+  },
+  {
+    // Unico fixture condiviso 5b: usa gli helper di prova, resta chiuso ai client e al driver.
+    files: ['lib/tenancy/policy-test-fixture.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [
+          { name: 'postgres', message: 'Il driver resta in lib/db/.' },
+          { name: 'drizzle-orm/postgres-js', message: 'Il driver resta in lib/db/.' },
+          { name: '@/lib/db/client', message: 'Il client resta in lib/db/.' },
+          ...PLATFORM_PATHS,
+        ],
+        patterns: [{ group: ['../*', '../**'], message: 'Usa alias @/ fra moduli.' }],
       }],
     },
   },

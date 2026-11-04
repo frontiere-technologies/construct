@@ -6,14 +6,14 @@ import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { tenantSettings } from '@/lib/db/schema'
 import { withTenant } from '@/lib/db/tenant-db'
 import type { Actor } from '@/lib/rbac/actor'
-import { requirePermission } from '@/lib/rbac/auth-guard'
+import { requireSupportConsentManager } from '@/lib/rbac/auth-guard'
 import { isoTimestamp } from './support-consent'
 import { isSupportDuration, SUPPORT_DURATION_INTERVAL, type SupportDuration } from './support-consent-durations'
 
 /**
  * Il permesso di assistenza alla piattaforma, dalle impostazioni del tenant (specifica 2026-10-26,
  * §3.4, MT5-DEC-10, MT5-DEC-12, MT5-DEC-20). Come `setSelfRegistration`: lo concede chi ha
- * `manage-tenant-settings`, nel tenant del suo attore (nessun parametro dice quale), e la voce va
+ * `manage-support-consent`, nel tenant del suo attore (nessun parametro dice quale), e la voce va
  * nel registro del tenant nella stessa transazione.
  *
  * La piattaforma in assistenza ha i permessi di un amministratore, `manage-tenant-settings`
@@ -31,11 +31,13 @@ function refuseDuringSupport(actor: Actor): void {
  * l'orologio del database. Un permesso nuovo sostituisce il precedente, anche se valeva ancora più
  * a lungo: vale l'ultima scelta. Restituisce la scadenza scritta.
  */
-export async function grantSupportConsent(duration: SupportDuration): Promise<{ ok: true; until: string }> {
-  const actor = await requirePermission('manage-tenant-settings')
+export async function grantSupportConsent(duration: SupportDuration, options?: { allowExport: boolean }): Promise<{ ok: true; until: string }> {
+  const actor = await requireSupportConsentManager()
   refuseDuringSupport(actor)
   // Un'azione server riceve quello che manda il client, non quello che dice il tipo.
   if (!isSupportDuration(duration)) throw new Error('Durata non valida')
+  if (options !== undefined && typeof options?.allowExport !== 'boolean') throw new Error('Consenso esportazione non valido')
+  const allowExport = options?.allowExport ?? false
   const interval = SUPPORT_DURATION_INTERVAL[duration]
 
   return withTenant(actor.tenantId, async tx => {
@@ -43,6 +45,7 @@ export async function grantSupportConsent(duration: SupportDuration): Promise<{ 
       supportUntil: sql`now() + ${interval}::interval`,
       supportGrantedBy: actor.userId,
       supportGrantedAt: sql`now()`,
+      supportExportAllowed: allowExport,
       updatedAt: sql`now()`,
     }
     const [row] = await tx.insert(tenantSettings)
@@ -54,7 +57,7 @@ export async function grantSupportConsent(duration: SupportDuration): Promise<{ 
     if (until === null) throw new Error('support consent not written')
     await recordTenantAudit(tx, auditActorOf(actor), {
       operation: 'support.grant', objectType: 'tenant_settings', objectId: actor.tenantId,
-      details: { duration, until },
+      details: { duration, until, allowExport },
     })
     return { ok: true as const, until }
   })
@@ -65,12 +68,12 @@ export async function grantSupportConsent(duration: SupportDuration): Promise<{ 
  * permesso che non vale già (mai concesso, scaduto o revocato) non cambia niente e non lascia voci.
  */
 export async function revokeSupportConsent(): Promise<{ ok: true }> {
-  const actor = await requirePermission('manage-tenant-settings')
+  const actor = await requireSupportConsentManager()
   refuseDuringSupport(actor)
 
   await withTenant(actor.tenantId, async tx => {
     const revoked = await tx.update(tenantSettings)
-      .set({ supportUntil: null, updatedAt: sql`now()` })
+      .set({ supportUntil: null, supportExportAllowed: false, updatedAt: sql`now()` })
       .where(and(isNotNull(tenantSettings.supportUntil), gt(tenantSettings.supportUntil, sql`now()`)))
       .returning({ idTenant: tenantSettings.idTenant })
     if (revoked.length === 0) return

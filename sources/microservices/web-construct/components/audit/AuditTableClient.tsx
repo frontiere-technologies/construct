@@ -62,7 +62,7 @@ export function AuditTableClient(props: Props) {
     },
     {
       colId: 'actor', field: 'actorEmail', headerName: t('audit.col.actor'), sortable: true, ...AUDIT_TEXT_FILTER,
-      valueGetter: p => p.data ? (p.data.actorEmail ?? '—') : '',
+      valueGetter: p => p.data ? (p.data.actorEmail ?? p.data.actorUserId ?? '—') : '',
     },
     {
       colId: 'kind', field: 'actorKind', headerName: t('audit.col.kind'), sortable: false,

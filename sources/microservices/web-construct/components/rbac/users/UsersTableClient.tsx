@@ -178,13 +178,12 @@ export default function UsersTableClient(props: Props) {
         onSortChanged={handleSortChanged}
         onGridReady={handleGridReady}
       />
-      {props.canInvite && (
-        <AddUserDialog
-          open={adding}
-          onClose={() => setAdding(false)}
-          onAdded={() => gridApiRef.current?.refreshInfiniteCache()}
-        />
-      )}
+      <AddUserDialog
+        open={adding}
+        canInvite={props.canInvite}
+        onClose={() => setAdding(false)}
+        onRefresh={() => { router.refresh(); gridApiRef.current?.refreshInfiniteCache() }}
+      />
       {managing && (
         <ManageRolesModal
           user={managing}

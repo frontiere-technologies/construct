@@ -10,37 +10,38 @@ import { Input } from '@/components/ui/input'
 
 interface Props {
   open: boolean
+  canInvite: boolean
   onClose: () => void
-  /** Chiamata a ogni aggiunta riuscita: la pagina aggiorna la griglia, il dialogo resta aperto. */
-  onAdded: () => void
+  onRefresh: () => void
 }
 
-type Outcome = { kind: 'done' } | { kind: 'invalid' } | { kind: 'error' } | null
+type Outcome = { kind: 'done' | 'invalid' | 'error' | 'member_quota' | 'capability_unavailable' } | null
 
-export function AddUserDialog({ open, onClose, onAdded }: Props) {
+export function AddUserDialog({ open, canInvite, onClose, onRefresh }: Props) {
   // Il modulo interno si smonta alla chiusura, così riaprendo il dialogo il campo e l'esito
   // ripartono da zero senza un effetto che li azzeri.
-  return open ? <AddUserForm onClose={onClose} onAdded={onAdded} /> : null
+  return open ? <AddUserForm canInvite={canInvite} onClose={onClose} onRefresh={onRefresh} /> : null
 }
 
-function AddUserForm({ onClose, onAdded }: Omit<Props, 'open'>) {
+function AddUserForm({ canInvite, onClose, onRefresh }: Omit<Props, 'open'>) {
   const { t } = useI18n()
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<Outcome>(null)
+  const hasLostCapability = outcome?.kind === 'capability_unavailable'
   const titleId = useId()
   const fieldId = useId()
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (busy) return
+    if (busy || !canInvite || hasLostCapability) return
     // Lo stesso schema del server: l'indirizzo scritto male non parte nemmeno.
     if (!emailSchema.safeParse(email).success) { setOutcome({ kind: 'invalid' }); return }
     setBusy(true); setOutcome(null)
     try {
-      await addUserByEmail(email)
-      setOutcome({ kind: 'done' })
-      onAdded()
+      const result = await addUserByEmail(email)
+      setOutcome({ kind: result.ok ? 'done' : result.reason })
+      if (result.ok || result.reason === 'member_quota') onRefresh()
     } catch {
       // Il messaggio dell'azione non arriva in produzione e non va mostrato: l'esito è neutro.
       setOutcome({ kind: 'error' })
@@ -61,7 +62,7 @@ function AddUserForm({ onClose, onAdded }: Omit<Props, 'open'>) {
         </label>
         <Input
           id={fieldId} type="email" autoComplete="off" data-dialog-initial-focus value={email}
-          onChange={e => { setEmail(e.target.value); setOutcome(null) }}
+          onChange={e => { setEmail(e.target.value); setOutcome(null) }} disabled={!canInvite || hasLostCapability}
         />
         <div className="mt-3 min-h-5 text-sm">
           {outcome?.kind === 'done' && <p role="status" className="text-foreground">{t('users.add.done')}</p>}
@@ -71,10 +72,17 @@ function AddUserForm({ onClose, onAdded }: Omit<Props, 'open'>) {
           {outcome?.kind === 'error' && (
             <p role="alert" className="text-destructive-muted-foreground">{t('users.add.error')}</p>
           )}
+          {outcome?.kind === 'member_quota' && (
+            <p role="alert" className="text-destructive-muted-foreground">{t('users.add.quota')}</p>
+          )}
+          {outcome?.kind === 'capability_unavailable' && (
+            <p role="alert" className="text-destructive-muted-foreground">{t('tenant.creation.capability_unavailable')}</p>
+          )}
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <Button type="button" variant="outline" data-dialog-close onClick={onClose}>{t('common.actions.close')}</Button>
-          <Button type="submit" disabled={busy || !email.trim()}>{t('users.add.submit')}</Button>
+          {hasLostCapability && <Button type="button" variant="outline" onClick={() => window.location.reload()}>{t('platform.policy.reload')}</Button>}
+          <Button type="submit" disabled={busy || !canInvite || hasLostCapability || !email.trim()}>{t('users.add.submit')}</Button>
         </div>
       </form>
     </AccessibleDialog>

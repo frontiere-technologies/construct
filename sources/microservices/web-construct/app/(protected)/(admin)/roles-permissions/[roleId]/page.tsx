@@ -1,10 +1,15 @@
 import { notFound } from 'next/navigation'
+import { inArray } from 'drizzle-orm'
+import { permission } from '@/lib/db/schema'
+import { featureForPermission } from '@/lib/tenancy/feature-catalog'
+import { isPermissionCode } from '@/lib/rbac/permission-catalog'
+import { canUseMenuEntry } from '@/lib/rbac/menu-feature-binding'
 import { withTenant } from '@/lib/db/tenant-db'
 import { getRole, getRoleAuthorizationTree } from '@/lib/rbac/roles-service'
 import RoleDetailClient from '@/components/rbac/roles/RoleDetailClient'
 import { requirePagePermission } from '@/lib/rbac/auth-guard'
 import { hasPermission } from '@/lib/rbac/actor'
-import { grantableItemIds } from '@/lib/rbac/grant-service'
+import { grantableItemIds, selectTenantGrantContext } from '@/lib/rbac/grant-service'
 import { buildAuthMap } from '@/lib/rbac/permission-tree'
 
 export default async function RoleDetailPage({ params }: { params: Promise<{ roleId: string }> }) {
@@ -28,11 +33,27 @@ export default async function RoleDetailPage({ params }: { params: Promise<{ rol
       functionalityIds: [...buildAuthMap(trees.functionalities).keys()],
     }))
     : { operationIds: [], functionalityIds: [] }
+  const suspended = await withTenant(actor.tenantId, async tx => {
+    const context = await selectTenantGrantContext(tx, actor.roleIds)
+    const operationIds = [...buildAuthMap(trees.operations).keys()]
+    const rows = operationIds.length ? await tx.select({ id: permission.idPermission, code: permission.code }).from(permission).where(inArray(permission.idPermission, operationIds)) : []
+    return {
+      operationIds: rows.filter(row => {
+        const feature = row.code && isPermissionCode(row.code) ? featureForPermission(row.code) : null
+        return feature !== null && !context.policy.enabledFeatures.includes(feature)
+      }).map(row => row.id),
+      functionalityIds: [...buildAuthMap(trees.functionalities).keys()].filter(id => {
+        const binding = context.menuBindings.get(id)
+        return binding !== undefined && binding.featureKey !== null && !canUseMenuEntry(context.policy, binding)
+      }),
+    }
+  })
   return (
     <RoleDetailClient
       role={role}
       trees={trees}
       grantable={grantable}
+      suspended={suspended}
       canGrant={canGrant}
       canManageRoles={hasPermission(actor, 'manage-roles')}
     />

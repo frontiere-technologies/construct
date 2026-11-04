@@ -1,6 +1,6 @@
 'use server'
 
-import { and, eq, sql } from 'drizzle-orm'
+import { and, DrizzleQueryError, eq, sql } from 'drizzle-orm'
 import { auditActorOf, type AuditEvent } from '@/lib/audit/audit-types'
 import { recordPlatformAudit } from '@/lib/audit/platform-audit'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
@@ -11,10 +11,12 @@ import { sendInvitationEmail } from '@/lib/invitation-email'
 import { createLogger } from '@/lib/logger'
 import { emailSchema, userIdSchema } from '@/lib/rbac/action-input-schemas'
 import { requirePlatformAdmin, type PlatformActor } from '@/lib/rbac/auth-guard'
+import { lockTenantPolicy } from '@/lib/tenancy/tenant-policy-lock'
 import { normalizeHost } from '@/lib/tenancy/request-host'
 import { createdTenantId, existingTenantId } from '@/lib/tenancy/platform-tenant'
 import { DEFAULT_TENANT_SLUG, type TenantId } from '@/lib/tenancy/tenant-id'
 import { mainBaseUrl } from '@/lib/tenancy/tenant-base-url'
+import { tenantQuotaReason, type TenantQuotaReason } from '@/lib/tenancy/tenant-quota-reason'
 import { enterTenant, withPlatform, type PlatformTx } from './db'
 import {
   createTenantInputSchema, hostInputSchema, reasonSchema, tenantIdArgSchema, tenantStatusSchema,
@@ -80,6 +82,7 @@ type TenantRowLocked = { id: number; slug: string; status: string; isTemplate: b
 
 /** Il tenant della transazione, bloccato: due azioni sullo stesso tenant si mettono in fila e la seconda vede lo stato della prima. */
 async function lockTenant(tx: PlatformTx, tenantId: TenantId): Promise<TenantRowLocked> {
+  await lockTenantPolicy(tx)
   const [row] = await tx
     .select({ id: tenant.id, slug: tenant.slug, status: tenant.status, isTemplate: tenant.isTemplate })
     .from(tenant).where(eq(tenant.id, tenantId)).for('update')
@@ -103,7 +106,7 @@ function assertAcceptsPeople(row: TenantRowLocked): void {
  */
 export async function createTenant(
   input: { name: string; slug: string; host?: string; adminEmail: string },
-): Promise<{ ok: true; tenantId: number; invited: boolean; inviteFailed?: true } | { ok: false; reason: 'taken' | 'invalid' }> {
+): Promise<{ ok: true; tenantId: number; invited: boolean; inviteFailed?: true } | { ok: false; reason: 'taken' | 'invalid' | TenantQuotaReason }> {
   const actor = await requirePlatformAdmin()
   const parsed = createTenantInputSchema.parse(input)
   const host = parsed.host === undefined ? null : normalizeHost(parsed.host)
@@ -113,6 +116,7 @@ export async function createTenant(
   let created: { tenantId: TenantId; invitation: PreparedInvitation | null }
   try {
     created = await withPlatform(async tx => {
+      await tx.execute(sql`select set_config('app.menu_origin', ${process.env.AUTH_URL || process.env.NEXTAUTH_URL ? new URL(mainBaseUrl()).origin : ''}, true)`)
       const [row] = await tx.execute<{ tenant_id: string }>(sql`
         select c.tenant_id::text as tenant_id
         from app_private.create_platform_tenant(${parsed.slug}, ${parsed.name}, ${host}::text, ${parsed.adminEmail}) c`)
@@ -127,6 +131,9 @@ export async function createTenant(
     })
   } catch (error) {
     if (isTakenError(error)) return { ok: false, reason: 'taken' }
+    const quota = tenantQuotaReason(error)
+    if (quota) return { ok: false, reason: quota }
+    if (error instanceof DrizzleQueryError) throw new Error('Failed to create tenant')
     throw error
   }
 

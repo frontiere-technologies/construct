@@ -1,4 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm'
+import { featureKeySchema, type FeatureKey } from '@/lib/tenancy/feature-catalog'
 import type { PlatformAuditTx } from '@/lib/audit/audit-types'
 import { ACTIVE_USER_STATUS } from '@/lib/auth-policy'
 import type { TenantTx } from '@/lib/db/tenant-db'
@@ -23,12 +24,12 @@ type ConsentTx = TenantTx | PlatformAuditTx
  * l'ha concesso (id dell'account). È tutto ciò che la console può sapere del tenant oltre ai suoi
  * dati (MT5-OK-2): chi l'ha concesso non esce dalla scheda della console.
  */
-export async function readSupportConsent(tx: ConsentTx): Promise<{ until: string | null; grantedBy: string | null }> {
-  const [row] = await tx.execute<{ until: string | null; granted_by: string | null }>(sql`
-    select ${isoTimestamp(sql`s.support_until`)} as until, s.support_granted_by::text as granted_by
+export async function readSupportConsent(tx: ConsentTx): Promise<{ until: string | null; grantedBy: string | null; exportAllowed: boolean }> {
+  const [row] = await tx.execute<{ until: string | null; granted_by: string | null; export_allowed: boolean }>(sql`
+    select ${isoTimestamp(sql`s.support_until`)} as until, s.support_granted_by::text as granted_by, s.support_export_allowed as export_allowed
     from public.tenant_settings s
     where s.id_tenant = app_private.current_tenant_id() and s.support_until > now()`)
-  return { until: row?.until ?? null, grantedBy: row?.granted_by ?? null }
+  return { until: row?.until ?? null, grantedBy: row?.granted_by ?? null, exportAllowed: row?.export_allowed === true }
 }
 
 /**
@@ -50,10 +51,11 @@ export async function readSupportConsent(tx: ConsentTx): Promise<{ until: string
  * Gli alias `e`, `s`, `t` sono quelli delle istruzioni che la usano.
  */
 const ENTRY_STILL_OPEN = sql`(
-  (t.is_template or e.occurred_at >= s.support_granted_at)
+  e.origin = 'live'
+  and (t.is_template or e.occurred_at >= s.support_granted_at)
   and not exists (
     select 1 from public.tenant_audit_event x
-    where x.id_tenant = e.id_tenant and x.id > e.id
+    where x.id_tenant = e.id_tenant and x.id > e.id and x.origin = 'live'
       and ((x.operation = 'support.exit' and x.actor_user_id = e.actor_user_id)
         or x.operation in ('support.revoke', 'tenant.status'))
   )
@@ -78,7 +80,7 @@ export async function readSupportInProgress(tx: TenantTx): Promise<boolean> {
       join public.tenant_settings s on s.id_tenant = t.id
       join public.tenant_audit_event e on e.id_tenant = t.id
       where t.id = app_private.current_tenant_id() and s.support_until > now()
-        and e.operation = 'support.enter' and e.actor_kind = 'platform'
+        and e.operation = 'support.enter' and e.actor_kind = 'platform' and e.origin = 'live'
         and ${ENTRY_STILL_OPEN}
     ) as in_progress`)
   return row?.in_progress === true
@@ -86,12 +88,15 @@ export async function readSupportInProgress(tx: TenantTx): Promise<boolean> {
 
 /** Tutto ciò che decide l'assistenza di una persona nel tenant della transazione, letto in un'istruzione sola. */
 export interface SupportAccess {
+  enabledFeatures: FeatureKey[]
   tenantName: string
   isTemplate: boolean
   tenantActive: boolean
   /** La scadenza del permesso se vale ancora (mai per il modello, che non ne ha bisogno). */
   until: string | null
   consentValid: boolean
+  /** Estensione distinta: vale solo insieme al consenso e a un ingresso aperto. */
+  exportAllowed: boolean
   /** L'attributo dell'account e l'account attivo. */
   platformAdmin: boolean
   accountActive: boolean
@@ -111,11 +116,13 @@ export interface SupportAccess {
 const ENTRY_WINDOW = '2 minutes'
 
 type AccessRow = {
+  enabled_features: string[]
   tenant_name: string
   is_template: boolean
   tenant_active: boolean
   until: string | null
   consent_valid: boolean
+  export_allowed: boolean
   platform_admin: boolean
   account_active: boolean
   main_address: boolean
@@ -152,18 +159,20 @@ export async function selectSupportAccess(
           e.details->>'reason' as reason
         from public.tenant_audit_event e
         where e.id_tenant = t.id and e.actor_user_id = ${userId}::uuid and e.actor_kind = 'platform'
-          and e.operation = 'support.enter'
+          and e.operation = 'support.enter' and e.origin = 'live'
         order by e.id desc
         limit 1
       )`
     : null
   const [row] = await tx.execute<AccessRow>(sql`
     select
+      array(select f.code from app_private.effective_tenant_feature_codes() f) as enabled_features,
       t.name as tenant_name,
       t.is_template,
       t.status = 'active' as tenant_active,
       ${isoTimestamp(sql`s.support_until`)} as until,
       coalesce(s.support_until > now(), false) as consent_valid,
+      coalesce(s.support_export_allowed and s.support_until > now(), false) as export_allowed,
       coalesce((select u.is_platform_admin from public.users u where u.id = ${userId}::uuid), false) as platform_admin,
       coalesce((select u.id_user_status = ${ACTIVE_USER_STATUS} from public.users u where u.id = ${userId}::uuid), false) as account_active,
       not exists (select 1 from public.tenant_host h where h.host = ${host}::text) as main_address,
@@ -179,11 +188,13 @@ export async function selectSupportAccess(
     where t.id = app_private.current_tenant_id()`)
   if (!row) return null
   return {
+    enabledFeatures: row.enabled_features.map(code => featureKeySchema.parse(code)),
     tenantName: row.tenant_name,
     isTemplate: row.is_template,
     tenantActive: row.tenant_active,
     until: row.is_template ? null : (row.consent_valid ? row.until : null),
     consentValid: row.consent_valid,
+    exportAllowed: row.export_allowed,
     platformAdmin: row.platform_admin && row.account_active,
     accountActive: row.account_active,
     mainAddress: row.main_address,

@@ -142,6 +142,13 @@ test('both sides of the comparison are actually visible to the scan', () => {
   assert.ok(readVariables().size >= 30, 'expected the source scan to find the env reads')
 })
 
+test('platform policy writes default to closed in the web and Kubernetes templates', () => {
+  const web = readFileSync(resolve(root, TEMPLATES.next), 'utf8')
+  const config = readFileSync(resolve(root, 'sources/devops/k8s/base/configmap.yaml'), 'utf8')
+  assert.match(web, /^CONSTRUCT_PLATFORM_POLICY_WRITES=0$/m)
+  assert.match(config, /^  CONSTRUCT_PLATFORM_POLICY_WRITES: "0"$/m)
+})
+
 test('every variable the code reads is documented in a template', () => {
   const documented = documentedVariables()
   const missing = [...readVariables()]
@@ -203,4 +210,13 @@ test('inventory: variables documented in a template and read by nobody', () => {
       `${name} is now read by ${[...(read.get(name) ?? [])].join(', ')} — remove its `
       + 'CONSUMED_OUTSIDE_THE_CODE entry')
   }
+})
+
+test('installation tenancy mode stays private and defaults to multi in deployment templates', () => {
+  const web = readFileSync(resolve(root, TEMPLATES.next), 'utf8')
+  const config = readFileSync(resolve(root, 'sources/devops/k8s/base/configmap.yaml'), 'utf8')
+  assert.match(web, /^CONSTRUCT_TENANCY_MODE=multi$/m)
+  assert.match(config, /^  CONSTRUCT_TENANCY_MODE: "multi"$/m)
+  assert.doesNotMatch(web, /^NEXT_PUBLIC_.*TENANCY/m)
+  assert.doesNotMatch(config, /^  NEXT_PUBLIC_.*TENANCY/m)
 })

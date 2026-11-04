@@ -21,6 +21,8 @@ export function mapRowToDto(
     description: resolveNavigationText(it.item_translation, 'description', locale, fallbackLocale, null) || null,
     functionalityType: it.id_functionality_type ? FUNCTIONALITY_TYPE_BY_ID[it.id_functionality_type] ?? null : null,
     link: it.functionality_link,
+    areaKey: it.area_key,
+    featureKey: it.feature_key,
     icon: it.icon_path,
     navbarPosition: it.navbar_position,
     isImmutable: it.is_immutable === 1,

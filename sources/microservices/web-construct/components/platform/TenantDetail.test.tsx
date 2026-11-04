@@ -27,7 +27,9 @@ vi.mock('@/lib/platform/tenant-actions', () => ({
   addTenantAdmin: vi.fn(), addTenantHost: vi.fn(), removeTenantHost: vi.fn(),
   resendTenantInvite: vi.fn(), setPrimaryHost: vi.fn(), setTenantStatus: vi.fn(),
 }))
+vi.mock('./TenantPolicyEditor', () => ({ TenantPolicyEditor: () => <section data-testid="tenant-policy-editor" /> }))
 vi.mock('@/lib/platform/support-actions', () => ({ startSupport: vi.fn() }))
+vi.mock('@/lib/platform/tenant-delete-actions', () => ({ deleteTenantPermanently: () => Promise.resolve({ ok: true }) }))
 // jsdom non naviga: l'ingresso carica la home del tenant da capo, nel browser.
 vi.mock('@/components/tenancy/load-page', () => ({ loadPage: vi.fn() }))
 
@@ -46,7 +48,7 @@ const ACME: PlatformTenantDetail = {
   id: 7, slug: 'acme', name: 'Acme', status: 'active', isTemplate: false, isDefault: false, createdAt: '2026-07-01T10:00:00Z',
   hosts: [{ host: 'acme.example.test', isPrimary: true }, { host: 'acme2.example.test', isPrimary: false }],
   admins: [{ userId: 'u-1', email: 'capo@acme.test', hasPassword: true }, { userId: 'u-2', email: 'nuovo@acme.test', hasPassword: false }],
-  support: { until: null },
+  support: { until: null, exportAllowed: false },
 }
 
 let root: Root | undefined
@@ -79,6 +81,34 @@ function type(input: HTMLInputElement | HTMLTextAreaElement, text: string) {
 const dialog = () => document.querySelector('[role="dialog"]')!
 const alertText = () => document.querySelector('[role="alert"]')?.textContent
 const statusText = () => document.querySelector('[role="status"]')?.textContent
+
+describe('TenantDetail: permanent deletion', () => {
+  it('offers deletion only after archiving and keeps protected tenants safe', () => {
+    render()
+    expect(buttonNamed('platform.tenant.delete.open')).toBeUndefined()
+    act(() => root?.render(<TenantDetail tenant={{ ...ACME, status: 'archived', isDefault: true }} />))
+    expect(buttonNamed('platform.tenant.delete.open')).toBeUndefined()
+    act(() => root?.render(<TenantDetail tenant={{ ...ACME, status: 'archived', isTemplate: true }} />))
+    expect(buttonNamed('platform.tenant.delete.open')).toBeUndefined()
+    act(() => root?.render(<TenantDetail tenant={{ ...ACME, status: 'archived' }} />))
+    expect(buttonNamed('platform.tenant.delete.open')?.disabled).toBe(false)
+  })
+
+  it('describes the consequences and requires the exact slug before submitting', async () => {
+    render({ ...ACME, status: 'archived' })
+    await click(need('platform.tenant.delete.open'))
+    const field = dialog().querySelector('input')!
+    const submit = dialog().querySelector<HTMLButtonElement>('button[type="submit"]')!
+    expect(dialog().textContent).toContain('platform.tenant.delete.warning')
+    expect(document.activeElement).toBe(field)
+    type(field, 'acme ')
+    expect(submit.disabled).toBe(true)
+    type(field, 'acme')
+    expect(submit.disabled).toBe(false)
+    await click(submit)
+    expect(load).toHaveBeenCalledWith('/platform')
+  })
+})
 
 describe('TenantDetail: data', () => {
   it('shows the name, the slug, the status and the creation date, with a link back to the list', () => {
@@ -346,7 +376,7 @@ describe('TenantDetail: the template', () => {
 
 // Pezzo 5a, Task 9 (MT5-DEC-6, MT5-DEC-10, MT5-DEC-11): lo stato del permesso e l'ingresso di assistenza.
 describe('TenantDetail: support', () => {
-  const CONSENT = { ...ACME, support: { until: '2026-10-28T10:00:00.000Z' } }
+  const CONSENT = { ...ACME, support: { until: '2026-10-28T10:00:00.000Z', exportAllowed: false } }
   const supportSection = () => sectionOf('platform.tenant.detail.support')
 
   it('without consent says so, and the enter button is off with the reason written in the page', () => {
@@ -407,4 +437,13 @@ describe('TenantDetail: support', () => {
     expect(supportSection().textContent).toContain('platform.support.template')
     expect(need('platform.support.enter').disabled).toBe(false)
   })
+})
+
+it('mounts the policy editor when the platform loader supplies its policy and usage', () => {
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  const policy = { revision: 1, areas: { people: true, roles: true, navigation: true, appearance: true, catalogs: true, 'tenant-settings': true }, overrides: {}, limits: { maxMembers: null, maxRoles: null, maxMenuEntries: null, queryTimeoutMs: null }, enabledFeatures: [] }
+  act(() => root?.render(<TenantDetail tenant={ACME} policy={policy} usage={{ members: 1, roles: 3, menuEntries: 4 }} />))
+  expect(document.querySelector('[data-testid="tenant-policy-editor"]')).not.toBeNull()
 })

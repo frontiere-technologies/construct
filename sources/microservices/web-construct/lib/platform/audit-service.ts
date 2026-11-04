@@ -52,6 +52,7 @@ async function readPlatformAudit(query: AuditQuery, onlyTenant: TenantId | undef
     // Dentro una transazione le letture vanno in serie sulla stessa connessione.
     const page = await tx.select({
       id: platformAuditEvent.id, occurredAt: platformAuditEvent.occurredAt, actorEmail: platformAuditEvent.actorEmail,
+      actorUserId: platformAuditEvent.actorUserId, sourceTenantId: platformAuditEvent.sourceTenantId,
       actorKind: platformAuditEvent.actorKind, operation: platformAuditEvent.operation,
       objectType: platformAuditEvent.objectType, objectId: platformAuditEvent.objectId, details: platformAuditEvent.details,
       tenantId: platformAuditEvent.idTenant, tenantName: tenant.name,
@@ -64,7 +65,12 @@ async function readPlatformAudit(query: AuditQuery, onlyTenant: TenantId | undef
       .offset(query.page * query.size)
     const [{ value: total }] = await tx.select({ value: count() }).from(platformAuditEvent).where(where)
     return {
-      rows: page.map(row => ({ ...toAuditRow(row), tenantId: row.tenantId, tenantName: row.tenantName })),
+      rows: page.map(row => {
+        const entry = toAuditRow(row)
+        if (row.sourceTenantId !== null) entry.details.sourceTenantId = row.sourceTenantId
+        if (row.operation === 'tenant.delete') entry.actorUserId = row.actorUserId
+        return { ...entry, tenantId: row.tenantId, tenantName: row.tenantName }
+      }),
       total,
     }
   })

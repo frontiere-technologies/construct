@@ -55,7 +55,7 @@ describe('withTenant, set_config', () => {
     const { withTenant } = createTenantAccess(database)
     await withTenant(tenantIdForTest(7), async () => 'done')
     const rendered = dialect.sqlToQuery(executed[0])
-    expect(rendered.sql).toBe("select set_config('app.tenant_id', '7', true)")
+    expect(rendered.sql).toBe('select app_private.configure_tenant_transaction(7)')
     expect(rendered.params).toEqual([])
   })
 

@@ -1,3 +1,6 @@
+import { featureForPermission } from '@/lib/tenancy/feature-catalog'
+import type { TenantPolicySnapshot } from '@/lib/tenancy/tenant-policy-types'
+import { canUseMenuEntry, type MenuFeatureBinding } from './menu-feature-binding'
 import type { Actor } from './actor'
 import { isPermissionCode } from './permission-catalog'
 
@@ -11,6 +14,11 @@ import { isPermissionCode } from './permission-catalog'
  * Amministratore a qualcuno è riservato all'Amministratore, come darlo.
  */
 
+export interface TenantGrantContext {
+  policy: TenantPolicySnapshot
+  menuBindings: ReadonlyMap<number, MenuFeatureBinding>
+}
+
 export interface RoleGrants {
   idRole: number
   codes: string[]
@@ -21,17 +29,21 @@ export interface RoleGrants {
 
 /**
  * L'attore può concedere questo codice? `null` è una riga GRANT senza codice: fuori dal catalogo,
- * nessun non amministratore la possiede. Le assert sotto e le pagine che decidono che cosa offrire
+ * non si concede a runtime. Le assert sotto e le pagine che decidono che cosa offrire
  * (DEC-32) leggono la stessa regola da qui.
  */
 export function canGrantCode(actor: Actor, code: string | null): boolean {
+  if (code === null || !isPermissionCode(code)) return false
+  const feature = featureForPermission(code)
+  if (feature === null || !actor.features.has(feature)) return false
   if (actor.isAdmin) return true
-  return code !== null && isPermissionCode(code) && actor.permissions.has(code)
+  return actor.permissions.has(code)
 }
 
 /** L'attore può concedere questa voce di menu? Solo se la vede, cioè se è di uno dei suoi ruoli. */
-export function canGrantFunctionality(actor: Actor, actorFunctionalityIds: ReadonlySet<number>, id: number): boolean {
-  return actor.isAdmin || actorFunctionalityIds.has(id)
+export function canGrantFunctionality(actor: Actor, actorFunctionalityIds: ReadonlySet<number>, id: number, context: TenantGrantContext): boolean {
+  const binding = context.menuBindings.get(id)
+  return binding !== undefined && binding.featureKey !== null && canUseMenuEntry(context.policy, binding) && (actor.isAdmin || actorFunctionalityIds.has(id))
 }
 
 export function assertCanGrantPermissions(actor: Actor, codes: string[]): void {
@@ -43,8 +55,9 @@ export function assertCanGrantFunctionalities(
   actor: Actor,
   actorFunctionalityIds: ReadonlySet<number>,
   ids: number[],
+  context: TenantGrantContext,
 ): void {
-  const missing = ids.filter(id => !canGrantFunctionality(actor, actorFunctionalityIds, id))
+  const missing = ids.filter(id => !canGrantFunctionality(actor, actorFunctionalityIds, id, context))
   if (missing.length) throw new Error(`Cannot grant menu entry(ies) you cannot see: ${missing.join(', ')}`)
 }
 
@@ -54,7 +67,10 @@ function roleChangeRefusal(
   actorFunctionalityIds: ReadonlySet<number>,
   touched: RoleGrants[],
   tenantAdminId: number,
+  context: TenantGrantContext,
 ): string | null {
+  const missingBindings = touched.flatMap(grants => grants.functionalityIds.filter(id => !context.menuBindings.has(id)))
+  if (missingBindings.length) return `Cannot grant menu entry(ies) without a binding: ${missingBindings.join(', ')}`
   if (actor.isAdmin) return null
   if (touched.some(r => r.idRole === tenantAdminId)) {
     return 'Only an administrator can assign or remove the Administrator role'
@@ -65,9 +81,15 @@ function roleChangeRefusal(
     if (grants.uncataloguedIds.length) {
       return `Cannot assign role ${grants.idRole}: it holds permission(s) outside the catalog: ${grants.uncataloguedIds.join(', ')}`
     }
-    const codes = grants.codes.filter(code => !canGrantCode(actor, code))
+    const codes = grants.codes.filter(code => {
+      const feature = isPermissionCode(code) ? featureForPermission(code) : null
+      return feature === null || (context.policy.enabledFeatures.includes(feature) && !canGrantCode(actor, code))
+    })
     if (codes.length) return `Cannot grant permission(s) you do not hold: ${codes.join(', ')}`
-    const ids = grants.functionalityIds.filter(id => !canGrantFunctionality(actor, actorFunctionalityIds, id))
+    const ids = grants.functionalityIds.filter(id => {
+      const binding = context.menuBindings.get(id)
+      return binding === undefined || (canUseMenuEntry(context.policy, binding) && !canGrantFunctionality(actor, actorFunctionalityIds, id, context))
+    })
     if (ids.length) return `Cannot grant menu entry(ies) you cannot see: ${ids.join(', ')}`
   }
   return null
@@ -78,8 +100,9 @@ export function assertCanChangeRoles(
   actorFunctionalityIds: ReadonlySet<number>,
   touched: RoleGrants[],
   tenantAdminId: number,
+  context: TenantGrantContext,
 ): void {
-  const refusal = roleChangeRefusal(actor, actorFunctionalityIds, touched, tenantAdminId)
+  const refusal = roleChangeRefusal(actor, actorFunctionalityIds, touched, tenantAdminId, context)
   if (refusal) throw new Error(refusal)
 }
 
@@ -90,8 +113,9 @@ export function canChangeRole(
   actorFunctionalityIds: ReadonlySet<number>,
   grants: RoleGrants,
   tenantAdminId: number,
+  context: TenantGrantContext,
 ): boolean {
-  return roleChangeRefusal(actor, actorFunctionalityIds, [grants], tenantAdminId) === null
+  return roleChangeRefusal(actor, actorFunctionalityIds, [grants], tenantAdminId, context) === null
 }
 
 export function assertCanChangeStatus(actor: Actor, targetIsAdmin: boolean): void {

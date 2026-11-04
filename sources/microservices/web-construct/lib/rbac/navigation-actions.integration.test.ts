@@ -5,15 +5,18 @@ import { withTenant, withGlobal } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { permission, menuEntry, role, roleFunctionality } from '@/lib/db/schema'
-import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
+import { createdId, describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
+import { createPolicyFixture } from '@/lib/tenancy/policy-test-fixture'
 import type { CreateNavItemInput } from './types'
 
+const actorState = vi.hoisted(() => ({ tenantId: 1 }))
+
 vi.mock('@/lib/rbac/auth-guard', async () => {
-  const { defaultTestTenant } = await import('@/lib/tenancy/testing')
-  const admin = { userId: '00000000-0000-4000-8000-0000000000a1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() }
+  const { tenantIdForTest } = await import('@/lib/tenancy/testing')
+  const admin = () => ({ userId: '00000000-0000-4000-8000-0000000000a1', tenantId: tenantIdForTest(actorState.tenantId), roleIds: [0, 1], isAdmin: true, permissions: new Set<string>() })
   return {
-    requirePermission: async () => admin,
-    requireAdministrator: async () => admin,
+    requirePermission: async () => admin(),
+    requireAdministrator: async () => admin(),
   }
 })
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
@@ -64,6 +67,7 @@ afterAll(closeOwner)
 
 describeIntegration('navigation mutations against the database', () => {
   afterEach(async () => {
+    actorState.tenantId = 1
     // menu_entry e permission non hanno più relazione dopo la 0027 (Task 6): questa riga di
     // pulizia è difensiva, nel caso un test qui sotto inserisca ancora un permesso con questo
     // prefisso — nessuno lo fa più oggi.
@@ -74,7 +78,7 @@ describeIntegration('navigation mutations against the database', () => {
   it('non crea alcun permesso gemello per una funzionalità nuova (via la sincronizzazione)', async () => {
     const nome = `${PREFIX}${sequence++}`
     const primaDi = await withGlobal(tx => tx.select({ n: count() }).from(permission))
-    const { id } = await createNavigationItem(functionalityInput(nome))
+    const id = createdId(await createNavigationItem(functionalityInput(nome)))
     try {
       const dopoDi = await withGlobal(tx => tx.select({ n: count() }).from(permission))
       expect(dopoDi[0].n).toBe(primaDi[0].n)
@@ -149,7 +153,7 @@ describeIntegration('navigation mutations against the database', () => {
 
   it('rifiuta la conversione di una categoria in funzionalità: id_functionality_type resta nullo', async () => {
     const name = `${PREFIX}${sequence++}`
-    const { id } = await createNavigationItem(categoryInput(name))
+    const id = createdId(await createNavigationItem(categoryInput(name)))
 
     await expect(updateNavigationItem(id, functionalityInput(name))).rejects.toThrow(/Cannot change item type/)
 
@@ -159,7 +163,7 @@ describeIntegration('navigation mutations against the database', () => {
 
   it('rifiuta la conversione di una funzionalità in categoria: id_functionality_type resta quello di prima', async () => {
     const name = `${PREFIX}${sequence++}`
-    const { id } = await createNavigationItem(functionalityInput(name))
+    const id = createdId(await createNavigationItem(functionalityInput(name)))
     const [before] = await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
     expect(before.idFunctionalityType).not.toBeNull()
 
@@ -221,7 +225,7 @@ describeIntegration('navigation mutations against the database', () => {
     const name = `${PREFIX}${sequence++}`
     const senzaTipo = omitFunctionalityType(categoryInput(name))
 
-    const { id } = await createNavigationItem(senzaTipo)
+    const id = createdId(await createNavigationItem(senzaTipo))
 
     const [row] = await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
     expect(row.idFunctionalityType).toBeNull()
@@ -236,7 +240,7 @@ describeIntegration('navigation mutations against the database', () => {
   // nel posto sbagliato.
   it('aggiorna una categoria col tipo OMESSO senza accusarla di una conversione', async () => {
     const name = `${PREFIX}${sequence++}`
-    const { id } = await createNavigationItem(categoryInput(name))
+    const id = createdId(await createNavigationItem(categoryInput(name)))
     const rinominata = `${name}_r`
 
     await updateNavigationItem(id, omitFunctionalityType(categoryInput(rinominata)))
@@ -248,7 +252,7 @@ describeIntegration('navigation mutations against the database', () => {
 
   it('rolls back field and parent changes when an update tag write fails', async () => {
     const original = `${PREFIX}${sequence++}`
-    const { id } = await createNavigationItem(functionalityInput(original))
+    const id = createdId(await createNavigationItem(functionalityInput(original)))
     await expect(updateNavigationItem(id, functionalityInput(`${PREFIX}changed`, 'x'.repeat(51)))).rejects.toThrow(/Failed to update item/)
     const [row] = await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
     expect(row.name).toBe(original)
@@ -261,7 +265,7 @@ describeIntegration('navigation mutations against the database', () => {
       createNavigationItem(categoryInput(`${PREFIX}${sequence++}`)),
       createNavigationItem(categoryInput(`${PREFIX}${sequence++}`)),
     ])
-    await Promise.all(ids.map(({ id }, index) => moveNavigationItem(id, { targetParentId: null, orderPosition: 2 - index })))
+    await Promise.all(ids.map((result, index) => moveNavigationItem(createdId(result), { targetParentId: null, orderPosition: 2 - index })))
     const rows = await withTenant(defaultTestTenant(), tx => tx.select({ position: menuEntry.orderPosition })
       .from(menuEntry)
       .where(like(menuEntry.name, `${PREFIX}%`)))
@@ -269,17 +273,50 @@ describeIntegration('navigation mutations against the database', () => {
     // DB remoto, un UPDATE per fratello dentro il lock del menu: ~5-6 s, oltre il timeout predefinito.
   }, 15_000)
 
+  it('keeps another tenant navigation writable while this tenant waits for its policy lock', async () => {
+    const a = await createPolicyFixture('menu-a')
+    const b = await createPolicyFixture('menu-b')
+    const sql = postgres(process.env.TEST_DATABASE_URL!, { prepare: false, max: 1 })
+    const connection = await sql.reserve()
+    let writing: ReturnType<typeof createNavigationItem> | undefined
+    let writingOther: ReturnType<typeof createNavigationItem> | undefined
+    let deadline: ReturnType<typeof setTimeout> | undefined
+    try {
+      await connection`select pg_advisory_lock(-${a.tenantId}::bigint)`
+      actorState.tenantId = a.tenantId
+      let completed = false
+      writing = createNavigationItem(categoryInput('Waiting tenant')).then(result => { completed = true; return result })
+      await new Promise(resolve => setTimeout(resolve, 75))
+      expect(completed).toBe(false)
+      actorState.tenantId = b.tenantId
+      writingOther = createNavigationItem(categoryInput('Independent tenant'))
+      const created = await Promise.race([writingOther, new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => reject(new Error('another tenant was serialized')), 1000)
+      })])
+      expect(createdId(created)).toBeGreaterThan(0)
+    } finally {
+      if (deadline) clearTimeout(deadline)
+      await connection`select pg_advisory_unlock(-${a.tenantId}::bigint)`
+      await Promise.all([writing, writingOther])
+      connection.release()
+      await sql.end({ timeout: 5 })
+      actorState.tenantId = 1
+      await a.close()
+      await b.close()
+    }
+  })
+
   it('serializes subtree deletion with every other navigation write', async () => {
-    const { id } = await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`))
+    const id = createdId(await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`)))
     const sql = postgres(process.env.TEST_DATABASE_URL!, { prepare: false, max: 1 })
     const connection = await sql.reserve()
     try {
-      await connection`select pg_advisory_lock(49374201)`
+      await connection`select pg_advisory_lock(-${defaultTestTenant()}::bigint)`
       let completed = false
       const deleting = deleteNavigationItem(id).then(() => { completed = true })
       await new Promise(resolve => setTimeout(resolve, 75))
       expect(completed).toBe(false)
-      await connection`select pg_advisory_unlock(49374201)`
+      await connection`select pg_advisory_unlock(-${defaultTestTenant()}::bigint)`
       await deleting
       expect(await withTenant(defaultTestTenant(), tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))).toHaveLength(0)
     } finally {
@@ -295,9 +332,9 @@ describeIntegration('navigation mutations against the database', () => {
   // cartella ne' i figli ne' le concessioni dei figli. Il cammino ha due livelli apposta, come il
   // test della cascata che sostituisce: un controllo fermo al primo figlio passerebbe lo stesso.
   it('rifiuta di cancellare una cartella non vuota, e non tocca niente', async () => {
-    const { id: catId } = await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`))
-    const { id: subId } = await createNavigationItem({ ...categoryInput(`${PREFIX}${sequence++}`), idItemParent: catId })
-    const { id: funcId } = await createNavigationItem({ ...functionalityInput(`${PREFIX}${sequence++}`), idItemParent: subId })
+    const catId = createdId(await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`)))
+    const subId = createdId(await createNavigationItem({ ...categoryInput(`${PREFIX}${sequence++}`), idItemParent: catId }))
+    const funcId = createdId(await createNavigationItem({ ...functionalityInput(`${PREFIX}${sequence++}`), idItemParent: subId }))
     const [ruolo] = await withTenant(defaultTestTenant(), tx => tx.insert(role).values({ description: `${PREFIX}non_vuota`, idRoleType: 2 }).returning({ idRole: role.idRole }))
     try {
       await withTenant(defaultTestTenant(), tx => tx.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: funcId }))
@@ -320,8 +357,8 @@ describeIntegration('navigation mutations against the database', () => {
   // (role_functionality.id_menu_entry, migrazione 0024): nessun percorso applicativo deve
   // ricordarsene. Si svuota la cartella dal fondo, come farebbe chi usa l'interfaccia.
   it('svuotata dal fondo, la cartella si cancella e le concessioni delle voci se ne vanno con loro', async () => {
-    const { id: catId } = await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`))
-    const { id: funcId } = await createNavigationItem({ ...functionalityInput(`${PREFIX}${sequence++}`), idItemParent: catId })
+    const catId = createdId(await createNavigationItem(categoryInput(`${PREFIX}${sequence++}`)))
+    const funcId = createdId(await createNavigationItem({ ...functionalityInput(`${PREFIX}${sequence++}`), idItemParent: catId }))
     const [ruolo] = await withTenant(defaultTestTenant(), tx => tx.insert(role).values({ description: `${PREFIX}svuotata`, idRoleType: 2 }).returning({ idRole: role.idRole }))
     try {
       await withTenant(defaultTestTenant(), tx => tx.insert(roleFunctionality).values({ idRole: ruolo.idRole, idMenuEntry: funcId }))

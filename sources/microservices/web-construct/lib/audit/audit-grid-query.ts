@@ -16,6 +16,8 @@ export type AuditRow = {
   id: string
   occurredAt: string
   actorEmail: string | null
+  /** Identificativo tecnico dell'attore per la sola traccia di cancellazione definitiva. */
+  actorUserId?: string | null
   actorKind: AuditActorKind
   operation: AuditOperation
   objectType: string | null

@@ -139,15 +139,17 @@ describeIntegration('audit tables, platform admin and support consent', () => {
   it('the runtime role can insert platform_audit_event but cannot read, update or delete it', async () => {
     const marker = `zzz-op-${unique()}`
     await withGlobal(tx => tx.execute(sql`
-      insert into public.platform_audit_event (actor_kind, operation) values ('platform', ${marker})`))
+      insert into public.platform_audit_event (actor_kind, operation, object_id)
+      values ('platform', 'language.create', ${marker})`))
     // Nemmeno con id_tenant: facoltativo, ma se c'è è un tenant vero.
     await withGlobal(tx => tx.execute(sql`
-      insert into public.platform_audit_event (id_tenant, actor_kind, operation) values (${other}, 'platform', ${marker})`))
+      insert into public.platform_audit_event (id_tenant, actor_kind, operation, object_id)
+      values (${other}, 'platform', 'tenant.status', ${marker})`))
 
     for (const statement of [
       sql`select operation from public.platform_audit_event`,
-      sql`update public.platform_audit_event set operation = 'changed' where operation = ${marker}`,
-      sql`delete from public.platform_audit_event where operation = ${marker}`,
+      sql`update public.platform_audit_event set operation = 'changed' where object_id = ${marker}`,
+      sql`delete from public.platform_audit_event where object_id = ${marker}`,
     ]) {
       const failure = await failureFrom(withGlobal(tx => tx.execute(statement)))
       expect(failure.codes).toContain('42501')
@@ -156,15 +158,15 @@ describeIntegration('audit tables, platform admin and support consent', () => {
     // Il proprietario le legge tutte e due: la piattaforma le leggerà con la sua identità.
     const written = await withOwner(tx => tx.execute<{ id_tenant: string | null }>(sql`
       select id_tenant::text as id_tenant from public.platform_audit_event
-      where operation = ${marker} order by id`))
+      where object_id = ${marker} order by id`))
     expect(written).toEqual([{ id_tenant: null }, { id_tenant: String(other) }])
-    await withOwner(tx => tx.execute(sql`delete from public.platform_audit_event where operation = ${marker}`))
+    await withOwner(tx => tx.execute(sql`delete from public.platform_audit_event where object_id = ${marker}`))
   }, 30_000)
 
   it('refuses a platform audit entry for a tenant that does not exist', async () => {
     const failure = await failureFrom(withGlobal(tx => tx.execute(sql`
       insert into public.platform_audit_event (id_tenant, actor_kind, operation)
-      values (999999999, 'command', 'x')`)))
+      values (999999999, 'command', 'tenant.status')`)))
     expect(failure.codes).toContain('23503')
   })
 

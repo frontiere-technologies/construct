@@ -5629,3 +5629,2443 @@ where tk.id_translation_key = tv.id_translation_key
   and tk.key = 'platform.admins.add.done_invite_failed'
   and al.code = 'en'
   and tv.value = 'Administrator added, but the invitation email was not sent. The person has no password yet and «Forgot password» does not help: remove the administrator and add them again to retry.';
+
+-- Migration: 0064_tenant_feature_policy.sql
+-- Multi-tenancy 5b, T02: cataloghi globali e fotografia protetta delle concessioni.
+-- Solo construct_owner modifica la policy. Le letture ordinarie non prendono blocchi.
+create table public.feature_area (code text primary key);
+create table public.app_feature (
+  code text primary key,
+  area_code text references public.feature_area(code),
+  -- permission.code ha un indice unico PARZIALE: il riferimento valido è la PK.
+  id_permission bigint references public.permission(id_permission)
+);
+create table public.app_feature_dependency (
+  feature_code text not null references public.app_feature(code),
+  dependency_code text not null references public.app_feature(code),
+  primary key (feature_code, dependency_code),
+  check (feature_code <> dependency_code)
+);
+insert into public.feature_area (code) values
+  ('people'), ('roles'), ('navigation'), ('appearance'), ('catalogs'), ('tenant-settings');
+insert into public.app_feature (code, area_code, id_permission)
+select f.code, f.area, p.id_permission
+from (values
+  ('read-users', 'people', 'read-users'),
+  ('invite-users', 'people', 'invite-users'),
+  ('set-user-status', 'people', 'set-user-status'),
+  ('assign-user-roles', 'people', 'assign-user-roles'),
+  ('read-roles', 'roles', 'read-roles'),
+  ('manage-roles', 'roles', 'manage-roles'),
+  ('grant-role-permissions', 'roles', 'grant-role-permissions'),
+  ('read-menu', 'navigation', 'read-menu'),
+  ('manage-menu', 'navigation', 'manage-menu'),
+  ('use-custom-content', 'navigation', null),
+  ('manage-tenant-theme', 'appearance', null),
+  ('read-languages', 'catalogs', 'read-languages'),
+  ('read-translations', 'catalogs', 'read-translations'),
+  ('manage-tenant-settings', 'tenant-settings', 'manage-tenant-settings'),
+  ('core-app', null, null),
+  ('read-tenant-audit', null, 'read-tenant-audit'),
+  ('manage-support-consent', null, null),
+  ('export-tenant-data', null, null)
+) f(code, area, permission_code)
+left join public.permission p on p.code = f.permission_code;
+-- Un catalogo incompleto deve fermare la migrazione, non perdere il collegamento al permesso.
+do $$ begin
+  if (select count(*) from public.app_feature where id_permission is not null) <> 13 then
+    raise exception 'feature permission catalog mismatch';
+  end if;
+end $$;
+insert into public.app_feature_dependency (feature_code, dependency_code) values
+  ('invite-users', 'read-users'), ('set-user-status', 'read-users'),
+  ('assign-user-roles', 'read-users'), ('assign-user-roles', 'read-roles'),
+  ('manage-roles', 'read-roles'), ('grant-role-permissions', 'read-roles'), ('manage-menu', 'read-menu');
+select app_private.declare_global_table('public.feature_area'::regclass, false, 'Catalogo fisso delle aree concedibili, modificato soltanto dalle migrazioni');
+select app_private.declare_global_table('public.app_feature'::regclass, false, 'Catalogo fisso delle capacità e dei collegamenti ai permessi');
+select app_private.declare_global_table('public.app_feature_dependency'::regclass, false, 'Dipendenze fisse fra capacità del catalogo');
+
+create table public.tenant_platform_policy (
+  id_tenant bigint primary key default app_private.current_tenant_id() references public.tenant(id),
+  revision bigint not null default 1 check (revision > 0),
+  query_timeout_ms integer check (query_timeout_ms > 0),
+  max_members integer check (max_members >= 0),
+  max_roles integer check (max_roles >= 0),
+  max_menu_entries integer check (max_menu_entries >= 0)
+);
+create table public.tenant_area_entitlement (
+  id_tenant bigint not null default app_private.current_tenant_id() references public.tenant(id),
+  area_code text not null references public.feature_area(code),
+  enabled boolean not null,
+  primary key (id_tenant, area_code)
+);
+create table public.tenant_entitlement (
+  id_tenant bigint not null default app_private.current_tenant_id() references public.tenant(id),
+  feature_code text not null references public.app_feature(code),
+  allowed boolean not null,
+  primary key (id_tenant, feature_code)
+);
+select app_private.protect_tenant_table('public.tenant_platform_policy'::regclass);
+select app_private.protect_tenant_table('public.tenant_area_entitlement'::regclass);
+select app_private.protect_tenant_table('public.tenant_entitlement'::regclass);
+revoke all on public.tenant_platform_policy, public.tenant_area_entitlement, public.tenant_entitlement from construct_runtime;
+grant select on public.tenant_platform_policy, public.tenant_area_entitlement, public.tenant_entitlement to construct_runtime;
+
+-- Ogni tenant esistente conserva l'accesso. Nessuna sincronizzazione successiva dal modello.
+do $$ declare v_tenant bigint; v_origine text := pg_catalog.current_setting('app.tenant_id', true); begin
+  for v_tenant in select t.id from public.tenant t order by t.id loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant::text, true);
+    insert into public.tenant_platform_policy (id_tenant) values (v_tenant);
+    insert into public.tenant_area_entitlement (id_tenant, area_code, enabled)
+    select v_tenant, a.code, true from public.feature_area a;
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', coalesce(v_origine, ''), true);
+end $$;
+
+-- Spazio dedicato delle chiavi bigint negative: biiezione con gli id positivi, nessun cast int32.
+-- Ordine comune: policy tenant -> riga tenant (se serve) -> blocchi membri/menu/ruoli.
+create function app_private.lock_tenant_policy() returns void
+language plpgsql security invoker set search_path = '' as $$
+declare v_tenant bigint := app_private.current_tenant_id();
+begin
+  if v_tenant <= 0 then raise exception 'invalid tenant id' using errcode = '22023'; end if;
+  perform pg_catalog.pg_advisory_xact_lock(-v_tenant);
+end $$;
+revoke all on function app_private.lock_tenant_policy() from public;
+grant execute on function app_private.lock_tenant_policy() to construct_runtime;
+
+-- Dipendenze transitive: una configurazione incoerente non concede la capacità di scrittura.
+-- UNION (non UNION ALL) termina anche se una futura migrazione introducesse un ciclo.
+create function app_private.effective_tenant_feature_codes() returns table(code text)
+language sql stable security invoker set search_path = '' as $$
+  with recursive granted as (
+    select f.code from public.app_feature f
+    left join public.tenant_area_entitlement a on a.area_code = f.area_code
+      and a.id_tenant = app_private.current_tenant_id()
+    left join public.tenant_entitlement e on e.feature_code = f.code
+      and e.id_tenant = app_private.current_tenant_id()
+    where f.area_code is null or coalesce(e.allowed, a.enabled, false)
+  ), dependencies(feature_code, dependency_code) as (
+    select d.feature_code, d.dependency_code from public.app_feature_dependency d
+    union
+    select d.feature_code, next.dependency_code from dependencies d
+    join public.app_feature_dependency next on next.feature_code = d.dependency_code
+  )
+  select g.code from granted g
+  where not exists (select 1 from dependencies d where d.feature_code = g.code
+    and not exists (select 1 from granted needed where needed.code = d.dependency_code))
+  order by g.code
+$$;
+revoke all on function app_private.effective_tenant_feature_codes() from public;
+grant execute on function app_private.effective_tenant_feature_codes() to construct_runtime;
+
+-- Copia canonica della 0057, estesa esplicitamente alle tre configurazioni.
+create or replace function app_private.copy_tenant(p_source bigint, p_slug text, p_name text, p_is_template boolean)
+returns bigint
+language plpgsql security invoker set search_path = '' set client_min_messages = warning as $$
+declare
+  -- Le tabelle di tenant che questa funzione conosce. Una tabella di tenant nuova va aggiunta a
+  -- uno dei due elenchi, e se va copiata anche al corpo della funzione: finché non succede la
+  -- copia si rifiuta, invece di far nascere tenant senza quei dati (Review Focus #4).
+  v_copiate constant text[] := array['menu_entry', 'menu_entry_tag', 'role', 'role_permission',
+                                     'role_functionality', 'app_theme', 'tenant_settings',
+                                     'tenant_platform_policy', 'tenant_area_entitlement', 'tenant_entitlement'];
+  v_saltate constant text[] := array['user_role', 'tenant_membership', 'tenant_audit_event'];
+  v_sconosciuta text;
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_nuovo bigint;
+begin
+  select c.table_name into v_sconosciuta
+  from app_private.table_class c
+  where c.class = 'tenant' and c.table_name <> all (v_copiate || v_saltate)
+  order by c.table_name
+  limit 1;
+  if v_sconosciuta is not null then
+    raise exception using errcode = 'P0001', message = 'tenant_table_not_copied:' || v_sconosciuta;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = p_source) then
+    raise exception using errcode = 'P0001', message = 'source_tenant_missing';
+  end if;
+
+  perform pg_catalog.set_config('app.tenant_id', p_source::text, true);
+  perform app_private.lock_tenant_policy();
+
+  insert into public.tenant (slug, name, is_template) values (p_slug, p_name, p_is_template)
+  returning id into v_nuovo;
+
+  -- Lettura, con il contesto del tenant di partenza. Le tabelle temporanee si ricreano a ogni
+  -- chiamata: la funzione si può chiamare più volte nella stessa transazione.
+  perform pg_catalog.set_config('app.tenant_id', p_source::text, true);
+
+  drop table if exists pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema,
+    pg_temp.copy_tenant_impostazioni, pg_temp.copy_tenant_policy,
+    pg_temp.copy_tenant_aree, pg_temp.copy_tenant_concessioni;
+
+  create temporary table copy_tenant_voce as
+  select m.id_menu_entry as id_vecchio, pg_catalog.nextval('public.s_id_menu_entry') as id_nuovo,
+         m.id_parent, m.name, m.order_position, m.navbar_position, m.icon_path, m.id_functionality_type,
+         m.functionality_link, m.open_in_new_tab, m.item_translation, m.is_immutable
+  from public.menu_entry m
+  where m.id_tenant = p_source;
+
+  create temporary table copy_tenant_ruolo as
+  select r.id_role as id_vecchio, pg_catalog.nextval('public.s_id_role') as id_nuovo,
+         r.id_role_type, r.description, r.system_key
+  from public.role r
+  where r.id_tenant = p_source;
+
+  create temporary table copy_tenant_etichetta as
+  select t.id_menu_entry, t.tag_lan, t.tag from public.menu_entry_tag t where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_permesso as
+  select p.id_role, p.id_permission from public.role_permission p where p.id_tenant = p_source;
+
+  create temporary table copy_tenant_funzionalita as
+  select f.id_role, f.id_menu_entry from public.role_functionality f where f.id_tenant = p_source;
+
+  create temporary table copy_tenant_tema as
+  select t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark
+  from public.app_theme t
+  where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_impostazioni as
+  select s.self_registration from public.tenant_settings s where s.id_tenant = p_source;
+
+  create temporary table copy_tenant_policy as
+  select p.query_timeout_ms, p.max_members, p.max_roles, p.max_menu_entries
+  from public.tenant_platform_policy p where p.id_tenant = p_source;
+  if not exists (select 1 from pg_temp.copy_tenant_policy) then
+    raise exception 'source_tenant_policy_missing';
+  end if;
+  create temporary table copy_tenant_aree as
+  select a.area_code, a.enabled from public.tenant_area_entitlement a where a.id_tenant = p_source;
+  create temporary table copy_tenant_concessioni as
+  select e.feature_code, e.allowed from public.tenant_entitlement e where e.id_tenant = p_source;
+
+  -- Scrittura, con il contesto del tenant nuovo e gli id nuovi. Il controllo sul genitore delle
+  -- voci è differito alla fine della transazione, quindi l'ordine delle righe non conta.
+  perform pg_catalog.set_config('app.tenant_id', v_nuovo::text, true);
+  perform app_private.lock_tenant_policy();
+  -- La revisione è locale al nuovo tenant: parte da 1, i valori sono quelli del modello.
+  insert into public.tenant_platform_policy (id_tenant, query_timeout_ms, max_members, max_roles, max_menu_entries)
+  select v_nuovo, p.query_timeout_ms, p.max_members, p.max_roles, p.max_menu_entries from pg_temp.copy_tenant_policy p;
+  insert into public.tenant_area_entitlement (id_tenant, area_code, enabled)
+  select v_nuovo, a.area_code, a.enabled from pg_temp.copy_tenant_aree a;
+  insert into public.tenant_entitlement (id_tenant, feature_code, allowed)
+  select v_nuovo, e.feature_code, e.allowed from pg_temp.copy_tenant_concessioni e;
+
+  insert into public.menu_entry (id_menu_entry, id_tenant, id_parent, name, order_position, navbar_position,
+    icon_path, id_functionality_type, functionality_link, open_in_new_tab, item_translation, is_immutable,
+    created_at, updated_at)
+  select v.id_nuovo, v_nuovo, genitore.id_nuovo, v.name, v.order_position, v.navbar_position,
+         v.icon_path, v.id_functionality_type, v.functionality_link, v.open_in_new_tab, v.item_translation,
+         v.is_immutable, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_voce v
+  left join pg_temp.copy_tenant_voce genitore on genitore.id_vecchio = v.id_parent;
+
+  insert into public.menu_entry_tag (id_tenant, id_menu_entry, tag_lan, tag, date_ins)
+  select v_nuovo, v.id_nuovo, e.tag_lan, e.tag, pg_catalog.now()
+  from pg_temp.copy_tenant_etichetta e
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = e.id_menu_entry;
+
+  insert into public.role (id_role, id_tenant, id_role_type, description, system_key, date_ins, date_mod)
+  select r.id_nuovo, v_nuovo, r.id_role_type, r.description, r.system_key, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_ruolo r;
+
+  -- Il permesso resta lo stesso id: il catalogo dei permessi è globale.
+  insert into public.role_permission (id_tenant, id_role, id_permission)
+  select v_nuovo, r.id_nuovo, p.id_permission
+  from pg_temp.copy_tenant_permesso p
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = p.id_role;
+
+  insert into public.role_functionality (id_tenant, id_role, id_menu_entry)
+  select v_nuovo, r.id_nuovo, v.id_nuovo
+  from pg_temp.copy_tenant_funzionalita f
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = f.id_role
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = f.id_menu_entry;
+
+  insert into public.app_theme (id_tenant, primary_color, primary_dark, background_light, card_light,
+    accent_light, sidebar_light, background_dark, card_dark, accent_dark, sidebar_dark, date_mod)
+  select v_nuovo, t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark, pg_catalog.now()
+  from pg_temp.copy_tenant_tema t;
+
+  -- Sempre una riga: ogni tenant ha le sue impostazioni.
+  insert into public.tenant_settings (id_tenant, self_registration, updated_at)
+  values (v_nuovo, coalesce((select s.self_registration from pg_temp.copy_tenant_impostazioni s), false),
+          pg_catalog.now());
+
+  drop table pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema,
+    pg_temp.copy_tenant_impostazioni, pg_temp.copy_tenant_policy,
+    pg_temp.copy_tenant_aree, pg_temp.copy_tenant_concessioni;
+
+  -- Il tenant di chi ha chiamato torna com'era: le istruzioni successive della transazione non
+  -- devono lavorare nel tenant nuovo.
+  perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+  return v_nuovo;
+end;
+$$;
+revoke all on function app_private.copy_tenant(bigint, text, text, boolean) from public;
+
+
+create or replace function public.replace_user_roles_guarded(p_user_id uuid, p_role_ids bigint[])
+returns void language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_registered bigint;
+  v_admin bigint;
+  requested_roles bigint[];
+begin
+  perform app_private.lock_tenant_policy();
+  perform pg_catalog.pg_advisory_xact_lock(49374202, v_tenant::integer);
+  select r.id_role into v_registered from public.role r where r.id_tenant = v_tenant and r.system_key = 'REGISTERED';
+  select r.id_role into v_admin from public.role r where r.id_tenant = v_tenant and r.system_key = 'TENANT_ADMIN';
+  if v_registered is null or v_admin is null then
+    raise exception using errcode = 'P0001', message = 'system_roles_missing';
+  end if;
+  requested_roles := array(
+    select distinct value from unnest(array_append(coalesce(p_role_ids, '{}'::bigint[]), v_registered)) value
+  );
+
+  if not exists (select 1 from public.users where id = p_user_id) then
+    raise exception using errcode = 'P0001', message = 'user_not_found';
+  end if;
+  -- Un'appartenenza in qualunque stato: i ruoli di un membro disattivato si possono ancora gestire.
+  if not exists (
+    select 1 from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id
+  ) then
+    raise exception using errcode = 'P0001', message = 'not_a_member';
+  end if;
+  if exists (
+    select 1 from unnest(requested_roles) requested(id_role)
+    where not exists (select 1 from public.role r where r.id_tenant = v_tenant and r.id_role = requested.id_role)
+  ) then
+    raise exception using errcode = 'P0001', message = 'invalid_role';
+  end if;
+
+  delete from public.user_role where id_tenant = v_tenant and user_id = p_user_id;
+  insert into public.user_role (user_id, id_role) select p_user_id, unnest(requested_roles);
+
+  if app_private.count_active_admins() = 0 then
+    raise exception using errcode = 'P0001', message = 'last_active_administrator';
+  end if;
+end;
+$$;
+
+create or replace function public.set_membership_status_guarded(p_user_id uuid, p_status text)
+returns void language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+begin
+  perform app_private.lock_tenant_policy();
+  perform pg_catalog.pg_advisory_xact_lock(49374202, v_tenant::integer);
+  if p_status is null or p_status not in ('active', 'deactivated') then
+    raise exception using errcode = 'P0001', message = 'invalid_user_status';
+  end if;
+
+  update public.tenant_membership set status = p_status
+  where id_tenant = v_tenant and user_id = p_user_id;
+  if not found then
+    raise exception using errcode = 'P0001', message = 'not_a_member';
+  end if;
+
+  if app_private.count_active_admins() = 0 then
+    raise exception using errcode = 'P0001', message = 'last_active_administrator';
+  end if;
+end;
+$$;
+
+create or replace function public.set_user_status_guarded(p_user_id uuid, p_status bigint)
+returns void language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_admin bigint;
+begin
+  perform app_private.lock_tenant_policy();
+  perform pg_catalog.pg_advisory_xact_lock(49374202, v_tenant::integer);
+  if p_status not in (1, 2) then
+    raise exception using errcode = 'P0001', message = 'invalid_user_status';
+  end if;
+  select r.id_role into v_admin from public.role r where r.id_tenant = v_tenant and r.system_key = 'TENANT_ADMIN';
+  if v_admin is null then
+    raise exception using errcode = 'P0001', message = 'system_roles_missing';
+  end if;
+
+  update public.users set id_user_status = p_status, last_status_ts = clock_timestamp() where id = p_user_id;
+  if not found then
+    raise exception using errcode = 'P0001', message = 'user_not_found';
+  end if;
+
+  if app_private.count_active_admins() = 0 then
+    raise exception using errcode = 'P0001', message = 'last_active_administrator';
+  end if;
+end;
+$$;
+
+create or replace function app_private.register_tenant_admin(p_email text)
+returns table (user_id uuid, invitation_token text)
+language plpgsql security invoker set search_path = '' as $$
+#variable_conflict use_column
+declare
+  v_email text := pg_catalog.lower(pg_catalog.btrim(p_email));
+  v_tenant bigint := app_private.current_tenant_id();
+  v_registrato bigint;
+  v_amministratore bigint;
+  v_utente uuid;
+  v_password text;
+  v_token text;
+  v_adesso timestamptz := pg_catalog.now();
+begin
+  perform app_private.lock_tenant_policy();
+  if v_email is null or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+$' then
+    raise exception using errcode = 'P0001', message = 'invalid_email';
+  end if;
+
+  select r.id_role into v_registrato from public.role r
+  where r.id_tenant = v_tenant and r.system_key = 'REGISTERED';
+  select r.id_role into v_amministratore from public.role r
+  where r.id_tenant = v_tenant and r.system_key = 'TENANT_ADMIN';
+  if v_registrato is null or v_amministratore is null then
+    raise exception using errcode = 'P0001', message = 'system_roles_missing';
+  end if;
+
+  insert into public.users (email, auth_provider) values (v_email, 'credentials')
+  on conflict (email) do nothing;
+  select u.id, u.password_hash into v_utente, v_password
+  from public.users u where u.email = v_email
+  for update;
+
+  insert into public.tenant_membership (id_tenant, user_id, status) values (v_tenant, v_utente, 'active')
+  on conflict on constraint tenant_membership_pkey do update set status = 'active';
+
+  insert into public.user_role (id_tenant, user_id, id_role)
+  values (v_tenant, v_utente, v_registrato), (v_tenant, v_utente, v_amministratore)
+  on conflict do nothing;
+
+  if v_password is null then
+    v_token := pg_catalog.gen_random_uuid()::text;
+    update public.password_set_tokens t set superseded_at = v_adesso
+    where t.user_id = v_utente and t.purpose = 'invitation' and t.used_at is null and t.superseded_at is null;
+    insert into public.password_set_tokens (user_id, token, expires_at, purpose, delivery_status,
+      delivery_attempted_at, delivered_at)
+    values (v_utente, v_token, v_adesso + interval '48 hours', 'invitation', 'sent', v_adesso, v_adesso);
+  end if;
+
+  user_id := v_utente;
+  invitation_token := v_token;
+  return next;
+end;
+$$;
+
+create or replace function app_private.enroll_tenant_admin(p_email text)
+returns table (user_id uuid, account_existed boolean, has_password boolean)
+language plpgsql security invoker set search_path = '' as $$
+#variable_conflict use_column
+declare
+  v_email text := pg_catalog.lower(pg_catalog.btrim(p_email));
+  v_tenant bigint := app_private.current_tenant_id();
+  v_registrato bigint;
+  v_amministratore bigint;
+  v_utente uuid;
+  v_password text;
+  v_esisteva boolean;
+begin
+  perform app_private.lock_tenant_policy();
+  if v_email is null or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+$' then
+    raise exception using errcode = 'P0001', message = 'invalid_email';
+  end if;
+
+  select r.id_role into v_registrato from public.role r
+  where r.id_tenant = v_tenant and r.system_key = 'REGISTERED';
+  select r.id_role into v_amministratore from public.role r
+  where r.id_tenant = v_tenant and r.system_key = 'TENANT_ADMIN';
+  if v_registrato is null or v_amministratore is null then
+    raise exception using errcode = 'P0001', message = 'system_roles_missing';
+  end if;
+
+  select exists (select 1 from public.users u where u.email = v_email) into v_esisteva;
+  insert into public.users (email, auth_provider) values (v_email, 'credentials')
+  on conflict (email) do nothing;
+  select u.id, u.password_hash into v_utente, v_password
+  from public.users u where u.email = v_email
+  for update;
+
+  insert into public.tenant_membership (id_tenant, user_id, status) values (v_tenant, v_utente, 'active')
+  on conflict on constraint tenant_membership_pkey do update set status = 'active';
+
+  insert into public.user_role (id_tenant, user_id, id_role)
+  values (v_tenant, v_utente, v_registrato), (v_tenant, v_utente, v_amministratore)
+  on conflict do nothing;
+
+  user_id := v_utente;
+  account_existed := v_esisteva;
+  has_password := v_password is not null;
+  return next;
+end;
+$$;
+
+create or replace function public.ensure_default_membership(p_user_id uuid) returns text
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_status text;
+begin
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  if found then
+    return v_status;
+  end if;
+  if exists (select 1 from public.users u where u.id = p_user_id and u.is_platform_admin) then
+    return null;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = v_tenant and t.slug = 'default') then
+    return null;
+  end if;
+  if not exists (
+    select 1 from public.tenant_settings s where s.id_tenant = v_tenant and s.self_registration
+  ) then
+    return null;
+  end if;
+  if app_private.is_member_elsewhere(p_user_id) then
+    return null;
+  end if;
+
+  perform app_private.lock_tenant_policy();
+  insert into public.tenant_membership (id_tenant, user_id, status) values (v_tenant, p_user_id, 'active')
+  on conflict (id_tenant, user_id) do nothing;
+  -- Se una transazione concorrente ha creato la riga per prima, vale il suo stato.
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  return v_status;
+end;
+$$;
+
+create or replace function public.join_by_registration(p_user_id uuid) returns text
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tenant bigint := app_private.current_tenant_id();
+  v_status text;
+  v_registered bigint;
+begin
+  if not exists (
+    select 1
+    from public.tenant t
+    join public.tenant_settings s on s.id_tenant = t.id
+    where t.id = v_tenant and t.status = 'active' and not t.is_template and s.self_registration
+  ) then
+    return null;
+  end if;
+
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  if found then
+    return v_status;
+  end if;
+  -- Rimette app.tenant_id da sola (0048).
+  if app_private.is_member_elsewhere(p_user_id) then
+    return null;
+  end if;
+
+  select r.id_role into v_registered from public.role r where r.id_tenant = v_tenant and r.system_key = 'REGISTERED';
+  if v_registered is null then
+    raise exception using errcode = 'P0001', message = 'system_roles_missing';
+  end if;
+
+  perform app_private.lock_tenant_policy();
+  insert into public.tenant_membership (id_tenant, user_id, status) values (v_tenant, p_user_id, 'active')
+  on conflict (id_tenant, user_id) do nothing;
+  if found then
+    insert into public.user_role (id_tenant, user_id, id_role) values (v_tenant, p_user_id, v_registered)
+    on conflict do nothing;
+    return 'active';
+  end if;
+  -- Una transazione concorrente ha creato la riga per prima: vale il suo stato.
+  select m.status into v_status
+  from public.tenant_membership m where m.id_tenant = v_tenant and m.user_id = p_user_id;
+  return v_status;
+end;
+$$;
+
+-- Migration: 0065_menu_feature_binding.sql
+-- La destinazione effettiva è canonica e separata dal valore di authoring conservato.
+alter table public.menu_entry add column canonical_link text;
+alter table public.menu_entry add column area_key text references public.feature_area(code);
+alter table public.menu_entry add column feature_key text references public.app_feature(code);
+
+create function app_private.menu_decode_path(p_path text) returns text
+language plpgsql immutable security invoker set search_path = '' as $$
+declare v_bytes bytea := ''::bytea; v_pos integer := 1; v_char text;
+begin
+  while v_pos <= pg_catalog.length(p_path) loop
+    v_char := pg_catalog.substr(p_path, v_pos, 1);
+    if v_char = '%' then
+      if pg_catalog.substr(p_path, v_pos + 1, 2) !~ '^[0-9A-Fa-f]{2}$' then raise exception 'invalid_menu_url_encoding' using errcode = '23514'; end if;
+      v_bytes := v_bytes || pg_catalog.decode(pg_catalog.substr(p_path, v_pos + 1, 2), 'hex');
+      v_pos := v_pos + 3;
+    else
+      v_bytes := v_bytes || pg_catalog.convert_to(v_char, 'UTF8');
+      v_pos := v_pos + 1;
+    end if;
+  end loop;
+  return pg_catalog.convert_from(v_bytes, 'UTF8');
+end $$;
+revoke all on function app_private.menu_decode_path(text) from public;
+grant execute on function app_private.menu_decode_path(text) to construct_runtime;
+
+-- Valida un target già serializzato dal parser URL nativo, non tenta di riprodurre WHATWG/IDNA.
+-- Anche una scrittura diretta può scegliere il target, ma feature/area proteggono ciò che si apre.
+create function app_private.bind_menu_target(p_target text, p_type bigint, p_area text)
+returns table(area_key text, feature_key text)
+language plpgsql stable security invoker set search_path = '' as $$
+declare
+  v_origin text := nullif(pg_catalog.current_setting('app.menu_origin', true), '');
+  v_parts text[]; v_scheme text; v_authority text; v_host_port text; v_host text; v_port text;
+  v_ip text; v_mapped text[]; v_octets integer[]; v_target_origin text; v_path text; v_feature text; v_area text;
+begin
+  if p_type is null then
+    if p_target is not null then raise exception 'category_cannot_have_target' using errcode = '23514'; end if;
+    return query select p_area, null::text; return;
+  end if;
+  if p_type not in (1, 2, 3, 4, 5) then raise exception 'unsupported_menu_type' using errcode = '23514'; end if;
+  if coalesce(p_target, '') = '' then raise exception 'canonical_menu_target_required' using errcode = '23514'; end if;
+  if p_target ~ '[[:cntrl:]]' or p_target <> pg_catalog.btrim(p_target) then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
+
+  if p_target ~ '^(https?://|//)' then
+    if v_origin is null then raise exception 'menu_origin_required: configure AUTH_URL or NEXTAUTH_URL' using errcode = '23514'; end if;
+    v_parts := pg_catalog.regexp_match(p_target, '^(?:(https?):)?//([^/?#]+)(/[^?#]*)([?#].*)?$');
+    if v_parts is null then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
+    v_scheme := coalesce(v_parts[1], pg_catalog.split_part(v_origin, ':', 1));
+    v_authority := v_parts[2];
+    -- Userinfo viene conservata ma non appartiene all'origine.
+    v_host_port := pg_catalog.regexp_replace(v_authority, '^.*@', '');
+    if v_host_port <> pg_catalog.lower(v_host_port) or v_host_port ~ '[@%]' then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
+    v_parts := pg_catalog.regexp_match(v_host_port, '^(\[[0-9a-f:]+\]|[a-z0-9._-]+)(?::(0|[1-9][0-9]*))?$');
+    if v_parts is null then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
+    v_host := v_parts[1]; v_port := v_parts[2];
+    if v_port is not null and (v_port::numeric > 65535 or (v_scheme = 'https' and v_port = '443') or (v_scheme = 'http' and v_port = '80')) then
+      raise exception 'noncanonical_menu_target' using errcode = '23514';
+    end if;
+    if v_host like '[%' then
+      v_ip := pg_catalog.host(pg_catalog.substr(v_host, 2, pg_catalog.length(v_host)-2)::inet);
+      v_mapped := pg_catalog.regexp_match(v_ip, '^(.*:)([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)$');
+      if v_mapped is not null then
+        v_octets := pg_catalog.string_to_array(v_mapped[2], '.')::integer[];
+        v_ip := v_mapped[1] || pg_catalog.to_hex(v_octets[1] * 256 + v_octets[2]) || ':' || pg_catalog.to_hex(v_octets[3] * 256 + v_octets[4]);
+      end if;
+      if v_host <> '[' || v_ip || ']' then raise exception 'noncanonical_menu_target' using errcode = '23514'; end if;
+    elsif pg_catalog.rtrim(v_host, '.') ~ '(^|\.)([0-9]+|0x[0-9a-f]+)$' then
+      if v_host !~ '^((0|[1-9][0-9]{0,2})\.){3}(0|[1-9][0-9]{0,2})$' or pg_catalog.host(v_host::inet) <> v_host then
+        raise exception 'noncanonical_menu_target' using errcode = '23514';
+      end if;
+    end if;
+    v_target_origin := v_scheme || '://' || v_host_port;
+    v_parts := pg_catalog.regexp_match(p_target, '^(?:https?:)?//[^/?#]+(/[^?#]*)');
+    v_path := v_parts[1];
+  elsif pg_catalog.left(p_target, 1) = '/' then
+    -- /.// è la serializzazione relativa alla radice di una pathname che inizia con //.
+    v_path := pg_catalog.regexp_replace(p_target, '[?#].*$', '');
+    if pg_catalog.left(v_path, 4) = '/.//' then v_path := pg_catalog.substr(v_path, 3); end if;
+  else
+    v_scheme := (pg_catalog.regexp_match(p_target, '^([a-z][a-z0-9+.-]*):'))[1];
+    if v_scheme is null or v_scheme in ('http', 'https', 'javascript', 'data', 'vbscript', 'file', 'blob') then
+      raise exception 'noncanonical_menu_target' using errcode = '23514';
+    end if;
+    return query select coalesce(p_area, 'navigation'), 'use-custom-content'::text; return;
+  end if;
+
+  -- In HTTP(S) la barra inversa è strutturale soltanto prima di query/frammento.
+  -- URL nativo la conserva nei suffissi; vietarla lì renderebbe il backfill retroattivo.
+  if p_target ~ '[[:space:]]' or pg_catalog.strpos(pg_catalog.regexp_replace(p_target, '[?#].*$', ''), E'\\') > 0
+    or pg_catalog.octet_length(p_target) <> pg_catalog.length(p_target) then
+    raise exception 'noncanonical_menu_target' using errcode = '23514';
+  end if;
+  -- URL risolve i dot segment prima della decodifica degli slash: l'ordine è significativo.
+  if pg_catalog.regexp_replace(pg_catalog.lower(v_path), '%2e', '.', 'g') ~ '(^|/)\.{1,2}(/|$)' then
+    raise exception 'noncanonical_menu_target' using errcode = '23514';
+  end if;
+  if v_target_origin is not null and v_target_origin <> v_origin then
+    return query select coalesce(p_area, 'navigation'), 'use-custom-content'::text; return;
+  end if;
+  v_path := pg_catalog.regexp_replace(app_private.menu_decode_path(v_path), '/+$', '');
+  if v_path = '' then v_path := '/'; end if;
+  if v_path ~ '^/(platform|api)(/|$)' then raise exception 'not_a_tenant_menu_target' using errcode = '23514'; end if;
+  v_feature := case
+    when v_path = '/user-management' then 'read-users'
+    when v_path ~ '^/roles-permissions(/[^/]+)?$' then 'read-roles'
+    when v_path = '/functionalities' then 'read-menu'
+    when v_path = '/functionalities/create' or v_path ~ '^/functionalities/[^/]+/edit$' then 'manage-menu'
+    when v_path = '/admin/theme' then 'manage-tenant-theme'
+    when v_path = '/admin/languages' then 'read-languages'
+    when v_path = '/admin/translations' then 'read-translations'
+    when v_path = '/admin/tenant-settings' then 'manage-support-consent'
+    when v_path = '/admin/audit' then 'read-tenant-audit'
+    when v_path ~ '^/embedded/[^/]+$' then 'use-custom-content'
+    else 'core-app' end;
+  select f.area_code into v_area from public.app_feature f where f.code = v_feature;
+  if v_feature = 'use-custom-content' then return query select coalesce(p_area, v_area), v_feature; return; end if;
+  if p_area is not null and p_area is distinct from v_area then raise exception 'incompatible_menu_area' using errcode = '23514'; end if;
+  return query select v_area, v_feature;
+end $$;
+revoke all on function app_private.bind_menu_target(text, bigint, text) from public;
+grant execute on function app_private.bind_menu_target(text, bigint, text) to construct_runtime;
+
+-- La CLI prepara la fotografia con URL nativo nella stessa transazione, sotto lock di tenant
+-- e menu presi PRIMA di leggerli. Una mappa parziale o stantia non può completare il backfill.
+do $$ declare v_tenant bigint; v_original text := pg_catalog.current_setting('app.tenant_id', true); begin
+  if pg_catalog.to_regclass('pg_temp.menu_target_backfill') is null then raise exception 'menu_target_backfill_required: run db.mjs apply'; end if;
+  if exists (select 1 from pg_temp.menu_target_backfill b where not exists (select 1 from public.tenant t where t.id = b.id_tenant)) then
+    raise exception 'menu_target_backfill_mismatch';
+  end if;
+  for v_tenant in select t.id from public.tenant t order by t.id loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant::text, true);
+    if exists (select 1 from public.menu_entry m full join
+      (select * from pg_temp.menu_target_backfill where id_tenant = v_tenant) b on b.id_menu_entry = m.id_menu_entry
+      where m.id_menu_entry is null or b.id_menu_entry is null or m.id_tenant <> b.id_tenant
+        or m.functionality_link is distinct from b.raw_link or m.id_functionality_type is distinct from b.functionality_type) then
+      raise exception 'menu_target_backfill_mismatch';
+    end if;
+    update public.menu_entry m set canonical_link = b.canonical_link,
+      (area_key, feature_key) = (select x.area_key, x.feature_key from app_private.bind_menu_target(b.canonical_link, m.id_functionality_type, null) x)
+    from pg_temp.menu_target_backfill b where b.id_tenant = v_tenant and b.id_menu_entry = m.id_menu_entry;
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', coalesce(v_original, ''), true);
+end $$;
+
+create function app_private.menu_feature_binding_guard() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+declare v_binding record; v_changed boolean;
+begin
+  -- Compatibilità di inserimenti SQL semplici: il target derivato viene accettato soltanto
+  -- se già canonico. Alias complessi richiedono il normalizzatore del server.
+  if tg_op = 'INSERT' and new.id_functionality_type is not null and new.canonical_link is null then
+    new.canonical_link := case when pg_catalog.left(new.functionality_link, 1) = '/' or pg_catalog.left(new.functionality_link, 4) = 'http'
+      or new.id_functionality_type = 1 then new.functionality_link else '/' || new.functionality_link end;
+  end if;
+  v_changed := tg_op = 'INSERT';
+  if tg_op = 'UPDATE' then
+    v_changed := (new.canonical_link, new.id_functionality_type, new.area_key, new.feature_key)
+      is distinct from (old.canonical_link, old.id_functionality_type, old.area_key, old.feature_key);
+  end if;
+  if not v_changed then return new; end if;
+  perform app_private.lock_tenant_policy();
+  select * into v_binding from app_private.bind_menu_target(new.canonical_link, new.id_functionality_type, new.area_key);
+  if new.feature_key is not null and new.feature_key is distinct from v_binding.feature_key then raise exception 'inconsistent_menu_feature' using errcode = '23514'; end if;
+  new.area_key := v_binding.area_key;
+  new.feature_key := v_binding.feature_key;
+  return new;
+end $$;
+revoke all on function app_private.menu_feature_binding_guard() from public;
+grant execute on function app_private.menu_feature_binding_guard() to construct_runtime;
+create trigger menu_feature_binding_guard before insert or update on public.menu_entry
+for each row execute function app_private.menu_feature_binding_guard();
+
+-- Copia canonica: trasporta le chiavi, il trigger rivalida usando la stessa origine fidata.
+create or replace function app_private.copy_tenant(p_source bigint, p_slug text, p_name text, p_is_template boolean)
+returns bigint
+language plpgsql security invoker set search_path = '' set client_min_messages = warning as $$
+declare
+  -- Le tabelle di tenant che questa funzione conosce. Una tabella di tenant nuova va aggiunta a
+  -- uno dei due elenchi, e se va copiata anche al corpo della funzione: finché non succede la
+  -- copia si rifiuta, invece di far nascere tenant senza quei dati (Review Focus #4).
+  v_copiate constant text[] := array['menu_entry', 'menu_entry_tag', 'role', 'role_permission',
+                                     'role_functionality', 'app_theme', 'tenant_settings',
+                                     'tenant_platform_policy', 'tenant_area_entitlement', 'tenant_entitlement'];
+  v_saltate constant text[] := array['user_role', 'tenant_membership', 'tenant_audit_event'];
+  v_sconosciuta text;
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_nuovo bigint;
+begin
+  select c.table_name into v_sconosciuta
+  from app_private.table_class c
+  where c.class = 'tenant' and c.table_name <> all (v_copiate || v_saltate)
+  order by c.table_name
+  limit 1;
+  if v_sconosciuta is not null then
+    raise exception using errcode = 'P0001', message = 'tenant_table_not_copied:' || v_sconosciuta;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = p_source) then
+    raise exception using errcode = 'P0001', message = 'source_tenant_missing';
+  end if;
+
+  perform pg_catalog.set_config('app.tenant_id', p_source::text, true);
+  perform app_private.lock_tenant_policy();
+
+  insert into public.tenant (slug, name, is_template) values (p_slug, p_name, p_is_template)
+  returning id into v_nuovo;
+
+  -- Lettura, con il contesto del tenant di partenza. Le tabelle temporanee si ricreano a ogni
+  -- chiamata: la funzione si può chiamare più volte nella stessa transazione.
+  perform pg_catalog.set_config('app.tenant_id', p_source::text, true);
+
+  drop table if exists pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema,
+    pg_temp.copy_tenant_impostazioni, pg_temp.copy_tenant_policy,
+    pg_temp.copy_tenant_aree, pg_temp.copy_tenant_concessioni;
+
+  create temporary table copy_tenant_voce as
+  select m.id_menu_entry as id_vecchio, pg_catalog.nextval('public.s_id_menu_entry') as id_nuovo,
+         m.id_parent, m.name, m.order_position, m.navbar_position, m.icon_path, m.id_functionality_type,
+         m.functionality_link, m.canonical_link, m.area_key, m.feature_key, m.open_in_new_tab, m.item_translation, m.is_immutable
+  from public.menu_entry m
+  where m.id_tenant = p_source;
+
+  create temporary table copy_tenant_ruolo as
+  select r.id_role as id_vecchio, pg_catalog.nextval('public.s_id_role') as id_nuovo,
+         r.id_role_type, r.description, r.system_key
+  from public.role r
+  where r.id_tenant = p_source;
+
+  create temporary table copy_tenant_etichetta as
+  select t.id_menu_entry, t.tag_lan, t.tag from public.menu_entry_tag t where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_permesso as
+  select p.id_role, p.id_permission from public.role_permission p where p.id_tenant = p_source;
+
+  create temporary table copy_tenant_funzionalita as
+  select f.id_role, f.id_menu_entry from public.role_functionality f where f.id_tenant = p_source;
+
+  create temporary table copy_tenant_tema as
+  select t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark
+  from public.app_theme t
+  where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_impostazioni as
+  select s.self_registration from public.tenant_settings s where s.id_tenant = p_source;
+
+  create temporary table copy_tenant_policy as
+  select p.query_timeout_ms, p.max_members, p.max_roles, p.max_menu_entries
+  from public.tenant_platform_policy p where p.id_tenant = p_source;
+  if not exists (select 1 from pg_temp.copy_tenant_policy) then
+    raise exception 'source_tenant_policy_missing';
+  end if;
+  create temporary table copy_tenant_aree as
+  select a.area_code, a.enabled from public.tenant_area_entitlement a where a.id_tenant = p_source;
+  create temporary table copy_tenant_concessioni as
+  select e.feature_code, e.allowed from public.tenant_entitlement e where e.id_tenant = p_source;
+
+  -- Scrittura, con il contesto del tenant nuovo e gli id nuovi. Il controllo sul genitore delle
+  -- voci è differito alla fine della transazione, quindi l'ordine delle righe non conta.
+  perform pg_catalog.set_config('app.tenant_id', v_nuovo::text, true);
+  perform app_private.lock_tenant_policy();
+  -- La revisione è locale al nuovo tenant: parte da 1, i valori sono quelli del modello.
+  insert into public.tenant_platform_policy (id_tenant, query_timeout_ms, max_members, max_roles, max_menu_entries)
+  select v_nuovo, p.query_timeout_ms, p.max_members, p.max_roles, p.max_menu_entries from pg_temp.copy_tenant_policy p;
+  insert into public.tenant_area_entitlement (id_tenant, area_code, enabled)
+  select v_nuovo, a.area_code, a.enabled from pg_temp.copy_tenant_aree a;
+  insert into public.tenant_entitlement (id_tenant, feature_code, allowed)
+  select v_nuovo, e.feature_code, e.allowed from pg_temp.copy_tenant_concessioni e;
+
+  insert into public.menu_entry (id_menu_entry, id_tenant, id_parent, name, order_position, navbar_position,
+    icon_path, id_functionality_type, functionality_link, canonical_link, area_key, feature_key, open_in_new_tab, item_translation, is_immutable,
+    created_at, updated_at)
+  select v.id_nuovo, v_nuovo, genitore.id_nuovo, v.name, v.order_position, v.navbar_position,
+         v.icon_path, v.id_functionality_type, v.functionality_link, v.canonical_link, v.area_key, v.feature_key, v.open_in_new_tab, v.item_translation,
+         v.is_immutable, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_voce v
+  left join pg_temp.copy_tenant_voce genitore on genitore.id_vecchio = v.id_parent;
+
+  insert into public.menu_entry_tag (id_tenant, id_menu_entry, tag_lan, tag, date_ins)
+  select v_nuovo, v.id_nuovo, e.tag_lan, e.tag, pg_catalog.now()
+  from pg_temp.copy_tenant_etichetta e
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = e.id_menu_entry;
+
+  insert into public.role (id_role, id_tenant, id_role_type, description, system_key, date_ins, date_mod)
+  select r.id_nuovo, v_nuovo, r.id_role_type, r.description, r.system_key, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_ruolo r;
+
+  -- Il permesso resta lo stesso id: il catalogo dei permessi è globale.
+  insert into public.role_permission (id_tenant, id_role, id_permission)
+  select v_nuovo, r.id_nuovo, p.id_permission
+  from pg_temp.copy_tenant_permesso p
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = p.id_role;
+
+  insert into public.role_functionality (id_tenant, id_role, id_menu_entry)
+  select v_nuovo, r.id_nuovo, v.id_nuovo
+  from pg_temp.copy_tenant_funzionalita f
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = f.id_role
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = f.id_menu_entry;
+
+  insert into public.app_theme (id_tenant, primary_color, primary_dark, background_light, card_light,
+    accent_light, sidebar_light, background_dark, card_dark, accent_dark, sidebar_dark, date_mod)
+  select v_nuovo, t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark, pg_catalog.now()
+  from pg_temp.copy_tenant_tema t;
+
+  -- Sempre una riga: ogni tenant ha le sue impostazioni.
+  insert into public.tenant_settings (id_tenant, self_registration, updated_at)
+  values (v_nuovo, coalesce((select s.self_registration from pg_temp.copy_tenant_impostazioni s), false),
+          pg_catalog.now());
+
+  drop table pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema,
+    pg_temp.copy_tenant_impostazioni, pg_temp.copy_tenant_policy,
+    pg_temp.copy_tenant_aree, pg_temp.copy_tenant_concessioni;
+
+  -- Il tenant di chi ha chiamato torna com'era: le istruzioni successive della transazione non
+  -- devono lavorare nel tenant nuovo.
+  perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+  return v_nuovo;
+end;
+$$;
+revoke all on function app_private.copy_tenant(bigint, text, text, boolean) from public;
+
+-- Migration: 0066_tenant_grant_guards.sql
+-- Ruling 13: il consenso essenziale conserva UNA VOLTA le deleghe preesistenti.
+-- Nuovi grant delle impostazioni opzionali non concedono il consenso.
+insert into public.permission
+  (name, code, id_parent, order_position, description, item_translation, kind, origin, is_immutable)
+select 'manage-support-consent', 'manage-support-consent', c.id_permission, 6,
+       'Gestire il consenso essenziale per l’assistenza della piattaforma',
+       '{"EN":{"name":"Manage support consent"},"IT":{"name":"Gestire il consenso all’assistenza"}}'::jsonb,
+       'GRANT', 'SOURCE', 1
+from public.permission c
+where c.name = 'Amministrazione' and c.id_parent = -1 and c.kind = 'CATEGORY' and c.origin = 'SOURCE';
+update public.app_feature set id_permission = (select p.id_permission from public.permission p where p.code = 'manage-support-consent')
+where code = 'manage-support-consent';
+-- BEGIN SUPPORT CONSENT BACKFILL
+-- Il contesto locale e la RLS valgono anche per il proprietario. Nessun nuovo ruolo o membro.
+do $$
+declare
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_tenant bigint;
+begin
+  for v_tenant in select t.id from public.tenant t order by t.id loop
+    perform pg_catalog.set_config('app.tenant_id', v_tenant::text, true);
+    perform app_private.lock_tenant_policy();
+    insert into public.role_permission (id_tenant, id_role, id_permission)
+    select v_tenant, rp.id_role, essential.id_permission
+    from public.role_permission rp
+    join public.permission optional on optional.id_permission = rp.id_permission and optional.code = 'manage-tenant-settings'
+    cross join public.permission essential
+    where rp.id_tenant = v_tenant and essential.code = 'manage-support-consent'
+    on conflict do nothing;
+  end loop;
+  perform pg_catalog.set_config('app.tenant_id', coalesce(v_origine, ''), true);
+end $$;
+-- END SUPPORT CONSENT BACKFILL
+
+-- T04: i nuovi grant sono limitati alle capacità effettive del tenant.
+-- La modalità storica è locale alla funzione di copia e richiede il proprietario.
+create function app_private.tenant_grant_feature_guard() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_feature text;
+  v_area text;
+  v_feature_area text;
+begin
+  if tg_op = 'UPDATE' then
+    if tg_table_name = 'role_permission' then
+      if (new.id_tenant, new.id_role, new.id_permission) is not distinct from (old.id_tenant, old.id_role, old.id_permission) then return new; end if;
+    else
+      if (new.id_tenant, new.id_role, new.id_menu_entry) is not distinct from (old.id_tenant, old.id_role, old.id_menu_entry) then return new; end if;
+    end if;
+  end if;
+  perform app_private.lock_tenant_policy();
+  if pg_catalog.current_setting('app.copy_suspended_grants', true) = 'on' then
+    if current_user <> 'construct_owner' then
+      raise exception 'tenant_grant_copy_owner_only' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+  if tg_table_name = 'role_permission' then
+    select f.code into v_feature from public.app_feature f
+    join public.permission p on p.id_permission = f.id_permission
+    where p.id_permission = new.id_permission and p.deprecated_at is null;
+  else
+    select m.feature_key, m.area_key, f.area_code into v_feature, v_area, v_feature_area
+    from public.menu_entry m left join public.app_feature f on f.code = m.feature_key
+    where m.id_tenant = new.id_tenant and m.id_menu_entry = new.id_menu_entry;
+  end if;
+  if v_feature is null or not exists (select 1 from app_private.effective_tenant_feature_codes() f where f.code = v_feature)
+    or (v_area is not null and v_area is distinct from v_feature_area and not exists (
+      select 1 from public.tenant_area_entitlement a where a.area_code = v_area and a.enabled
+    )) then
+    raise exception 'tenant_feature_disabled' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+revoke all on function app_private.tenant_grant_feature_guard() from public;
+grant execute on function app_private.tenant_grant_feature_guard() to construct_runtime;
+create trigger tenant_permission_feature_guard before insert or update on public.role_permission
+for each row execute function app_private.tenant_grant_feature_guard();
+create trigger tenant_functionality_feature_guard before insert or update on public.role_functionality
+for each row execute function app_private.tenant_grant_feature_guard();
+
+-- Copia storica: conserva i grant sospesi senza renderli efficaci. Il contesto locale viene
+-- ripristinato dopo le due copie; su errore il rollback lo annulla. EXECUTE resta owner-only.
+create or replace function app_private.copy_tenant(p_source bigint, p_slug text, p_name text, p_is_template boolean)
+returns bigint
+language plpgsql security invoker set search_path = '' set client_min_messages = warning as $$
+declare
+  -- Le tabelle di tenant che questa funzione conosce. Una tabella di tenant nuova va aggiunta a
+  -- uno dei due elenchi, e se va copiata anche al corpo della funzione: finché non succede la
+  -- copia si rifiuta, invece di far nascere tenant senza quei dati (Review Focus #4).
+  v_copiate constant text[] := array['menu_entry', 'menu_entry_tag', 'role', 'role_permission',
+                                     'role_functionality', 'app_theme', 'tenant_settings',
+                                     'tenant_platform_policy', 'tenant_area_entitlement', 'tenant_entitlement'];
+  v_saltate constant text[] := array['user_role', 'tenant_membership', 'tenant_audit_event'];
+  v_sconosciuta text;
+  v_origine text := pg_catalog.current_setting('app.tenant_id', true);
+  v_nuovo bigint;
+  v_copy_mode text := pg_catalog.current_setting('app.copy_suspended_grants', true);
+begin
+  select c.table_name into v_sconosciuta
+  from app_private.table_class c
+  where c.class = 'tenant' and c.table_name <> all (v_copiate || v_saltate)
+  order by c.table_name
+  limit 1;
+  if v_sconosciuta is not null then
+    raise exception using errcode = 'P0001', message = 'tenant_table_not_copied:' || v_sconosciuta;
+  end if;
+  if not exists (select 1 from public.tenant t where t.id = p_source) then
+    raise exception using errcode = 'P0001', message = 'source_tenant_missing';
+  end if;
+
+  perform pg_catalog.set_config('app.tenant_id', p_source::text, true);
+  perform app_private.lock_tenant_policy();
+
+  insert into public.tenant (slug, name, is_template) values (p_slug, p_name, p_is_template)
+  returning id into v_nuovo;
+
+  -- Lettura, con il contesto del tenant di partenza. Le tabelle temporanee si ricreano a ogni
+  -- chiamata: la funzione si può chiamare più volte nella stessa transazione.
+  perform pg_catalog.set_config('app.tenant_id', p_source::text, true);
+
+  drop table if exists pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema,
+    pg_temp.copy_tenant_impostazioni, pg_temp.copy_tenant_policy,
+    pg_temp.copy_tenant_aree, pg_temp.copy_tenant_concessioni;
+
+  create temporary table copy_tenant_voce as
+  select m.id_menu_entry as id_vecchio, pg_catalog.nextval('public.s_id_menu_entry') as id_nuovo,
+         m.id_parent, m.name, m.order_position, m.navbar_position, m.icon_path, m.id_functionality_type,
+         m.functionality_link, m.canonical_link, m.area_key, m.feature_key, m.open_in_new_tab, m.item_translation, m.is_immutable
+  from public.menu_entry m
+  where m.id_tenant = p_source;
+
+  create temporary table copy_tenant_ruolo as
+  select r.id_role as id_vecchio, pg_catalog.nextval('public.s_id_role') as id_nuovo,
+         r.id_role_type, r.description, r.system_key
+  from public.role r
+  where r.id_tenant = p_source;
+
+  create temporary table copy_tenant_etichetta as
+  select t.id_menu_entry, t.tag_lan, t.tag from public.menu_entry_tag t where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_permesso as
+  select p.id_role, p.id_permission from public.role_permission p where p.id_tenant = p_source;
+
+  create temporary table copy_tenant_funzionalita as
+  select f.id_role, f.id_menu_entry from public.role_functionality f where f.id_tenant = p_source;
+
+  create temporary table copy_tenant_tema as
+  select t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark
+  from public.app_theme t
+  where t.id_tenant = p_source;
+
+  create temporary table copy_tenant_impostazioni as
+  select s.self_registration from public.tenant_settings s where s.id_tenant = p_source;
+
+  create temporary table copy_tenant_policy as
+  select p.query_timeout_ms, p.max_members, p.max_roles, p.max_menu_entries
+  from public.tenant_platform_policy p where p.id_tenant = p_source;
+  if not exists (select 1 from pg_temp.copy_tenant_policy) then
+    raise exception 'source_tenant_policy_missing';
+  end if;
+  create temporary table copy_tenant_aree as
+  select a.area_code, a.enabled from public.tenant_area_entitlement a where a.id_tenant = p_source;
+  create temporary table copy_tenant_concessioni as
+  select e.feature_code, e.allowed from public.tenant_entitlement e where e.id_tenant = p_source;
+
+  -- Scrittura, con il contesto del tenant nuovo e gli id nuovi. Il controllo sul genitore delle
+  -- voci è differito alla fine della transazione, quindi l'ordine delle righe non conta.
+  perform pg_catalog.set_config('app.tenant_id', v_nuovo::text, true);
+  perform app_private.lock_tenant_policy();
+  -- La revisione è locale al nuovo tenant: parte da 1, i valori sono quelli del modello.
+  insert into public.tenant_platform_policy (id_tenant, query_timeout_ms, max_members, max_roles, max_menu_entries)
+  select v_nuovo, p.query_timeout_ms, p.max_members, p.max_roles, p.max_menu_entries from pg_temp.copy_tenant_policy p;
+  insert into public.tenant_area_entitlement (id_tenant, area_code, enabled)
+  select v_nuovo, a.area_code, a.enabled from pg_temp.copy_tenant_aree a;
+  insert into public.tenant_entitlement (id_tenant, feature_code, allowed)
+  select v_nuovo, e.feature_code, e.allowed from pg_temp.copy_tenant_concessioni e;
+
+  insert into public.menu_entry (id_menu_entry, id_tenant, id_parent, name, order_position, navbar_position,
+    icon_path, id_functionality_type, functionality_link, canonical_link, area_key, feature_key, open_in_new_tab, item_translation, is_immutable,
+    created_at, updated_at)
+  select v.id_nuovo, v_nuovo, genitore.id_nuovo, v.name, v.order_position, v.navbar_position,
+         v.icon_path, v.id_functionality_type, v.functionality_link, v.canonical_link, v.area_key, v.feature_key, v.open_in_new_tab, v.item_translation,
+         v.is_immutable, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_voce v
+  left join pg_temp.copy_tenant_voce genitore on genitore.id_vecchio = v.id_parent;
+
+  insert into public.menu_entry_tag (id_tenant, id_menu_entry, tag_lan, tag, date_ins)
+  select v_nuovo, v.id_nuovo, e.tag_lan, e.tag, pg_catalog.now()
+  from pg_temp.copy_tenant_etichetta e
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = e.id_menu_entry;
+
+  insert into public.role (id_role, id_tenant, id_role_type, description, system_key, date_ins, date_mod)
+  select r.id_nuovo, v_nuovo, r.id_role_type, r.description, r.system_key, pg_catalog.now(), pg_catalog.now()
+  from pg_temp.copy_tenant_ruolo r;
+
+  -- Il permesso resta lo stesso id: il catalogo dei permessi è globale.
+  if current_user <> 'construct_owner' then
+    raise exception 'tenant_grant_copy_owner_only' using errcode = '42501';
+  end if;
+  perform pg_catalog.set_config('app.copy_suspended_grants', 'on', true);
+  insert into public.role_permission (id_tenant, id_role, id_permission)
+  select v_nuovo, r.id_nuovo, p.id_permission
+  from pg_temp.copy_tenant_permesso p
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = p.id_role;
+
+  insert into public.role_functionality (id_tenant, id_role, id_menu_entry)
+  select v_nuovo, r.id_nuovo, v.id_nuovo
+  from pg_temp.copy_tenant_funzionalita f
+  join pg_temp.copy_tenant_ruolo r on r.id_vecchio = f.id_role
+  join pg_temp.copy_tenant_voce v on v.id_vecchio = f.id_menu_entry;
+
+  perform pg_catalog.set_config('app.copy_suspended_grants', coalesce(v_copy_mode, ''), true);
+
+  insert into public.app_theme (id_tenant, primary_color, primary_dark, background_light, card_light,
+    accent_light, sidebar_light, background_dark, card_dark, accent_dark, sidebar_dark, date_mod)
+  select v_nuovo, t.primary_color, t.primary_dark, t.background_light, t.card_light, t.accent_light,
+         t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark, pg_catalog.now()
+  from pg_temp.copy_tenant_tema t;
+
+  -- Sempre una riga: ogni tenant ha le sue impostazioni.
+  insert into public.tenant_settings (id_tenant, self_registration, updated_at)
+  values (v_nuovo, coalesce((select s.self_registration from pg_temp.copy_tenant_impostazioni s), false),
+          pg_catalog.now());
+
+  drop table pg_temp.copy_tenant_voce, pg_temp.copy_tenant_ruolo, pg_temp.copy_tenant_etichetta,
+    pg_temp.copy_tenant_permesso, pg_temp.copy_tenant_funzionalita, pg_temp.copy_tenant_tema,
+    pg_temp.copy_tenant_impostazioni, pg_temp.copy_tenant_policy,
+    pg_temp.copy_tenant_aree, pg_temp.copy_tenant_concessioni;
+
+  -- Il tenant di chi ha chiamato torna com'era: le istruzioni successive della transazione non
+  -- devono lavorare nel tenant nuovo.
+  perform pg_catalog.set_config('app.tenant_id', v_origine, true);
+  return v_nuovo;
+end;
+$$;
+revoke all on function app_private.copy_tenant(bigint, text, text, boolean) from public;
+
+-- Migration: 0067_tenant_resource_limits.sql
+-- T06: exact quotas serialized with policy changes, and transaction-local query timeout.
+-- VOLATILE PL/pgSQL queries obtain a fresh snapshot after the policy lock under
+-- READ COMMITTED. Reject stronger isolation for counted writes, also for owner
+-- copies/restores: a fixed transaction snapshot cannot enforce concurrent quotas.
+create function app_private.tenant_resource_write_lock() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+begin
+  if pg_catalog.current_setting('transaction_isolation') <> 'read committed' then
+    raise exception using errcode = 'P0001', message = 'tenant_quota_requires_read_committed';
+  end if;
+  perform app_private.lock_tenant_policy();
+  return null;
+end $$;
+revoke all on function app_private.tenant_resource_write_lock() from public;
+
+-- Statement triggers run before PostgreSQL locks any target rows (menu reorder,
+-- member reactivation). Deletes do not increase usage and need no quota check.
+create trigger tenant_resource_write_lock before insert or update on public.tenant_membership
+for each statement execute function app_private.tenant_resource_write_lock();
+create trigger tenant_resource_write_lock before insert or update on public.role
+for each statement execute function app_private.tenant_resource_write_lock();
+create trigger tenant_resource_write_lock before insert or update on public.menu_entry
+for each statement execute function app_private.tenant_resource_write_lock();
+
+create function app_private.tenant_resource_insert_guard() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_limit integer;
+  v_usage bigint;
+  v_error text;
+begin
+  -- Transition rows contain actual insertions: ON CONFLICT on any unique key
+  -- consumes nothing, even when policy has since been lowered below current use.
+  if not exists (select 1 from inserted_resources) then return null; end if;
+  if tg_table_name = 'tenant_membership' then
+    select p.max_members into v_limit from public.tenant_platform_policy p
+    where p.id_tenant = app_private.current_tenant_id();
+    if v_limit is null then return null; end if;
+    select count(*) into v_usage from public.tenant_membership;
+    v_error := 'tenant_member_quota';
+  elsif tg_table_name = 'role' then
+    select p.max_roles into v_limit from public.tenant_platform_policy p
+    where p.id_tenant = app_private.current_tenant_id();
+    if v_limit is null then return null; end if;
+    select count(*) into v_usage from public.role;
+    v_error := 'tenant_role_quota';
+  elsif tg_table_name = 'menu_entry' then
+    select p.max_menu_entries into v_limit from public.tenant_platform_policy p
+    where p.id_tenant = app_private.current_tenant_id();
+    if v_limit is null then return null; end if;
+    select count(*) into v_usage from public.menu_entry;
+    v_error := 'tenant_menu_quota';
+  end if;
+  if v_usage > v_limit then
+    raise exception using errcode = 'P0001', message = v_error;
+  end if;
+  return null;
+end $$;
+revoke all on function app_private.tenant_resource_insert_guard() from public;
+
+create trigger tenant_resource_insert_guard after insert on public.tenant_membership
+referencing new table as inserted_resources for each statement
+execute function app_private.tenant_resource_insert_guard();
+create trigger tenant_resource_insert_guard after insert on public.role
+referencing new table as inserted_resources for each statement
+execute function app_private.tenant_resource_insert_guard();
+create trigger tenant_resource_insert_guard after insert on public.menu_entry
+referencing new table as inserted_resources for each statement
+execute function app_private.tenant_resource_insert_guard();
+
+-- One setup statement per withTenant, preserving the fixed round-trip budget.
+-- Separate procedural statements guarantee context -> policy read -> local timeout;
+-- there is no dependency on SELECT expression evaluation order or session state.
+create function app_private.configure_tenant_transaction(p_tenant bigint) returns void
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_connection integer;
+  v_tenant_limit integer;
+  v_effective integer;
+begin
+  if p_tenant <= 0 or p_tenant is null then
+    raise exception using errcode = '22023', message = 'invalid tenant id';
+  end if;
+  perform pg_catalog.set_config('app.tenant_id', p_tenant::text, true);
+  select s.setting::integer into strict v_connection from pg_catalog.pg_settings s
+  where s.name = 'statement_timeout';
+  select p.query_timeout_ms into v_tenant_limit from public.tenant_platform_policy p
+  where p.id_tenant = p_tenant;
+  v_effective := case
+    when v_tenant_limit is null then v_connection
+    when v_connection = 0 then v_tenant_limit
+    else least(v_connection, v_tenant_limit)
+  end;
+  perform pg_catalog.set_config('statement_timeout', v_effective::text, true);
+end $$;
+revoke all on function app_private.configure_tenant_transaction(bigint) from public;
+grant execute on function app_private.configure_tenant_transaction(bigint) to construct_runtime;
+
+-- Migration: 0068_tenant_policy_ui.sql
+-- T08: etichette delle concessioni, limiti, assegnazioni sospese e aree menu.
+-- Solo aggiunte per le lingue base; nessun grant o dato tenant modificato.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+  {
+    "key": "platform.policy.title",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.title",
+    "it": "Concessioni e limiti",
+    "en": "Features and limits"
+  },
+  {
+    "key": "platform.policy.suspended_preserved",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.suspended_preserved",
+    "it": "La sospensione conserva dati e assegnazioni dei ruoli. La riattivazione li rende nuovamente disponibili; la pulizia è una cancellazione separata e definitiva.",
+    "en": "Suspension preserves data and role assignments. Restoring access makes them available again; cleanup is a separate permanent deletion."
+  },
+  {
+    "key": "platform.policy.area_enabled",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.area_enabled",
+    "it": "Area concessa",
+    "en": "Area allowed"
+  },
+  {
+    "key": "platform.policy.inherit",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.inherit",
+    "it": "Eredita",
+    "en": "Inherit"
+  },
+  {
+    "key": "platform.policy.allow",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.allow",
+    "it": "Consenti",
+    "en": "Allow"
+  },
+  {
+    "key": "platform.policy.deny",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.deny",
+    "it": "Nega",
+    "en": "Deny"
+  },
+  {
+    "key": "platform.policy.effective.allowed",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.effective.allowed",
+    "it": "Consentito",
+    "en": "Allowed"
+  },
+  {
+    "key": "platform.policy.effective.denied",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.effective.denied",
+    "it": "Sospeso",
+    "en": "Suspended"
+  },
+  {
+    "key": "platform.policy.source.area",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.source.area",
+    "it": "Valore ereditato dall’area",
+    "en": "Value inherited from area"
+  },
+  {
+    "key": "platform.policy.source.override",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.source.override",
+    "it": "Eccezione esplicita",
+    "en": "Explicit override"
+  },
+  {
+    "key": "platform.policy.limits",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.limits",
+    "it": "Limiti del tenant",
+    "en": "Tenant limits"
+  },
+  {
+    "key": "platform.policy.limit_inherit",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.limit_inherit",
+    "it": "Lascia vuoto per ereditare. Zero impedisce nuove risorse. Il timeout deve essere positivo e resta entro il limite della connessione.",
+    "en": "Leave blank to inherit. Zero prevents new resources. The timeout must be positive and remains within the connection limit."
+  },
+  {
+    "key": "platform.policy.limit.max_members",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.limit.maxMembers",
+    "it": "Massimo appartenenze",
+    "en": "Maximum memberships"
+  },
+  {
+    "key": "platform.policy.limit.max_roles",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.limit.maxRoles",
+    "it": "Massimo ruoli (inclusi quelli di sistema)",
+    "en": "Maximum roles (including system roles)"
+  },
+  {
+    "key": "platform.policy.limit.max_menu_entries",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.limit.maxMenuEntries",
+    "it": "Massimo voci menu (incluse categorie)",
+    "en": "Maximum menu entries (including categories)"
+  },
+  {
+    "key": "platform.policy.limit.query_timeout_ms",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.limit.queryTimeoutMs",
+    "it": "Timeout query in millisecondi",
+    "en": "Query timeout in milliseconds"
+  },
+  {
+    "key": "platform.policy.usage",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.usage",
+    "it": "Uso corrente: {{count}}",
+    "en": "Current usage: {{count}}"
+  },
+  {
+    "key": "platform.policy.quota_below_usage",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.quota_below_usage",
+    "it": "Il limite è inferiore all’uso corrente: i dati restano, ma non si possono aggiungere altre risorse.",
+    "en": "The limit is below current usage: data is preserved, but no more resources can be added."
+  },
+  {
+    "key": "platform.policy.dependencies",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.dependencies",
+    "it": "Dipendenze mancanti: {{features}}. Consenti le letture richieste oppure sospendi le funzioni dipendenti.",
+    "en": "Missing dependencies: {{features}}. Allow the required reads or suspend the dependent features."
+  },
+  {
+    "key": "platform.policy.saved",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.saved",
+    "it": "Concessioni e limiti salvati. Nessuna assegnazione eliminata.",
+    "en": "Features and limits saved. No assignments deleted."
+  },
+  {
+    "key": "platform.policy.conflict",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.conflict",
+    "it": "La revisione è cambiata. Ricarica i dati prima di confermare nuovamente.",
+    "en": "The revision has changed. Reload the data before confirming again."
+  },
+  {
+    "key": "platform.policy.invalid",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.invalid",
+    "it": "Controlla le concessioni, le dipendenze e i limiti inseriti.",
+    "en": "Check the selected features, dependencies and limits."
+  },
+  {
+    "key": "platform.policy.disabled",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.disabled",
+    "it": "Le modifiche alle concessioni sono temporaneamente disabilitate.",
+    "en": "Feature policy changes are temporarily disabled."
+  },
+  {
+    "key": "platform.policy.error",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.error",
+    "it": "Impossibile completare la modifica. Ricarica e riprova.",
+    "en": "The change could not be completed. Reload and try again."
+  },
+  {
+    "key": "platform.policy.reload",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.reload",
+    "it": "Ricarica dati",
+    "en": "Reload data"
+  },
+  {
+    "key": "platform.policy.purge.selection",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.purge.selection",
+    "it": "Pulizia delle assegnazioni sospese",
+    "en": "Clean up suspended assignments"
+  },
+  {
+    "key": "platform.policy.purge.preview",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.purge.preview",
+    "it": "Calcola anteprima pulizia",
+    "en": "Preview cleanup"
+  },
+  {
+    "key": "platform.policy.purge.open",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.purge.open",
+    "it": "Rivedi cancellazione assegnazioni",
+    "en": "Review assignment deletion"
+  },
+  {
+    "key": "platform.policy.purge.title",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.purge.title",
+    "it": "Conferma cancellazione delle assegnazioni",
+    "en": "Confirm assignment deletion"
+  },
+  {
+    "key": "platform.policy.purge.warning",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.purge.warning",
+    "it": "La cancellazione elimina soltanto le assegnazioni delle funzioni sospese selezionate. Riattivare le funzioni non le ricrea. I ruoli e i dati restano.",
+    "en": "Deletion removes only assignments for the selected suspended features. Restoring features will not recreate them. Roles and data are preserved."
+  },
+  {
+    "key": "platform.policy.purge.counts",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.purge.counts",
+    "it": "Ruoli coinvolti: {{roles}}. Assegnazioni permessi: {{permissions}}. Assegnazioni menu: {{menus}}.",
+    "en": "Affected roles: {{roles}}. Permission assignments: {{permissions}}. Menu assignments: {{menus}}."
+  },
+  {
+    "key": "platform.policy.purge.confirm",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.purge.confirm",
+    "it": "Elimina le assegnazioni indicate",
+    "en": "Delete the listed assignments"
+  },
+  {
+    "key": "platform.policy.purge.refresh",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.purge.refresh",
+    "it": "Aggiorna anteprima",
+    "en": "Refresh preview"
+  },
+  {
+    "key": "platform.policy.purge.refresh_error",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.purge.refresh_error",
+    "it": "Anteprima non disponibile. Ricarica la policy e seleziona nuovamente le funzioni sospese.",
+    "en": "Preview unavailable. Reload the policy and select the suspended features again."
+  },
+  {
+    "key": "platform.policy.purge.done",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.purge.done",
+    "it": "Assegnazioni eliminate. Ricarica i dati per continuare.",
+    "en": "Assignments deleted. Reload the data to continue."
+  },
+  {
+    "key": "roles.detail.suspended_badge",
+    "namespace": "roles",
+    "module": "platform",
+    "description": "Tenant policy UI: roles.detail.suspended_badge",
+    "it": "Sospesa dalla piattaforma",
+    "en": "Suspended by platform"
+  },
+  {
+    "key": "roles.detail.suspended_hint",
+    "namespace": "roles",
+    "module": "platform",
+    "description": "Tenant policy UI: roles.detail.suspended_hint",
+    "it": "Assegnazione conservata ma non efficace. Puoi revocarla; non puoi creare una nuova concessione finché la funzione è sospesa.",
+    "en": "Assignment preserved but inactive. You can revoke it; new grants are unavailable while the feature is suspended."
+  },
+  {
+    "key": "functionalities.form.area",
+    "namespace": "functionalities",
+    "module": "platform",
+    "description": "Tenant policy UI: functionalities.form.area",
+    "it": "Area di presentazione",
+    "en": "Presentation area"
+  },
+  {
+    "key": "functionalities.form.area_automatic",
+    "namespace": "functionalities",
+    "module": "platform",
+    "description": "Tenant policy UI: functionalities.form.area_automatic",
+    "it": "Automatica / nessuna",
+    "en": "Automatic / none"
+  },
+  {
+    "key": "functionalities.form.area_unavailable",
+    "namespace": "functionalities",
+    "module": "platform",
+    "description": "Tenant policy UI: functionalities.form.area_unavailable",
+    "it": "Area attuale non disponibile",
+    "en": "Current area unavailable"
+  },
+  {
+    "key": "functionalities.form.area_hint",
+    "namespace": "functionalities",
+    "module": "platform",
+    "description": "Tenant policy UI: functionalities.form.area_hint",
+    "it": "Le aree disponibili sono calcolate dal server. Per una pagina interna l’area dipende dalla destinazione; usa Automatica. Un’area storica non disponibile resta visibile e non viene sostituita automaticamente.",
+    "en": "Available areas are calculated by the server. For an internal page, the destination determines the area; use Automatic. An unavailable historical area remains visible and is never silently replaced."
+  },
+  {
+    "key": "platform.policy.area.people",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.area.people",
+    "it": "Persone",
+    "en": "People"
+  },
+  {
+    "key": "platform.policy.area.roles",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.area.roles",
+    "it": "Ruoli",
+    "en": "Roles"
+  },
+  {
+    "key": "platform.policy.area.navigation",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.area.navigation",
+    "it": "Menu",
+    "en": "Navigation"
+  },
+  {
+    "key": "platform.policy.area.appearance",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.area.appearance",
+    "it": "Aspetto",
+    "en": "Appearance"
+  },
+  {
+    "key": "platform.policy.area.catalogs",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.area.catalogs",
+    "it": "Cataloghi",
+    "en": "Catalogs"
+  },
+  {
+    "key": "platform.policy.area.tenant_settings",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.area.tenant-settings",
+    "it": "Impostazioni tenant",
+    "en": "Tenant settings"
+  },
+  {
+    "key": "platform.policy.feature.read_users",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.read-users",
+    "it": "Leggere le persone",
+    "en": "Read people"
+  },
+  {
+    "key": "platform.policy.feature.invite_users",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.invite-users",
+    "it": "Invitare persone",
+    "en": "Invite people"
+  },
+  {
+    "key": "platform.policy.feature.set_user_status",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.set-user-status",
+    "it": "Cambiare stato delle persone",
+    "en": "Change people status"
+  },
+  {
+    "key": "platform.policy.feature.assign_user_roles",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.assign-user-roles",
+    "it": "Assegnare ruoli alle persone",
+    "en": "Assign roles to people"
+  },
+  {
+    "key": "platform.policy.feature.read_roles",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.read-roles",
+    "it": "Leggere i ruoli",
+    "en": "Read roles"
+  },
+  {
+    "key": "platform.policy.feature.manage_roles",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.manage-roles",
+    "it": "Gestire i ruoli",
+    "en": "Manage roles"
+  },
+  {
+    "key": "platform.policy.feature.grant_role_permissions",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.grant-role-permissions",
+    "it": "Concedere permessi ai ruoli",
+    "en": "Grant role permissions"
+  },
+  {
+    "key": "platform.policy.feature.read_menu",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.read-menu",
+    "it": "Leggere il menu",
+    "en": "Read navigation"
+  },
+  {
+    "key": "platform.policy.feature.manage_menu",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.manage-menu",
+    "it": "Gestire il menu",
+    "en": "Manage navigation"
+  },
+  {
+    "key": "platform.policy.feature.use_custom_content",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.use-custom-content",
+    "it": "Usare contenuti propri",
+    "en": "Use custom content"
+  },
+  {
+    "key": "platform.policy.feature.manage_tenant_theme",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.manage-tenant-theme",
+    "it": "Gestire il tema del tenant",
+    "en": "Manage tenant theme"
+  },
+  {
+    "key": "platform.policy.feature.read_languages",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.read-languages",
+    "it": "Leggere le lingue",
+    "en": "Read languages"
+  },
+  {
+    "key": "platform.policy.feature.read_translations",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.read-translations",
+    "it": "Leggere le traduzioni",
+    "en": "Read translations"
+  },
+  {
+    "key": "platform.policy.feature.manage_tenant_settings",
+    "namespace": "platform",
+    "module": "platform",
+    "description": "Tenant policy UI: platform.policy.feature.manage-tenant-settings",
+    "it": "Gestire le impostazioni del tenant",
+    "en": "Manage tenant settings"
+  },
+  {
+    "key": "audit.operation.tenant.policy.save",
+    "namespace": "audit",
+    "module": "rbac",
+    "description": "Audit operation: tenant feature policy and limits saved",
+    "it": "Concessioni e limiti del tenant salvati",
+    "en": "Tenant feature policy and limits saved"
+  },
+  {
+    "key": "audit.operation.tenant.grants.purge",
+    "namespace": "audit",
+    "module": "rbac",
+    "description": "Audit operation: suspended tenant role assignments permanently deleted",
+    "it": "Assegnazioni sospese del tenant eliminate",
+    "en": "Suspended tenant assignments deleted"
+  }
+]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0069_tenant_export_consent.sql
+-- T09: l'esportazione richiede un'estensione distinta dell'assistenza.
+-- Il default falso conserva l'ambito di tutti i consensi precedenti e delle copie dal modello.
+alter table public.tenant_settings
+  add column support_export_allowed boolean not null default false;
+
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {
+      "key": "tenancy.support.allow_export",
+      "namespace": "tenancy",
+      "module": "tenancy",
+      "description": "Explicit export choice for the next support consent",
+      "it": "Consenti anche l’esportazione dei dati",
+      "en": "Also allow data export"
+    },
+    {
+      "key": "tenancy.support.allow_export_hint",
+      "namespace": "tenancy",
+      "module": "tenancy",
+      "description": "Scope of explicit export consent",
+      "it": "La scelta vale per il prossimo consenso di assistenza. Seleziona una durata per concederlo; ogni rinnovo richiede una nuova scelta.",
+      "en": "This choice applies to the next support consent. Select a duration to grant it; each renewal requires a new choice."
+    },
+    {
+      "key": "tenancy.support.export_allowed",
+      "namespace": "tenancy",
+      "module": "tenancy",
+      "description": "Saved support consent includes export",
+      "it": "Esportazione consentita durante l’assistenza autorizzata.",
+      "en": "Data export allowed during authorized support."
+    },
+    {
+      "key": "tenancy.support.export_not_allowed",
+      "namespace": "tenancy",
+      "module": "tenancy",
+      "description": "Saved support consent excludes export",
+      "it": "Esportazione non consentita.",
+      "en": "Data export not allowed."
+    }
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0070_tenant_data_contract.sql
+-- T10: archivio tenant v1. Provenienza storica esplicita, mai autorità per aprire assistenza.
+alter table public.tenant_audit_event
+  add column origin text not null default 'live' check (origin in ('live', 'restored')),
+  add column source_tenant_id text,
+  add column source_event_id text;
+
+-- Elenchi deliberatamente espliciti per ciascuna operazione: una tabella nuova non può essere
+-- saltata silenziosamente. Il runtime legge soltanto il registro e conserva i suoi privilegi.
+create function app_private.assert_tenant_data_coverage(p_operation text) returns void
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_export constant text[] := array[
+    'role', 'user_role', 'role_permission', 'menu_entry', 'menu_entry_tag', 'role_functionality',
+    'app_theme', 'tenant_membership', 'tenant_settings', 'tenant_audit_event',
+    'tenant_platform_policy', 'tenant_area_entitlement', 'tenant_entitlement'];
+  v_restore constant text[] := array[
+    'role', 'user_role', 'role_permission', 'menu_entry', 'menu_entry_tag', 'role_functionality',
+    'app_theme', 'tenant_membership', 'tenant_settings', 'tenant_audit_event',
+    'tenant_platform_policy', 'tenant_area_entitlement', 'tenant_entitlement'];
+  v_delete constant text[] := array[
+    'role', 'user_role', 'role_permission', 'menu_entry', 'menu_entry_tag', 'role_functionality',
+    'app_theme', 'tenant_membership', 'tenant_settings', 'tenant_audit_event',
+    'tenant_platform_policy', 'tenant_area_entitlement', 'tenant_entitlement'];
+  v_known text[];
+  v_missing text;
+begin
+  case p_operation
+    when 'export' then v_known := v_export;
+    when 'restore' then v_known := v_restore;
+    when 'delete' then v_known := v_delete;
+    else raise exception using errcode = '22023', message = 'unknown tenant data operation';
+  end case;
+  select c.table_name into v_missing from app_private.table_class c
+    where c.class = 'tenant' and c.table_name <> all(v_known)
+    order by c.table_name limit 1;
+  if v_missing is null then
+    select k.name into v_missing from unnest(v_known) k(name)
+      where not exists (select 1 from app_private.table_class c where c.class = 'tenant' and c.table_name = k.name)
+      order by k.name limit 1;
+  end if;
+  if v_missing is not null then
+    raise exception using errcode = 'P0001', message = 'tenant_data_coverage:' || p_operation || ':' || v_missing;
+  end if;
+end $$;
+revoke all on function app_private.assert_tenant_data_coverage(text) from public;
+grant execute on function app_private.assert_tenant_data_coverage(text) to construct_runtime;
+
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"audit.operation.tenant.export.prepare","namespace":"audit","module":"rbac","description":"Tenant archive preparation audit operation","it":"Archivio del tenant preparato","en":"Tenant archive prepared"},
+    {"key":"tenancy.export.title","namespace":"tenancy","module":"tenancy","description":"Tenant data export section","it":"Esportazione dei dati","en":"Data export"},
+    {"key":"tenancy.export.hint","namespace":"tenancy","module":"tenancy","description":"Tenant data archive contents and size limit","it":"Scarica un archivio JSON dei dati del tenant, senza credenziali. Massimo 50 MiB; la preparazione può richiedere fino a un minuto.","en":"Download a JSON archive of the tenant data, without credentials. Maximum 50 MiB; preparation can take up to one minute."},
+    {"key":"tenancy.export.download","namespace":"tenancy","module":"tenancy","description":"Download tenant data archive","it":"Scarica archivio JSON","en":"Download JSON archive"},
+    {"key":"tenancy.export.preparing","namespace":"tenancy","module":"tenancy","description":"Tenant data export in progress","it":"Preparazione dell’archivio…","en":"Preparing archive…"},
+    {"key":"tenancy.export.failed","namespace":"tenancy","module":"tenancy","description":"Tenant export failure without partial download","it":"Archivio non disponibile. Verifica l’autorizzazione e riprova.","en":"Archive unavailable. Check your authorization and try again."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0071_restore_tenant_archive.sql
+-- T11: the operator supplies an already parsed v1 archive and explicitly maps operational
+-- members. The database checks the destination again before allocating a tenant.
+create function app_private.check_tenant_archive_restore(
+  p_archive jsonb, p_slug text, p_name text, p_user_map jsonb, p_actor uuid
+) returns jsonb
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tables jsonb := p_archive -> 'tables';
+  v_references jsonb := p_archive -> 'globalReferences';
+  v_policy public.tenant_platform_policy;
+  v_source_id text := p_archive #>> '{sourceTenant,id}';
+begin
+  if current_user <> 'construct_owner' then
+    raise exception 'tenant_restore_owner_only' using errcode = '42501';
+  end if;
+  perform app_private.assert_tenant_data_coverage('restore');
+  if p_slug is null or p_slug !~ '^[a-z0-9-]{3,40}$' or p_slug in ('default', 'template')
+    or nullif(btrim(p_name), '') is null then
+    raise exception 'tenant_restore_invalid_slug';
+  end if;
+  if exists (select 1 from public.tenant where slug = p_slug) then
+    raise exception 'tenant_restore_slug_taken' using errcode = '23505';
+  end if;
+  if p_archive -> 'formatVersion' is distinct from '1'::jsonb
+    or p_archive -> 'schemaVersion' is distinct from '"0070"'::jsonb
+    or p_archive -> 'catalogVersion' is distinct from '1'::jsonb
+    or v_source_id is null
+    or (select count(*) from jsonb_object_keys(v_tables)) <> 13
+    or exists (
+      select 1 from app_private.table_class c where c.class = 'tenant'
+        and jsonb_typeof(v_tables -> c.table_name) is distinct from 'array'
+    )
+    or exists (
+      select 1 from jsonb_each(v_tables) t(name, rows)
+      where to_jsonb(jsonb_array_length(t.rows)) is distinct from (p_archive -> 'counts' -> t.name)
+        or exists (select 1 from jsonb_array_elements(t.rows) r where r ->> 'id_tenant' is distinct from v_source_id)
+    ) then
+    raise exception 'tenant_restore_invalid_archive';
+  end if;
+  if (select count(*) from jsonb_populate_recordset(null::public.role, v_tables -> 'role') r
+      where r.system_key = 'REGISTERED') <> 1
+    or (select count(*) from jsonb_populate_recordset(null::public.role, v_tables -> 'role') r
+      where r.system_key = 'TENANT_ADMIN') <> 1 then
+    raise exception 'tenant_restore_invalid_archive';
+  end if;
+
+  if jsonb_typeof(p_user_map) is distinct from 'object' then
+    raise exception 'tenant_restore_invalid_map';
+  end if;
+  if (select count(*) from jsonb_object_keys(p_user_map)) <> jsonb_array_length(v_tables -> 'tenant_membership')
+    or (select count(distinct target::uuid) from jsonb_each_text(p_user_map) m(source, target))
+       <> jsonb_array_length(v_tables -> 'tenant_membership')
+    or exists (
+      select 1 from jsonb_populate_recordset(null::public.tenant_membership, v_tables -> 'tenant_membership') m
+      where (p_user_map ->> m.user_id::text) is null
+    ) then
+    raise exception 'tenant_restore_invalid_map';
+  end if;
+  if exists (
+    select 1 from jsonb_each_text(p_user_map) m(source, target)
+    where not exists (select 1 from public.users u where u.id = m.target::uuid)
+  ) then
+    raise exception 'tenant_restore_unknown_account';
+  end if;
+  if p_actor is not null and not exists (select 1 from public.users u where u.id = p_actor) then
+    raise exception 'tenant_restore_unknown_actor';
+  end if;
+  if not exists (
+    select 1
+    from jsonb_populate_recordset(null::public.tenant_membership, v_tables -> 'tenant_membership') m
+    join jsonb_populate_recordset(null::public.user_role, v_tables -> 'user_role') ur using (user_id)
+    join jsonb_populate_recordset(null::public.role, v_tables -> 'role') r using (id_role)
+    join public.users u on u.id = (p_user_map ->> m.user_id::text)::uuid
+    where m.status = 'active' and u.id_user_status = 2 and r.system_key = 'TENANT_ADMIN'
+  ) then
+    raise exception 'tenant_restore_inactive_admin';
+  end if;
+
+  -- Coded permissions travel by stable code. The legacy code-less entries can only
+  -- resolve to the same uncoded catalog id.
+  if exists (
+    select 1 from jsonb_to_recordset(v_references -> 'permission') ref(id_permission bigint, code text)
+    where not exists (
+      select 1 from public.permission p where p.code = ref.code
+        or (ref.code is null and p.code is null and p.id_permission = ref.id_permission)
+    )
+  ) then
+    raise exception 'tenant_restore_unknown_permission';
+  end if;
+  if exists (
+    select 1 from jsonb_to_recordset(v_references -> 'role_type') ref(id_role_type bigint)
+    where not exists (select 1 from public.role_type t where t.id_role_type = ref.id_role_type)
+  ) or exists (
+    select 1 from jsonb_to_recordset(v_references -> 'functionality_type') ref(id_functionality_type bigint)
+    where not exists (select 1 from public.functionality_type t where t.id_functionality_type = ref.id_functionality_type)
+  ) then
+    raise exception 'tenant_restore_unknown_type';
+  end if;
+  -- The archive retains the exact case of its tag and translation keys. The installed
+  -- language catalog only permits lowercase codes, including for legacy EN/IT keys.
+  if exists (
+    select 1 from jsonb_to_recordset(v_references -> 'app_language') ref(code text)
+    where not exists (select 1 from public.app_language l where l.code = lower(ref.code))
+  ) then
+    raise exception 'tenant_restore_unknown_language';
+  end if;
+  if exists (
+    select 1 from jsonb_to_recordset(v_tables -> 'tenant_area_entitlement') ref(area_code text)
+    where not exists (select 1 from public.feature_area a where a.code = ref.area_code)
+  ) or exists (
+    select 1 from jsonb_to_recordset(v_tables -> 'tenant_entitlement') ref(feature_code text)
+    where not exists (select 1 from public.app_feature f where f.code = ref.feature_code)
+  ) or exists (
+    select 1 from jsonb_populate_recordset(null::public.menu_entry, v_tables -> 'menu_entry') m
+    where (m.area_key is not null and not exists (select 1 from public.feature_area a where a.code = m.area_key))
+      or (m.feature_key is not null and not exists (select 1 from public.app_feature f where f.code = m.feature_key))
+  ) then
+    raise exception 'tenant_restore_unknown_feature';
+  end if;
+  if exists (
+    select 1 from jsonb_populate_recordset(null::public.menu_entry, v_tables -> 'menu_entry') m
+    cross join lateral app_private.bind_menu_target(m.canonical_link, m.id_functionality_type, m.area_key) b
+    where (m.area_key, m.feature_key) is distinct from (b.area_key, b.feature_key)
+  ) then
+    raise exception 'tenant_restore_inconsistent_binding';
+  end if;
+
+  v_policy := jsonb_populate_record(null::public.tenant_platform_policy, v_tables #> '{tenant_platform_policy,0}');
+  if v_policy.query_timeout_ms <= 0 or v_policy.revision <= 0 then
+    raise exception 'tenant_restore_invalid_policy';
+  end if;
+  if v_policy.max_members < jsonb_array_length(v_tables -> 'tenant_membership') then
+    raise exception 'tenant_member_quota';
+  end if;
+  if v_policy.max_roles < jsonb_array_length(v_tables -> 'role') then
+    raise exception 'tenant_role_quota';
+  end if;
+  if v_policy.max_menu_entries < jsonb_array_length(v_tables -> 'menu_entry') then
+    raise exception 'tenant_menu_quota';
+  end if;
+
+  -- Same entitlement and dependency rules as effective_tenant_feature_codes(), evaluated
+  -- against the accepted archive without creating any tenant data during preflight.
+  return (
+    with recursive areas as (
+      select * from jsonb_to_recordset(v_tables -> 'tenant_area_entitlement') as a(area_code text, enabled boolean)
+    ), features as (
+      select * from jsonb_to_recordset(v_tables -> 'tenant_entitlement') as e(feature_code text, allowed boolean)
+    ), granted as (
+      select f.code from public.app_feature f
+      left join areas a on a.area_code = f.area_code
+      left join features e on e.feature_code = f.code
+      where f.area_code is null or coalesce(e.allowed, a.enabled, false)
+    ), dependencies(feature_code, dependency_code) as (
+      select d.feature_code, d.dependency_code from public.app_feature_dependency d
+      union
+      select d.feature_code, n.dependency_code from dependencies d
+      join public.app_feature_dependency n on n.feature_code = d.dependency_code
+    )
+    select jsonb_build_object(
+      'limits', jsonb_build_object('maxMembers', v_policy.max_members, 'maxRoles', v_policy.max_roles,
+        'maxMenuEntries', v_policy.max_menu_entries, 'queryTimeoutMs', v_policy.query_timeout_ms),
+      'areaEntitlements', (select coalesce(jsonb_agg(to_jsonb(a) order by a.area_code), '[]'::jsonb) from areas a),
+      'featureEntitlements', (select coalesce(jsonb_agg(to_jsonb(e) order by e.feature_code), '[]'::jsonb) from features e),
+      'effectiveFeatures', (select coalesce(jsonb_agg(g.code order by g.code), '[]'::jsonb) from granted g
+        where not exists (select 1 from dependencies d where d.feature_code = g.code
+          and not exists (select 1 from granted needed where needed.code = d.dependency_code)))
+    )
+  );
+end $$;
+revoke all on function app_private.check_tenant_archive_restore(jsonb, text, text, jsonb, uuid) from public;
+
+-- Sequences give each copy new ids. Skip numbers present in the archive as well:
+-- on another installation those ids need not be behind the destination sequences.
+create function app_private.allocate_restore_ids(p_source_ids jsonb, p_sequence regclass) returns jsonb
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_old text;
+  v_new bigint;
+  v_keys text[] := array[]::text[];
+  v_values text[] := array[]::text[];
+begin
+  for v_old in select jsonb_object_keys(p_source_ids) loop
+    loop
+      v_new := nextval(p_sequence);
+      exit when not p_source_ids ? v_new::text;
+    end loop;
+    v_keys := array_append(v_keys, v_old);
+    v_values := array_append(v_values, v_new::text);
+  end loop;
+  return jsonb_object(v_keys, v_values);
+end $$;
+revoke all on function app_private.allocate_restore_ids(jsonb, regclass) from public;
+
+create function app_private.restore_tenant_archive(
+  p_archive jsonb, p_slug text, p_name text, p_user_map jsonb, p_actor uuid
+) returns bigint
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_tables jsonb := p_archive -> 'tables';
+  v_source_id text := p_archive #>> '{sourceTenant,id}';
+  v_tenant bigint;
+  v_original_tenant text := current_setting('app.tenant_id', true);
+  v_original_copy text := current_setting('app.copy_suspended_grants', true);
+  v_roles jsonb;
+  v_menu jsonb;
+  v_policy public.tenant_platform_policy;
+  v_settings public.tenant_settings;
+begin
+  if current_user <> 'construct_owner' then
+    raise exception 'tenant_restore_owner_only' using errcode = '42501';
+  end if;
+  if current_setting('transaction_isolation') <> 'read committed' then
+    raise exception 'tenant_quota_requires_read_committed';
+  end if;
+  if p_actor is null then
+    raise exception 'tenant_restore_unknown_actor';
+  end if;
+  -- Hold the existing account/status rows stable through commit, without writing users.
+  perform u.id from public.users u
+  where u.id = p_actor or u.id in (select m.target::uuid from jsonb_each_text(p_user_map) m(source, target))
+  order by u.id for share of u;
+  perform p.id_permission from public.permission p
+  join jsonb_to_recordset(p_archive #> '{globalReferences,permission}') ref(id_permission bigint, code text)
+    on p.code = ref.code or (ref.code is null and p.code is null and p.id_permission = ref.id_permission)
+  order by p.id_permission for share of p;
+  perform l.code from public.app_language l
+  where l.code in (select lower(ref.code) from jsonb_to_recordset(p_archive #> '{globalReferences,app_language}') ref(code text))
+  order by l.code for share of l;
+  perform app_private.check_tenant_archive_restore(p_archive, p_slug, p_name, p_user_map, p_actor);
+
+  insert into public.tenant (slug, name, status, is_template)
+  values (p_slug, p_name, 'suspended', false)
+  on conflict (slug) do nothing returning id into v_tenant;
+  if not found then raise exception 'tenant_restore_slug_taken' using errcode = '23505'; end if;
+
+  perform set_config('app.tenant_id', v_tenant::text, true);
+  perform app_private.lock_tenant_policy();
+
+  -- The new tenant has its own revision; only the accepted policy values are copied.
+  v_policy := jsonb_populate_record(null::public.tenant_platform_policy, v_tables #> '{tenant_platform_policy,0}');
+  insert into public.tenant_platform_policy (query_timeout_ms, max_members, max_roles, max_menu_entries)
+  values (v_policy.query_timeout_ms, v_policy.max_members, v_policy.max_roles, v_policy.max_menu_entries);
+  insert into public.tenant_area_entitlement (area_code, enabled)
+  select r.area_code, r.enabled from jsonb_populate_recordset(null::public.tenant_area_entitlement, v_tables -> 'tenant_area_entitlement') r;
+  insert into public.tenant_entitlement (feature_code, allowed)
+  select r.feature_code, r.allowed from jsonb_populate_recordset(null::public.tenant_entitlement, v_tables -> 'tenant_entitlement') r;
+
+  select app_private.allocate_restore_ids(coalesce(jsonb_object_agg(r.id_role, true), '{}'::jsonb), 'public.s_id_role')
+    into v_roles from jsonb_populate_recordset(null::public.role, v_tables -> 'role') r;
+  select app_private.allocate_restore_ids(coalesce(jsonb_object_agg(m.id_menu_entry, true), '{}'::jsonb), 'public.s_id_menu_entry')
+    into v_menu from jsonb_populate_recordset(null::public.menu_entry, v_tables -> 'menu_entry') m;
+
+  insert into public.role (id_role, id_role_type, description, system_key, date_ins, date_mod)
+  select (v_roles ->> r.id_role::text)::bigint, r.id_role_type, r.description, r.system_key, r.date_ins, r.date_mod
+  from jsonb_populate_recordset(null::public.role, v_tables -> 'role') r;
+  insert into public.tenant_membership (user_id, status, created_at, updated_at)
+  select (p_user_map ->> m.user_id::text)::uuid, m.status, m.created_at, m.updated_at
+  from jsonb_populate_recordset(null::public.tenant_membership, v_tables -> 'tenant_membership') m;
+  insert into public.user_role (user_id, id_role, date_ins)
+  select (p_user_map ->> ur.user_id::text)::uuid, (v_roles ->> ur.id_role::text)::bigint, ur.date_ins
+  from jsonb_populate_recordset(null::public.user_role, v_tables -> 'user_role') ur;
+
+  -- The parent FK is deferred. Both ids are allocated before any menu row is inserted.
+  insert into public.menu_entry (id_menu_entry, id_parent, name, order_position, navbar_position, icon_path,
+    id_functionality_type, functionality_link, canonical_link, area_key, feature_key, open_in_new_tab,
+    item_translation, is_immutable, created_at, updated_at)
+  select (v_menu ->> m.id_menu_entry::text)::bigint, (v_menu ->> m.id_parent::text)::bigint, m.name, m.order_position,
+    m.navbar_position, m.icon_path, m.id_functionality_type, m.functionality_link, m.canonical_link, m.area_key,
+    m.feature_key, m.open_in_new_tab, m.item_translation, m.is_immutable, m.created_at, m.updated_at
+  from jsonb_populate_recordset(null::public.menu_entry, v_tables -> 'menu_entry') m;
+  insert into public.menu_entry_tag (id_menu_entry, tag_lan, tag, date_ins)
+  select (v_menu ->> t.id_menu_entry::text)::bigint, t.tag_lan, t.tag, t.date_ins
+  from jsonb_populate_recordset(null::public.menu_entry_tag, v_tables -> 'menu_entry_tag') t;
+
+  -- Existing owner-only exception for historical assignments; quotas and menu validation
+  -- still apply. No other statement runs with the grant copy flag enabled.
+  perform set_config('app.copy_suspended_grants', 'on', true);
+  with mapped_permissions as (
+    select ref.id_permission as source_id, p.id_permission
+    from jsonb_to_recordset(p_archive #> '{globalReferences,permission}') ref(id_permission bigint, code text)
+    join public.permission p on p.code = ref.code
+      or (ref.code is null and p.code is null and p.id_permission = ref.id_permission)
+  )
+  insert into public.role_permission (id_role, id_permission)
+  select (v_roles ->> r.id_role::text)::bigint, p.id_permission
+  from jsonb_populate_recordset(null::public.role_permission, v_tables -> 'role_permission') r
+  left join mapped_permissions p on p.source_id = r.id_permission;
+  insert into public.role_functionality (id_role, id_menu_entry)
+  select (v_roles ->> r.id_role::text)::bigint, (v_menu ->> r.id_menu_entry::text)::bigint
+  from jsonb_populate_recordset(null::public.role_functionality, v_tables -> 'role_functionality') r;
+  perform set_config('app.copy_suspended_grants', coalesce(v_original_copy, ''), true);
+
+  insert into public.app_theme (primary_color, primary_dark, background_light, card_light,
+    accent_light, sidebar_light, background_dark, card_dark, accent_dark, sidebar_dark, date_mod)
+  select t.primary_color, t.primary_dark, t.background_light, t.card_light,
+    t.accent_light, t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark, t.date_mod
+  from jsonb_populate_recordset(null::public.app_theme, v_tables -> 'app_theme') t;
+  v_settings := jsonb_populate_record(null::public.tenant_settings, v_tables #> '{tenant_settings,0}');
+  insert into public.tenant_settings (self_registration, updated_at)
+  values (coalesce(v_settings.self_registration, false), coalesce(v_settings.updated_at, now()));
+
+  -- Historical ids are provenance, even if the archive claimed the events were live.
+  -- Keep the original actor and object references. Neither grants access to the copy.
+  insert into public.tenant_audit_event (occurred_at, actor_user_id, actor_email, actor_kind, operation,
+    object_type, object_id, details, origin, source_tenant_id, source_event_id)
+  select e.occurred_at, e.actor_user_id, e.actor_email, e.actor_kind, e.operation, e.object_type, e.object_id,
+    e.details, 'restored', v_source_id, e.id::text
+  from jsonb_populate_recordset(null::public.tenant_audit_event, v_tables -> 'tenant_audit_event') e order by e.id;
+
+  insert into public.tenant_audit_event (actor_user_id, actor_kind, operation, object_type, object_id, source_tenant_id)
+  values (p_actor, 'command', 'tenant.create', 'tenant', v_tenant::text, v_source_id);
+  -- T12 must account for this platform-side event attached to the restored tenant. The
+  -- details carry the immediate source archive id, with no account or host information.
+  insert into public.platform_audit_event (id_tenant, actor_user_id, actor_kind, operation, object_type, object_id, details)
+  values (v_tenant, p_actor, 'command', 'tenant.restore', 'tenant', v_tenant::text, jsonb_build_object('sourceTenantId', v_source_id));
+
+  perform set_config('app.tenant_id', coalesce(v_original_tenant, ''), true);
+  return v_tenant;
+end $$;
+revoke all on function app_private.restore_tenant_archive(jsonb, text, text, jsonb, uuid) from public;
+
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"audit.operation.tenant.restore","namespace":"audit","module":"rbac","description":"Tenant restore audit operation","it":"Ripristino tenant","en":"Tenant restored"}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0072_erase_tenant.sql
+-- T12. Il registro ha una destinazione e, per i ripristini, un'origine separabile.
+-- Il formato v1 non identifica l'installazione sorgente: l'id nell'archivio non è una FK locale.
+alter table public.platform_audit_event add column source_tenant_id text;
+
+-- I writer 5a già passano id_tenant, anche quando l'oggetto è un utente o un indirizzo.
+-- Le eventuali voci senza FK sono ricostruibili solo quando l'oggetto era proprio il tenant.
+update public.platform_audit_event e set id_tenant = t.id
+from public.tenant t
+where e.id_tenant is null and e.object_id = t.id::text
+  and ((e.object_type = 'tenant' and e.operation in (
+    'tenant.create', 'tenant.status', 'tenant.export.prepare', 'tenant.restore', 'support.enter', 'support.exit'))
+    or (e.object_type = 'tenant_platform_policy' and e.operation in ('tenant.policy.save', 'tenant.grants.purge')));
+
+update public.platform_audit_event
+set source_tenant_id = details ->> 'sourceTenantId', details = details - 'sourceTenantId'
+where operation = 'tenant.restore';
+
+-- Questa classificazione si applica anche ai writer SQL e ai dati già presenti. Un tipo nuovo
+-- richiede una scelta esplicita prima di essere accettato dal registro.
+alter table public.platform_audit_event add constraint platform_audit_event_tenant_association_check
+check (
+  not (details ? 'sourceTenantId') and
+  (source_tenant_id is null or (operation = 'tenant.restore' and source_tenant_id ~ '^-?(0|[1-9][0-9]*)$')) and
+  case
+    when operation in (
+      'tenant.create', 'tenant.status', 'tenant.host.add', 'tenant.host.remove', 'tenant.host.primary',
+      'tenant.admin.add', 'tenant.invite.resend', 'tenant.policy.save', 'tenant.grants.purge',
+      'tenant.export.prepare', 'tenant.restore', 'support.enter', 'support.exit'
+    ) then id_tenant is not null
+    when operation in (
+      'platform.admin.add', 'platform.admin.remove', 'platform.admin.invite',
+      'language.create', 'language.update', 'language.active', 'language.default', 'language.delete',
+      'translation.key.create', 'translation.key.delete', 'translation.save'
+    ) then id_tenant is null
+    when operation = 'tenant.delete' then
+      id_tenant is null and actor_user_id is not null and actor_email is null and actor_kind = 'platform'
+      and object_type is not distinct from 'tenant' and object_id is not null and object_id ~ '^[1-9][0-9]*$'
+      and details = '{}'::jsonb
+    else false
+  end
+);
+
+create index platform_audit_event_source_tenant_idx
+  on public.platform_audit_event (source_tenant_id) where source_tenant_id is not null;
+create unique index platform_audit_event_deleted_tenant_idx
+  on public.platform_audit_event (object_id) where operation = 'tenant.delete';
+
+-- Compatibilità con il writer immutato della 0071. Il ripristino potrebbe già tenere un
+-- blocco su users, che erase_tenant deve poter aggiornare per il riferimento last_tenant_id:
+-- NOWAIT fa fallire quel ripristino interamente, senza attendere in ordine inverso.
+create function app_private.normalize_platform_tenant_audit() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+begin
+  if current_user <> 'construct_owner' then
+    raise exception using errcode = '42501', message = 'platform_tenant_audit_owner_required';
+  end if;
+  if new.operation = 'tenant.restore' then
+    new.source_tenant_id := coalesce(new.source_tenant_id, new.details ->> 'sourceTenantId');
+    new.details := new.details - 'sourceTenantId';
+    if new.source_tenant_id is not null then
+      perform 1 from public.tenant where id = new.source_tenant_id::bigint for key share nowait;
+      if not found and exists (
+        select 1 from public.platform_audit_event
+        where operation = 'tenant.delete' and object_id = new.source_tenant_id
+      ) then
+        new.source_tenant_id := null;
+      end if;
+    end if;
+  end if;
+  return new;
+end $$;
+revoke all on function app_private.normalize_platform_tenant_audit() from public;
+create trigger normalize_platform_tenant_audit
+before insert on public.platform_audit_event
+for each row when (new.operation in ('tenant.restore', 'tenant.delete'))
+execute function app_private.normalize_platform_tenant_audit();
+
+create function app_private.erase_tenant(p_id bigint, p_slug text, p_actor uuid) returns void
+language plpgsql security invoker set search_path = '' as $$
+declare
+  target public.tenant%rowtype;
+begin
+  if current_user <> 'construct_owner' or app_private.current_tenant_id() is distinct from p_id then
+    raise exception using errcode = '42501', message = 'tenant_erase_context';
+  end if;
+
+  -- Dopo l'attesa dei blocchi, anche le righe appena commesse devono essere visibili,
+  -- incluse le voci di ripristino la cui origine tecnica non ha una FK.
+  if pg_catalog.current_setting('transaction_isolation') <> 'read committed' then
+    raise exception using errcode = '25000', message = 'tenant_erase_requires_read_committed';
+  end if;
+  perform app_private.lock_tenant_policy();
+  select * into target from public.tenant where id = p_id for update;
+
+  perform 1 from public.users
+  where id = p_actor and id_user_status = 2 and is_platform_admin
+  for share;
+  if not found then
+    raise exception using errcode = '42501', message = 'tenant_erase_actor';
+  end if;
+
+  if target.id is null then
+    raise exception using errcode = 'P0001', message = 'tenant_erase_changed';
+  end if;
+  if target.slug = 'default' or target.is_template then
+    raise exception using errcode = 'P0001', message = 'tenant_erase_protected';
+  end if;
+  if target.slug is distinct from p_slug then
+    raise exception using errcode = 'P0001', message = 'tenant_erase_changed';
+  end if;
+  if target.status <> 'archived' then
+    raise exception using errcode = 'P0001', message = 'tenant_erase_not_archived';
+  end if;
+  perform app_private.assert_tenant_data_coverage('delete');
+
+  -- Le revoche ordinarie continuano a imporre l'ultimo amministratore. Qui vengono
+  -- cancellate tutte le appartenenze insieme al tenant archiviato, sotto la sua RLS.
+  delete from public.user_role where id_tenant = p_id;
+  delete from public.role_permission where id_tenant = p_id;
+  delete from public.role_functionality where id_tenant = p_id;
+  delete from public.menu_entry_tag where id_tenant = p_id;
+  delete from public.menu_entry where id_tenant = p_id;
+  delete from public.role where id_tenant = p_id;
+  delete from public.tenant_membership where id_tenant = p_id;
+  delete from public.app_theme where id_tenant = p_id;
+  delete from public.tenant_settings where id_tenant = p_id;
+  delete from public.tenant_area_entitlement where id_tenant = p_id;
+  delete from public.tenant_entitlement where id_tenant = p_id;
+  delete from public.tenant_platform_policy where id_tenant = p_id;
+  delete from public.tenant_host where id_tenant = p_id;
+  delete from public.tenant_audit_event where id_tenant = p_id;
+  delete from public.platform_audit_event where id_tenant = p_id;
+  update public.platform_audit_event set source_tenant_id = null where source_tenant_id = p_id::text;
+
+  -- users.last_tenant_id ha ON DELETE SET NULL. Utenti e token del pezzo 5a sono globali.
+  delete from public.tenant where id = p_id;
+
+  insert into public.platform_audit_event (occurred_at, actor_user_id, actor_kind, operation, object_type, object_id)
+  values (pg_catalog.clock_timestamp(), p_actor, 'platform', 'tenant.delete', 'tenant', p_id::text);
+end $$;
+revoke all on function app_private.erase_tenant(bigint, text, uuid) from public;
+
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"audit.operation.tenant.delete","namespace":"audit","module":"rbac","description":"Permanent tenant deletion audit operation","it":"Tenant eliminato definitivamente","en":"Tenant permanently deleted"},
+    {"key":"platform.tenant.delete.open","namespace":"platform","module":"rbac","description":"Open permanent tenant deletion dialog","it":"Elimina definitivamente","en":"Delete permanently"},
+    {"key":"platform.tenant.delete.title","namespace":"platform","module":"rbac","description":"Permanent tenant deletion dialog title","it":"Eliminare definitivamente il tenant?","en":"Permanently delete this tenant?"},
+    {"key":"platform.tenant.delete.warning","namespace":"platform","module":"rbac","description":"Permanent tenant deletion consequences","it":"Verranno eliminati i dati, le appartenenze, le assegnazioni e i registri del tenant. I file già esportati restano a chi li ha scaricati.","en":"This will delete the tenant’s data, memberships, assignments and audit history. Anyone who downloaded an archive keeps their copy."},
+    {"key":"platform.tenant.delete.slug","namespace":"platform","module":"rbac","description":"Slug confirmation instruction","it":"Per confermare, digita lo slug attuale","en":"To confirm, type the current slug"},
+    {"key":"platform.tenant.delete.working","namespace":"platform","module":"rbac","description":"Deletion in progress","it":"Eliminazione in corso…","en":"Deleting…"},
+    {"key":"platform.tenant.delete.invalid","namespace":"platform","module":"rbac","description":"Malformed deletion confirmation","it":"Controlla lo slug digitato.","en":"Check the slug you entered."},
+    {"key":"platform.tenant.delete.protected","namespace":"platform","module":"rbac","description":"Protected tenant deletion refused","it":"Il tenant predefinito e il modello sono protetti.","en":"The default tenant and the template are protected."},
+    {"key":"platform.tenant.delete.not_archived","namespace":"platform","module":"rbac","description":"Tenant no longer archived","it":"Solo un tenant archiviato può essere eliminato.","en":"Only an archived tenant can be deleted."},
+    {"key":"platform.tenant.delete.changed","namespace":"platform","module":"rbac","description":"Tenant changed after opening deletion dialog","it":"Il tenant è cambiato. Aggiorna la pagina e riprova.","en":"The tenant has changed. Refresh the page and try again."},
+    {"key":"platform.tenant.delete.error","namespace":"platform","module":"rbac","description":"Unexpected permanent deletion failure","it":"Non è stato possibile completare l’eliminazione.","en":"The deletion could not be completed."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;
+
+-- Migration: 0073_serialize_role_deltas.sql
+-- Serialize both RBAC delta paths with tenant policy changes and grant purge.
+-- In particular, a revoke-only call must take the policy lock before DELETE:
+-- the later role UPDATE already takes it via the resource quota trigger.
+create or replace function public.apply_role_functionality_deltas(p_role_id bigint, p_grant_ids bigint[], p_revoke_ids bigint[])
+returns void language plpgsql set search_path = '' as $$
+begin
+  perform app_private.lock_tenant_policy();
+  if array_length(p_grant_ids, 1) is not null then
+    insert into public.role_functionality (id_role, id_menu_entry)
+      select p_role_id, unnest(p_grant_ids)
+      on conflict (id_tenant, id_role, id_menu_entry) do nothing;
+  end if;
+  if array_length(p_revoke_ids, 1) is not null then
+    delete from public.role_functionality
+      where id_role = p_role_id and id_menu_entry = any(p_revoke_ids);
+  end if;
+  update public.role set date_mod = now() where id_role = p_role_id;
+end;
+$$;
+
+create or replace function public.apply_role_permission_deltas(p_role_id bigint, p_grant_ids bigint[], p_revoke_ids bigint[])
+returns void language plpgsql set search_path = '' as $$
+begin
+  perform app_private.lock_tenant_policy();
+  if array_length(p_grant_ids, 1) is not null then
+    insert into public.role_permission (id_role, id_permission)
+      select p_role_id, unnest(p_grant_ids)
+      on conflict (id_tenant, id_role, id_permission) do nothing;
+  end if;
+  if array_length(p_revoke_ids, 1) is not null then
+    delete from public.role_permission where id_role = p_role_id and id_permission = any(p_revoke_ids);
+  end if;
+  update public.role set date_mod = now() where id_role = p_role_id;
+end;
+$$;
+
+-- Migration: 0074_guard_grant_snapshots_and_creation_messages.sql
+-- F-I1: authorizing a new grant key requires a fresh policy read after the lock.
+create or replace function app_private.tenant_grant_feature_guard() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_feature text;
+  v_area text;
+  v_feature_area text;
+begin
+  if tg_op = 'UPDATE' then
+    if tg_table_name = 'role_permission' then
+      if (new.id_tenant, new.id_role, new.id_permission) is not distinct from (old.id_tenant, old.id_role, old.id_permission) then return new; end if;
+    else
+      if (new.id_tenant, new.id_role, new.id_menu_entry) is not distinct from (old.id_tenant, old.id_role, old.id_menu_entry) then return new; end if;
+    end if;
+  end if;
+  -- The lock serializes writes but cannot refresh a fixed transaction snapshot.
+  if pg_catalog.current_setting('transaction_isolation') in ('repeatable read', 'serializable') then
+    raise exception using errcode = 'P0001', message = 'tenant_grant_requires_read_committed';
+  end if;
+  perform app_private.lock_tenant_policy();
+  if pg_catalog.current_setting('app.copy_suspended_grants', true) = 'on' then
+    if current_user <> 'construct_owner' then
+      raise exception 'tenant_grant_copy_owner_only' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+  if tg_table_name = 'role_permission' then
+    select f.code into v_feature from public.app_feature f
+    join public.permission p on p.id_permission = f.id_permission
+    where p.id_permission = new.id_permission and p.deprecated_at is null;
+  else
+    select m.feature_key, m.area_key, f.area_code into v_feature, v_area, v_feature_area
+    from public.menu_entry m left join public.app_feature f on f.code = m.feature_key
+    where m.id_tenant = new.id_tenant and m.id_menu_entry = new.id_menu_entry;
+  end if;
+  if v_feature is null or not exists (select 1 from app_private.effective_tenant_feature_codes() f where f.code = v_feature)
+    or (v_area is not null and v_area is distinct from v_feature_area and not exists (
+      select 1 from public.tenant_area_entitlement a where a.area_code = v_area and a.enabled
+    )) then
+    raise exception 'tenant_feature_disabled' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+-- F-I2: bounded creation outcomes are presented in the active application language.
+do $$
+declare v_summary text;
+begin
+  select public.apply_translation_seed($seed$[
+    {"key":"tenant.creation.capability_unavailable","namespace":"tenant","module":"rbac","description":"Creation permission lost under the tenant policy lock","it":"La concessione necessaria per questa operazione non è più disponibile.","en":"The feature required for this operation is no longer available."},
+    {"key":"roles.form.create_error","namespace":"roles","module":"rbac","description":"Create role: unexpected failure","it":"Non è stato possibile creare il ruolo.","en":"The role could not be created."},
+    {"key":"roles.form.quota","namespace":"roles","module":"rbac","description":"Create role: tenant role quota reached","it":"È stato raggiunto il limite di ruoli del tenant.","en":"The tenant has reached its role limit."},
+    {"key":"functionalities.form.quota","namespace":"functionalities","module":"rbac","description":"Create menu entry: tenant menu quota reached","it":"È stato raggiunto il limite di voci di menu del tenant.","en":"The tenant has reached its menu entry limit."},
+    {"key":"functionalities.form.target_unavailable","namespace":"functionalities","module":"rbac","description":"Create menu entry: selected area or target is unavailable","it":"L’area o la destinazione scelta non è disponibile per il tenant.","en":"The selected area or destination is unavailable for this tenant."},
+    {"key":"users.add.quota","namespace":"users","module":"rbac","description":"Add a person: tenant membership quota reached","it":"È stato raggiunto il limite di appartenenze del tenant.","en":"The tenant has reached its membership limit."},
+    {"key":"platform.tenant.new.role_quota","namespace":"platform","module":"rbac","description":"Create tenant: template role limit","it":"Il limite di ruoli del modello non consente di creare il tenant.","en":"The template’s role limit prevents the tenant from being created."},
+    {"key":"platform.tenant.new.menu_quota","namespace":"platform","module":"rbac","description":"Create tenant: template menu entry limit","it":"Il limite di voci di menu del modello non consente di creare il tenant.","en":"The template’s menu entry limit prevents the tenant from being created."},
+    {"key":"platform.tenant.new.member_quota","namespace":"platform","module":"rbac","description":"Create tenant: template membership limit","it":"Il limite di appartenenze del modello non consente di aggiungere il primo amministratore.","en":"The template’s membership limit prevents adding the first administrator."}
+  ]$seed$::jsonb) into v_summary;
+  raise notice '%', v_summary;
+end $$;

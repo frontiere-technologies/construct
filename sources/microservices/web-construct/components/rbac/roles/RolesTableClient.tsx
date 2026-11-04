@@ -140,7 +140,12 @@ export default function RolesTableClient(props: Props) {
         onSortChanged={handleSortChanged}
         onGridReady={handleGridReady}
       />
-      {showCreate && <CreateRoleModal onClose={() => setShowCreate(false)} />}
+      {showCreate && (
+        <CreateRoleModal
+          onClose={() => setShowCreate(false)}
+          onRefresh={() => gridApiRef.current?.refreshInfiniteCache()}
+        />
+      )}
       {renaming && <RenameRoleModal roleId={renaming.id} currentName={renaming.description} onClose={() => { setRenaming(null); gridApi?.refreshInfiniteCache() }} />}
       {deleting && (
         <ConfirmModal

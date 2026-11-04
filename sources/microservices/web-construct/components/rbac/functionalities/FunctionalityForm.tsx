@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { areaKeySchema, type AreaKey } from '@/lib/tenancy/feature-catalog'
 import { createNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'
 import { isGenitoreLocked, buildGenitoreOptions, genitoreValue, parseGenitoreSelection } from '@/lib/rbac/genitore-lock'
 import { isTypeLocked, resolveItemType, typeOptionsFor } from '@/lib/rbac/item-type-options'
@@ -19,6 +20,7 @@ import TagInput from './TagInput'
 import IconPicker from './IconPicker'
 
 interface Initial {
+  areaKey?: AreaKey | null
   description: string; idItemType: 1 | 2; idFunctionalityType: number | null
   functionalityLink: string; iconPath: string; idItemParent: number | null
   /** External links only: open the URL in a new tab (the default) instead of in this one. */
@@ -27,11 +29,12 @@ interface Initial {
 }
 
 export default function FunctionalityForm(
-  { mode, funcId, initial, parents, locales }:
-  { mode: 'create' | 'edit'; funcId?: number; initial: Initial; parents: ParentOption[]; locales: NavigationLocale[] },
+  { mode, funcId, initial, parents, locales, availableAreas }:
+  { mode: 'create' | 'edit'; funcId?: number; initial: Initial; parents: ParentOption[]; locales: NavigationLocale[]; availableAreas: { category: AreaKey[]; content: AreaKey[] } },
 ) {
   const { t } = useI18n()
   const router = useRouter()
+  const areaId = useId()
   const genitoreLocked = isGenitoreLocked(parents.length)
   const itemTypeLabels: Record<string, string> = {
     category: t('functionalities.item_type.category'),
@@ -41,8 +44,10 @@ export default function FunctionalityForm(
   }
   const [f, setF] = useState<Initial>(() =>
     mode === 'create' && parents.length === 0 ? { ...initial, idItemParent: null } : initial)
+  const [hasSelectedArea, setHasSelectedArea] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [needsRefresh, setNeedsRefresh] = useState(false)
   const set = <K extends keyof Initial>(k: K, v: Initial[K]) => setF(prev => ({ ...prev, [k]: v }))
 
   // Il server (updateNavigationItem) rifiuta un cambio di tipologia categoria <-> funzionalità.
@@ -67,6 +72,8 @@ export default function FunctionalityForm(
   // null while no tipologia has been picked yet — the dropdown then shows its placeholder
   // instead of a type the item doesn't actually have, and the Link field stays hidden.
   const selectedType = resolveItemType(f.idItemType, f.idFunctionalityType)
+  const areaOptions = selectedType?.key === 'category' ? availableAreas.category : availableAreas.content
+  const hasHistoricalArea = f.areaKey != null && !areaOptions.includes(f.areaKey)
   const isFunc = selectedType?.idItemType === ITEM_TYPE_FUNCTIONALITY
   const defaultLocale = defaultNavigationLocale(locales)
   const primaryName = f.translations[defaultLocale]?.name ?? ''
@@ -75,13 +82,16 @@ export default function FunctionalityForm(
     && (!isFunc || f.functionalityLink.trim().length > 0)
 
   const submit = async () => {
-    if (!valid) return
+    if (!valid || busy || needsRefresh) return
     setBusy(true)
     try {
       setError(null)
       if (mode === 'edit') {
         if (funcId == null) { setError(t('functionalities.form.missing_id_error')); return }
         const input: CreateNavItemInput = {
+          // L'area caricata non è una scelta nuova: omessa, il server deriva quella
+          // del nuovo target interno o conserva quella storica per categorie/contenuti.
+          ...(hasSelectedArea ? { areaKey: f.areaKey ?? null } : {}),
           name: primaryName, idItemType: f.idItemType,
           idFunctionalityType: isFunc ? f.idFunctionalityType : null,
           functionalityLink: isFunc ? f.functionalityLink : null,
@@ -92,6 +102,7 @@ export default function FunctionalityForm(
         await updateNavigationItem(funcId, input)
       } else {
         const input: CreateNavItemInput = {
+          areaKey: f.areaKey ?? null,
           name: primaryName, idItemType: f.idItemType,
           idFunctionalityType: isFunc ? f.idFunctionalityType : null,
           functionalityLink: isFunc ? f.functionalityLink : null,
@@ -99,11 +110,21 @@ export default function FunctionalityForm(
           openInNewTab: f.openInNewTab,
           description: primaryDescription, itemTranslation: f.translations, tagTranslations: f.tagTranslations,
         }
-        await createNavigationItem(input)
+        const result = await createNavigationItem(input)
+        if ('reason' in result) {
+          if (result.reason === 'capability_unavailable') {
+            setError(t('tenant.creation.capability_unavailable'))
+            setNeedsRefresh(true)
+          } else {
+            setError(t(result.reason === 'menu_quota' ? 'functionalities.form.quota' : 'functionalities.form.target_unavailable'))
+            router.refresh()
+          }
+          return
+        }
       }
       router.push('/functionalities')
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('functionalities.form.save_error'))
+      setError(mode === 'edit' && err instanceof Error ? err.message : t('functionalities.form.save_error'))
     } finally { setBusy(false) }
   }
 
@@ -163,6 +184,18 @@ export default function FunctionalityForm(
               disabled={typeLocked}
               title={typeLocked ? t('functionalities.form.type_locked_edit_hint') : undefined}
             />
+            <div>
+              <label htmlFor={areaId} className="mb-1 block text-sm">{t('functionalities.form.area')}</label>
+              <select id={areaId} data-testid="menu-area" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={f.areaKey ?? ''} onChange={event => {
+                setHasSelectedArea(true)
+                set('areaKey', event.target.value === '' ? null : areaKeySchema.parse(event.target.value))
+              }}>
+                <option value="">{t('functionalities.form.area_automatic')}</option>
+                {areaOptions.map(area => <option key={area} value={area}>{t(`platform.policy.area.${area.replaceAll('-', '_')}`)}</option>)}
+                {hasHistoricalArea && <option value={f.areaKey!} disabled>{t(`platform.policy.area.${f.areaKey?.replaceAll('-', '_')}`)} — {t('functionalities.form.area_unavailable')}</option>}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">{t('functionalities.form.area_hint')}</p>
+            </div>
             {isFunc && (
               <Input value={f.functionalityLink} onChange={e => set('functionalityLink', e.target.value)} placeholder={t('functionalities.form.link_placeholder')}
                 className="bg-transparent" />
@@ -192,12 +225,13 @@ export default function FunctionalityForm(
       </div>
 
       <div className="pt-4 border-t border-border flex items-center justify-between">
-        <div>{error && <p className="text-sm text-destructive-muted-foreground">{error}</p>}</div>
+        <div>{error && <p role="alert" className="text-sm text-destructive-muted-foreground">{error}</p>}</div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => router.push('/functionalities')}>
             {t('common.actions.cancel')}
           </Button>
-          <Button onClick={submit} disabled={!valid || busy}>
+          {needsRefresh && <Button variant="outline" onClick={() => window.location.reload()}>{t('platform.policy.reload')}</Button>}
+          <Button onClick={submit} disabled={!valid || busy || needsRefresh}>
             {t('common.actions.save')}
           </Button>
         </div>

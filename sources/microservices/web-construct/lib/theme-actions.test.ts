@@ -1,18 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { FEATURE_KEYS } from '@/lib/tenancy/feature-catalog'
 import type { AppTheme } from '@/lib/theme-vars'
 
 const mocks = vi.hoisted(() => ({
-  requireAdministrator: vi.fn(),
+  requireAdministratorFeature: vi.fn(),
   set: vi.fn(),
   withTenant: vi.fn(),
   logError: vi.fn(),
   audit: vi.fn(),
 }))
 
-vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdministrator: mocks.requireAdministrator }))
-vi.mock('@/lib/db/tenant-db', () => ({
-  withTenant: (tenantId: unknown, fn: (tx: unknown) => unknown) => {
-    mocks.withTenant(tenantId)
+vi.mock('@/lib/rbac/auth-guard', () => ({ requireAdministratorFeature: mocks.requireAdministratorFeature }))
+vi.mock('@/lib/tenancy/tenant-feature-access', () => ({
+  withTenantFeature: (actor: { tenantId: unknown }, feature: string, fn: (tx: unknown) => unknown) => {
+    if (feature !== 'manage-tenant-theme') throw new Error('wrong feature')
+    mocks.withTenant(actor.tenantId)
     return fn({ update: () => ({ set: (values: unknown) => ({ returning: () => mocks.set(values) }) }) })
   },
 }))
@@ -38,22 +40,22 @@ const allNull = {
 
 describe('saveAppTheme', () => {
   beforeEach(() => {
-    mocks.requireAdministrator.mockReset().mockResolvedValue({ userId: 'admin-1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, permissions: new Set() })
+    mocks.requireAdministratorFeature.mockReset().mockResolvedValue({ userId: 'admin-1', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, features: new Set(FEATURE_KEYS), canManageSupportConsent: true, permissions: new Set() })
     mocks.set.mockReset().mockResolvedValue([{ id: 1 }])
     mocks.withTenant.mockReset()
     mocks.logError.mockReset()
     mocks.audit.mockReset().mockResolvedValue(undefined)
   })
 
-  it('refuses anyone requireAdministrator refuses', async () => {
-    mocks.requireAdministrator.mockRejectedValue(new Error('Unauthorized'))
+  it('refuses anyone requireAdministratorFeature refuses', async () => {
+    mocks.requireAdministratorFeature.mockRejectedValue(new Error('Unauthorized'))
     expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'unauthorized' })
     expect(mocks.set).not.toHaveBeenCalled()
     expect(mocks.logError).not.toHaveBeenCalled()
   })
 
   it('logs a failure that is not a refusal, still answering unauthorized', async () => {
-    mocks.requireAdministrator.mockRejectedValue(new Error('connection refused'))
+    mocks.requireAdministratorFeature.mockRejectedValue(new Error('connection refused'))
     expect(await saveAppTheme(theme('#123456'))).toEqual({ saved: false, error: 'unauthorized' })
     expect(mocks.logError).toHaveBeenCalledOnce()
     expect(mocks.set).not.toHaveBeenCalled()

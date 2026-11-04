@@ -40,7 +40,7 @@ function render(element: React.ReactElement): HTMLInputElement {
  */
 describe('role name fields and password managers', () => {
   it.each([
-    ['create', <CreateRoleModal key="create" onClose={() => {}} />],
+    ['create', <CreateRoleModal key="create" onRefresh={() => {}} onClose={() => {}} />],
     ['rename', <RenameRoleModal key="rename" roleId={7} currentName="Lettore" onClose={() => {}} />],
   ])('keeps the %s field out of autofill', (_mode, element) => {
     const input = render(element)

@@ -1,12 +1,14 @@
 'use server'
 
-import { and, eq, sql } from 'drizzle-orm'
+import { and, DrizzleQueryError, eq, sql } from 'drizzle-orm'
+import { TenantFeatureUnavailableError, withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
+import { tenantQuotaReason } from '@/lib/tenancy/tenant-quota-reason'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
-import { withTenant, type AnyTx, type TenantTx } from '@/lib/db/tenant-db'
+import type { AnyTx, TenantTx } from '@/lib/db/tenant-db'
 import { userRole, users } from '@/lib/db/schema'
-import { prepareInvitationIn } from '@/lib/auth-invitations'
+import { prepareInvitationIn, type PreparedInvitation } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
 import { createLogger } from '@/lib/logger'
 import { addTenantMember, MEMBERSHIP_ACTIVE, MEMBERSHIP_DEACTIVATED } from '@/lib/tenancy/membership'
@@ -14,7 +16,7 @@ import { assertTenantActive } from '@/lib/tenancy/tenant-status'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { emailSchema, roleIdsSchema, userIdSchema, userStatusSchema } from './action-input-schemas'
 import { assertCanChangeRoles, assertCanChangeStatus, symmetricDifference } from './grant-guards'
-import { currentRoleIds, functionalityIdsForRoles, grantsForRoles } from './grant-service'
+import { currentRoleIds, selectTenantGrantContext, grantsForRoles } from './grant-service'
 import { refuseSelfInSupport } from './support-guards'
 import { assertRoleChangeAllowed, assertStatusChangeAllowed } from './user-guards'
 import { USER_STATUS_ACTIVE, type UserStatusId } from './types'
@@ -58,7 +60,7 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
   }
   refuseSelfInSupport(actor, userId)
   const currentUserId = actor.userId
-  await withTenant(actor.tenantId, async tx => {
+  await withTenantFeature(actor, 'assign-user-roles', async tx => {
     const system = await getSystemRoleIds(tx)
     const targetCurrentlyAdmin = await userIsAdmin(tx, userId, system.tenantAdmin)
     assertRoleChangeAllowed({
@@ -74,9 +76,9 @@ export async function updateUserRoles(userId: string, roleIds: number[]): Promis
     const finalRoleIds = Array.from(new Set<number>([system.registered, ...roleIds]))
     if (!actor.isAdmin) {
       const touched = symmetricDifference(await currentRoleIds(tx, userId), finalRoleIds)
-      const visible = await functionalityIdsForRoles(tx, actor.roleIds)
+      const context = await selectTenantGrantContext(tx, actor.roleIds)
       const grants = await grantsForRoles(tx, touched)
-      assertCanChangeRoles(actor, visible, grants, system.tenantAdmin)
+      assertCanChangeRoles({ ...actor, features: new Set(context.policy.enabledFeatures) }, context.visible, grants, system.tenantAdmin, context)
     }
     try {
       const roleIdsArray = `{${finalRoleIds.join(',')}}`
@@ -108,7 +110,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
     otherActiveAdminCount: 1,
   })
 
-  await withTenant(actor.tenantId, async tx => {
+  await withTenantFeature(actor, 'set-user-status', async tx => {
     if (!actor.isAdmin) {
       const system = await getSystemRoleIds(tx)
       assertCanChangeStatus(actor, await userIsAdmin(tx, userId, system.tenantAdmin))
@@ -140,31 +142,40 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
  * Limite noto: l'email parte solo per un account nuovo, quindi il tempo di risposta può differire;
  * il contenuto della risposta no. È lo stesso limite di oggi della registrazione.
  */
-export async function addUserByEmail(email: string): Promise<{ ok: true }> {
-  const actor = await requirePermission('invite-users')
+export async function addUserByEmail(email: string): Promise<{ ok: true } | { ok: false; reason: 'member_quota' | 'capability_unavailable' }> {
+  const actor = await requirePermission('invite-users', { onDenied: 'return' })
+  if (!actor) return { ok: false, reason: 'capability_unavailable' }
   const parsed = emailSchema.safeParse(email)
   if (!parsed.success) throw new Error('Email non valida')
   const normalizedEmail = parsed.data
 
   // Account (se manca), token d'invito e appartenenza nascono in una transazione sola, nel tenant
   // dell'attore, insieme alla voce del registro: o tutto o niente (MT5-DEC-15).
-  const invitation = await withTenant(actor.tenantId, async tx => {
-    // Un tenant sospeso o archiviato non manda inviti né aggiunge persone (MT5-DEC-25).
-    await assertTenantActive(tx)
-    // In assistenza, non il proprio account: prima di creare token o appartenenze.
-    if (actor.support === true) refuseSelfInSupport(actor, await findUserIdByEmailOrNull(tx, normalizedEmail))
-    const prepared = await prepareInvitationIn(tx, normalizedEmail, actor.userId)
-    const userId = prepared?.userId ?? await findUserIdByEmail(tx, normalizedEmail)
-    const added = await addTenantMember(tx, userId)
-    // Una persona già membro non cambia l'appartenenza (niente `member.add`), ma un token nuovo è un invito.
-    if (added || prepared) {
-      await recordTenantAudit(tx, auditActorOf(actor), {
-        operation: added ? 'member.add' : 'member.invite', objectType: 'user', objectId: userId,
-        details: added ? { invited: prepared !== null } : { expiresAt: prepared?.expiresAt },
-      })
-    }
-    return prepared
-  })
+  let invitation: PreparedInvitation | null
+  try {
+    invitation = await withTenantFeature(actor, 'invite-users', async tx => {
+      // Un tenant sospeso o archiviato non manda inviti né aggiunge persone (MT5-DEC-25).
+      await assertTenantActive(tx)
+      // In assistenza, non il proprio account: prima di creare token o appartenenze.
+      if (actor.support === true) refuseSelfInSupport(actor, await findUserIdByEmailOrNull(tx, normalizedEmail))
+      const prepared = await prepareInvitationIn(tx, normalizedEmail, actor.userId)
+      const userId = prepared?.userId ?? await findUserIdByEmail(tx, normalizedEmail)
+      const added = await addTenantMember(tx, userId)
+      // Una persona già membro non cambia l'appartenenza (niente `member.add`), ma un token nuovo è un invito.
+      if (added || prepared) {
+        await recordTenantAudit(tx, auditActorOf(actor), {
+          operation: added ? 'member.add' : 'member.invite', objectType: 'user', objectId: userId,
+          details: added ? { invited: prepared !== null } : { expiresAt: prepared?.expiresAt },
+        })
+      }
+      return prepared
+    })
+  } catch (err) {
+    if (err instanceof TenantFeatureUnavailableError) return { ok: false, reason: 'capability_unavailable' }
+    if (tenantQuotaReason(err) === 'member_quota') return { ok: false, reason: 'member_quota' }
+    if (err instanceof DrizzleQueryError) throw new Error('Failed to add user')
+    throw err
+  }
 
   if (invitation) {
     // L'appartenenza c'è già: l'invito porta la persona a un tenant a cui può accedere.

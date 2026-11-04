@@ -3,6 +3,7 @@ import {
   pgTable, pgView, uuid, text, jsonb, timestamp, bigint, integer, smallint,
   boolean, varchar, primaryKey, unique, index, uniqueIndex, foreignKey, type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
+import { AREA_KEYS, FEATURE_KEYS } from '@/lib/tenancy/feature-catalog'
 
 export const userStatus = pgTable('user_status', {
   idUserStatus: bigint('id_user_status', { mode: 'number' }).primaryKey(),
@@ -114,6 +115,7 @@ export const tenantSettings = pgTable('tenant_settings', {
   supportUntil: timestamp('support_until', { withTimezone: true, mode: 'string' }),
   supportGrantedBy: uuid('support_granted_by').references(() => users.id, { onDelete: 'set null' }),
   supportGrantedAt: timestamp('support_granted_at', { withTimezone: true, mode: 'string' }),
+  supportExportAllowed: boolean('support_export_allowed').notNull().default(false),
 })
 
 /**
@@ -133,6 +135,9 @@ export const tenantAuditEvent = pgTable('tenant_audit_event', {
   objectType: text('object_type'),
   objectId: text('object_id'),
   details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
+  origin: text('origin', { enum: ['live', 'restored'] }).notNull().default('live'),
+  sourceTenantId: text('source_tenant_id'),
+  sourceEventId: text('source_event_id'),
 }, (t) => [
   primaryKey({ columns: [t.idTenant, t.id] }),
   index('tenant_audit_event_occurred_idx').on(t.idTenant, t.occurredAt.desc()),
@@ -146,6 +151,7 @@ export const tenantAuditEvent = pgTable('tenant_audit_event', {
 export const platformAuditEvent = pgTable('platform_audit_event', {
   id: bigint('id', { mode: 'number' }).generatedAlwaysAsIdentity().primaryKey(),
   idTenant: bigint('id_tenant', { mode: 'number' }).references(() => tenant.id),
+  sourceTenantId: text('source_tenant_id'),
   occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
   actorUserId: uuid('actor_user_id'),
   actorEmail: text('actor_email'),
@@ -157,6 +163,8 @@ export const platformAuditEvent = pgTable('platform_audit_event', {
 }, (t) => [
   index('platform_audit_event_occurred_idx').on(t.occurredAt.desc()),
   index('platform_audit_event_tenant_idx').on(t.idTenant, t.occurredAt.desc()),
+  index('platform_audit_event_source_tenant_idx').on(t.sourceTenantId).where(sql`${t.sourceTenantId} is not null`),
+  uniqueIndex('platform_audit_event_deleted_tenant_idx').on(t.objectId).where(sql`${t.operation} = 'tenant.delete'::text`),
 ])
 
 /** Il colore principale dell'app: una riga per tenant (0046; era una riga sola, 0031). */
@@ -286,6 +294,9 @@ export const menuEntry = pgTable('menu_entry', {
   iconPath: text('icon_path'),
   idFunctionalityType: bigint('id_functionality_type', { mode: 'number' }).references(() => functionalityType.idFunctionalityType),
   functionalityLink: text('functionality_link'),
+  canonicalLink: text('canonical_link'),
+  areaKey: text('area_key', { enum: AREA_KEYS }).references(() => featureArea.code),
+  featureKey: text('feature_key', { enum: FEATURE_KEYS }).references(() => appFeature.code),
   openInNewTab: smallint('open_in_new_tab').notNull().default(1),
   itemTranslation: jsonb('item_translation'),
   isImmutable: smallint('is_immutable').notNull().default(0),
@@ -357,3 +368,41 @@ export const translationValue = pgTable('translation_value', {
   unique('translation_value_key_language_unique').on(t.idTranslationKey, t.idLanguage),
   index('translation_value_language_idx').on(t.idLanguage),
 ])
+
+/** Cataloghi fissi 5b: sola lettura per construct_runtime (0064). */
+export const featureArea = pgTable('feature_area', {
+  code: text('code').primaryKey(),
+})
+
+export const appFeature = pgTable('app_feature', {
+  code: text('code').primaryKey(),
+  areaCode: text('area_code').references(() => featureArea.code),
+  idPermission: bigint('id_permission', { mode: 'number' }).references(() => permission.idPermission),
+})
+
+export const appFeatureDependency = pgTable('app_feature_dependency', {
+  featureCode: text('feature_code').notNull().references(() => appFeature.code),
+  dependencyCode: text('dependency_code').notNull().references(() => appFeature.code),
+}, t => [primaryKey({ columns: [t.featureCode, t.dependencyCode] })])
+
+/** Concessioni e limiti: il tenant legge, la piattaforma modifica; RLS forzata (0064). */
+export const tenantPlatformPolicy = pgTable('tenant_platform_policy', {
+  idTenant: tenantIdColumn().primaryKey(),
+  revision: bigint('revision', { mode: 'number' }).notNull().default(1),
+  queryTimeoutMs: integer('query_timeout_ms'),
+  maxMembers: integer('max_members'),
+  maxRoles: integer('max_roles'),
+  maxMenuEntries: integer('max_menu_entries'),
+})
+
+export const tenantAreaEntitlement = pgTable('tenant_area_entitlement', {
+  idTenant: tenantIdColumn(),
+  areaCode: text('area_code').notNull().references(() => featureArea.code),
+  enabled: boolean('enabled').notNull(),
+}, t => [primaryKey({ columns: [t.idTenant, t.areaCode] })])
+
+export const tenantEntitlement = pgTable('tenant_entitlement', {
+  idTenant: tenantIdColumn(),
+  featureCode: text('feature_code').notNull().references(() => appFeature.code),
+  allowed: boolean('allowed').notNull(),
+}, t => [primaryKey({ columns: [t.idTenant, t.featureCode] })])

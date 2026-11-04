@@ -232,26 +232,40 @@ def test_actions_column_stays_pinned_on_horizontal_scroll(logged_in_page, base_u
     """The actions column is pinned left: scrolling the grid horizontally moves
     the other columns only, keeping the row menu reachable at all times."""
     page = logged_in_page
+    # Force horizontal overflow even if the sidebar leaves the grid more room.
+    page.set_viewport_size({"width": 1100, "height": 900})
     nav(page, f"{base_url}/user-management")
     actions_header = page.locator('.ag-header-cell[col-id="actions"]')
+    email_header = page.locator('.ag-header-cell[col-id="email"]')
     first_menu = page.locator('[data-testid^="row-menu"]').first
     expect(actions_header).to_be_visible()
+    expect(email_header).to_be_visible()
+
+    scroll_selector = ".ag-body-horizontal-scroll-viewport"
+    page.wait_for_function(
+        """selector => {
+            const viewport = document.querySelector(selector);
+            return viewport?.clientWidth > 0 && viewport.scrollWidth > viewport.clientWidth;
+        }""",
+        arg=scroll_selector,
+        timeout=5_000,
+    )
 
     x_before = actions_header.bounding_box()["x"]
-    email_x_before = page.locator('.ag-header-cell[col-id="email"]').bounding_box()["x"]
+    email_x_before = email_header.bounding_box()["x"]
 
-    page.evaluate(
-        """() => {
-            const v = document.querySelector('.ag-body-horizontal-scroll-viewport');
-            v.scrollLeft = v.scrollWidth;
-        }"""
+    # Scroll far enough to move the email header while keeping it in view.
+    scroll_viewport = page.locator(scroll_selector)
+    scroll_left = scroll_viewport.evaluate(
+        "viewport => { viewport.scrollLeft = 100; return viewport.scrollLeft; }"
     )
+    assert scroll_left > 0, "The grid did not scroll horizontally"
     # The scroll is applied on the next animation frame, so wait for the
     # scrolling columns to have actually moved before comparing positions.
     page.wait_for_function(
         """x => {
             const h = document.querySelector('.ag-header-cell[col-id="email"]');
-            return !h || h.getBoundingClientRect().x < x;
+            return h && h.getBoundingClientRect().x < x;
         }""",
         arg=email_x_before,
     )
@@ -259,6 +273,10 @@ def test_actions_column_stays_pinned_on_horizontal_scroll(logged_in_page, base_u
     assert actions_header.bounding_box()["x"] == x_before, \
         "The pinned actions column moved while scrolling horizontally"
     expect(first_menu).to_be_visible()
+    first_menu.click()
+    expect(page.get_by_role("menuitem", name="Gestisci ruoli")).to_be_visible()
+    assert scroll_viewport.evaluate("viewport => viewport.scrollLeft") == scroll_left, \
+        "Opening the pinned row menu changed the horizontal scroll position"
 
 
 def test_column_visibility_toggle(logged_in_page, base_url):

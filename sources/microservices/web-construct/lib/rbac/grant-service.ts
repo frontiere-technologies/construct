@@ -1,10 +1,13 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { sql, and, eq, inArray, isNull } from 'drizzle-orm'
 import { allInTransaction } from '@/lib/db/all-in-transaction'
 import type { TenantTx } from '@/lib/db/tenant-db'
 import { permission, roleFunctionality, rolePermission, userRole } from '@/lib/db/schema'
 import { getSystemRoleIds, type SystemRoleIds } from '@/lib/tenancy/system-roles'
+import { areaKeySchema, featureKeySchema } from '@/lib/tenancy/feature-catalog'
+import { tenantPolicySelection, tenantPolicyFromData, type TenantPolicyData } from '@/lib/tenancy/tenant-policy-service'
+import type { MenuFeatureBinding } from './menu-feature-binding'
 import type { Actor } from './actor'
-import { canChangeRole, canGrantCode, canGrantFunctionality, type RoleGrants } from './grant-guards'
+import { canChangeRole, canGrantCode, canGrantFunctionality, type RoleGrants, type TenantGrantContext } from './grant-guards'
 import type { GrantableItemIds } from './types'
 
 /** I code delle righe GRANT indicate. Una categoria non ha code e non compare: la rifiuta
@@ -77,12 +80,13 @@ export async function assignableRoleIds(tx: TenantTx, actor: Actor, roleIds: num
   // Le prime due letture hanno parametri e restano in serie con prepare: false (specifica
   // 2026-10-15, §2.5); i ruoli di sistema, se non sono già dati, sono senza parametri. Ogni ramo
   // deve essere una sola istruzione, oppure attendere tutto ciò che avvia.
-  const [visible, grants, { tenantAdmin }] = await allInTransaction([
-    functionalityIdsForRoles(tx, actor.roleIds),
+  const [context, grants, { tenantAdmin }] = await allInTransaction([
+    selectTenantGrantContext(tx, actor.roleIds),
     grantsForRoles(tx, roleIds),
     system ?? getSystemRoleIds(tx),
   ])
-  return grants.filter(g => canChangeRole(actor, visible, g, tenantAdmin)).map(g => g.idRole)
+  const effectiveActor = { ...actor, features: new Set(context.policy.enabledFeatures) }
+  return grants.filter(g => canChangeRole(effectiveActor, context.visible, g, tenantAdmin, context)).map(g => g.idRole)
 }
 
 /**
@@ -97,11 +101,32 @@ export async function grantableItemIds(tx: TenantTx, actor: Actor, candidates: G
       .from(permission)
       .where(inArray(permission.idPermission, candidates.operationIds))
     : []
-  const visible = await functionalityIdsForRoles(tx, actor.roleIds)
+  const context = await selectTenantGrantContext(tx, actor.roleIds)
+  const effectiveActor = { ...actor, features: new Set(context.policy.enabledFeatures) }
   return {
     operationIds: rows
-      .filter(row => row.kind === 'GRANT' && canGrantCode(actor, row.code))
+      .filter(row => row.kind === 'GRANT' && canGrantCode(effectiveActor, row.code))
       .map(row => row.idPermission),
-    functionalityIds: candidates.functionalityIds.filter(id => canGrantFunctionality(actor, visible, id)),
+    functionalityIds: candidates.functionalityIds.filter(id => canGrantFunctionality(effectiveActor, context.visible, id, context)),
+  }
+}
+
+/** Policy, binding validati dal DB e visibilità in una sola lettura: nessun viaggio per voce. */
+export async function selectTenantGrantContext(tx: TenantTx, roleIds: number[]): Promise<TenantGrantContext & { visible: ReadonlySet<number> }> {
+  const [row] = await tx.execute<{
+    policy: TenantPolicyData
+    bindings: { id: number; area: string | null; feature: string | null }[]
+    visible: string[]
+  }>(sql`select
+    (select row_to_json(p) from (${tenantPolicySelection}) p) as policy,
+    coalesce((select jsonb_agg(jsonb_build_object('id', m.id_menu_entry, 'area', m.area_key, 'feature', m.feature_key)) from public.menu_entry m), '[]'::jsonb) as bindings,
+    array(select distinct f.id_menu_entry::text from public.role_functionality f where f.id_role = any(${`{${roleIds.join(',')}}`}::bigint[])) as visible`)
+  return {
+    policy: tenantPolicyFromData(row.policy),
+    menuBindings: new Map(row.bindings.map(binding => [binding.id, {
+      areaKey: binding.area === null ? null : areaKeySchema.parse(binding.area),
+      featureKey: binding.feature === null ? null : featureKeySchema.parse(binding.feature),
+    } satisfies MenuFeatureBinding])),
+    visible: new Set(row.visible.map(Number)),
   }
 }

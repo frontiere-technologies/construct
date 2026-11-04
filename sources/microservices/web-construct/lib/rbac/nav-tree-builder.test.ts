@@ -3,6 +3,7 @@ import { buildNavTree, canDeleteSubtree, hasChildren, isDescendant, selectablePa
 import type { MenuEntryRow } from './types'
 
 const row = (id: number, parent: number | null, isCategory: boolean, name: string, extra: Partial<MenuEntryRow> = {}): MenuEntryRow => ({
+  area_key: null, feature_key: null, canonical_link: null,
   id_menu_entry: id, id_parent: parent, name,
   order_position: id, navbar_position: null, icon_path: null,
   id_functionality_type: isCategory ? null : 3,
@@ -105,4 +106,9 @@ describe('selectableParents', () => {
     const untranslated = [row(20, null, true, 'Raw', { item_translation: null })]
     expect(selectableParents(untranslated)).toEqual([{ id: 20, name: 'Raw', navbarPosition: null }])
   })
+})
+
+it('retains the authoritative area and feature bindings in the authoring DTO', () => {
+  const tree = buildNavTree([row(91, null, false, 'Synthetic', { area_key: 'people', feature_key: 'read-users' })], new Map())
+  expect(tree[0]).toMatchObject({ areaKey: 'people', featureKey: 'read-users' })
 })

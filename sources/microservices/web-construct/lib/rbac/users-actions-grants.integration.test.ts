@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { eq, inArray } from 'drizzle-orm'
-import { withTenant, withGlobal } from '@/lib/db/tenant-db'
+import { eq, inArray, sql } from 'drizzle-orm'
+import { FEATURE_KEYS } from '@/lib/tenancy/feature-catalog'
+import { withTenant, withGlobal, type BaseTx } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner } from '@/lib/db/testing'
 import { defaultTestTenant } from '@/lib/tenancy/testing'
 import { permission, role, rolePermission, tenantMembership, userRole, users } from '@/lib/db/schema'
@@ -8,12 +9,12 @@ import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures
 import type { Actor } from './actor'
 
 const guard = vi.hoisted(() => ({
-  actor: { userId: 'test', roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set<string>() },
+  actor: { canManageSupportConsent: false, userId: 'test', roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set<string>() },
 }))
 vi.mock('@/lib/rbac/auth-guard', async () => {
   // Il guscio dell'attore sta nel guard; il tenant lo aggiunge la guardia vera, qui il predefinito.
   const { defaultTestTenant } = await import('@/lib/tenancy/testing')
-  const current = () => ({ ...guard.actor, tenantId: defaultTestTenant() })
+  const current = () => ({ ...guard.actor, features: new Set(FEATURE_KEYS), tenantId: defaultTestTenant() })
   return {
     requirePermission: async () => current(),
     requireAdministrator: async () => current(),
@@ -32,13 +33,18 @@ const createdRoles: number[] = []
 const createdPermissions: number[] = []
 
 /** Un ruolo di servizio con le sole concessioni indicate (id di riga `permission`). */
-async function makeRole(permissionIds: number[]): Promise<number> {
+async function makeRole(permissionIds: number[], historical = false): Promise<number> {
   const [created] = await withTenant(defaultTestTenant(), tx => tx.insert(role)
     .values({ description: `zzz_grants_${unique()}`, idRoleType: ROLE_TYPE_SERVICE })
     .returning({ idRole: role.idRole }))
   createdRoles.push(created.idRole)
   if (permissionIds.length) {
-    await withTenant(defaultTestTenant(), tx => tx.insert(rolePermission).values(permissionIds.map(idPermission => ({ idRole: created.idRole, idPermission }))))
+    const write = (tx: BaseTx) => tx.insert(rolePermission).values(permissionIds.map(idPermission => ({ idRole: created.idRole, idPermission })))
+    if (historical) await withOwner(async tx => {
+      await tx.execute(sql`select set_config('app.copy_suspended_grants', 'on', true)`)
+      await write(tx)
+    }, defaultTestTenant())
+    else await withTenant(defaultTestTenant(), write)
   }
   return created.idRole
 }
@@ -85,7 +91,7 @@ afterAll(closeOwner)
 
 describeIntegration('user role and status actions with a limited actor', () => {
   beforeEach(() => {
-    guard.actor = {
+    guard.actor = { canManageSupportConsent: false,
       userId: crypto.randomUUID(),
       roleIds: [0],
       isAdmin: false,
@@ -95,7 +101,7 @@ describeIntegration('user role and status actions with a limited actor', () => {
   })
 
   afterEach(async () => {
-    guard.actor = { userId: 'test', roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set() }
+    guard.actor = { canManageSupportConsent: false, userId: 'test', roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set() }
     for (const id of created.splice(0)) await withGlobal(tx => tx.delete(users).where(eq(users.id, id)))
     // user_role e role_permission cascatano dal ruolo; la riga permission va tolta a parte.
     const roleIds = createdRoles.splice(0)
@@ -151,7 +157,7 @@ describeIntegration('user role and status actions with a limited actor', () => {
   // possiede. Concederla a un ruolo è già rifiutato (permissionCodesByIds); assegnare un ruolo che
   // la porta deve esserlo allo stesso modo, o il controllo la salterebbe in silenzio.
   it('refuses assigning a role that holds a GRANT row outside the catalog', async () => {
-    const odd = await makeRole([await permissionId('read-menu'), await makeUncodedGrant()])
+    const odd = await makeRole([await permissionId('read-menu'), await makeUncodedGrant()], true)
     guard.actor = { ...guard.actor, permissions: new Set(['assign-user-roles', 'read-menu']) }
     const target = await makeUser([0])
     await expect(updateUserRoles(target, [0, odd])).rejects.toThrow(/outside the catalog/)
@@ -162,14 +168,14 @@ describeIntegration('user role and status actions with a limited actor', () => {
   it('offers a limited actor only the roles whose grants it holds, never the Administrator', async () => {
     const reader = await makeRole([await permissionId('read-menu')])
     const manager = await makeRole([await permissionId('manage-menu')])
-    const odd = await makeRole([await makeUncodedGrant()])
-    const actor: Actor = { userId: guard.actor.userId, tenantId: defaultTestTenant(), roleIds: [0], isAdmin: false, isPlatformAdmin: false, permissions: new Set(['assign-user-roles', 'read-menu']) }
+    const odd = await makeRole([await makeUncodedGrant()], true)
+    const actor: Actor = { features: new Set(FEATURE_KEYS), canManageSupportConsent: false, userId: guard.actor.userId, tenantId: defaultTestTenant(), roleIds: [0], isAdmin: false, isPlatformAdmin: false, permissions: new Set(['assign-user-roles', 'read-menu']) }
     expect(await withTenant(defaultTestTenant(), tx => assignableRoleIds(tx, actor, [1, reader, manager, odd]))).toEqual([reader])
   })
 
   it('offers the Administrator every role', async () => {
     const manager = await makeRole([await permissionId('manage-menu')])
-    const admin: Actor = { userId: 'test', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set() }
+    const admin: Actor = { features: new Set(FEATURE_KEYS), canManageSupportConsent: false, userId: 'test', tenantId: defaultTestTenant(), roleIds: [0, 1], isAdmin: true, isPlatformAdmin: false, permissions: new Set() }
     expect(await withTenant(defaultTestTenant(), tx => assignableRoleIds(tx, admin, [1, manager]))).toEqual([1, manager])
   })
 

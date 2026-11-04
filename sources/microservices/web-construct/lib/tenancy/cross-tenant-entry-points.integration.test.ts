@@ -15,12 +15,13 @@ import EmbeddedItemPage from '@/app/(protected)/embedded/[itemId]/page'
 import SelectTenantPage from '@/app/select-tenant/page'
 import { POST as sendInvite } from '@/app/api/admin/send-invite/route'
 import { POST as tenantAuditGrid } from '@/app/api/audit/tenant-grid/route'
+import { GET as tenantExport } from '@/app/api/tenant/export/route'
 import { POST as rolesGrid } from '@/app/api/rbac/roles-grid/route'
 import { POST as usersGrid } from '@/app/api/rbac/users-grid/route'
 import { appTheme, menuEntry, role, roleFunctionality, tenantAuditEvent, tenantMembership, tenantSettings, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
-import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
+import { createdId, describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { createNavigationItem, deleteNavigationItem, moveNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'
 import { createRole, deleteRole, renameRole, updateRolePermissions } from '@/lib/rbac/roles-actions'
 import { FUNCTYPE_EMBEDDED_PAGE, FUNCTYPE_EXTERNAL_LINK, USER_STATUS_DEACTIVATED, type CreateNavItemInput } from '@/lib/rbac/types'
@@ -29,6 +30,10 @@ import PlatformTenantPage from '@/app/platform/tenants/[tenantId]/page'
 import {
   addTenantAdmin, addTenantHost, createTenant as createPlatformTenant, removeTenantHost, resendTenantInvite, setPrimaryHost, setTenantStatus,
 } from '@/lib/platform/tenant-actions'
+import { deleteTenantPermanently } from '@/lib/platform/tenant-delete-actions'
+import { previewTenantGrantPurge, purgeTenantGrants, saveTenantPolicy } from '@/lib/platform/tenant-policy-actions'
+import { readTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
+import type { TenantArchive } from '@/lib/tenancy/tenant-archive-types'
 import { saveAppTheme } from '@/lib/theme-actions'
 import { endSupport, startSupport } from '@/lib/platform/support-actions'
 import { getSystemRoleIds } from './system-roles'
@@ -241,7 +246,8 @@ function sessionOf(userId: string, tenantState: 'ready' | 'choose' = 'ready') {
 /**
  * L'impronta di B: per ogni tabella di tenant del registro l'md5 delle righe di B (la RLS forzata
  * vale anche per il proprietario), più le righe globali che appartengono a B: la riga di `tenant`,
- * i suoi indirizzi, le sue persone e i loro token. Un'istruzione sola, costruita una volta.
+ * i suoi indirizzi, le sue persone, i loro token e gli eventi di piattaforma in cui B compare
+ * come destinazione o origine. Un'istruzione sola, costruita una volta.
  */
 async function fingerprintOfB(): Promise<Record<string, string | null>> {
   const people = `{${[bUser, bOther].join(',')}}`
@@ -252,6 +258,8 @@ async function fingerprintOfB(): Promise<Record<string, string | null>> {
       (select md5(string_agg(t::text, '|' order by t::text)) from public.tenant t where t.id = ${B}) as tenant_row,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.tenant_host t
         where t.id_tenant = ${B}) as tenant_host,
+      (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.platform_audit_event t
+        where t.id_tenant = ${B} or t.source_tenant_id = ${String(B)}) as platform_audit,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.users t
         where t.id = any(${people}::uuid[])) as people,
       (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.password_set_tokens t
@@ -340,6 +348,34 @@ function collectIds(tree: Array<{ id: number; children?: unknown[] }>): number[]
 }
 
 const CASES: Record<string, CrossTenantCase> = {
+  'app/api/tenant/export/route.ts#GET': {
+    entry: tenantExport,
+    run: async () => {
+      const url = `http://localhost:3000/api/tenant/export?tenantId=${B}`
+      mocks.session = sessionOf(memberA)
+      const denied = await tenantExport(new Request(url))
+      expect(denied.status).toBe(403)
+      expect(denied.headers.get('content-disposition')).toBeNull()
+      mocks.session = sessionOf(adminA)
+      const response = await tenantExport(new Request(url))
+      expect(response.status).toBe(200)
+      const archive = await response.json() as TenantArchive
+      expect(archive.sourceTenant.id).toBe(String(A))
+      expect(Object.keys(archive.tables).sort()).toEqual([...tenantTables].sort())
+      for (const name of Object.keys(archive.tables) as Array<keyof TenantArchive['tables']>) {
+        expect(archive.tables[name].map(row => row.id_tenant)).toEqual(Array(archive.counts[name]).fill(String(A)))
+      }
+      expect(archive.tables.tenant_membership.map(row => row.user_id).sort()).toEqual([adminA, memberA].sort())
+      const identitiesInA = new Set([
+        adminA, memberA, ...archive.tables.tenant_audit_event.map(row => row.actor_user_id),
+        ...archive.tables.tenant_settings.map(row => row.support_granted_by),
+      ])
+      identitiesInA.delete(null)
+      expect(archive.identities.map(row => row.id).sort()).toEqual([...identitiesInA].sort())
+      expect(identitiesInA.has(bUser) || identitiesInA.has(bOther)).toBe(false)
+      expectNoTraceOfB(archive)
+    },
+  },
   // --- Azioni del server -------------------------------------------------------------------------
   'lib/rbac/users-actions.ts#updateUserRoles': {
     entry: updateUserRoles,
@@ -379,7 +415,7 @@ const CASES: Record<string, CrossTenantCase> = {
   'lib/rbac/roles-actions.ts#createRole': {
     entry: createRole,
     run: async () => {
-      const { id } = await createRole(`ZZZ ruolo nuovo di A ${unique()}`)
+      const id = createdId(await createRole(`ZZZ ruolo nuovo di A ${unique()}`))
       expect(bRoleIds).not.toContain(id)
       const [created] = await withOwner(tx => tx.select({ id: role.idRole }).from(role).where(eq(role.idRole, id)), A)
       expect(created).toEqual({ id })
@@ -519,6 +555,13 @@ const CASES: Record<string, CrossTenantCase> = {
       await expect(setTenantStatus(Number(B), 'archived', 'preso da A')).rejects.toThrow('Unauthorized')
     },
   },
+  'lib/platform/tenant-delete-actions.ts#deleteTenantPermanently': {
+    entry: deleteTenantPermanently,
+    run: async () => {
+      const [target] = await withOwner(tx => tx.execute<{ slug: string }>(sql`select slug from public.tenant where id = ${B}`))
+      await expect(deleteTenantPermanently(Number(B), target.slug)).rejects.toThrow('Unauthorized')
+    },
+  },
   'lib/platform/tenant-actions.ts#addTenantHost': {
     entry: addTenantHost,
     run: async () => { await expect(addTenantHost(Number(B), `zzz-xt-${unique()}.example.test`, true)).rejects.toThrow('Unauthorized') },
@@ -540,6 +583,30 @@ const CASES: Record<string, CrossTenantCase> = {
     run: async () => {
       // bUser è l'amministratore di B senza password: un invito per lui creerebbe un token (l'impronta lo vedrebbe).
       await expect(resendTenantInvite(Number(B), bUser)).rejects.toThrow('Unauthorized')
+    },
+  },
+  'lib/platform/tenant-policy-actions.ts#saveTenantPolicy': {
+    entry: saveTenantPolicy,
+    run: async () => {
+      const policy = await readTenantPolicy(B)
+      await expect(saveTenantPolicy(Number(B), {
+        expectedRevision: policy.revision,
+        areas: { ...policy.areas, appearance: false }, overrides: policy.overrides, limits: policy.limits,
+      })).rejects.toThrow(/^Unauthorized$/)
+    },
+  },
+  'lib/platform/tenant-policy-actions.ts#previewTenantGrantPurge': {
+    entry: previewTenantGrantPurge,
+    run: async () => { await expect(previewTenantGrantPurge(Number(B), ['read-users'])).rejects.toThrow(/^Unauthorized$/) },
+  },
+  'lib/platform/tenant-policy-actions.ts#purgeTenantGrants': {
+    entry: purgeTenantGrants,
+    run: async () => {
+      const policy = await readTenantPolicy(B)
+      await expect(purgeTenantGrants(Number(B), {
+        revision: policy.revision, keys: ['read-users'], roleCount: 0, permissionGrantCount: 0,
+        menuGrantCount: 0, fingerprint: 'a'.repeat(64),
+      })).rejects.toThrow(/^Unauthorized$/)
     },
   },
   // L'ingresso di assistenza (Task 9): l'amministratore di A non è amministratore di piattaforma, e
@@ -701,7 +768,7 @@ const CASES: Record<string, CrossTenantCase> = {
       // L'interruttore di A (spento, quello di B è acceso); A non ha un indirizzo dedicato. Il
       // permesso di assistenza è quello di A (nessuno), non quello di B (valido).
       expect(propsOf<{ initialEnabled: boolean; selfRegistrationApplies: boolean }>(await TenantSettingsPage()))
-        .toEqual({ initialEnabled: false, selfRegistrationApplies: false, support: { until: null, inProgress: false, locked: false } })
+        .toEqual({ initialEnabled: false, canManageSettings: true, canExport: true, selfRegistrationApplies: false, support: { until: null, exportAllowed: false, inProgress: false, locked: false } })
     },
   },
   'app/(protected)/(admin)/admin/theme/page.tsx#default': {
@@ -791,6 +858,7 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
 
     aSystem = await withTenant(A, tx => getSystemRoleIds(tx))
     await withTenant(A, async tx => {
+      await tx.execute(sql`select set_config('app.menu_origin', 'http://localhost:3000', true)`)
       const [service] = await tx.insert(role).values({ description: 'ZZZ ruolo di servizio di A', idRoleType: 2 })
         .returning({ id: role.idRole })
       aServiceRole = service.id
@@ -801,6 +869,7 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
     })
 
     await withTenant(B, async tx => {
+      await tx.execute(sql`select set_config('app.menu_origin', 'http://localhost:3000', true)`)
       const system = await getSystemRoleIds(tx)
       const [service] = await tx.insert(role).values({ description: `ZZZ ruolo ${MARK_B}`, idRoleType: 2 })
         .returning({ id: role.idRole })
@@ -828,6 +897,10 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
       actorKind: 'person', actorEmail: `zzz_${MARK_B}@example.test`, operation: 'role.create', objectType: 'role', objectId: 'b-audit',
       details: { name: MARK_B },
     }), B)
+    await withOwner(tx => tx.execute(sql`insert into public.platform_audit_event
+      (id_tenant, actor_kind, operation, object_type, object_id, source_tenant_id) values
+      (${B}, 'command', 'tenant.create', 'tenant', ${String(B)}, null),
+      (${A}, 'command', 'tenant.restore', 'tenant', ${String(A)}, ${String(B)})`))
 
     const bRoles = await withOwner(tx => tx.select({ id: role.idRole }).from(role), B)
     bRoleIds = bRoles.map(row => row.id)
@@ -908,6 +981,9 @@ describeIntegration('every entry point refuses another tenant\'s data', () => {
       expect((await sendInvite(jsonRequest('/api/admin/send-invite', { userId: bUser }))).status).toBe(404)
       const audit = await tenantAuditGrid(jsonRequest('/api/audit/tenant-grid', { page: 0, size: 200 }))
       expectNoTraceOfB(await audit.json())
+      const exportResponse = await tenantExport(new Request(`http://localhost:3000/api/tenant/export?tenantId=${B}`))
+      expect(exportResponse.status).toBe(403)
+      expect(exportResponse.headers.get('content-disposition')).toBeNull()
       // Da dentro l'assistenza la console è chiusa: nemmeno B si apre da lì.
       await expect(startSupport(Number(B), 'dall\'assistenza')).rejects.toThrow('Unauthorized')
       // L'ingresso in A ha lasciato le sue voci in A: B (l'impronta) non ne ha.

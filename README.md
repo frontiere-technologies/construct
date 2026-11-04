@@ -132,11 +132,39 @@ node sources/devops/db/db.mjs apply
 node sources/devops/db/db.mjs provision-runtime-role
 ```
 
+Per la migrazione `0065` fornire al processo del migratore anche `AUTH_URL` (o
+`NEXTAUTH_URL`), con lo stesso indirizzo pubblico configurato nel processo web. L'origine
+serve a riconoscere gli alias assoluti delle pagine dell'app; non si ricava dal database
+o dall'intestazione `Host`. Se esistono URL assoluti e manca l'origine, la migrazione si
+interrompe con `menu_origin_required` e annulla le proprie modifiche. Gli URL memorizzati
+restano identici. Anche `tenant-create` e la console di piattaforma richiedono tale
+configurazione quando il modello contiene URL assoluti: una copia fallita non lascia
+un tenant parziale.
+
+`functionality_link` conserva il valore originale per l'editor; `canonical_link` è la
+destinazione autorevole usata dalla sidebar e dalla pagina embedded. La normalizzazione
+usa `URL` nativo, preserva query/frammento e mantiene i percorsi relativi sulla radice
+dell'host corrente. Il database valida e classifica il target canonico, senza tentare
+una seconda implementazione WHATWG/IDNA. Unicode, tab, barre inverse e credenziali di URL
+prima utilizzabili vengono normalizzati senza riscrivere il valore di authoring. La
+regola href precedente è conservata: `ftp:`, `mailto:` e `tel:` nelle normali voci menu
+continuano a essere percorsi Home, mentre i controlli delle pagine embedded restano attivi.
+
+La CLI prepara la mappa completa di id/tenant/valore/tipo nella stessa transazione della
+migrazione, prendendo i lock prima della lettura; una fotografia incompleta o stantia
+annulla il backfill. Eseguire la migrazione tramite `db.mjs apply`, che prepara la mappa.
+Le immagini precedenti usano ancora il valore raw come href e non implementano questo
+confine: il rilascio deve coordinare migrazione e sostituzione delle immagini senza
+mantenere renderer precedenti attivi sul nuovo schema. Una modifica SQL del solo valore
+di authoring non modifica la destinazione aperta dai nuovi renderer.
+
 Dalla migrazione `0045` gli oggetti del database appartengono al ruolo `construct_owner` (senza
 login e senza BYPASSRLS), e `db.mjs apply` esegue ogni migrazione successiva con
 `set local role construct_owner`. L'utente di `MIGRATION_DATABASE_URL` ne diventa membro con la
 `0045` stessa. Se in un ambiente le migrazioni le esegue un utente diverso da quello che ha
 applicato la `0045`, va concesso a mano: `grant construct_owner to <utente>;`.
+La scelta del ruolo segue la versione nel database di destinazione. Anche su un server
+che ha già il ruolo di gruppo, fino alla 0045 compresa opera il login delle migrazioni.
 
 ### Rilascio in produzione: tre tappe (isolamento per tenant, migrazioni 0044-0047)
 
@@ -215,6 +243,16 @@ outside the boundary:
 ```bash
 node sources/devops/db/db.mjs boundary-check
 ```
+
+When packaging the operator CLI or migration image, include the `sources/devops/db/probes/`
+directory alongside `db.mjs` and its other resources. `boundary-check` reads
+`probes/tenant-policy-boundary.sql` relative to `db.mjs`, independently of the working directory.
+Include also `menu-target-backfill.mjs` and `menu-target-url.generated.mjs` beside `db.mjs`.
+The generated module comes from the application TypeScript source
+`lib/rbac/menu-target-url.ts`; regenerate it with
+`node sources/devops/db/generate-menu-target-url.mjs`, or use `--check` to verify it.
+Generation uses the existing development TypeScript dependency; the operator runtime
+imports plain ECMAScript and needs no TypeScript loader. CI runs the drift check in `test:migrations`.
 
 ### Identità di piattaforma
 
@@ -448,6 +486,12 @@ amministratore di piattaforma. Il database della console è il login `construct_
   quello del tenant.
 - **In assistenza la console è chiusa.** Finché si è in un tenant la sezione "Piattaforma" non è
   raggiungibile: si preme prima "Esci" dalla fascia di assistenza, poi si torna alla console.
+
+Concessioni, quote e pulizia delle assegnazioni si gestiscono dalla scheda del tenant.
+L'amministratore del tenant può scaricare un archivio JSON e scegliere se estendere all'export
+il consenso per l'assistenza. Il ripristino da CLI crea un nuovo tenant sospeso e la
+cancellazione definitiva richiede un tenant già archiviato. La guida descrive le esclusioni
+dell'archivio, i registri e la sequenza di rilascio dalla 0063. [Ciclo di vita dei dati di un tenant](docs/runbooks/tenant-data-lifecycle.md)
 
 ## Local Docker with Supabase
 
@@ -683,6 +727,14 @@ set -a && . sources/devops/db/local-test.env && set +a && caffeinate -dims uv ru
 ```
 
 Integrazione ed E2E usano lo stesso database: non farli girare insieme.
+
+Prima delle due suite, la prova di aggiornamento usa `node sources/devops/db/verify-tenant-upgrade.mjs`.
+Impostare `TEST_DATABASE_DISPOSABLE=1`, `TEST_MIGRATION_DATABASE_URL` con destinazione
+`construct_upgrade_test` sul PostgreSQL di prova in ascolto su `127.0.0.1` e `AUTH_URL`
+con l'origine di prova. Specificare la porta PostgreSQL nell'URL, per esempio `127.0.0.1:55432`
+per il container locale. Il login deve poter creare la banca dati dedicata. Il runner rifiuta
+un database preesistente e rimuove quello che ha creato al termine della prova 0063→0074.
+In CI la prova affianca l'installazione nuova e `boundary-check` sul servizio usa e getta.
 
 ## Adding application pages
 

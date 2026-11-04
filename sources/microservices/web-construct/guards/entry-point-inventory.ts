@@ -21,12 +21,16 @@ import ts from 'typescript'
  * ma nessuno aspetta il suo esito, e la lettura che segue passa comunque. Le tre `allow*` sono
  * dichiarazioni sincrone senza esito da aspettare.
  */
-const DECLARATION_MODULES: Record<string, Record<string, 'awaited' | 'sync'>> = {
+const DECLARATION_MODULES: Record<string, Record<string, 'awaited' | 'sync' | 'scope'>> = {
+  '@/lib/tenancy/tenant-export-access': { requireTenantExporter: 'awaited' },
+  '@/lib/db/tenant-export-scope': { withTenantExportScope: 'scope' },
   '@/lib/rbac/auth-guard': {
     requirePermission: 'awaited',
     requirePagePermission: 'awaited',
-    requireAdministrator: 'awaited',
-    requireAdministratorPage: 'awaited',
+    requireAdministratorFeature: 'awaited',
+    requireAdministratorFeaturePage: 'awaited',
+    requireSupportConsentManager: 'awaited',
+    requireTenantSettingsPage: 'awaited',
     requirePlatformAdmin: 'awaited',
     requirePlatformAdminPage: 'awaited',
     requireSupportExit: 'awaited',
@@ -41,14 +45,14 @@ const DECLARATION_MODULES: Record<string, Record<string, 'awaited' | 'sync'>> = 
 /** Una dichiarazione importata: il nome con cui il modulo di guardia la esporta e come va chiamata. */
 interface DeclarationBinding {
   name: string
-  mode: 'awaited' | 'sync'
+  mode: 'awaited' | 'sync' | 'scope'
 }
 
 /** I nomi **locali** delle dichiarazioni importate dal file. */
 type ImportedDeclarations = ReadonlyMap<string, DeclarationBinding>
 
 /** Le dichiarazioni che chiedono un codice del catalogo: per loro conta anche quale. */
-const CODE_DECLARATIONS = new Set(['requirePermission', 'requirePagePermission'])
+const CODE_DECLARATIONS = new Set(['requirePermission', 'requirePagePermission', 'requireAdministratorFeature', 'requireAdministratorFeaturePage'])
 
 function isNestedFunction(node: ts.Node): boolean {
   return ts.isArrowFunction(node) || ts.isFunctionExpression(node)
@@ -96,6 +100,17 @@ export function findDeclaration(node: ts.Node, declarations: ImportedDeclaration
     if (isNestedFunction(current)) return
     if (ts.isCallExpression(current) && ts.isIdentifier(current.expression)) {
       const binding = declarations.get(current.expression.text)
+      if (binding?.mode === 'scope') {
+        const [signal, callback] = current.arguments
+        // The only admitted wrapper just installs a clock/signal. No work can precede its guard.
+        const safeSignal = (node: ts.Expression): boolean => ts.isIdentifier(node)
+          || (ts.isPropertyAccessExpression(node) && safeSignal(node.expression))
+        if (isAwaited(current) && current.arguments.length === 2 && signal && safeSignal(signal)
+          && callback && ts.isArrowFunction(callback) && callback.parameters.length === 0) {
+          found = firstDeclaration(callback.body, declarations)
+        }
+        return
+      }
       if (binding && (binding.mode === 'sync' || isAwaited(current))) {
         found = declarationMarker(current, binding)
         return

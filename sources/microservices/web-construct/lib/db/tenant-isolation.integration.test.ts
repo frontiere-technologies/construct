@@ -75,10 +75,13 @@ describeIntegration('tenant isolation in the database', () => {
         { userId: bAdminUserId, idRole: registered.idRole },
         { userId: bAdminUserId, idRole: admin.idRole },
       ])
-      const [entry] = await tx.insert(menuEntry).values({ name: 'B entry' }).returning({ idMenuEntry: menuEntry.idMenuEntry })
+      const [entry] = await tx.insert(menuEntry)
+        .values({ name: 'B entry', idFunctionalityType: 3, functionalityLink: '/admin/tenant-settings' })
+        .returning({ idMenuEntry: menuEntry.idMenuEntry })
       await tx.insert(menuEntryTag).values({ idMenuEntry: entry.idMenuEntry, tagLan: 'it', tag: 'zzz-iso' })
       await tx.insert(roleFunctionality).values({ idRole: service.idRole, idMenuEntry: entry.idMenuEntry })
-      const [grant] = await tx.select({ idPermission: permission.idPermission }).from(permission).limit(1)
+      const [grant] = await tx.select({ idPermission: permission.idPermission }).from(permission)
+        .where(eq(permission.code, 'manage-support-consent'))
       await tx.insert(rolePermission).values({ idRole: service.idRole, idPermission: grant.idPermission })
       await tx.insert(appTheme).values({ primaryColor: '#123456' })
       bRoleId = service.idRole

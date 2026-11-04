@@ -23,6 +23,11 @@ export function unique(): string {
   return `${Date.now().toString(36)}${counter}`
 }
 
+export function createdId(result: { id: number } | { reason: string }): number {
+  if ('reason' in result) throw new Error(`Fixture creation rejected: ${result.reason}`)
+  return result.id
+}
+
 export function testKey(suffix: string): string {
   return `${TEST_PREFIX}${suffix}`
 }

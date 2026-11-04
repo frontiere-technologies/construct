@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 import {
   applyPendingMigrations,
   discoverMigrations,
+  menuOrigin,
   parseApplyArguments,
   parsePlatformAdminArguments,
   parseTenantCreateArguments,
@@ -26,6 +27,7 @@ import {
   renderSchemaSnapshot,
   selectMigrationsUpTo,
 } from './migration-lib.mjs'
+import { prepareMenuTargetBackfill } from './menu-target-backfill.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const appDir = resolve(here, '../../microservices/web-construct')
@@ -135,14 +137,12 @@ function migrationAdapter(sql) {
         // imposta il tenant a livello di sessione (set_config(..., false)) non deve lasciarlo alle
         // migrazioni successive, che scriverebbero nel suo tenant invece di fallire con 42501
         // (Review Focus 2).
-        await sql`select set_config('app.tenant_id', '', false)`
-        // Dalla 0045 in poi ogni migrazione lavora come construct_owner, che possiede gli oggetti e
-        // non ha BYPASSRLS: la RLS forzata vale anche qui (specifica 2026-10-13, §2.1). La 0045
-        // stessa gira ancora come utente delle migrazioni, perché il ruolo non esiste ancora.
-        const [{ ownerExists }] = await sql`
-          select exists (select 1 from pg_roles where rolname = 'construct_owner') as "ownerExists"
-        `
-        if (ownerExists) await sql`set local role construct_owner`
+        await sql`select set_config('app.tenant_id', '', false), set_config('app.menu_origin', ${menuOrigin()}, true)`
+        // La 0045 trasferisce gli oggetti dal login delle migrazioni a construct_owner, che
+        // non ha BYPASSRLS. Il ruolo può già esistere nel cluster, quindi conta la versione
+        // applicata a questa banca dati: la 0045 usa ancora il login, dalla 0046 serve l'owner.
+        if (migration.version > '0045') await sql`set local role construct_owner`
+        if (migration.version === '0065') await prepareMenuTargetBackfill(sql, menuOrigin())
         await sql.unsafe(migration.sql).simple()
         // La cronologia resta dell'utente delle migrazioni, non del proprietario.
         await sql`reset role`
@@ -718,6 +718,11 @@ async function boundaryCheck() {
         const rows = globalViolations.filter(row => row.problem === problem)
         report(label, !rows.length, rows.map(row => row.name).join(', '))
       }
+      // Query condivisa con schema-contract: esecuzione e reporting restano propri della CLI.
+      const policyViolations = await sql.unsafe(readFileSync(
+        new URL('./probes/tenant-policy-boundary.sql', import.meta.url), 'utf8'))
+      report('tenant policies, lifecycle helpers and database guards preserve the privilege boundary', !policyViolations.length,
+        policyViolations.map(row => row.name + ': ' + row.problem).join(', '))
       // Specchio di 'keeps the tenant audit tables append-only for the runtime role': i registri di
       // tenant sono tabelle di tenant con un privilegio in meno, e l'elenco è esplicito.
       const appendOnly = await sql`
@@ -842,6 +847,7 @@ async function runTenantCreate(connectionUrl, { slug, name, admin, host }) {
     const result = await sql.begin(async tx => {
       await tx`set local role construct_owner`
       if (host) await assertHostFree(tx, host)
+      await tx`select set_config('app.menu_origin', ${menuOrigin()}, true)`
       const [{ tenantId }] = await tx`
         select app_private.create_tenant_from_template(${slug}, ${name})::text as "tenantId"
       `
@@ -880,6 +886,15 @@ async function runTenantCreate(connectionUrl, { slug, name, admin, host }) {
       console.log(`Link per impostare la password (valido 48 ore): ${baseUrl}/set-password?token=${result.invitationToken}`)
       if (!baseUrl) console.log("AUTH_URL non impostata: anteponi l'indirizzo del sito.")
     }
+  } catch (error) {
+    if (error.code === 'P0001') {
+      switch (error.message) {
+        case 'tenant_role_quota': throw new Error('Il limite di ruoli del modello non consente di creare il tenant.')
+        case 'tenant_menu_quota': throw new Error('Il limite di voci di menu del modello non consente di creare il tenant.')
+        case 'tenant_member_quota': throw new Error('Il limite di appartenenze del modello non consente di aggiungere il primo amministratore.')
+      }
+    }
+    throw error
   } finally {
     await sql.end({ timeout: 5 })
   }
@@ -896,6 +911,20 @@ function tenantLinkBase(configured, host) {
   const url = new URL(configured)
   url.hostname = host
   return url.href.replace(/\/$/, '')
+}
+
+async function runTenantRestoreCommand(connectionUrl, args) {
+  const { parseTenantRestoreArguments, runTenantRestore } = await import('./tenant-archive.mjs')
+  const options = parseTenantRestoreArguments(args)
+  const sql = postgres(connectionUrl, {
+    max: 1, prepare: false, connect_timeout: 15, idle_timeout: 5, onnotice: () => {},
+  })
+  try {
+    const report = await runTenantRestore(sql, options)
+    console.log(JSON.stringify(report, null, 2))
+  } finally {
+    await sql.end({ timeout: 5 })
+  }
 }
 
 /** Un indirizzo è uno solo in tutto il registro: se è già di qualcuno il comando si ferma. */
@@ -1170,6 +1199,7 @@ async function runTestTenantDelete(connectionUrl, { slugs }) {
         }
         // La RLS forzata vale anche per il proprietario (MTF-DEC-4): il tenant va impostato.
         await tx`select set_config('app.tenant_id', ${found.id}, true)`
+        await tx`select app_private.lock_tenant_policy()`
         // Le chiavi esterne fra tabelle di tenant sono tutte in cascata: l'ordine non conta.
         for (const { name } of tables) {
           await tx`delete from ${tx('public.' + name)} where id_tenant = ${found.id}`
@@ -1242,6 +1272,7 @@ const supported = new Set([
   'schema-write',
   'tenant-create',
   'tenant-host-add',
+  'tenant-restore',
   'test-apply',
   'test-query',
   'test-reset-e2e',
@@ -1252,10 +1283,11 @@ const supported = new Set([
   'test-tenant-host-add',
   'test-tenant-member-add',
   'test-tenant-delete',
+  'test-tenant-restore',
 ])
 
 if (!supported.has(command)) {
-  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | provision-platform-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | platform-admin-add --email <email> | platform-admin-remove --email <email> | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-platform-admin-add --email <email> | test-platform-admin-remove --email <email> | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...]')
+  console.error('usage: db.mjs apply [--to <version>] | boundary-check | provision-runtime-role | provision-platform-role | query "<sql>" | schema-check | schema-write | tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | tenant-host-add --slug <slug> --host <host> [--primary] | platform-admin-add --email <email> | platform-admin-remove --email <email> | test-apply [--to <version>] | test-query "<sql>" | test-reset-e2e | test-delete-user | test-platform-admin-add --email <email> | test-platform-admin-remove --email <email> | test-tenant-create --slug <slug> --name <name> --admin <email> [--host <host>] | test-tenant-host-add --slug <slug> --host <host> [--primary] | test-tenant-member-add --slug <slug> --email <email> [--admin] | test-tenant-delete --slug <slug> [--slug <slug> ...] | (test-)tenant-restore --file <archive.json> --slug <slug> --name <name> --user-map <map.json> [--actor <uuid>] [--apply --accept-policy]')
   process.exit(2)
 }
 
@@ -1279,6 +1311,8 @@ try {
   else if (command === 'test-platform-admin-remove') await runPlatformAdminRemove(testMigrationDatabaseUrl(), parsePlatformAdminArguments(commandArguments))
   else if (command === 'test-tenant-member-add') await runTestTenantMemberAdd(testMigrationDatabaseUrl(), parseTenantMemberArguments(commandArguments))
   else if (command === 'test-tenant-delete') await runTestTenantDelete(testMigrationDatabaseUrl(), parseTenantDeleteArguments(commandArguments))
+  else if (command === 'tenant-restore') await runTenantRestoreCommand(migrationDatabaseUrl(), commandArguments)
+  else if (command === 'test-tenant-restore') await runTenantRestoreCommand(testMigrationDatabaseUrl(), commandArguments)
   else await runDatabaseCommand(command, argument)
 } catch (err) {
   console.error(`ERROR: ${err.message}`)

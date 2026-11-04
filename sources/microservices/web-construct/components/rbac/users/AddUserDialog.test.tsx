@@ -34,9 +34,9 @@ function render() {
   document.body.append(container)
   root = createRoot(container)
   const onClose = vi.fn()
-  const onAdded = vi.fn()
-  act(() => root?.render(<AddUserDialog open onClose={onClose} onAdded={onAdded} />))
-  return { onClose, onAdded }
+  const onRefresh = vi.fn()
+  act(() => root?.render(<AddUserDialog open canInvite onClose={onClose} onRefresh={onRefresh} />))
+  return { onClose, onRefresh }
 }
 
 const emailField = () => document.querySelector<HTMLInputElement>('input[type="email"]')!
@@ -59,7 +59,7 @@ describe('add user dialog', () => {
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
-    act(() => root?.render(<AddUserDialog open={false} onClose={() => {}} onAdded={() => {}} />))
+    act(() => root?.render(<AddUserDialog open={false} canInvite onClose={() => {}} onRefresh={() => {}} />))
     expect(document.querySelector('[role="dialog"]')).toBe(null)
   })
 
@@ -71,7 +71,7 @@ describe('add user dialog', () => {
 
   it('submits the email and shows the neutral confirmation', async () => {
     addUser.mockResolvedValue({ ok: true })
-    const { onAdded } = render()
+    const { onRefresh } = render()
     type(emailField(), 'Persona@Esempio.it')
     await submit()
 
@@ -79,29 +79,41 @@ describe('add user dialog', () => {
     expect(addUser).toHaveBeenCalledWith('Persona@Esempio.it')
     expect(document.querySelector('[role="status"]')?.textContent).toBe('users.add.done')
     expect(document.querySelector('[role="alert"]')).toBe(null)
-    expect(onAdded).toHaveBeenCalledTimes(1)
+    expect(onRefresh).toHaveBeenCalledTimes(1)
   })
 
   it('shows the invalid-email message without calling the action', async () => {
-    const { onAdded } = render()
+    const { onRefresh } = render()
     type(emailField(), 'non-una-email')
     await submit()
 
     expect(addUser).not.toHaveBeenCalled()
     expect(document.querySelector('[role="alert"]')?.textContent).toBe('users.add.invalid_email')
     expect(document.querySelector('[role="status"]')).toBe(null)
-    expect(onAdded).not.toHaveBeenCalled()
+    expect(onRefresh).not.toHaveBeenCalled()
   })
 
   it('shows the generic error in role="alert" when the action fails', async () => {
     addUser.mockRejectedValue(new Error('qualunque dettaglio del server'))
-    const { onAdded } = render()
+    const { onRefresh } = render()
     type(emailField(), 'persona@esempio.it')
     await submit()
 
     expect(document.querySelector('[role="alert"]')?.textContent).toBe('users.add.error')
     expect(document.querySelector('[role="status"]')).toBe(null)
-    expect(onAdded).not.toHaveBeenCalled()
+    expect(onRefresh).not.toHaveBeenCalled()
+  })
+
+  it('keeps the revocation visible without refreshing the page that owns the dialog', async () => {
+    addUser.mockResolvedValue({ ok: false, reason: 'capability_unavailable' })
+    const { onRefresh } = render()
+    type(emailField(), 'persona@esempio.it')
+    await submit()
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('tenant.creation.capability_unavailable')
+    expect(emailField().value).toBe('persona@esempio.it')
+    expect(submitButton().disabled).toBe(true)
+    expect(onRefresh).not.toHaveBeenCalled()
   })
 
   it('forgets the previous outcome when the person types again', async () => {

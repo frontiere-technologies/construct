@@ -12,7 +12,7 @@ import {
  * di ogni funzione esportata da un file `'use server'`, di ogni gestore esportato da
  * `app/api/**\/route.ts` e di ogni pagina sotto `app/(protected)/` contenga una chiamata di
  * dichiarazione: un permesso (`requirePermission`, `requirePagePermission`), il ruolo
- * Amministratore (`requireAdministrator`, `requireAdministratorPage`) o un'esenzione
+ * Amministratore (`requireAdministratorFeature`, `requireAdministratorFeaturePage`) o un'esenzione
  * (`allowSelfService`, `allowAnonymous`, `allowAnyAuthenticated`).
  *
  * «Prima istruzione» e non «da qualche parte»: un controllo che arriva dopo una lettura dal
@@ -32,7 +32,7 @@ const OPAQUE_EXPORTS: Record<string, string> = {
   'app/api/auth/[...nextauth]/route.ts': 'gli handler di NextAuth: accesso, callback e sessione sono anonimi per natura',
 }
 
-const GUARD_IMPORT = "import { requirePermission, requirePagePermission, requireAdministrator } from '@/lib/rbac/auth-guard'"
+const GUARD_IMPORT = "import { requirePermission, requirePagePermission, requireAdministratorFeature } from '@/lib/rbac/auth-guard'"
 const ALLOW_IMPORT = "import { allowAnonymous, allowSelfService } from '@/lib/rbac/access-declarations'"
 
 /** Un file di prova con gli import veri davanti: la guardia legge da dove arriva ogni nome. */
@@ -52,7 +52,7 @@ describe('findDeclaration / inspectExports', () => {
   it('accepts the declaration inside the first statement: const, try, .catch', () => {
     const source = probe(
       "export async function a() { const actor = await requirePermission('read-users'); return actor }",
-      'export async function b() { try { await requireAdministrator() } catch { return null } }',
+      "export async function b() { try { await requireAdministratorFeature('manage-tenant-theme') } catch { return null } }",
       "export async function c() { const actor = await requirePermission('read-users').catch(() => null); return actor }",
     )
     expect(inspectExports(source, 'probe.ts').undeclared).toEqual([])
@@ -74,6 +74,18 @@ describe('findDeclaration / inspectExports', () => {
   it('rejects a declaration hidden in a nested callback', () => {
     const source = probe("export async function save() { await run(async () => { await requirePermission('manage-menu') }) }")
     expect(inspectExports(source, 'probe.ts').undeclared).toEqual(['save'])
+  })
+
+  it('recognizes only the lexical export scope with its guard first and no work in its signal argument', () => {
+    const imports = "import { withTenantExportScope as scope } from '@/lib/db/tenant-export-scope'; import { requireTenantExporter } from '@/lib/tenancy/tenant-export-access'"
+    expect(inspectExports(`${imports}; export async function GET(request: Request) { return await scope(request.signal, async () => { const actor = await requireTenantExporter(); return actor }) }`, 'probe.ts').declared).toEqual({ GET: 'requireTenantExporter' })
+    for (const body of [
+      'return await scope(request.signal, async () => { await read(); await requireTenantExporter() })',
+      'return await scope(await read(), async () => { await requireTenantExporter() })',
+      'return scope(request.signal, async () => { await requireTenantExporter() })',
+    ]) expect(inspectExports(`${imports}; export async function GET(request: Request) { ${body} }`, 'probe.ts').undeclared).toEqual(['GET'])
+    const wrong = imports.replace('@/lib/db/tenant-export-scope', '@/lib/other')
+    expect(inspectExports(`${wrong}; export async function GET(request: Request) { return await scope(request.signal, async () => { await requireTenantExporter() }) }`, 'probe.ts').undeclared).toEqual(['GET'])
   })
 
   it('rejects a require call nobody awaits: the check starts and the write goes ahead', () => {
@@ -133,7 +145,7 @@ describe('findDeclaration / inspectExports', () => {
     const source = probe(
       "export async function a() { const actor = await requirePermission('manage-menu'); return actor }",
       "export default async function Page() { await requirePagePermission('read-menu'); return null }",
-      'export async function c() { try { await requireAdministrator() } catch { return null } }',
+      "export async function c() { try { await requireAdministratorFeature('manage-tenant-theme') } catch { return null } }",
       'export async function d() { allowSelfService(); return 1 }',
       'export async function e(code: never) { await requirePermission(code) }',
       'export async function f() { return 1 }',
@@ -141,7 +153,7 @@ describe('findDeclaration / inspectExports', () => {
     expect(inspectExports(source, 'probe.tsx').declared).toEqual({
       a: 'manage-menu',
       default: 'read-menu',
-      c: 'requireAdministrator',
+      c: 'manage-tenant-theme',
       d: 'allowSelfService',
       e: '<not a literal>',
     })
@@ -177,10 +189,11 @@ describe('findDeclaration / inspectExports', () => {
  * Una porta nuova senza riga, una porta tolta o un codice cambiato fanno fallire il test.
  */
 const EXPECTED_DECLARATIONS: Record<string, string> = {
+  'app/api/tenant/export/route.ts#GET': 'requireTenantExporter',
   'app/(protected)/(admin)/admin/audit/page.tsx#default': 'read-tenant-audit',
   'app/(protected)/(admin)/admin/languages/page.tsx#default': 'read-languages',
-  'app/(protected)/(admin)/admin/tenant-settings/page.tsx#default': 'manage-tenant-settings',
-  'app/(protected)/(admin)/admin/theme/page.tsx#default': 'requireAdministratorPage',
+  'app/(protected)/(admin)/admin/tenant-settings/page.tsx#default': 'requireTenantSettingsPage',
+  'app/(protected)/(admin)/admin/theme/page.tsx#default': 'manage-tenant-theme',
   'app/(protected)/(admin)/admin/translations/page.tsx#default': 'read-translations',
   'app/(protected)/(admin)/functionalities/[funcId]/edit/page.tsx#default': 'manage-menu',
   'app/(protected)/(admin)/functionalities/create/page.tsx#default': 'manage-menu',
@@ -243,8 +256,12 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/platform/tenant-actions.ts#createTenant': 'requirePlatformAdmin',
   'lib/platform/tenant-actions.ts#removeTenantHost': 'requirePlatformAdmin',
   'lib/platform/tenant-actions.ts#resendTenantInvite': 'requirePlatformAdmin',
+  'lib/platform/tenant-policy-actions.ts#saveTenantPolicy': 'requirePlatformAdmin',
+  'lib/platform/tenant-policy-actions.ts#previewTenantGrantPurge': 'requirePlatformAdmin',
+  'lib/platform/tenant-policy-actions.ts#purgeTenantGrants': 'requirePlatformAdmin',
   'lib/platform/tenant-actions.ts#setPrimaryHost': 'requirePlatformAdmin',
   'lib/platform/tenant-actions.ts#setTenantStatus': 'requirePlatformAdmin',
+  'lib/platform/tenant-delete-actions.ts#deleteTenantPermanently': 'requirePlatformAdmin',
   'lib/profile-actions.ts#saveProfile': 'allowSelfService',
   'lib/rbac/navigation-actions.ts#createNavigationItem': 'manage-menu',
   'lib/rbac/navigation-actions.ts#deleteNavigationItem': 'manage-menu',
@@ -257,12 +274,12 @@ const EXPECTED_DECLARATIONS: Record<string, string> = {
   'lib/rbac/users-actions.ts#addUserByEmail': 'invite-users',
   'lib/rbac/users-actions.ts#setUserStatus': 'set-user-status',
   'lib/rbac/users-actions.ts#updateUserRoles': 'assign-user-roles',
-  'lib/tenancy/support-consent-actions.ts#grantSupportConsent': 'manage-tenant-settings',
-  'lib/tenancy/support-consent-actions.ts#revokeSupportConsent': 'manage-tenant-settings',
+  'lib/tenancy/support-consent-actions.ts#grantSupportConsent': 'requireSupportConsentManager',
+  'lib/tenancy/support-consent-actions.ts#revokeSupportConsent': 'requireSupportConsentManager',
   'lib/tenancy/tenant-actions.ts#chooseTenant': 'allowAnyAuthenticated',
   'lib/tenancy/tenant-actions.ts#refreshTenant': 'allowAnyAuthenticated',
   'lib/tenancy/tenant-settings-actions.ts#setSelfRegistration': 'manage-tenant-settings',
-  'lib/theme-actions.ts#saveAppTheme': 'requireAdministrator',
+  'lib/theme-actions.ts#saveAppTheme': 'manage-tenant-theme',
 }
 
 describe('isServerActionsSource / appSourceFiles', () => {

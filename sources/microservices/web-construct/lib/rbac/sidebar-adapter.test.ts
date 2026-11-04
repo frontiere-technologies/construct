@@ -1,9 +1,20 @@
 import { describe, it, expect } from 'vitest'
+import { FEATURE_KEYS } from '@/lib/tenancy/feature-catalog'
+import type { TenantPolicySnapshot } from '@/lib/tenancy/tenant-policy-types'
+import { normalizeMenuTargetUrl } from './menu-target-url'
 import { mapMenuToSidebar, resolveGrantedFunctionalityIds } from './sidebar-adapter'
 import { FUNCTYPE_EMBEDDED_PAGE, FUNCTYPE_EXTERNAL_LINK } from './types'
 import type { MenuEntryRow } from './types'
 
+const policy: TenantPolicySnapshot = {
+  revision: 1, areas: { people: true, roles: true, navigation: true, appearance: true, catalogs: true, 'tenant-settings': true },
+  overrides: {}, enabledFeatures: [...FEATURE_KEYS],
+  limits: { queryTimeoutMs: null, maxMembers: null, maxRoles: null, maxMenuEntries: null },
+}
+
 const voce = (over: Partial<MenuEntryRow> & { id_menu_entry: number }): MenuEntryRow => ({
+  area_key: 'navigation', feature_key: 'use-custom-content',
+  canonical_link: normalizeMenuTargetUrl(over.functionality_link ?? '/content', over.id_functionality_type ?? 2, 'https://construct.example.test'),
   id_parent: null, name: `voce-${over.id_menu_entry}`,
   order_position: 0, navbar_position: null, icon_path: null,
   id_functionality_type: 1, functionality_link: null, open_in_new_tab: 1,
@@ -12,12 +23,12 @@ const voce = (over: Partial<MenuEntryRow> & { id_menu_entry: number }): MenuEntr
 
 describe('mapMenuToSidebar', () => {
   it('mostra una voce concessa al ruolo', () => {
-    const out = mapMenuToSidebar([voce({ id_menu_entry: 8 })], new Set([8]))
+    const out = mapMenuToSidebar([voce({ id_menu_entry: 8 })], new Set([8]), policy)
     expect(out).toHaveLength(1)
   })
 
   it('nasconde una voce non concessa: non esistono più voci pubbliche (DEC-18)', () => {
-    const out = mapMenuToSidebar([voce({ id_menu_entry: 8 })], new Set())
+    const out = mapMenuToSidebar([voce({ id_menu_entry: 8 })], new Set(), policy)
     expect(out).toEqual([])
   })
 
@@ -26,7 +37,7 @@ describe('mapMenuToSidebar', () => {
       voce({ id_menu_entry: 1, id_functionality_type: null, name: 'Home' }),
       voce({ id_menu_entry: 2, id_functionality_type: null, id_parent: 1, name: 'sezione vuota' }),
       voce({ id_menu_entry: 3, id_parent: 1, name: 'foglia' }),
-    ], new Set([3]))
+    ], new Set([3]), policy)
     expect(out.map(m => m.id)).toEqual(['1', '3'])
   })
 
@@ -34,7 +45,7 @@ describe('mapMenuToSidebar', () => {
     const out = mapMenuToSidebar([
       voce({ id_menu_entry: 10 }),
       voce({ id_menu_entry: 11 }),
-    ], new Set([10, 11]))
+    ], new Set([10, 11]), policy)
     expect(out.map(m => m.id).sort()).toEqual(['10', '11'])
   })
 
@@ -43,7 +54,7 @@ describe('mapMenuToSidebar', () => {
       voce({ id_menu_entry: 1, id_functionality_type: null, name: 'Admin' }),
       voce({ id_menu_entry: 2, id_functionality_type: null, id_parent: 1, name: 'aaa' }),
       voce({ id_menu_entry: 3, id_parent: 2, name: 'link-interno' }),
-    ], new Set([3]))
+    ], new Set([3]), policy)
     expect(out.map(m => m.id).sort()).toEqual(['1', '2', '3'])
   })
 
@@ -51,7 +62,7 @@ describe('mapMenuToSidebar', () => {
     const out = mapMenuToSidebar([
       voce({ id_menu_entry: 20, id_functionality_type: 1, functionality_link: null }),
       voce({ id_menu_entry: 21, id_functionality_type: 2, functionality_link: 'https://example.com', open_in_new_tab: 0 }),
-    ], new Set([20, 21]))
+    ], new Set([20, 21]), policy)
     expect(out.find(m => m.id === '20')?.route).toBe('/embedded/20')
     expect(out.find(m => m.id === '21')?.target).toBe('_self')
   })
@@ -59,14 +70,14 @@ describe('mapMenuToSidebar', () => {
   it('usa la lingua configurata prima del fallback inglese', () => {
     const out = mapMenuToSidebar([
       voce({ id_menu_entry: 30, name: 'English', item_translation: { IT: { name: 'Italiano' }, EN: { name: 'English' } } }),
-    ], new Set([30]), 'DE', 'IT')
+    ], new Set([30]), policy, 'DE', 'IT')
     expect(out[0].label).toBe('Italiano')
   })
 
   it('antepone "/" a un collegamento che non inizia né con "/" né con "http"', () => {
     const out = mapMenuToSidebar([
       voce({ id_menu_entry: 40, id_functionality_type: 3, functionality_link: 'user-management' }),
-    ], new Set([40]))
+    ], new Set([40]), policy)
     expect(out[0].route).toBe('/user-management')
   })
 
@@ -74,7 +85,7 @@ describe('mapMenuToSidebar', () => {
     const out = mapMenuToSidebar([
       voce({ id_menu_entry: 70, id_functionality_type: null, name: 'RBAC' }),
       voce({ id_menu_entry: 71, id_parent: 70 }),
-    ], new Set([71]))
+    ], new Set([71]), policy)
     const container = out.find(m => m.id === '70')!
     expect(container.type).toBe('container')
     expect(container.collapsible).toBe(true)
@@ -89,7 +100,7 @@ describe('mapMenuToSidebar', () => {
     const out = mapMenuToSidebar([
       voce({ id_menu_entry: 1, id_functionality_type: null, name: 'Home' }),
       voce({ id_menu_entry: 2, id_functionality_type: null, id_parent: 1, name: 'sezione vuota' }),
-    ], new Set([1]))
+    ], new Set([1]), policy)
     expect(out).toEqual([])
   })
 })
@@ -98,7 +109,7 @@ describe('mapMenuToSidebar target del collegamento', () => {
   it('apre in una nuova scheda per default un link esterno', () => {
     const out = mapMenuToSidebar([
       voce({ id_menu_entry: 50, id_functionality_type: FUNCTYPE_EXTERNAL_LINK, functionality_link: 'https://example.com', open_in_new_tab: 1 }),
-    ], new Set([50]))
+    ], new Set([50]), policy)
     expect(out[0].target).toBe('_blank')
   })
 
@@ -108,7 +119,7 @@ describe('mapMenuToSidebar target del collegamento', () => {
       voce({ id_menu_entry: 61, id_functionality_type: FUNCTYPE_EMBEDDED_PAGE, open_in_new_tab: 1 }),
       voce({ id_menu_entry: 62, id_functionality_type: null, open_in_new_tab: 1, name: 'section' }),
       voce({ id_menu_entry: 63, id_parent: 62 }),
-    ], new Set([60, 61, 63]))
+    ], new Set([60, 61, 63]), policy)
     const targets = out.filter(m => ['60', '61', '62'].includes(m.id)).map(m => m.target)
     expect(targets).toEqual([undefined, undefined, undefined])
   })
@@ -122,4 +133,45 @@ describe('resolveGrantedFunctionalityIds', () => {
     )
     expect([...ids]).toEqual([10])
   })
+})
+
+describe('tenant capability ceiling', () => {
+  it('hides aliases and their empty neutral category when the real feature is suspended', () => {
+    const entries = [
+      voce({ id_menu_entry: 1, id_functionality_type: null, area_key: null, feature_key: null }),
+      voce({ id_menu_entry: 2, id_parent: 1, area_key: 'people', feature_key: 'read-users' }),
+      voce({ id_menu_entry: 3, id_parent: 1, area_key: 'people', feature_key: 'read-users', functionality_link: 'https://construct.example.test/user-management' }),
+    ]
+    expect(mapMenuToSidebar(entries, new Set([2, 3]), { ...policy, enabledFeatures: policy.enabledFeatures.filter(key => key !== 'read-users') })).toEqual([])
+  })
+
+  it('keeps a neutral administration category with a visible child from another area', () => {
+    const entries = [
+      voce({ id_menu_entry: 1, id_functionality_type: null, area_key: null, feature_key: null }),
+      voce({ id_menu_entry: 2, id_parent: 1, area_key: 'people', feature_key: 'read-users' }),
+      voce({ id_menu_entry: 3, id_parent: 1, area_key: 'roles', feature_key: 'read-roles' }),
+    ]
+    expect(mapMenuToSidebar(entries, new Set([2, 3]), { ...policy, enabledFeatures: policy.enabledFeatures.filter(key => key !== 'read-users') }).map(item => item.id)).toEqual(['1', '3'])
+  })
+
+  it('keeps an explicitly permitted child under a category whose area is disabled', () => {
+    const entries = [
+      voce({ id_menu_entry: 1, id_functionality_type: null, area_key: 'people', feature_key: null }),
+      voce({ id_menu_entry: 2, id_parent: 1, area_key: 'people', feature_key: 'read-users' }),
+    ]
+    expect(mapMenuToSidebar(entries, new Set([2]), { ...policy, areas: { ...policy.areas, people: false }, overrides: { 'read-users': true } }).map(item => item.id)).toEqual(['1', '2'])
+  })
+
+  it('does not show an unclassified functionality', () => {
+    expect(mapMenuToSidebar([voce({ id_menu_entry: 5, feature_key: null })], new Set([5]), policy)).toEqual([])
+  })
+})
+
+it('opens only the authoritative canonical target even if the authoring string names a different page', () => {
+  const out = mapMenuToSidebar([voce({
+    id_menu_entry: 900, id_functionality_type: 2,
+    functionality_link: '/user-management', canonical_link: 'https://outside.test/canonical',
+    area_key: 'navigation', feature_key: 'use-custom-content', open_in_new_tab: 0,
+  })], new Set([900]), policy)
+  expect(out[0]).toMatchObject({ route: 'https://outside.test/canonical', target: '_self' })
 })

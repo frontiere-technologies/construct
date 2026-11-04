@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { eq, inArray, sql } from 'drizzle-orm'
-import { passwordSetTokens, tenant, tenantHost, tenantMembership, userRole, users } from '@/lib/db/schema'
+import { menuEntry, passwordSetTokens, tenant, tenantHost, tenantMembership, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
+import { normalizeMenuTargetUrl } from '@/lib/rbac/menu-target-url'
 import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { tenantIdForTest } from '@/lib/tenancy/testing'
@@ -200,6 +201,28 @@ async function create(label: string, options: { host?: string; adminEmail?: stri
 }
 
 describeIntegration('createTenant', () => {
+
+  it('passes the configured origin when copying absolute internal and external menu targets', async () => {
+    const [template] = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).where(eq(tenant.isTemplate, true)))
+    const templateId = tenantIdForTest(template.id)
+    const links = ['https://construct.example.test/user-management', 'https://bücher.example/user-management']
+    const originals = await withOwner(async tx => {
+      await tx.execute(sql`select set_config('app.menu_origin', 'https://construct.example.test', true)`)
+      return tx.insert(menuEntry).values(links.map((link, index) => ({ name: 'Absolute template ' + index, idFunctionalityType: 2, functionalityLink: link, canonicalLink: normalizeMenuTargetUrl(link, 2, 'https://construct.example.test') }))).returning({ id: menuEntry.idMenuEntry })
+    }, templateId)
+    try {
+      const { result } = await create('absolute')
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      const copied = await withTenant(tenantIdForTest(result.tenantId), tx => tx.select().from(menuEntry).where(inArray(menuEntry.functionalityLink, links)))
+      expect(copied.map(entry => entry.featureKey).sort()).toEqual(['read-users', 'use-custom-content'])
+      expect(copied.map(entry => entry.canonicalLink).sort()).toEqual(['https://construct.example.test/user-management', 'https://xn--bcher-kva.example/user-management'])
+      expect(copied.every(entry => !originals.some(original => original.id === entry.idMenuEntry))).toBe(true)
+    } finally {
+      await withOwner(tx => tx.delete(menuEntry).where(inArray(menuEntry.idMenuEntry, originals.map(entry => entry.id))), templateId)
+    }
+  })
+
   it('copies the template, sets the primary host, makes the admin, and emails a link to the tenant host', async () => {
     const host = hostOf('create')
     const { result, slug, adminEmail, account } = await create('create', { host })
@@ -305,6 +328,35 @@ describeIntegration('createTenant', () => {
     expect(await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).where(eq(tenant.slug, slug)))).toEqual([])
     expect(mocks.sendEmail).not.toHaveBeenCalled()
   }, 60_000)
+
+  it.each([
+    ['max_roles', 'role_quota'], ['max_menu_entries', 'menu_quota'], ['max_members', 'member_quota'],
+  ])('returns the model %s rejection with no tenant, host, account, audit or email', async (column, reason) => {
+    const [{ id }] = await withOwner(tx => tx.execute<{ id: number }>(sql`select id from public.tenant where is_template`))
+    const modelId = tenantIdForTest(Number(id))
+    const field = sql.identifier(column)
+    const [{ quota }] = await withOwner(tx => tx.execute<{ quota: number | null }>(sql`select ${field} as quota from public.tenant_platform_policy`), modelId)
+    const slug = slugOf('model-quota')
+    const host = hostOf('model-quota')
+    const adminEmail = emailOf('model-quota')
+    try {
+      await withOwner(tx => tx.execute(sql`update public.tenant_platform_policy set ${field} = 0`), modelId)
+      expect(await createTenant({ name: 'ZZZ model quota', slug, host, adminEmail })).toEqual({ ok: false, reason })
+      const residues = await withOwner(tx => tx.execute(sql`
+        select id::text as residue from public.tenant where slug = ${slug}
+        union all select host from public.tenant_host where host = ${host}
+        union all select id::text from public.platform_audit_event where details->>'slug' = ${slug}
+        union all select id::text from public.users where email = ${adminEmail}`))
+      expect(residues).toEqual([])
+      expect(mocks.sendEmail).not.toHaveBeenCalled()
+    } finally {
+      await withOwner(tx => tx.execute(sql`update public.tenant_platform_policy set ${field} = ${quota}`), modelId)
+      const [unexpected] = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).where(eq(tenant.slug, slug)))
+      if (unexpected) createdTenants.push(tenantIdForTest(unexpected.id))
+      const account = await userByEmail(adminEmail)
+      if (account) createdUserIds.push(account.id)
+    }
+  })
 
   it.each([
     ['an empty name', { name: '  ', slug: 'zzz-tl-ok-slug', adminEmail: 'a@example.test' }],

@@ -7,6 +7,7 @@ import { users } from '@/lib/db/schema'
 import { withGlobal } from '@/lib/db/tenant-db'
 import { allowAnyAuthenticated } from '@/lib/rbac/access-declarations'
 import { listAvailableTenants } from './host-tenants'
+import { isMultiTenantEnabled } from './tenancy-mode'
 import { readRequestHost } from './request-host'
 import type { TenantState } from './tenant-selection'
 
@@ -42,6 +43,7 @@ async function signedInPerson(): Promise<string> {
  */
 export async function chooseTenant(tenantId: number): Promise<TenantState> {
   allowAnyAuthenticated()
+  if (!isMultiTenantEnabled()) throw new Error('tenant_selection_disabled')
   const userId = await signedInPerson()
   if (typeof tenantId !== 'number' || !Number.isSafeInteger(tenantId) || tenantId <= 0) {
     throw new Error('tenant_not_available')

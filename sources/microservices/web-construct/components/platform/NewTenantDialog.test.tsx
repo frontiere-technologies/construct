@@ -31,7 +31,7 @@ function render() {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  act(() => root?.render(<NewTenantDialog onClose={onClose} onCreated={onCreated} />))
+  act(() => root?.render(<NewTenantDialog onQuotaRejected={() => {}} onClose={onClose} onCreated={onCreated} />))
 }
 
 const field = (label: string) => {

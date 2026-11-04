@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import { withTenant } from '@/lib/db/tenant-db'
 import { evaluateAuthorization, isActiveAccount } from '@/lib/auth-policy'
+import { featureForPermission, type FeatureKey } from '@/lib/tenancy/feature-catalog'
 import { readRequestHost } from '@/lib/tenancy/request-host'
 import { selectSupportAccess, supportConditionsHold } from '@/lib/tenancy/support-consent'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
@@ -15,6 +16,8 @@ export interface Actor {
   isAdmin: boolean
   /** Attributo dell'account (MT5-DEC-1), letto con il resto dell'autorizzazione: non è un permesso del tenant. */
   isPlatformAdmin: boolean
+  features: ReadonlySet<FeatureKey>
+  canManageSupportConsent: boolean
   permissions: ReadonlySet<PermissionCode>
   /**
    * L'amministratore di piattaforma in assistenza nel tenant (pezzo 5a, MT5-DEC-12): ha i permessi
@@ -26,8 +29,8 @@ export interface Actor {
 }
 
 /**
- * L'unico posto dove vive l'eccezione dell'Amministratore (DEC-5): riceve tutti i codici del
- * catalogo, anche quelli che un rilascio ha appena aggiunto e che nessuno gli ha ancora concesso.
+ * L'amministratore (DEC-5) riceve i codici attivi del catalogo entro le capacità del tenant,
+ * anche senza concessioni nei suoi ruoli. Il limite viene applicato prima di ogni porta.
  * Un account disattivato non è un attore, qualunque cosa concedano i suoi ruoli. I cataloghi
  * globali di lingue e traduzioni non c'entrano più coi permessi del tenant: le scritture sono
  * dell'amministratore di piattaforma (MT5-DEC-17), e nessuna regola distingue il tenant predefinito.
@@ -37,16 +40,24 @@ export function buildActor(
   tenantId: TenantId,
   authorization: { accountActive: boolean; roleIds: number[]; isAdmin: boolean; isPlatformAdmin: boolean },
   grantedCodes: string[],
+  enabledFeatures: readonly FeatureKey[],
 ): Actor | null {
   if (!authorization.accountActive) return null
   const codes = authorization.isAdmin ? PERMISSION_CODES : grantedCodes.filter(isPermissionCode)
-  const permissions = new Set<PermissionCode>(codes)
+  const features = new Set(enabledFeatures)
+  const canManageSupportConsent = authorization.isAdmin || codes.includes('manage-support-consent')
+  const permissions = new Set<PermissionCode>(codes.filter(code => {
+    const feature = featureForPermission(code)
+    return feature !== null && features.has(feature)
+  }))
   return {
     userId,
     tenantId,
     roleIds: authorization.roleIds,
     isAdmin: authorization.isAdmin,
     isPlatformAdmin: authorization.isPlatformAdmin,
+    features,
+    canManageSupportConsent,
     permissions,
   }
 }
@@ -75,7 +86,7 @@ export const resolveActor = cache(async (tenantId: TenantId, userId: string): Pr
       ),
       isPlatformAdmin: snapshot.isPlatformAdmin && isActiveAccount(snapshot.status),
     }
-    return buildActor(userId, tenantId, authorization, snapshot.permissionCodes)
+    return buildActor(userId, tenantId, authorization, snapshot.permissionCodes, snapshot.enabledFeatures)
   }))
 
 /**
@@ -97,6 +108,7 @@ export const resolveSupportActor = cache(async (tenantId: TenantId, userId: stri
     tenantId,
     { accountActive: true, roleIds: [access.tenantAdminRoleId], isAdmin: true, isPlatformAdmin: true },
     [],
+    access.enabledFeatures,
   )
-  return actor && { ...actor, support: true }
+  return actor && { ...actor, support: true, canManageSupportConsent: false }
 })

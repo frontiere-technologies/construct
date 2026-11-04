@@ -18,11 +18,12 @@ interface Props {
   trees: RoleAuthorizationTrees
   /** Ciò che l'attore può accendere nei due alberi, calcolato dalla pagina (DEC-6, DEC-29, DEC-32). */
   grantable: GrantableItemIds
+  suspended: GrantableItemIds
   canGrant: boolean
   canManageRoles: boolean
 }
 
-export default function RoleDetailClient({ role, trees, grantable, canGrant, canManageRoles }: Props) {
+export default function RoleDetailClient({ role, trees, grantable, suspended, canGrant, canManageRoles }: Props) {
   const { t } = useI18n()
   const router = useRouter()
   const loadedFunctionalities = useMemo(() => buildAuthMap(trees.functionalities), [trees.functionalities])
@@ -99,7 +100,7 @@ export default function RoleDetailClient({ role, trees, grantable, canGrant, can
         <h2 className="text-sm font-medium text-muted-foreground">{t('roles.detail.functionalities')}</h2>
         <PermissionsTree
           trees={trees.functionalities} map={functionalities} onChange={setFunctionalities} editable={editable}
-          canGrantNode={canGrantFunctionality}
+          canGrantNode={canGrantFunctionality} suspendedIds={suspended.functionalityIds}
         />
       </section>
 
@@ -107,7 +108,7 @@ export default function RoleDetailClient({ role, trees, grantable, canGrant, can
         <h2 className="text-sm font-medium text-muted-foreground">{t('roles.detail.operations')}</h2>
         <PermissionsTree
           trees={trees.operations} map={operations} onChange={setOperations} editable={editable}
-          canGrantNode={canGrantOperation}
+          canGrantNode={canGrantOperation} suspendedIds={suspended.operationIds}
         />
       </section>
 

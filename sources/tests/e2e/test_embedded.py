@@ -245,4 +245,5 @@ def test_embedded_page_shows_fallback_when_private_target_is_blocked(embedded_it
     page.wait_for_url("**/embedded/**", timeout=10_000)
     notice = page.locator('[data-testid="embedded-blocked-open-new-tab"]')
     expect(notice).to_be_visible()
-    assert notice.get_attribute("href") == url
+    # The private fallback opens the canonical destination, including a lowercased host.
+    assert notice.get_attribute("href") == f"{probe_server.lower()}/blocked"

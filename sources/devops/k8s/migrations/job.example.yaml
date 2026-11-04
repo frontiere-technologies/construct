@@ -21,3 +21,6 @@ spec:
                 secretKeyRef:
                   name: construct-migration-secret
                   key: MIGRATION_DATABASE_URL
+            # Usare la stessa origine pubblica dell'applicazione per normalizzare i link del menu.
+            - name: AUTH_URL
+              value: "https://construct.example.com"

@@ -41,13 +41,13 @@ afterEach(() => {
   container = undefined
 })
 
-type Support = { until: string | null; inProgress: boolean; locked: boolean }
-const NO_CONSENT: Support = { until: null, inProgress: false, locked: false }
+type Support = { until: string | null; inProgress: boolean; locked: boolean; exportAllowed: boolean }
+const NO_CONSENT: Support = { until: null, inProgress: false, locked: false, exportAllowed: false }
 
-function render(initialEnabled: boolean, selfRegistrationApplies = true, support: Support = NO_CONSENT) {
+function render(initialEnabled: boolean, selfRegistrationApplies = true, support: Support = NO_CONSENT, canManageSettings = true) {
   act(() => {
     root = createRoot(container!)
-    root.render(<TenantSettings initialEnabled={initialEnabled} selfRegistrationApplies={selfRegistrationApplies} support={support} />)
+    root.render(<TenantSettings initialEnabled={initialEnabled} canManageSettings={canManageSettings} selfRegistrationApplies={selfRegistrationApplies} support={support} />)
   })
 }
 
@@ -119,14 +119,14 @@ describe('TenantSettings: support consent', () => {
     mocks.grantSupportConsent.mockResolvedValue({ ok: true, until: '2026-10-28T10:00:00.000Z' })
     render(false)
     await act(async () => { buttonNamed('tenancy.support.duration.1d')!.click() })
-    expect(mocks.grantSupportConsent).toHaveBeenCalledWith('1d')
+    expect(mocks.grantSupportConsent).toHaveBeenCalledWith('1d', { allowExport: false })
     expect(container!.textContent).toContain('tenancy.support.granted_until|{"time":"dt:2026-10-28T10:00:00.000Z"}')
     expect(buttonNamed('tenancy.support.revoke')).toBeDefined()
   })
 
   it('revoke removes the consent', async () => {
     mocks.revokeSupportConsent.mockResolvedValue({ ok: true })
-    render(false, true, { until: '2026-10-28T10:00:00.000Z', inProgress: true, locked: false })
+    render(false, true, { until: '2026-10-28T10:00:00.000Z', inProgress: true, locked: false, exportAllowed: false })
     expect(container!.textContent).toContain('tenancy.support.in_progress')
     await act(async () => { buttonNamed('tenancy.support.revoke')!.click() })
     expect(mocks.revokeSupportConsent).toHaveBeenCalledTimes(1)
@@ -143,7 +143,7 @@ describe('TenantSettings: support consent', () => {
   })
 
   it('during support the platform sees the consent but cannot change it', () => {
-    render(false, true, { until: '2026-10-28T10:00:00.000Z', inProgress: true, locked: true })
+    render(false, true, { until: '2026-10-28T10:00:00.000Z', inProgress: true, locked: true, exportAllowed: false })
     expect(container!.textContent).toContain('tenancy.support.granted_until')
     expect(container!.textContent).toContain('tenancy.support.locked')
     for (const duration of ['1h', '1d', '1w']) expect(buttonNamed(`tenancy.support.duration.${duration}`)).toBeUndefined()
@@ -155,4 +155,48 @@ describe('TenantSettings: support consent', () => {
     expect(container!.textContent).toContain('tenancy.settings.self_registration_no_address')
     expect(container!.textContent).toContain('tenancy.support.not_granted')
   })
+})
+
+
+it('keeps essential consent controls without offering suspended optional settings', async () => {
+  await render(false, true, NO_CONSENT, false)
+  expect(document.querySelector('[data-testid="tenant-self-registration"]')).toBeNull()
+  expect(document.querySelector('[data-testid="tenant-self-registration-no-address"]')).toBeNull()
+  expect(document.querySelector('[data-testid="tenant-support-state"]')).not.toBeNull()
+})
+
+it('requires an unchecked explicit export choice for each grant and shows the saved export state', async () => {
+  mocks.grantSupportConsent.mockResolvedValue({ ok: true, until: '2026-10-28T10:00:00.000Z' })
+  render(false, true, { until: '2026-10-28T10:00:00.000Z', inProgress: true, locked: false, exportAllowed: true })
+  const checkbox = container!.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+  expect(checkbox).not.toBeNull()
+  expect(checkbox.checked).toBe(false)
+  expect(container!.textContent).toContain('tenancy.support.export_allowed')
+  await act(async () => { buttonNamed('tenancy.support.duration.1h')!.click() })
+  expect(mocks.grantSupportConsent).toHaveBeenLastCalledWith('1h', { allowExport: false })
+  expect(container!.textContent).toContain('tenancy.support.export_not_allowed')
+  expect(container!.textContent).not.toContain('tenancy.support.in_progress')
+  await act(async () => { checkbox.click() })
+  await act(async () => { buttonNamed('tenancy.support.duration.1d')!.click() })
+  expect(mocks.grantSupportConsent).toHaveBeenLastCalledWith('1d', { allowExport: true })
+  expect(container!.textContent).toContain('tenancy.support.export_allowed')
+  expect(checkbox.checked).toBe(false)
+})
+
+it('shows the saved export state during support without an editable export choice', () => {
+  render(false, true, { until: '2026-10-28T10:00:00.000Z', inProgress: true, locked: true, exportAllowed: true })
+  expect(container!.querySelector('input[type="checkbox"]')).toBeNull()
+  expect(container!.textContent).toContain('tenancy.support.export_allowed')
+})
+
+it('keeps the saved export state and explicit pending choice when the grant fails', async () => {
+  mocks.grantSupportConsent.mockRejectedValue(new Error('Unauthorized'))
+  render(false, true, { until: '2026-10-28T10:00:00.000Z', inProgress: true, locked: false, exportAllowed: false })
+  const checkbox = container!.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+  await act(async () => { checkbox.click() })
+  await act(async () => { buttonNamed('tenancy.support.duration.1h')!.click() })
+  expect(checkbox.checked).toBe(true)
+  expect(container!.textContent).toContain('tenancy.support.export_not_allowed')
+  expect(container!.textContent).toContain('tenancy.support.in_progress')
+  expect(container!.querySelector('[role="alert"]')).not.toBeNull()
 })
