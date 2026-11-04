@@ -373,13 +373,13 @@ La scadenza deve interrompere anche la query in corso e annullare la transazione
 
 ## Task 11 — T11 — Ripristino operativo in un nuovo tenant
 
-- [ ] ID=MT5B-T11, Severity=Critical, Complexity=High, Priority=P1, Estimate=days, Title=Ripristino isolato e verificato, Fix description=Verifica preventiva e importazione atomica con identità rimappate, nessun privilegio globale dal file; copre MT5B-OK-4/6 e RF-4.
+- [✅] ID=MT5B-T11, Severity=Critical, Complexity=High, Priority=P1, Estimate=days, Title=Ripristino isolato e verificato, Fix description=Verifica preventiva e importazione atomica con identità rimappate, nessun privilegio globale dal file; copre MT5B-OK-4/6 e RF-4.
 
 **File:** C `D/migrations/0071_restore_tenant_archive.sql`, `D/tenant-archive.mjs`, `D/tenant-archive.test.mjs`, `W/lib/tenancy/tenant-restore-command.integration.test.ts`; M `D/db.mjs`. I parser nuovi sono testati in `tenant-archive.test.mjs`. Il comando legge il contratto JSON T10 dal percorso dell'app, non importa TypeScript con alias da uno script Node.
 
 **Interfacce:** `parseTenantRestoreArguments(args: string[]): RestoreOptions` e `runTenantRestore(sql, options): Promise<RestoreReport>` nel modulo operativo, tipi documentati con JSDoc. Opzioni `--file`, `--slug`, `--name`, `--user-map`, `--actor`, `--accept-policy`, `--apply`; senza `--apply` solo verifica preventiva. `--user-map` è un JSON da id origine a UUID destinazione; mai corrispondenza automatica per email. Comandi `tenant-restore` e `test-tenant-restore`, con connessioni rispettivamente migrazioni/test-migrazioni e controlli usa e getta esistenti per il secondo. SQL owner-only `app_private.restore_tenant_archive(p_archive jsonb, p_slug text, p_name text, p_user_map jsonb, p_actor uuid) returns bigint`.
 
-- [ ] T11.1 Scrivere test parser e integrazione: esportare A con B presente, fornire mappa completa, ripristinare A2 sospeso e confrontare dati e diritti; gli id ruolo/menu cambiano e i riferimenti restano coerenti. B e account globali invariati. Include assegnazioni dormienti, utenti condivisi e attori storici non più presenti.
+- [✅] T11.1 Scrivere test parser e integrazione: esportare A con B presente, fornire mappa completa, ripristinare A2 sospeso e confrontare dati e diritti; gli id ruolo/menu cambiano e i riferimenti restano coerenti. B e account globali invariati. Include assegnazioni dormienti, utenti condivisi e attori storici non più presenti.
 
 Nel caso `it('restores A into A2 without touching B or shared accounts')`, conservare prima/dopo righe ordinate delle tabelle di B e dei campi di users, senza stamparli:
 ```ts
@@ -388,11 +388,11 @@ expect(afterUsers).toEqual(beforeUsers)
 expect(restoredTenant.status).toBe('suspended')
 expect(restoredRoleIds).not.toEqual(sourceRoleIds)
 ```
-- [ ] T11.2 Eseguire `node --test sources/devops/db/tenant-archive.test.mjs` e poi integrazione del comando sulla prova: casi nuovi falliscono.
-- [ ] T11.3 Implementare validazione chiusa coerente con contratto T10, verifica preventiva con conteggi/quote e assenza di scritture. `--apply` richiede `--accept-policy`, mappa completa e attore tecnico esplicito; il comando mostra l'effetto della configurazione di piattaforma ma non valori personali o credenziali. Validare nuovamente dentro la transazione che applica, non fidarsi del rapporto di verifica precedente. Rifiutare esistenza slug, formato/versione/campi/codici ignoti, mappa incompleta o ambigua e quote insufficienti.
-- [ ] T11.4 Nella funzione SQL creare nuovo tenant sospeso, rimappare chiavi e ricostruire righe note in ordine; caricare grant storici con il percorso owner-only T04. Non creare/modificare users o password, non ripristinare consensi/sessioni/token/host attivi, non acquisire ruolo speciale del modello/default. Richiedere almeno un amministratore attivo nella destinazione e preservare gli attori storici come tali. Annotare origine tecnica degli eventi importati e del ripristino; impedire che vecchi eventi `support.*` riaprano assistenza.
+- [✅] T11.2 Eseguire `node --test sources/devops/db/tenant-archive.test.mjs` e poi integrazione del comando sulla prova: casi nuovi falliscono.
+- [✅] T11.3 Implementare validazione chiusa coerente con contratto T10, verifica preventiva con conteggi/quote e assenza di scritture. `--apply` richiede `--accept-policy`, mappa completa e attore tecnico esplicito; il comando mostra l'effetto della configurazione di piattaforma ma non valori personali o credenziali. Validare nuovamente dentro la transazione che applica, non fidarsi del rapporto di verifica precedente. Rifiutare esistenza slug, formato/versione/campi/codici ignoti, mappa incompleta o ambigua e quote insufficienti.
+- [✅] T11.4 Nella funzione SQL creare nuovo tenant sospeso, rimappare chiavi e ricostruire righe note in ordine; caricare grant storici con il percorso owner-only T04. Non creare/modificare users o password, non ripristinare consensi/sessioni/token/host attivi, non acquisire ruolo speciale del modello/default. Richiedere almeno un amministratore attivo nella destinazione e preservare gli attori storici come tali. Annotare origine tecnica degli eventi importati e del ripristino; impedire che vecchi eventi `support.*` riaprano assistenza.
 Gli eventi importati ricevono sempre `origin='restored'` e riferimenti sorgente, anche se il file sosteneva `live`; i nuovi eventi dell'importatore sono `live`. I campi di provenienza non sovrascrivono identità o privilegi.
-- [ ] T11.5 Provare fallimento dopo metà importazione, prima dell'evento finale e concorrenza sullo slug: zero residui, un solo tenant eventuale. Il comando usa limiti operativi espliciti propri e READ COMMITTED per le scritture contate (Ruling 16), senza cambiare timeout del web. Ripetere test e commit locale `feat(tenancy): restore tenant archives through guarded operator command`.
+- [✅] T11.5 Provare fallimento dopo metà importazione, prima dell'evento finale e concorrenza sullo slug: zero residui, un solo tenant eventuale. Il comando usa limiti operativi espliciti propri e READ COMMITTED per le scritture contate (Ruling 16), senza cambiare timeout del web. Ripetere test e commit locale `feat(tenancy): restore tenant archives through guarded operator command`.
 
 ## Task 12 — T12 — Eliminazione definitiva con sola traccia minima
 

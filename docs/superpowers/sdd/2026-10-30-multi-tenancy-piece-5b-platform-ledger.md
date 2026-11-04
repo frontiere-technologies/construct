@@ -404,3 +404,20 @@ Task 10: fix round4/5 (1 addressed,0 open — T10-R3-I1; commitsa16add0..86a19de
 Task 10: complete (commits81297a7..86a19de, review clean)
 
 Spuntati i passi T10 verificati. Prova0070; sviluppo0063, nessun remoto. I minori M1/M2 restano al triage finale. Verifica pooler/certificati/cancellazione TLS di destinazione in T13, senza attribuire esito al test sintetico. T11 prossimo.
+
+Task 11: in progress — BASE733a8edd8d99585363101b8be80d8380107364e6; /root/mt5b_t11_implementer GPT-6.1/high avviato effettivamente. Brief, contesto e rapporto task-11-*; sola prova locale alla0070, nuova0071 riservata; nessun browser o altro esecutore. Revisione indipendente GPT-6.1/high dopo consegna.
+
+Ruling: 26. Ripristino registra nel tenant il nuovo evento live tenant.create con source_tenant_id tecnico, preservando il contratto chiuso v1. Se emesso, tenant.restore nel registro di piattaforma usa catalogo e traduzioni 0071 e associazione strutturata a destinazione/origine tecnica, senza dati personali nei dettagli. I due inserimenti sono atomici e la copertura delle associazioni passa a T12. Gli eventi importati hanno sempre origine restored e identificativi dell’archivio immediato. Per il menu il valore originale si conserva e si rivalida la destinazione canonica già autorevole con il normalizzatore esistente — la creazione ripristinata deve restare identificabile senza estendere le operazioni tenant v1 — costo se errato: la distinzione nel registro tenant dipende dal campo provenienza e la cancellazione deve trattare esplicitamente il riferimento tecnico all’origine nel registro piattaforma.
+
+Ruling: 27. Nel file i riferimenti lingua restano l’insieme esatto e sensibile al maiuscolo. Nel catalogo destinazione si controlla la compatibilità usando lower, perché app_language ammette solo minuscole, senza riscrivere tag o chiavi storiche — preserva dati v1 e rispetta il dominio del catalogo — costo se errato: EN ed en puntano alla stessa lingua operativa e devono comunque restare distinti nel file e nelle traduzioni ripristinate.
+T11 traguardi dichiarati: RED formato/CLI assente, trial0071 in rollback e controllo runtime/owner, tenant/audit assenti dopo rollback, applicata0071 solo prova. Tipi verdi, integrazione in corso. Il test Node del parser entra nello script test:migrations esistente per essere raccolto in CI.
+
+Task 11: implementazione011bf20, revisore /root/mt5b_t11_reviewer_61 GPT-6.1/high avviato, package review-733a8ed..011bf20.diff. Report verificato. 1729 unità,37 Node,9 mirati finali,lint/tipi/schema/boundary verdi,0071 solo prova dopo trial rollback. Completa iniziale776 verdi,6 rossi,16 saltati: traduzioni audit T10/T11 riallineate con verifica reale it/en e9/9 mirati. Residui T13: permission-schema righe94/565/579/594 tenant_feature_disabled e286 conteggio23 contro24; setup tenant-isolation riga80 e role-2-removal riga60 tenant_feature_disabled,13+3 saltati. Diagnosi da log e DDL, senza baseline separata. Portare log t11-integration-full.log a T13; non dichiarare completa verde. Server browser assente, esclusiva DB liberata.
+
+Task 11: review GPT-6.1/high non conforme,0 critici,2 importanti (T11-I1 controlli deterministici tema/tag in preflight, T11-I2 proprietà JSON duplicate),1 minore T11-M1 diagnostici menu differito. Fix round1/5 assegnato allo stesso esecutore, BASE011bf20. 0071 già salvata e applicata resta immutata; risolvere nel controllo CLI condiviso, in transazione e prima di scritture, senza cambiare formato export v1. Ruling26/27 verificati. Fallimenti legacy attribuiti staticamente a0066 dal revisore e conservati per T13; associazione sourceTenantId passa a T12.
+
+Task 11: fix round1/5 (2 addressed,0 open — T11-I1/I2; commits011bf20..00fb381). Parser5/5, CLI11/11, lint/tipi/schema; 0071 e contratto v1 immutati. Riesame GPT-6.1/high task-11-r1-review.md approvato, nessuna nuova regressione. T11-M1 al triage finale.
+
+Task 11: complete (commits733a8ed..00fb381, review clean)
+
+Prova0071, nessuna attivazione. Riportare a T12 associazione strutturata di tenant.restore; a T13 residui fixture 0066 confermati staticamente, con log del completo non verde.
