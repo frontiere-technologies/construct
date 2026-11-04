@@ -18,14 +18,22 @@ ARTIFACTS = Path(__file__).resolve().parents[3] / ".superpowers/sdd/2026-10-30-m
 
 
 def _scalar(tenant_id: int, expression: str) -> int:
+    # The CI test login bypasses RLS, so tenant tables need explicit predicates.
     output = run_sql(f"select set_config('app.tenant_id', '{tenant_id}', true); select ({expression})::int as n")
     matches = re.findall(r"│\s*0\s*│\s*(\d+)\s*│", output)
     assert matches, "synthetic count was not returned"
     return int(matches[-1])
 
 
+def _tenant_count(tenant_id: int, table: str) -> int:
+    return _scalar(tenant_id, f"select count(*) from {table} where id_tenant = {tenant_id}")
+
+
 def _assignments(tenant_id: int) -> int:
-    return _scalar(tenant_id, "(select count(*) from role_permission) + (select count(*) from role_functionality)")
+    return _scalar(tenant_id, f"""
+        (select count(*) from role_permission where id_tenant = {tenant_id})
+        + (select count(*) from role_functionality where id_tenant = {tenant_id})
+    """)
 
 
 @pytest.fixture
@@ -40,17 +48,17 @@ def policy_tenant(test_email, base_url):
         run_sql(f"""
           select set_config('app.tenant_id', '{tenant_id}', true);
           select set_config('app.menu_origin', '{origin}', true);
-          delete from role_permission;
-          delete from role_functionality;
+          delete from role_permission where id_tenant = {tenant_id};
+          delete from role_functionality where id_tenant = {tenant_id};
           insert into role (id_role_type, description) values (2, 'E2E policy role');
           insert into role_permission (id_role, id_permission)
             select r.id_role, p.id_permission from role r cross join permission p
-            where r.description = 'E2E policy role' and p.code = 'read-users';
+            where r.id_tenant = {tenant_id} and r.description = 'E2E policy role' and p.code = 'read-users';
           insert into menu_entry (name, id_functionality_type, functionality_link, order_position, is_immutable)
             values ('E2E policy people', 3, '/user-management', 0, 0);
           insert into role_functionality (id_role, id_menu_entry)
-            select r.id_role, m.id_menu_entry from role r cross join menu_entry m
-            where r.description = 'E2E policy role' and m.name = 'E2E policy people';
+            select r.id_role, m.id_menu_entry from role r join menu_entry m on m.id_tenant = r.id_tenant
+            where r.id_tenant = {tenant_id} and r.description = 'E2E policy role' and m.name = 'E2E policy people';
         """)
         yield tenant_id
     finally:
@@ -68,6 +76,13 @@ def _open(page, base_url, tenant_id):
 def _save(editor):
     editor.get_by_role("button", name="Salva", exact=True).click()
     expect(editor.get_by_role("button", name="Salva", exact=True)).to_be_enabled()
+
+
+def _save_initial_limits(editor):
+    saved = editor.get_by_text("Concessioni e limiti salvati. Nessuna assegnazione eliminata.", exact=True)
+    expect(saved).to_have_count(0)
+    _save(editor)
+    expect(saved).to_be_visible()
 
 
 def test_export_requires_tenant_admin_or_explicit_support_consent(
@@ -166,8 +181,12 @@ def test_suspend_restore_and_purge_grants(platform_page, base_url, policy_tenant
     dialog.get_by_role("button", name="Elimina le assegnazioni indicate", exact=True).click()
     expect(dialog).to_have_count(0)
     assert _assignments(policy_tenant) == 0
-    assert _scalar(policy_tenant, "select count(*) from role where description = 'E2E policy role'") == 1
-    assert _scalar(policy_tenant, "select count(*) from menu_entry where name = 'E2E policy people'") == 1
+    assert _scalar(policy_tenant, f"""
+        select count(*) from role where id_tenant = {policy_tenant} and description = 'E2E policy role'
+    """) == 1
+    assert _scalar(policy_tenant, f"""
+        select count(*) from menu_entry where id_tenant = {policy_tenant} and name = 'E2E policy people'
+    """) == 1
 
 
 def test_policy_conflict_and_quota_notice(platform_page, base_url, policy_tenant):
@@ -194,7 +213,7 @@ def test_policy_conflict_and_quota_notice(platform_page, base_url, policy_tenant
         editor_b.get_by_label("Massimo appartenenze", exact=True).fill("0")
         _save(editor_b)
         expect(editor_b.get_by_text(re.compile("Il limite è inferiore"))).to_be_visible()
-        assert _scalar(policy_tenant, "select count(*) from tenant_membership") >= 1
+        assert _tenant_count(policy_tenant, "tenant_membership") >= 1
     finally:
         second.close()
 
@@ -215,16 +234,19 @@ def test_role_quota_rejection_refreshes_the_grid_and_keeps_the_dialog(
           insert into role (id_role_type, description) values (2, 'E2E role from another session');
         """)
         editor = _open(platform_page, base_url, policy_tenant)
-        count = _scalar(policy_tenant, "select count(*) from role")
+        count = _tenant_count(policy_tenant, "role")
         editor.get_by_label("Massimo ruoli (inclusi quelli di sistema)", exact=True).fill(str(count))
-        _save(editor)
+        _save_initial_limits(editor)
+        assert _scalar(policy_tenant, f"""
+            select count(*) from tenant_platform_policy where id_tenant = {policy_tenant} and max_roles = {count}
+        """) == 1, "The tenant role quota was not saved"
 
         dialog.get_by_role("button", name="Salva", exact=True).click()
         expect(dialog.get_by_role("alert")).to_have_text("È stato raggiunto il limite di ruoli del tenant.")
         expect(grid_rows(admin).filter(has_text="E2E role from another session")).to_have_count(1)
         expect(dialog.get_by_role("alert")).to_be_visible()
         expect(dialog.get_by_placeholder("Nome ruolo")).to_have_value("E2E blocked role")
-        assert _scalar(policy_tenant, "select count(*) from role") == count
+        assert _tenant_count(policy_tenant, "role") == count
 
 
 @pytest.mark.parametrize("area", ["roles", "people", "navigation"])
@@ -316,12 +338,16 @@ def test_menu_and_member_quota_rejections_keep_the_inputs(
     admin_email = f"e2e-console-admin@{test_email.split('@', 1)[1]}"
     unknown_email = "e2e-quota-unknown@example.test"
     tenant_url = _on_host(base_url, "e2e-console.localhost")
-    menu_count = _scalar(policy_tenant, "select count(*) from menu_entry")
-    member_count = _scalar(policy_tenant, "select count(*) from tenant_membership")
+    menu_count = _tenant_count(policy_tenant, "menu_entry")
+    member_count = _tenant_count(policy_tenant, "tenant_membership")
     editor = _open(platform_page, base_url, policy_tenant)
     editor.get_by_label("Massimo voci menu (incluse categorie)", exact=True).fill(str(menu_count))
     editor.get_by_label("Massimo appartenenze", exact=True).fill(str(member_count))
-    _save(editor)
+    _save_initial_limits(editor)
+    assert _scalar(policy_tenant, f"""
+        select count(*) from tenant_platform_policy where id_tenant = {policy_tenant}
+        and max_menu_entries = {menu_count} and max_members = {member_count}
+    """) == 1, "The tenant menu and membership quotas were not saved"
 
     try:
         with _signed_in(browser, tenant_url, admin_email) as admin:
@@ -334,7 +360,7 @@ def test_menu_and_member_quota_rejections_keep_the_inputs(
             message = "È stato raggiunto il limite di voci di menu del tenant."
             expect(admin.get_by_role("alert").filter(has_text=message)).to_have_text(message)
             expect(name).to_have_value("E2E blocked menu entry")
-            assert _scalar(policy_tenant, "select count(*) from menu_entry") == menu_count
+            assert _tenant_count(policy_tenant, "menu_entry") == menu_count
 
             nav(admin, f"{tenant_url}/user-management")
             admin.get_by_role("button", name="Aggiungi persona", exact=True).click()
@@ -344,7 +370,7 @@ def test_menu_and_member_quota_rejections_keep_the_inputs(
                 dialog.get_by_role("button", name="Aggiungi", exact=True).click()
                 expect(dialog.get_by_role("alert")).to_have_text("È stato raggiunto il limite di appartenenze del tenant.")
                 expect(dialog.get_by_label("Email", exact=True)).to_have_value(email)
-            assert _scalar(policy_tenant, "select count(*) from tenant_membership") == member_count
+            assert _tenant_count(policy_tenant, "tenant_membership") == member_count
             assert _scalar(1, f"select count(*) from users where email = '{unknown_email}'") == 0
     finally:
         delete_people([unknown_email])
