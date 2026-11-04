@@ -731,7 +731,8 @@ Integrazione ed E2E usano lo stesso database: non farli girare insieme.
 Prima delle due suite, la prova di aggiornamento usa `node sources/devops/db/verify-tenant-upgrade.mjs`.
 Impostare `TEST_DATABASE_DISPOSABLE=1`, `TEST_MIGRATION_DATABASE_URL` con destinazione
 `construct_upgrade_test` sul PostgreSQL di prova in ascolto su `127.0.0.1` e `AUTH_URL`
-con l'origine di prova. Il login deve poter creare la banca dati dedicata. Il runner rifiuta
+con l'origine di prova. Specificare la porta PostgreSQL nell'URL, per esempio `127.0.0.1:55432`
+per il container locale. Il login deve poter creare la banca dati dedicata. Il runner rifiuta
 un database preesistente e rimuove quello che ha creato al termine della prova 0063→0073.
 In CI la prova affianca l'installazione nuova e `boundary-check` sul servizio usa e getta.
 

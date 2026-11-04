@@ -23,6 +23,8 @@ function upgradeUrl() {
   if (url.protocol !== 'postgresql:' && url.protocol !== 'postgres:') throw new Error('valid PostgreSQL URL is required')
   if (url.hostname !== '127.0.0.1') throw new Error('numeric loopback address is required (127.0.0.1)')
   if (url.pathname !== `/${TARGET}`) throw new Error(`dedicated ${TARGET} database is required`)
+  // The maintenance connection and migration subprocess must use the same listener.
+  if (!url.port) throw new Error('explicit PostgreSQL port is required')
   // The driver also parses connection parameters. Allow only the validated URL fields.
   if (url.href.includes('?') || url.href.includes('#')) throw new Error('connection options and fragments are forbidden')
   if (!url.username) throw new Error('a migration login is required')

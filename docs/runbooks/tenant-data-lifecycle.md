@@ -24,8 +24,14 @@ il timeout del database se più severo.
 Il consenso di assistenza è una capacità essenziale gestita dal tenant. Per concederlo con
 esportazione selezionare l'opzione esplicita prima di scegliere la durata. Ogni rinnovo richiede
 una nuova scelta. I consensi storici mantengono scadenza e autore con l'esportazione disabilitata.
-In modalità `single` il vero amministratore del tenant predefinito può esportare. Console e
-assistenza di piattaforma sono disponibili soltanto in modalità `multi`.
+
+`CONSTRUCT_TENANCY_MODE` vale `multi` per impostazione predefinita. La modalità `single`
+ammette solo il tenant predefinito sull'host canonico dell'origine configurata. Prima di
+attivarla, predisporre esplicitamente appartenenze e ruoli tramite i percorsi canonici.
+L'accesso usa solo le assegnazioni esistenti e non attribuisce automaticamente `REGISTERED`,
+anche a chi ha già un'appartenenza attiva. «Riprova» rivalida la sessione senza scegliere un
+tenant o concedere privilegi. In single l'amministratore del tenant predefinito può esportare.
+Console e assistenza di piattaforma sono disponibili soltanto in modalità `multi`.
 
 ## Scaricare e custodire un archivio
 
@@ -71,9 +77,12 @@ La verifica preventiva è in sola lettura. Esaminare conteggi, quote, concession
 compatibilità dei codici e destinazioni menu, host ignorati e amministratore attivo. Correggere le
 incongruenze prima di ripetere il controllo. Per applicare, ripetere lo stesso comando aggiungendo
 `--apply --accept-policy --actor <uuid-amministratore-piattaforma-attivo>`. L'applicazione
-verifica di nuovo gli input e scrive in una transazione. Crea un tenant sospeso con slug nuovo,
-rimappa ruoli e voci e non riattiva host, inviti, sessioni o consensi. Verificare accessi e policy
-sulla destinazione, quindi configurare l'indirizzo e riattivare dalla console con autorizzazione.
+verifica di nuovo gli input e scrive in una transazione `READ COMMITTED`. Le scritture di
+appartenenze, ruoli e voci di menu soggette alle quote richiedono questo livello di isolamento
+anche per `construct_owner`, comprese copia e ripristino. Il ripristino crea un tenant sospeso
+con slug nuovo, rimappa ruoli e voci e non riattiva host, inviti, sessioni o consensi. Verificare
+accessi e policy sulla destinazione, quindi configurare l'indirizzo e riattivare dalla console
+con autorizzazione.
 
 Il registro di piattaforma annota `tenant.restore` sul tenant di destinazione. La provenienza
 tecnica va nella colonna separata `source_tenant_id`. Nel nuovo tenant l'evento live è
