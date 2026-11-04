@@ -7,7 +7,7 @@ import { menuOrigin } from './migration-lib.mjs'
 
 const TARGET = 'construct_upgrade_test'
 const LEGACY = '0063'
-const LATEST = '0073'
+const LATEST = '0074'
 const CLI = fileURLToPath(new URL('./db.mjs', import.meta.url))
 const require = createRequire(new URL('../../microservices/web-construct/package.json', import.meta.url))
 

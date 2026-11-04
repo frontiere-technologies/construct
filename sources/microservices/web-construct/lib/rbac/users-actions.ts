@@ -1,13 +1,14 @@
 'use server'
 
-import { and, eq, sql } from 'drizzle-orm'
-import { withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
+import { and, DrizzleQueryError, eq, sql } from 'drizzle-orm'
+import { TenantFeatureUnavailableError, withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
+import { tenantQuotaReason } from '@/lib/tenancy/tenant-quota-reason'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
 import type { AnyTx, TenantTx } from '@/lib/db/tenant-db'
 import { userRole, users } from '@/lib/db/schema'
-import { prepareInvitationIn } from '@/lib/auth-invitations'
+import { prepareInvitationIn, type PreparedInvitation } from '@/lib/auth-invitations'
 import { sendInvitationEmail } from '@/lib/invitation-email'
 import { createLogger } from '@/lib/logger'
 import { addTenantMember, MEMBERSHIP_ACTIVE, MEMBERSHIP_DEACTIVATED } from '@/lib/tenancy/membership'
@@ -141,7 +142,7 @@ export async function setUserStatus(userId: string, status: UserStatusId): Promi
  * Limite noto: l'email parte solo per un account nuovo, quindi il tempo di risposta può differire;
  * il contenuto della risposta no. È lo stesso limite di oggi della registrazione.
  */
-export async function addUserByEmail(email: string): Promise<{ ok: true }> {
+export async function addUserByEmail(email: string): Promise<{ ok: true } | { ok: false; reason: 'member_quota' | 'capability_unavailable' }> {
   const actor = await requirePermission('invite-users')
   const parsed = emailSchema.safeParse(email)
   if (!parsed.success) throw new Error('Email non valida')
@@ -149,23 +150,31 @@ export async function addUserByEmail(email: string): Promise<{ ok: true }> {
 
   // Account (se manca), token d'invito e appartenenza nascono in una transazione sola, nel tenant
   // dell'attore, insieme alla voce del registro: o tutto o niente (MT5-DEC-15).
-  const invitation = await withTenantFeature(actor, 'invite-users', async tx => {
-    // Un tenant sospeso o archiviato non manda inviti né aggiunge persone (MT5-DEC-25).
-    await assertTenantActive(tx)
-    // In assistenza, non il proprio account: prima di creare token o appartenenze.
-    if (actor.support === true) refuseSelfInSupport(actor, await findUserIdByEmailOrNull(tx, normalizedEmail))
-    const prepared = await prepareInvitationIn(tx, normalizedEmail, actor.userId)
-    const userId = prepared?.userId ?? await findUserIdByEmail(tx, normalizedEmail)
-    const added = await addTenantMember(tx, userId)
-    // Una persona già membro non cambia l'appartenenza (niente `member.add`), ma un token nuovo è un invito.
-    if (added || prepared) {
-      await recordTenantAudit(tx, auditActorOf(actor), {
-        operation: added ? 'member.add' : 'member.invite', objectType: 'user', objectId: userId,
-        details: added ? { invited: prepared !== null } : { expiresAt: prepared?.expiresAt },
-      })
-    }
-    return prepared
-  })
+  let invitation: PreparedInvitation | null
+  try {
+    invitation = await withTenantFeature(actor, 'invite-users', async tx => {
+      // Un tenant sospeso o archiviato non manda inviti né aggiunge persone (MT5-DEC-25).
+      await assertTenantActive(tx)
+      // In assistenza, non il proprio account: prima di creare token o appartenenze.
+      if (actor.support === true) refuseSelfInSupport(actor, await findUserIdByEmailOrNull(tx, normalizedEmail))
+      const prepared = await prepareInvitationIn(tx, normalizedEmail, actor.userId)
+      const userId = prepared?.userId ?? await findUserIdByEmail(tx, normalizedEmail)
+      const added = await addTenantMember(tx, userId)
+      // Una persona già membro non cambia l'appartenenza (niente `member.add`), ma un token nuovo è un invito.
+      if (added || prepared) {
+        await recordTenantAudit(tx, auditActorOf(actor), {
+          operation: added ? 'member.add' : 'member.invite', objectType: 'user', objectId: userId,
+          details: added ? { invited: prepared !== null } : { expiresAt: prepared?.expiresAt },
+        })
+      }
+      return prepared
+    })
+  } catch (err) {
+    if (err instanceof TenantFeatureUnavailableError) return { ok: false, reason: 'capability_unavailable' }
+    if (tenantQuotaReason(err) === 'member_quota') return { ok: false, reason: 'member_quota' }
+    if (err instanceof DrizzleQueryError) throw new Error('Failed to add user')
+    throw err
+  }
 
   if (invitation) {
     // L'appartenenza c'è già: l'invito porta la persona a un tenant a cui può accedere.

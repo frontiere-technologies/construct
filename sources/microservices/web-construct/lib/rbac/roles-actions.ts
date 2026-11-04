@@ -1,7 +1,8 @@
 'use server'
 
 import { eq, inArray, sql } from 'drizzle-orm'
-import { withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
+import { TenantFeatureUnavailableError, withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
+import { tenantQuotaReason } from '@/lib/tenancy/tenant-quota-reason'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
@@ -44,7 +45,7 @@ async function getRoleType(tx: TenantTx, roleId: number): Promise<RoleTypeStr> {
   return (await loadRole(tx, roleId)).type
 }
 
-export async function createRole(roleName: string): Promise<{ id: number }> {
+export async function createRole(roleName: string): Promise<{ id: number } | { ok: false; reason: 'role_quota' | 'capability_unavailable' }> {
   const actor = await requirePermission('manage-roles')
   const name = roleName.trim()
   if (!name) throw new Error('Role name is required')
@@ -57,7 +58,9 @@ export async function createRole(roleName: string): Promise<{ id: number }> {
       return { id: created.idRole }
     })
   } catch (err) {
-    throw new Error(`Failed to create role: ${err instanceof Error ? err.message : String(err)}`)
+    if (err instanceof TenantFeatureUnavailableError) return { ok: false, reason: 'capability_unavailable' }
+    if (tenantQuotaReason(err) === 'role_quota') return { ok: false, reason: 'role_quota' }
+    throw new Error('Failed to create role')
   }
 }
 

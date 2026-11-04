@@ -330,6 +330,35 @@ describeIntegration('createTenant', () => {
   }, 60_000)
 
   it.each([
+    ['max_roles', 'role_quota'], ['max_menu_entries', 'menu_quota'], ['max_members', 'member_quota'],
+  ])('returns the model %s rejection with no tenant, host, account, audit or email', async (column, reason) => {
+    const [{ id }] = await withOwner(tx => tx.execute<{ id: number }>(sql`select id from public.tenant where is_template`))
+    const modelId = tenantIdForTest(Number(id))
+    const field = sql.identifier(column)
+    const [{ quota }] = await withOwner(tx => tx.execute<{ quota: number | null }>(sql`select ${field} as quota from public.tenant_platform_policy`), modelId)
+    const slug = slugOf('model-quota')
+    const host = hostOf('model-quota')
+    const adminEmail = emailOf('model-quota')
+    try {
+      await withOwner(tx => tx.execute(sql`update public.tenant_platform_policy set ${field} = 0`), modelId)
+      expect(await createTenant({ name: 'ZZZ model quota', slug, host, adminEmail })).toEqual({ ok: false, reason })
+      const residues = await withOwner(tx => tx.execute(sql`
+        select id::text as residue from public.tenant where slug = ${slug}
+        union all select host from public.tenant_host where host = ${host}
+        union all select id::text from public.platform_audit_event where details->>'slug' = ${slug}
+        union all select id::text from public.users where email = ${adminEmail}`))
+      expect(residues).toEqual([])
+      expect(mocks.sendEmail).not.toHaveBeenCalled()
+    } finally {
+      await withOwner(tx => tx.execute(sql`update public.tenant_platform_policy set ${field} = ${quota}`), modelId)
+      const [unexpected] = await withGlobal(tx => tx.select({ id: tenant.id }).from(tenant).where(eq(tenant.slug, slug)))
+      if (unexpected) createdTenants.push(tenantIdForTest(unexpected.id))
+      const account = await userByEmail(adminEmail)
+      if (account) createdUserIds.push(account.id)
+    }
+  })
+
+  it.each([
     ['an empty name', { name: '  ', slug: 'zzz-tl-ok-slug', adminEmail: 'a@example.test' }],
     ['a slug with capitals', { name: 'N', slug: 'Zzz-Bad', adminEmail: 'a@example.test' }],
     ['a slug that is too short', { name: 'N', slug: 'ab', adminEmail: 'a@example.test' }],

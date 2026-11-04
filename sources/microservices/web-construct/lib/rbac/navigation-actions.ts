@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
-import { withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
+import { TenantFeatureUnavailableError, withTenantFeature } from '@/lib/tenancy/tenant-feature-access'
+import { tenantQuotaReason } from '@/lib/tenancy/tenant-quota-reason'
 import { auditActorOf } from '@/lib/audit/audit-types'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
 import { requirePermission } from '@/lib/rbac/auth-guard'
@@ -19,6 +20,8 @@ import { canDeleteSubtree, hasChildren, isDescendant } from './nav-tree-builder'
 import type { CreateNavItemInput, UpdateNavItemInput, MoveInput, MenuEntryRow } from './types'
 import { ITEM_TYPE_CATEGORY } from './types'
 
+class MenuTargetUnavailableError extends Error {}
+
 async function bindTarget(
   tx: TenantTx,
   input: CreateNavItemInput,
@@ -33,7 +36,7 @@ async function bindTarget(
   if (areaKey === undefined && previousAreaKey !== undefined && (binding.featureKey === 'use-custom-content' || binding.featureKey === null)) {
     binding.areaKey = previousAreaKey
   }
-  if (!canUseMenuEntry(await selectTenantPolicy(tx), binding)) throw new Error('menu_capability_unavailable')
+  if (!canUseMenuEntry(await selectTenantPolicy(tx), binding)) throw new MenuTargetUnavailableError('menu_capability_unavailable')
   return { ...binding, canonicalLink: normalizeMenuTargetUrl(input.functionalityLink, input.idFunctionalityType ?? null, origin) }
 }
 
@@ -108,7 +111,9 @@ async function reparent(
   }
 }
 
-export async function createNavigationItem(input: CreateNavItemInput): Promise<{ id: number }> {
+export async function createNavigationItem(input: CreateNavItemInput): Promise<
+  { id: number } | { ok: false; reason: 'menu_quota' | 'capability_unavailable' | 'target_unavailable' }
+> {
   const actor = await requirePermission('manage-menu')
   if (!input.name.trim()) throw new Error('Name is required')
   // Una categoria di menu non è un permesso: raggruppa voci, non protegge niente.
@@ -168,7 +173,10 @@ export async function createNavigationItem(input: CreateNavItemInput): Promise<{
     revalidatePath('/', 'layout')
     return { id: created.id }
   } catch (err) {
-    throw new Error(`Failed to create item: ${err instanceof Error ? err.message : String(err)}`)
+    if (err instanceof TenantFeatureUnavailableError) return { ok: false, reason: 'capability_unavailable' }
+    if (err instanceof MenuTargetUnavailableError) return { ok: false, reason: 'target_unavailable' }
+    if (tenantQuotaReason(err) === 'menu_quota') return { ok: false, reason: 'menu_quota' }
+    throw new Error('Failed to create item')
   }
 }
 

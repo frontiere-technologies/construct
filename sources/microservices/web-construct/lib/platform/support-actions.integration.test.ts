@@ -3,7 +3,7 @@ import { eq, inArray, sql } from 'drizzle-orm'
 import { appLanguage, role, tenant as tenantTable, tenantMembership, tenantSettings, translationKey, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
-import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
+import { createdId, describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { getSystemRoleIds } from '@/lib/tenancy/system-roles'
 import { tenantIdForTest } from '@/lib/tenancy/testing'
 import type { TenantId } from '@/lib/tenancy/tenant-id'
@@ -545,7 +545,7 @@ describeIntegration('support access only with the tenant consent (MT5-DEC-10, MT
     await startSupport(Number(tenant), 'correzione dei ruoli')
     await nextRequest()
     const name = `ZZZ ruolo della piattaforma ${unique()}`
-    const { id } = await createRole(name)
+    const id = createdId(await createRole(name))
     expect(await endSupport()).toMatchObject({ state: 'none' })
     expect(mocks.token).toMatchObject({ tenantState: 'none', tenantNoneReason: null, isPlatformAdmin: true })
 

@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { eq } from 'drizzle-orm'
 import { withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, withOwner, deleteTenantForTest } from '@/lib/db/testing'
-import { describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
+import { createdId, describeIntegration } from '@/lib/i18n/test-support/db-fixtures'
 import { menuEntry, roleFunctionality } from '@/lib/db/schema'
 import { tenantIdForTest } from '@/lib/tenancy/testing'
 import { createPolicyFixture } from '@/lib/tenancy/policy-test-fixture'
@@ -150,14 +150,14 @@ describeIntegration('binding parity and preservation', () => {
     actorState.tenantId = f.tenantId
     vi.stubEnv('AUTH_URL', origin)
     try {
-      const { id } = await createNavigationItem(customInput('people'))
+      const id = createdId(await createNavigationItem(customInput('people')))
       await withOwner(tx => tx.execute(sql`update public.tenant_area_entitlement set enabled = false where area_code = 'people'`), f.tenantId)
-      await expect(createNavigationItem(customInput('people'))).rejects.toThrow(/unavailable/)
+      await expect(createNavigationItem(customInput('people'))).resolves.toEqual({ ok: false, reason: 'target_unavailable' })
       await updateNavigationItem(id, { ...customInput(), areaKey: undefined, name: 'Renamed while suspended' })
       await moveNavigationItem(id, { targetParentId: null, orderPosition: 0 })
       const [entry] = await withTenant(f.tenantId, tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
       expect(entry).toMatchObject({ areaKey: 'people', featureKey: 'use-custom-content', name: 'Renamed while suspended' })
-      const { id: allowed } = await createNavigationItem(customInput())
+      const allowed = createdId(await createNavigationItem(customInput()))
       await expect(updateNavigationItem(allowed, customInput('people'))).rejects.toThrow(/unavailable/)
       const [unchanged] = await withTenant(f.tenantId, tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, allowed)))
       expect(unchanged.areaKey).toBe('navigation')
@@ -213,13 +213,17 @@ describeIntegration('trusted origin and transaction boundary', () => {
     try {
       await withOwner(async tx => {
         await tx.execute(sql`select app_private.lock_tenant_policy()`)
-        let settled = false
-        pending = createNavigationItem(customInput('people')).then(() => { settled = true; return null }, error => { settled = true; return error })
-        await new Promise(resolve => setTimeout(resolve, 60))
-        expect(settled).toBe(false)
+        const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_catalog.pg_backend_pid() as pid`)
+        pending = createNavigationItem(customInput('people'))
+        await vi.waitFor(async () => {
+          const [{ waiting }] = await tx.execute<{ waiting: boolean }>(sql`
+            select exists(select 1 from pg_catalog.pg_stat_activity a
+              where ${pid} = any(pg_catalog.pg_blocking_pids(a.pid))) as waiting`)
+          expect(waiting).toBe(true)
+        })
         await tx.execute(sql`update public.tenant_area_entitlement set enabled = false where area_code = 'people'`)
       }, f.tenantId)
-      expect(await pending).toBeInstanceOf(Error)
+      expect(await pending).toEqual({ ok: false, reason: 'target_unavailable' })
       expect((await withTenant(f.tenantId, tx => tx.select().from(menuEntry))).some(row => row.name === 'Custom binding')).toBe(false)
     } finally { if (pending) await pending; vi.unstubAllEnvs(); actorState.tenantId = 1; await f.close() }
   })
@@ -246,7 +250,7 @@ describeIntegration('menu target edits', () => {
     actorState.tenantId = f.tenantId
     vi.stubEnv('AUTH_URL', origin)
     try {
-      const { id } = await createNavigationItem(customInput())
+      const id = createdId(await createNavigationItem(customInput()))
       await updateNavigationItem(id, { ...customInput(), areaKey: undefined, functionalityLink: `${origin}/user-management/?sort=name#grid` })
       const [entry] = await withTenant(f.tenantId, tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
       expect(entry).toMatchObject({ areaKey: 'people', featureKey: 'read-users' })
@@ -330,7 +334,7 @@ describeIntegration('authoritative target boundary', () => {
     actorState.tenantId = f.tenantId
     vi.stubEnv('AUTH_URL', 'https://xn--bcher-kva.example')
     try {
-      const { id } = await createNavigationItem({ ...customInput(), areaKey: null, functionalityLink: 'https://bücher.example/user-management' })
+      const id = createdId(await createNavigationItem({ ...customInput(), areaKey: null, functionalityLink: 'https://bücher.example/user-management' }))
       await withOwner(tx => tx.insert(roleFunctionality).values({ idRole: f.roleId, idMenuEntry: id }), f.tenantId)
       const [entry] = await withTenant(f.tenantId, tx => tx.select().from(menuEntry).where(eq(menuEntry.idMenuEntry, id)))
       expect(entry).toMatchObject({ functionalityLink: 'https://bücher.example/user-management', canonicalLink: 'https://xn--bcher-kva.example/user-management', featureKey: 'read-users', areaKey: 'people' })

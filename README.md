@@ -733,7 +733,7 @@ Impostare `TEST_DATABASE_DISPOSABLE=1`, `TEST_MIGRATION_DATABASE_URL` con destin
 `construct_upgrade_test` sul PostgreSQL di prova in ascolto su `127.0.0.1` e `AUTH_URL`
 con l'origine di prova. Specificare la porta PostgreSQL nell'URL, per esempio `127.0.0.1:55432`
 per il container locale. Il login deve poter creare la banca dati dedicata. Il runner rifiuta
-un database preesistente e rimuove quello che ha creato al termine della prova 0063→0073.
+un database preesistente e rimuove quello che ha creato al termine della prova 0063→0074.
 In CI la prova affianca l'installazione nuova e `boundary-check` sul servizio usa e getta.
 
 ## Adding application pages

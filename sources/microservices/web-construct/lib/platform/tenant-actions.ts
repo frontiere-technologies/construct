@@ -1,6 +1,6 @@
 'use server'
 
-import { and, eq, sql } from 'drizzle-orm'
+import { and, DrizzleQueryError, eq, sql } from 'drizzle-orm'
 import { auditActorOf, type AuditEvent } from '@/lib/audit/audit-types'
 import { recordPlatformAudit } from '@/lib/audit/platform-audit'
 import { recordTenantAudit } from '@/lib/audit/tenant-audit'
@@ -16,6 +16,7 @@ import { normalizeHost } from '@/lib/tenancy/request-host'
 import { createdTenantId, existingTenantId } from '@/lib/tenancy/platform-tenant'
 import { DEFAULT_TENANT_SLUG, type TenantId } from '@/lib/tenancy/tenant-id'
 import { mainBaseUrl } from '@/lib/tenancy/tenant-base-url'
+import { tenantQuotaReason, type TenantQuotaReason } from '@/lib/tenancy/tenant-quota-reason'
 import { enterTenant, withPlatform, type PlatformTx } from './db'
 import {
   createTenantInputSchema, hostInputSchema, reasonSchema, tenantIdArgSchema, tenantStatusSchema,
@@ -105,7 +106,7 @@ function assertAcceptsPeople(row: TenantRowLocked): void {
  */
 export async function createTenant(
   input: { name: string; slug: string; host?: string; adminEmail: string },
-): Promise<{ ok: true; tenantId: number; invited: boolean; inviteFailed?: true } | { ok: false; reason: 'taken' | 'invalid' }> {
+): Promise<{ ok: true; tenantId: number; invited: boolean; inviteFailed?: true } | { ok: false; reason: 'taken' | 'invalid' | TenantQuotaReason }> {
   const actor = await requirePlatformAdmin()
   const parsed = createTenantInputSchema.parse(input)
   const host = parsed.host === undefined ? null : normalizeHost(parsed.host)
@@ -130,6 +131,9 @@ export async function createTenant(
     })
   } catch (error) {
     if (isTakenError(error)) return { ok: false, reason: 'taken' }
+    const quota = tenantQuotaReason(error)
+    if (quota) return { ok: false, reason: quota }
+    if (error instanceof DrizzleQueryError) throw new Error('Failed to create tenant')
     throw error
   }
 

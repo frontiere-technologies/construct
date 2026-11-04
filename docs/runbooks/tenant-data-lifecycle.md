@@ -1,6 +1,6 @@
 # Ciclo di vita dei dati di un tenant
 
-La 0073 completa l'aggiornamento dalla 0063. Prima di aprire le scritture di policy,
+La 0074 completa l'aggiornamento dalla 0063. Prima di aprire le scritture di policy,
 sostituire tutte le istanze e verificare l'annullamento dell'export sul collegamento di
 destinazione. La piattaforma gestisce quote, ripristini ed eliminazioni. Il tenant
 controlla il consenso e i file che decide di condividere.
@@ -76,7 +76,7 @@ node sources/devops/db/db.mjs tenant-restore \
 La verifica preventiva è in sola lettura. Esaminare conteggi, quote, concessioni effettive,
 compatibilità dei codici e destinazioni menu, host ignorati e amministratore attivo. Correggere le
 incongruenze prima di ripetere il controllo. Per applicare, ripetere lo stesso comando aggiungendo
-`--apply --accept-policy --actor <uuid-amministratore-piattaforma-attivo>`. L'applicazione
+`--apply --accept-policy --actor <uuid-account-tecnico-esistente>`. L'applicazione
 verifica di nuovo gli input e scrive in una transazione `READ COMMITTED`. Le scritture di
 appartenenze, ruoli e voci di menu soggette alle quote richiedono questo livello di isolamento
 anche per `construct_owner`, comprese copia e ripristino. Il ripristino crea un tenant sospeso
@@ -122,7 +122,7 @@ e log operativi seguono le rispettive politiche di accesso e scadenza.
 ## Rilasciare da 0063
 
 - [ ] ID=TDL-1, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Preparare migrazioni e finestra del menu, Fix description=Verificare snapshot e identità. Configurare la stessa origine pubblica nel job delle migrazioni e nei comandi che copiano o ripristinano menu con link assoluti. Preparare il pacchetto CLI con migrazioni, sonde, schema JSON dell'archivio, menu-target-backfill.mjs e menu-target-url.generated.mjs. Coordinare il blocco dei writer e il ricambio dei renderer del menu prima di riaprire traffico.
-- [ ] ID=TDL-2, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Applicare 0064–0073 e sostituire tutte le istanze, Fix description=Applicare con la CLI canonica. Distribuire le istanze nuove con CONSTRUCT_PLATFORM_POLICY_WRITES=0. Verificare che tutte le istanze usino i controlli aggiornati e che il confine tenga con le due connessioni limitate.
+- [ ] ID=TDL-2, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Applicare 0064–0074 e sostituire tutte le istanze, Fix description=Applicare con la CLI canonica. Distribuire le istanze nuove con CONSTRUCT_PLATFORM_POLICY_WRITES=0. Verificare che tutte le istanze usino i controlli aggiornati e che il confine tenga con le due connessioni limitate.
 - [ ] ID=TDL-3, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Provare l'annullamento sul percorso di destinazione, Fix description=Usare un ambiente di prova autorizzato che riproduca il pooler in modalità transazione. Provocare l'annullamento di una query e della transazione di export e verificare una richiesta successiva con tenant e timeout corretti. Verificare TLS e catena dei certificati di CancelRequest sullo stesso percorso.
 - [ ] ID=TDL-4, Severity=High, Complexity=Medium, Priority=P1, Estimate=minutes, Title=Abilitare le scritture di policy, Fix description=Dopo le verifiche impostare CONSTRUCT_PLATFORM_POLICY_WRITES=1. Dopo l'introduzione di concessioni restrittive correggere in avanti o tenere chiusi gli accessi fino alla correzione.
 
@@ -133,6 +133,9 @@ scrivere link assoluti. Bloccare le scritture del menu e impedire il rendering c
 vecchie nella finestra tra migrazione e sostituzione. Il controllo della generazione del modulo
 canonico è in CI. La 0073 acquisisce il blocco di policy prima dei grant in entrambi i delta SQL.
 La pulizia segue lo stesso ordine e la revoca arrivata per prima invalida la vecchia anteprima.
+La 0074 rifiuta nuovi grant e cambi di chiave in `REPEATABLE READ` e `SERIALIZABLE`.
+Le cancellazioni e gli aggiornamenti a chiave invariata restano disponibili. La console
+e le pagine di amministrazione del tenant mostrano il limite che ha bloccato una creazione.
 
 La prova PostgreSQL locale verifica annullamento e isolamento sul collegamento diretto.
 Le prove TLS sintetiche coprono SNI, fallback e chiusura. La verifica sul percorso reale

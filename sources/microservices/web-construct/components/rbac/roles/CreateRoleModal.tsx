@@ -8,20 +8,30 @@ import { AccessibleDialog } from '@/components/shared/AccessibleDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
-export default function CreateRoleModal({ onClose }: { onClose: () => void }) {
+export default function CreateRoleModal({ onClose, onRefresh }: { onClose: () => void; onRefresh: () => void }) {
   const { t } = useI18n()
   const router = useRouter()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [errorKey, setErrorKey] = useState<string | null>(null)
   const titleId = useId()
   const descriptionId = useId()
 
   const submit = async () => {
     if (!name.trim()) return
     setBusy(true)
+    setErrorKey(null)
     try {
-      const { id } = await createRole(name)
-      router.push(`/roles-permissions/${id}`)
+      const result = await createRole(name)
+      if ('reason' in result) {
+        setErrorKey(result.reason === 'role_quota' ? 'roles.form.quota' : 'tenant.creation.capability_unavailable')
+        router.refresh()
+        onRefresh()
+        return
+      }
+      router.push(`/roles-permissions/${result.id}`)
+    } catch {
+      setErrorKey('roles.form.create_error')
     } finally { setBusy(false) }
   }
 
@@ -36,9 +46,10 @@ export default function CreateRoleModal({ onClose }: { onClose: () => void }) {
         <h2 id={titleId} className="text-lg font-bold mb-2">{t('roles.form.create_title')}</h2>
         <p id={descriptionId} className="text-sm text-muted-foreground mb-4">{t('roles.form.create_subtitle')}</p>
         <Input
-          data-dialog-initial-focus value={name} onChange={e => setName(e.target.value)} placeholder={t('roles.form.name')}
+          data-dialog-initial-focus value={name} onChange={e => { setName(e.target.value); setErrorKey(null) }} placeholder={t('roles.form.name')}
           className="mb-6"
         />
+        {errorKey && <p role="alert" className="mb-4 text-sm text-destructive-muted-foreground">{t(errorKey)}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" data-dialog-close onClick={onClose}>{t('common.actions.cancel')}</Button>
           <Button onClick={submit} disabled={!name.trim() || busy}>{t('common.actions.save')}</Button>

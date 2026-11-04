@@ -21,7 +21,7 @@ import { POST as usersGrid } from '@/app/api/rbac/users-grid/route'
 import { appTheme, menuEntry, role, roleFunctionality, tenantAuditEvent, tenantMembership, tenantSettings, userRole, users } from '@/lib/db/schema'
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
-import { describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
+import { createdId, describeIntegration, unique } from '@/lib/i18n/test-support/db-fixtures'
 import { createNavigationItem, deleteNavigationItem, moveNavigationItem, updateNavigationItem } from '@/lib/rbac/navigation-actions'
 import { createRole, deleteRole, renameRole, updateRolePermissions } from '@/lib/rbac/roles-actions'
 import { FUNCTYPE_EMBEDDED_PAGE, FUNCTYPE_EXTERNAL_LINK, USER_STATUS_DEACTIVATED, type CreateNavItemInput } from '@/lib/rbac/types'
@@ -415,7 +415,7 @@ const CASES: Record<string, CrossTenantCase> = {
   'lib/rbac/roles-actions.ts#createRole': {
     entry: createRole,
     run: async () => {
-      const { id } = await createRole(`ZZZ ruolo nuovo di A ${unique()}`)
+      const id = createdId(await createRole(`ZZZ ruolo nuovo di A ${unique()}`))
       expect(bRoleIds).not.toContain(id)
       const [created] = await withOwner(tx => tx.select({ id: role.idRole }).from(role).where(eq(role.idRole, id)), A)
       expect(created).toEqual({ id })

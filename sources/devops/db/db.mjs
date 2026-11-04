@@ -886,6 +886,15 @@ async function runTenantCreate(connectionUrl, { slug, name, admin, host }) {
       console.log(`Link per impostare la password (valido 48 ore): ${baseUrl}/set-password?token=${result.invitationToken}`)
       if (!baseUrl) console.log("AUTH_URL non impostata: anteponi l'indirizzo del sito.")
     }
+  } catch (error) {
+    if (error.code === 'P0001') {
+      switch (error.message) {
+        case 'tenant_role_quota': throw new Error('Il limite di ruoli del modello non consente di creare il tenant.')
+        case 'tenant_menu_quota': throw new Error('Il limite di voci di menu del modello non consente di creare il tenant.')
+        case 'tenant_member_quota': throw new Error('Il limite di appartenenze del modello non consente di aggiungere il primo amministratore.')
+      }
+    }
+    throw error
   } finally {
     await sql.end({ timeout: 5 })
   }

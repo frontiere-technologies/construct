@@ -11,6 +11,7 @@ import {
 import { withGlobal, withTenant } from '@/lib/db/tenant-db'
 import { closeOwner, deleteTenantForTest, withOwner } from '@/lib/db/testing'
 import {
+  createdId,
   cleanupTestData, describeIntegration, TEST_ACTOR_ID, testKey, unique,
 } from '@/lib/i18n/test-support/db-fixtures'
 import { createLanguage, deleteLanguage, setDefaultLanguage, setLanguageActive, updateLanguage } from '@/lib/i18n/language-actions'
@@ -293,7 +294,7 @@ const CASES: Record<string, AuditCase> = {
   },
   'lib/rbac/roles-actions.ts#createRole': {
     entry: createRole, sink: 'tenant',
-    run: async () => { state.roleId = (await createRole(`ZZZ ruolo ${unique()}`)).id },
+    run: async () => { state.roleId = createdId(await createRole(`ZZZ ruolo ${unique()}`)) },
     expected: [{ operation: 'role.create', objectType: 'role', objectId: () => state.roleId }],
   },
   'lib/rbac/roles-actions.ts#renameRole': {
@@ -303,7 +304,7 @@ const CASES: Record<string, AuditCase> = {
   },
   'lib/rbac/navigation-actions.ts#createNavigationItem': {
     entry: createNavigationItem, sink: 'tenant',
-    run: async () => { state.navId = (await createNavigationItem(navInput(`ZZZ voce ${unique()}`))).id },
+    run: async () => { state.navId = createdId(await createNavigationItem(navInput(`ZZZ voce ${unique()}`))) },
     expected: [{ operation: 'menu.create', objectType: 'menu_entry', objectId: () => state.navId }],
   },
   'lib/rbac/navigation-actions.ts#updateNavigationItem': {
@@ -753,7 +754,7 @@ describeIntegration('every door that writes records its audit row in the same tr
     const defaultBefore = await tenantRows(DEFAULT)
     const platformBefore = await platformRows()
     const name = `ZZZ ruolo per il registro ${unique()}`
-    const { id } = await createRole(name)
+    const id = createdId(await createRole(name))
 
     const written = (await tenantRows()).filter(row => row.operation === 'role.create' && row.objectId === String(id))
     expect(written).toHaveLength(1)

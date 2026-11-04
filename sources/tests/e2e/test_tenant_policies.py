@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from helpers import E2E_CONSOLE_TENANT_SLUG, delete_people, nav, run_db, run_sql
+from helpers import E2E_CONSOLE_TENANT_SLUG, delete_people, grid_rows, nav, run_db, run_sql
+from test_functionalities import _select_tipologia
 from test_tenants import _create_tenant, _on_host, _signed_in
 
 ARTIFACTS = Path(__file__).resolve().parents[3] / ".superpowers/sdd/2026-10-30-multi-tenancy-piece-5b-platform/logs"
@@ -196,3 +197,103 @@ def test_policy_conflict_and_quota_notice(platform_page, base_url, policy_tenant
         assert _scalar(policy_tenant, "select count(*) from tenant_membership") >= 1
     finally:
         second.close()
+
+
+def test_role_quota_rejection_refreshes_the_grid_and_keeps_the_dialog(
+    browser, platform_page, base_url, policy_tenant, test_email,
+):
+    admin_email = f"e2e-console-admin@{test_email.split('@', 1)[1]}"
+    tenant_url = _on_host(base_url, "e2e-console.localhost")
+    with _signed_in(browser, tenant_url, admin_email) as admin:
+        nav(admin, f"{tenant_url}/roles-permissions")
+        admin.get_by_test_id("create-role").click()
+        dialog = admin.get_by_role("dialog")
+        dialog.get_by_placeholder("Nome ruolo").fill("E2E blocked role")
+
+        run_sql(f"""
+          select set_config('app.tenant_id', '{policy_tenant}', true);
+          insert into role (id_role_type, description) values (2, 'E2E role from another session');
+        """)
+        editor = _open(platform_page, base_url, policy_tenant)
+        count = _scalar(policy_tenant, "select count(*) from role")
+        editor.get_by_label("Massimo ruoli (inclusi quelli di sistema)", exact=True).fill(str(count))
+        _save(editor)
+
+        dialog.get_by_role("button", name="Salva", exact=True).click()
+        expect(dialog.get_by_role("alert")).to_have_text("È stato raggiunto il limite di ruoli del tenant.")
+        expect(grid_rows(admin).filter(has_text="E2E role from another session")).to_have_count(1)
+        expect(dialog.get_by_role("alert")).to_be_visible()
+        expect(dialog.get_by_placeholder("Nome ruolo")).to_have_value("E2E blocked role")
+        assert _scalar(policy_tenant, "select count(*) from role") == count
+
+
+def test_template_quota_rejection_is_localized_and_atomic(platform_page, base_url):
+    page = platform_page
+    model_id = _scalar(1, "select id from tenant where is_template")
+    slug = "e2e-copy-quota-blocked"
+    host = f"{slug}.localhost"
+    email = f"{slug}@example.test"
+    editor = _open(page, base_url, model_id)
+    limit = editor.get_by_label("Massimo ruoli (inclusi quelli di sistema)", exact=True)
+    previous = limit.input_value()
+    try:
+        limit.fill("0")
+        _save(editor)
+        nav(page, f"{base_url}/platform")
+        page.get_by_test_id("new-tenant").click()
+        dialog = page.get_by_role("dialog")
+        dialog.get_by_label("Nome", exact=True).fill("E2E copy quota blocked")
+        expect(dialog.get_by_label("Slug", exact=True)).to_have_value(slug)
+        dialog.get_by_label("Indirizzo dedicato (facoltativo)").fill(host)
+        dialog.get_by_label("Email del primo amministratore").fill(email)
+        dialog.get_by_role("button", name="Crea tenant", exact=True).click()
+        expect(dialog.get_by_role("alert")).to_have_text("Il limite di ruoli del modello non consente di creare il tenant.")
+        assert _scalar(1, f"select count(*) from tenant where slug = '{slug}'") == 0
+        assert _scalar(1, f"select count(*) from tenant_host where host = '{host}'") == 0
+        assert _scalar(1, f"select count(*) from users where email = '{email}'") == 0
+    finally:
+        editor = _open(page, base_url, model_id)
+        editor.get_by_label("Massimo ruoli (inclusi quelli di sistema)", exact=True).fill(previous)
+        _save(editor)
+        run_db("test-tenant-delete", "--slug", slug)
+        delete_people([email])
+
+
+def test_menu_and_member_quota_rejections_keep_the_inputs(
+    browser, platform_page, base_url, policy_tenant, test_email, test_email_user,
+):
+    admin_email = f"e2e-console-admin@{test_email.split('@', 1)[1]}"
+    unknown_email = "e2e-quota-unknown@example.test"
+    tenant_url = _on_host(base_url, "e2e-console.localhost")
+    menu_count = _scalar(policy_tenant, "select count(*) from menu_entry")
+    member_count = _scalar(policy_tenant, "select count(*) from tenant_membership")
+    editor = _open(platform_page, base_url, policy_tenant)
+    editor.get_by_label("Massimo voci menu (incluse categorie)", exact=True).fill(str(menu_count))
+    editor.get_by_label("Massimo appartenenze", exact=True).fill(str(member_count))
+    _save(editor)
+
+    try:
+        with _signed_in(browser, tenant_url, admin_email) as admin:
+            nav(admin, f"{tenant_url}/functionalities/create")
+            name = admin.get_by_placeholder("Nome funzionalità *")
+            name.fill("E2E blocked menu entry")
+            admin.get_by_placeholder("Descrizione *").fill("E2E menu quota")
+            _select_tipologia(admin, "Category")
+            admin.get_by_role("button", name="Salva", exact=True).click()
+            message = "È stato raggiunto il limite di voci di menu del tenant."
+            expect(admin.get_by_role("alert").filter(has_text=message)).to_have_text(message)
+            expect(name).to_have_value("E2E blocked menu entry")
+            assert _scalar(policy_tenant, "select count(*) from menu_entry") == menu_count
+
+            nav(admin, f"{tenant_url}/user-management")
+            admin.get_by_role("button", name="Aggiungi persona", exact=True).click()
+            dialog = admin.get_by_role("dialog")
+            for email in (test_email_user, unknown_email):
+                dialog.get_by_label("Email", exact=True).fill(email)
+                dialog.get_by_role("button", name="Aggiungi", exact=True).click()
+                expect(dialog.get_by_role("alert")).to_have_text("È stato raggiunto il limite di appartenenze del tenant.")
+                expect(dialog.get_by_label("Email", exact=True)).to_have_value(email)
+            assert _scalar(policy_tenant, "select count(*) from tenant_membership") == member_count
+            assert _scalar(1, f"select count(*) from users where email = '{unknown_email}'") == 0
+    finally:
+        delete_people([unknown_email])

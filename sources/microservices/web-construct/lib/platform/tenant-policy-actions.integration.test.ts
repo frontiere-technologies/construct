@@ -7,6 +7,9 @@ import { createPolicyFixture, type PolicyFixture } from '@/lib/tenancy/policy-te
 import { readTenantPolicy } from '@/lib/tenancy/tenant-policy-service'
 import type { TenantPolicyDraft } from '@/lib/tenancy/tenant-policy-types'
 import { grantSupportConsent } from '@/lib/tenancy/support-consent-actions'
+import { createNavigationItem } from '@/lib/rbac/navigation-actions'
+import { createRole } from '@/lib/rbac/roles-actions'
+import { addUserByEmail } from '@/lib/rbac/users-actions'
 import { closePlatform } from './db'
 import { saveTenantPolicy, previewTenantGrantPurge, purgeTenantGrants } from './tenant-policy-actions'
 import { readTenantPolicyForPlatform, readTenantUsageForPlatform } from './tenant-service'
@@ -14,6 +17,7 @@ import { readTenantPolicyForPlatform, readTenantUsageForPlatform } from './tenan
 const mocks = vi.hoisted(() => ({ session: null as unknown, failTenantAudit: false }))
 vi.mock('@/lib/auth-session', () => ({ getSession: async () => mocks.session }))
 vi.mock('next/headers', () => ({ headers: async () => new Headers({ host: 'localhost:3000' }) }))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('react', async importOriginal => ({
   ...(await importOriginal<typeof import('react')>()), cache: <T>(fn: T) => fn,
 }))
@@ -201,6 +205,120 @@ describeIntegration('platform tenant policy actions', () => {
     expect(events.platform.at(-1)).toMatchObject({ operation: 'tenant.grants.purge', details: { keys: preview.keys, permissionGrantCount: 2, menuGrantCount: 1 } })
     signIn(fixture.memberId, fixture.tenantId)
     expect((await grantSupportConsent('1h')).ok).toBe(true)
+  })
+
+  it('refuses both direct runtime grants from a repeatable snapshot after suspension commits', async () => {
+    const suspended = await draft()
+    const restored = { ...suspended, expectedRevision: suspended.expectedRevision + 1 }
+    suspended.areas = { ...suspended.areas, people: false }
+    const attempts = await withTenant(fixture.tenantId, async tx => {
+      const [{ enabled }] = await tx.execute<{ enabled: boolean }>(sql`
+        select exists(select 1 from app_private.effective_tenant_feature_codes() where code = 'read-users') as enabled`)
+      expect(enabled).toBe(true)
+      // Commits on the separate platform connection while the runtime snapshot is open.
+      expect((await saveTenantPolicy(fixture.tenantId, suspended)).ok).toBe(true)
+      const statements = [
+        sql`insert into public.role_permission (id_role, id_permission)
+          select ${fixture.roleId}, id_permission from public.permission where code = 'read-users'`,
+        sql`insert into public.role_functionality (id_role, id_menu_entry) values (${fixture.roleId}, ${fixture.menuEntryId})`,
+      ]
+      const results: unknown[] = []
+      for (const statement of statements) {
+        // A failed statement rolls back to its savepoint so both are tested in the same snapshot.
+        results.push(await tx.transaction(savepoint => savepoint.execute(statement)).then(() => null, error => error))
+      }
+      return results
+    }, { isolationLevel: 'repeatable read' })
+    expect((await saveTenantPolicy(fixture.tenantId, restored)).ok).toBe(true)
+    expect({ attempts, grants: await grants() }).toEqual({
+      attempts: Array.from({ length: 2 }, () => expect.objectContaining({
+        cause: expect.objectContaining({ code: 'P0001', message: 'tenant_grant_requires_read_committed' }),
+      })),
+      grants: { permissions: [], menus: [], roles: 1, entries: 1 },
+    })
+  })
+
+  it('allows no-op updates and revocation of suspended grants but refuses key changes in a fixed snapshot', async () => {
+    await seedGrants()
+    const value = await draft()
+    value.areas.people = false
+    expect((await saveTenantPolicy(fixture.tenantId, value)).ok).toBe(true)
+    await withTenant(fixture.tenantId, async tx => {
+      const [{ registered }] = await tx.execute<{ registered: number }>(sql`
+        select id_role as registered from public.role where system_key = 'REGISTERED'`)
+      for (const table of ['role_permission', 'role_functionality']) {
+        const name = sql.identifier(table)
+        const noop = await tx.execute(sql`update public.${name} set id_role = id_role where id_role = ${fixture.roleId} returning id_role`)
+        expect(noop.length).toBeGreaterThan(0)
+        await expect(tx.transaction(savepoint => savepoint.execute(sql`
+          update public.${name} set id_role = ${registered} where id_role = ${fixture.roleId}`)))
+          .rejects.toMatchObject({ cause: { message: 'tenant_grant_requires_read_committed' } })
+        const deleted = await tx.execute(sql`delete from public.${name} where id_role = ${fixture.roleId} returning id_role`)
+        expect(deleted).toHaveLength(noop.length)
+      }
+    }, { isolationLevel: 'serializable' })
+    expect(await grants()).toEqual({ permissions: [], menus: [], roles: 1, entries: 1 })
+  })
+
+  it('returns bounded quota results for roles, menu entries and invitations with no partial writes', async () => {
+    const usage = await readTenantUsageForPlatform(fixture.tenantId)
+    const value = await draft()
+    value.limits = { ...value.limits, maxRoles: usage.roles, maxMenuEntries: usage.menuEntries, maxMembers: usage.members }
+    expect((await saveTenantPolicy(fixture.tenantId, value)).ok).toBe(true)
+    const before = await audits()
+    const existing = `${fixture.slug}-platform@example.test`
+    const unknown = `${fixture.slug}-unknown@example.test`
+    signIn(fixture.adminId, fixture.tenantId)
+    const results = await Promise.allSettled([
+      createRole('Over quota'),
+      createNavigationItem({
+        name: 'Over quota', description: 'Over quota', idItemType: 1, idFunctionalityType: null,
+        functionalityLink: null, iconPath: null, idItemParent: null, itemTranslation: {}, tagTranslations: {},
+      }),
+      addUserByEmail(existing),
+      addUserByEmail(unknown),
+    ])
+    expect(results).toEqual(['role_quota', 'menu_quota', 'member_quota', 'member_quota'].map(reason => ({
+      status: 'fulfilled', value: { ok: false, reason },
+    })))
+    const leftovers = await withOwner(tx => tx.execute(sql`
+      select id from public.users where email = ${unknown}
+      union all
+      select t.id from public.password_set_tokens t join public.users u on u.id = t.user_id where u.email = ${existing}`))
+    expect(leftovers).toHaveLength(0)
+    signIn()
+    expect(await readTenantUsageForPlatform(fixture.tenantId)).toEqual(usage)
+    expect(await audits()).toEqual(before)
+  })
+
+  it('returns a stable rejection when a role creation loses its capability while waiting on the policy lock', async () => {
+    const usage = await readTenantUsageForPlatform(fixture.tenantId)
+    const before = await audits()
+    signIn(fixture.adminId, fixture.tenantId)
+    let pending: Promise<unknown> | undefined
+    try {
+      await withOwner(async tx => {
+        await tx.execute(sql`select app_private.lock_tenant_policy()`)
+        const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_catalog.pg_backend_pid() as pid`)
+        pending = createRole('Revoked while waiting').then(
+          result => ({ status: 'fulfilled', result }), error => ({ status: 'rejected', error }),
+        )
+        await vi.waitFor(async () => {
+          const [{ waiting }] = await tx.execute<{ waiting: boolean }>(sql`
+            select exists(select 1 from pg_catalog.pg_stat_activity a
+              where ${pid} = any(pg_catalog.pg_blocking_pids(a.pid))) as waiting`)
+          expect(waiting).toBe(true)
+        })
+        await tx.execute(sql`insert into public.tenant_entitlement (feature_code, allowed) values ('manage-roles', false)
+          on conflict (id_tenant, feature_code) do update set allowed = false`)
+      }, fixture.tenantId)
+      expect(await pending).toEqual({ status: 'fulfilled', result: { ok: false, reason: 'capability_unavailable' } })
+      signIn()
+      expect(await readTenantUsageForPlatform(fixture.tenantId)).toEqual(usage)
+      expect(await audits()).toEqual(before)
+    } finally {
+      await pending
+    }
   })
 
   it('refuses essential and still granted features hidden in the selected keys', async () => {

@@ -47,6 +47,7 @@ export default function FunctionalityForm(
   const [hasSelectedArea, setHasSelectedArea] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [needsRefresh, setNeedsRefresh] = useState(false)
   const set = <K extends keyof Initial>(k: K, v: Initial[K]) => setF(prev => ({ ...prev, [k]: v }))
 
   // Il server (updateNavigationItem) rifiuta un cambio di tipologia categoria <-> funzionalità.
@@ -109,11 +110,21 @@ export default function FunctionalityForm(
           openInNewTab: f.openInNewTab,
           description: primaryDescription, itemTranslation: f.translations, tagTranslations: f.tagTranslations,
         }
-        await createNavigationItem(input)
+        const result = await createNavigationItem(input)
+        if ('reason' in result) {
+          if (result.reason === 'capability_unavailable') {
+            setError(t('tenant.creation.capability_unavailable'))
+            setNeedsRefresh(true)
+          } else {
+            setError(t(result.reason === 'menu_quota' ? 'functionalities.form.quota' : 'functionalities.form.target_unavailable'))
+            router.refresh()
+          }
+          return
+        }
       }
       router.push('/functionalities')
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('functionalities.form.save_error'))
+      setError(mode === 'edit' && err instanceof Error ? err.message : t('functionalities.form.save_error'))
     } finally { setBusy(false) }
   }
 
@@ -214,12 +225,13 @@ export default function FunctionalityForm(
       </div>
 
       <div className="pt-4 border-t border-border flex items-center justify-between">
-        <div>{error && <p className="text-sm text-destructive-muted-foreground">{error}</p>}</div>
+        <div>{error && <p role="alert" className="text-sm text-destructive-muted-foreground">{error}</p>}</div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => router.push('/functionalities')}>
             {t('common.actions.cancel')}
           </Button>
-          <Button onClick={submit} disabled={!valid || busy}>
+          {needsRefresh && <Button variant="outline" onClick={() => { setNeedsRefresh(false); router.refresh() }}>{t('platform.policy.reload')}</Button>}
+          <Button onClick={submit} disabled={!valid || busy || needsRefresh}>
             {t('common.actions.save')}
           </Button>
         </div>
