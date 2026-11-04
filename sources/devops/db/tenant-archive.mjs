@@ -188,23 +188,49 @@ export function validateTenantArchive(value) {
   return value
 }
 
-function parseJson(text, label) {
+function parseUniqueJson(text, label) {
+  let value
   try {
-    return JSON.parse(text)
+    value = JSON.parse(text)
   } catch {
     throw new Error(`invalid ${label} JSON`)
   }
+  // JSON.parse owns syntax and value decoding. Walk the original text as well because
+  // the decoded object can no longer distinguish overwritten keys. Keep the walk
+  // iterative, including when skipping long or heavily escaped string values.
+  const scopes = []
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]
+    if (char === '{') scopes.push(new Set())
+    else if (char === '[') scopes.push(null)
+    else if (char === '}' || char === ']') scopes.pop()
+    else if (char === '"') {
+      const start = i
+      i += 1
+      while (text[i] !== '"') i += text[i] === '\\' ? 2 : 1
+      const end = i + 1
+      let next = end
+      while (next < text.length && ' \t\r\n'.includes(text[next])) next += 1
+      if (text[next] === ':') {
+        const keys = scopes.at(-1)
+        const key = JSON.parse(text.slice(start, end))
+        if (keys.has(key)) throw new Error(`duplicate ${label} JSON key`)
+        keys.add(key)
+      }
+    }
+  }
+  return value
+}
+
+export function parseTenantArchiveText(text) {
+  return validateTenantArchive(parseUniqueJson(text, 'archive'))
 }
 
 /** Only operational members may be mapped, and destination accounts must be distinct. */
 export function parseTenantRestoreUserMap(text, memberIds) {
-  const value = parseJson(text, 'user map')
+  const value = parseUniqueJson(text, 'user map')
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('user map must be a JSON object')
   const entries = Object.entries(value)
-  // Count colon tokens outside quoted strings, so even a repeated JSON object key hidden
-  // by JSON.parse is rejected. A valid map is flat and has only string values.
-  const separators = Array.from(text.matchAll(/"(?:[^"\\]|\\[\s\S])*"|:/g)).filter(match => match[0] === ':').length
-  if (separators !== entries.length) throw new Error('duplicate or invalid user map key')
   const seen = new Set()
   const map = new Map()
   for (const [source, target] of entries) {
@@ -246,6 +272,29 @@ async function readBoundedText(path, label) {
   }
 }
 
+async function checkDestinationRows(tx, tables) {
+  // Use the same destination composite types as 0071 to exercise typmods and input
+  // conversions without writes. The SQL preflight already decodes the other rows or
+  // checks their keys and references. The v1 schema allows all strings for the colours.
+  const [result] = await tx`
+    select
+      exists (
+        select 1 from pg_catalog.jsonb_populate_recordset(null::public.app_theme, ${tx.json(tables.app_theme)}::jsonb) t
+        cross join lateral pg_catalog.unnest(array[t.primary_color, t.primary_dark, t.background_light,
+          t.card_light, t.accent_light, t.sidebar_light, t.background_dark, t.card_dark, t.accent_dark, t.sidebar_dark]) colour(value)
+        where colour.value !~ '^#[0-9a-f]{6}$'
+      ) as invalid_theme,
+      exists (
+        select 1 from pg_catalog.jsonb_populate_recordset(null::public.menu_entry_tag, ${tx.json(tables.menu_entry_tag)}::jsonb) t
+        group by t.id_menu_entry, t.tag_lan, t.tag having count(*) > 1
+      ) as duplicate_tags,
+      (select count(*) from pg_catalog.jsonb_populate_recordset(null::public.tenant_settings, ${tx.json(tables.tenant_settings)}::jsonb)) as settings,
+      (select count(*) from pg_catalog.jsonb_populate_recordset(null::public.tenant_audit_event, ${tx.json(tables.tenant_audit_event)}::jsonb)) as events
+  `
+  if (result.invalid_theme) throw new Error('tenant_restore_invalid_theme')
+  if (result.duplicate_tags) throw new Error('tenant_restore_duplicate_tags')
+}
+
 const restoreDiagnostics = {
   tenant_restore_slug_taken: 'destination slug already exists',
   tenant_restore_invalid_slug: 'invalid destination slug or name',
@@ -260,6 +309,8 @@ const restoreDiagnostics = {
   tenant_restore_unknown_feature: 'destination feature or area is unknown',
   tenant_restore_inconsistent_binding: 'archive menu binding is incompatible with the destination',
   tenant_restore_invalid_policy: 'invalid archive policy',
+  tenant_restore_invalid_theme: 'archive contains an invalid theme colour',
+  tenant_restore_duplicate_tags: 'archive tags conflict after destination column conversion',
   tenant_member_quota: 'archive exceeds the member quota',
   tenant_role_quota: 'archive exceeds the role quota',
   tenant_menu_quota: 'archive exceeds the menu quota',
@@ -280,7 +331,7 @@ const restoreDiagnostics = {
  */
 export async function runTenantRestore(sql, options) {
   assertRestoreOptions(options)
-  const archive = validateTenantArchive(parseJson(await readBoundedText(options.file, 'archive'), 'archive'))
+  const archive = parseTenantArchiveText(await readBoundedText(options.file, 'archive'))
   const userMap = parseTenantRestoreUserMap(await readBoundedText(options.userMap, 'user map'),
     archive.tables.tenant_membership.map(row => row.user_id))
   try {
@@ -297,6 +348,7 @@ export async function runTenantRestore(sql, options) {
       await tx`set local lock_timeout = '5s'`
       await tx`set local idle_in_transaction_session_timeout = '10s'`
       await tx`select set_config('app.menu_origin', ${origin}, true)`
+      await checkDestinationRows(tx, archive.tables)
       const args = tx`${tx.json(archive)}::jsonb, ${options.slug}::text, ${options.name}::text,
         ${tx.json(userMap)}::jsonb, ${options.actor ?? null}::uuid`
       const [{ policy }] = await tx`select app_private.check_tenant_archive_restore(${args}) as policy`
@@ -319,6 +371,9 @@ export async function runTenantRestore(sql, options) {
     const marker = error.message?.split(':', 1)[0]
     const diagnostic = Object.hasOwn(restoreDiagnostics, marker) ? restoreDiagnostics[marker] : undefined
     if (diagnostic) throw new Error(diagnostic)
+    if (['22001', '22003', '22007', '22008', '22021', '22P02', '22P05'].includes(error.code)) {
+      throw new Error('archive row has an incompatible destination column value')
+    }
     if (error.code === '57014' || error.code === '55P03') throw new Error('tenant restore exceeded the database time limit')
     const code = /^[0-9A-Z]{5}$/.test(error.code) ? ` (SQLSTATE ${error.code})` : ''
     throw new Error(`tenant restore failed${code}`)

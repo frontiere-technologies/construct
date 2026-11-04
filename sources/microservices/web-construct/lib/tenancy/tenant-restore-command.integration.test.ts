@@ -40,6 +40,13 @@ async function snapshotUsers() {
   return withOwner(tx => tx.execute(sql`select to_jsonb(u)::text as row from public.users u order by u.id`))
 }
 
+async function snapshotRestoreSequences() {
+  return withOwner(tx => tx.execute(sql`
+    select t.last_value::text as tenant, t.is_called as tenant_called,
+      r.last_value::text as role, r.is_called as role_called, m.last_value::text as menu, m.is_called as menu_called
+    from public.s_id_tenant t cross join public.s_id_role r cross join public.s_id_menu_entry m`))
+}
+
 describeIntegration('tenant restore command', () => {
   let a: PolicyFixture
   let b: PolicyFixture
@@ -280,6 +287,47 @@ describeIntegration('tenant restore command', () => {
         await tx.execute(sql`drop function app_private.${fixture}()`)
       })
     }
+  }, 20_000)
+
+  it.each([
+    ['primary theme colour', (file: TenantArchive) => { file.tables.app_theme[0].primary_color = 'invalid' }, /invalid theme colour/],
+    ['secondary theme colour', (file: TenantArchive) => { file.tables.app_theme[0].sidebar_dark = '#ABCDEF' }, /invalid theme colour/],
+    ['tag width', (file: TenantArchive) => { file.tables.menu_entry_tag[0].tag = 'a'.repeat(51) }, /incompatible destination column/],
+    ['tag timestamp', (file: TenantArchive) => { file.tables.menu_entry_tag[0].date_ins = '0000-01-01T00:00:00Z' }, /incompatible destination column/],
+    ['tag collision after conversion', (file: TenantArchive) => {
+      const tag = file.tables.menu_entry_tag[0]
+      tag.tag = '🎛'.repeat(50)
+      file.tables.menu_entry_tag.push({ ...tag, tag: tag.tag + ' ' })
+      file.counts.menu_entry_tag += 1
+    }, /tags conflict after destination column conversion/],
+  ] as const)('refuses invalid %s during preflight and apply before allocating IDs', async (_label, mutate, error) => {
+    const slug = `zzz-restore-${unique()}`
+    const path = join(dir, 'invalid-destination-row.json')
+    const invalid = structuredClone(archive)
+    mutate(invalid)
+    await writeFile(path, JSON.stringify(invalid))
+    const beforeSequences = await snapshotRestoreSequences()
+    const preflight = await command(slug, false, path)
+    const apply = await command(slug, true, path)
+    for (const result of [preflight, apply]) {
+      expect(result).toMatchObject({ code: 1, stdout: '', stderr: expect.stringMatching(error) })
+    }
+    expect(await findTenant(slug)).toBeUndefined()
+    expect(await snapshotRestoreSequences()).toEqual(beforeSequences)
+  }, 20_000)
+
+  it('rejects a duplicate entitlement key in the original archive in both modes', async () => {
+    const slug = `zzz-restore-${unique()}`
+    const path = join(dir, 'duplicate-archive-key.json')
+    const text = JSON.stringify(archive).replace('"allowed":false', '"allowed":true,"\\u0061llowed":false')
+    await writeFile(path, text)
+    const beforeSequences = await snapshotRestoreSequences()
+    const preflight = await command(slug, false, path)
+    // Exercise apply only after preflight proves the parser rejects the ambiguity.
+    expect(preflight).toEqual({ code: 1, stdout: '', stderr: 'ERROR: duplicate archive JSON key\n' })
+    expect(await command(slug, true, path)).toEqual(preflight)
+    expect(await findTenant(slug)).toBeUndefined()
+    expect(await snapshotRestoreSequences()).toEqual(beforeSequences)
   }, 20_000)
 
   it('commits only one restore when two commands target the same slug', async () => {

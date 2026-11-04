@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { parseTenantRestoreArguments, validateTenantArchive, parseTenantRestoreUserMap } from './tenant-archive.mjs'
+import { parseTenantArchiveText, parseTenantRestoreArguments, validateTenantArchive, parseTenantRestoreUserMap } from './tenant-archive.mjs'
 
 const actor = '00000000-0000-4000-8000-000000000001'
 const member = '00000000-0000-4000-8000-000000000002'
@@ -30,7 +30,7 @@ function archiveFixture() {
       origin: 'live', source_tenant_id: null, source_event_id: null }],
     tenant_platform_policy: [{ id_tenant: '42', revision: '2', query_timeout_ms: 500, max_members: 1, max_roles: 2, max_menu_entries: 1 }],
     tenant_area_entitlement: [],
-    tenant_entitlement: [],
+    tenant_entitlement: [{ id_tenant: '42', feature_code: 'read-users', allowed: false }],
   }
   return {
     formatVersion: 1, schemaVersion: '0070', catalogVersion: 1, exportedAt: at,
@@ -93,5 +93,26 @@ test('requires a one-to-one explicit map of operational members and no historica
     [JSON.stringify({ [member]: actor, [actor]: member }), [member]],
     [JSON.stringify({ [member]: actor, [actor]: actor }), [member, actor]],
     [`{"${member}":"${actor}","${member}":"${member}"}`, [member]],
+    [`{"${member}":"${actor}","\\u0030${member.slice(1)}":"${member}"}`, [member]],
   ]) assert.throws(() => parseTenantRestoreUserMap(raw, members), /user.map/)
+})
+
+test('rejects duplicate JSON keys before validating the decoded archive, even inside arrays', () => {
+  const text = JSON.stringify(archiveFixture())
+  for (const invalid of [
+    text.replace('"formatVersion":1', '"formatVersion":2,"formatVersion":1'),
+    text.replace('"allowed":false', '"allowed":true,"\\u0061llowed":false'),
+    text.replace('"details":{}', '"details":{"unexpected":"hidden"},"details":{}'),
+    text.replace('"EN":{"name":"Users"}', '"EN":{"name":"Hidden","\\u006eame":"Users"}'),
+  ]) {
+    assert.notEqual(invalid, text)
+    assert.throws(() => parseTenantArchiveText(invalid), /duplicate archive JSON key/)
+  }
+})
+
+test('accepts repeated names in separate objects, including nested valid escaped strings', () => {
+  const archive = archiveFixture()
+  archive.tables.menu_entry[0].item_translation = { EN: { name: 'A "quote": {[ ]}' }, en: { name: 'A \\ path' } }
+  const text = JSON.stringify(archive).replace('"name":"A ', '"\\u006eame":"A ')
+  assert.deepEqual(parseTenantArchiveText(text), archive)
 })
