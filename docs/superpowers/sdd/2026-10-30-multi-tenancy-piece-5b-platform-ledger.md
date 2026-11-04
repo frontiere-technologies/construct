@@ -421,3 +421,19 @@ Task 11: fix round1/5 (2 addressed,0 open — T11-I1/I2; commits011bf20..00fb381
 Task 11: complete (commits733a8ed..00fb381, review clean)
 
 Prova0071, nessuna attivazione. Riportare a T12 associazione strutturata di tenant.restore; a T13 residui fixture 0066 confermati staticamente, con log del completo non verde.
+
+Task 12: in progress — BASEa490647a7d896707e99504b60aac406daccf4134, /root/mt5b_t12_implementer GPT-6.1/high attivo. Prova0071 esclusiva; migrazione nuova0072, E2E solo dopo integrazioni. Prima del codice SQL, esecutore inventaria FK/audit e propone risoluzione del conflitto owner-only / piattaforma / invoker. Può procedere con prove rosse e attività indipendenti. Revisore successivo GPT-6.1/high.
+
+T12 chiarimento architetturale: lib/platform/db.ts e lib/db/platform-database.ts già eseguono SET LOCAL ROLE construct_owner nella transazione del login dedicato NOINHERIT. Il brief owner-only SECURITY INVOKER è quindi compatibile con withPlatform e guardia canonica. Scartata ipotesi di grant/cascate generali, nessuna credenziale operatore o modifica del confine. Contesto ed esecutore aggiornati; proposta ora riguarda soltanto FK, lock e associazioni audit.
+
+Ruling: 28. T12 cancella in ordine esplicito figli/parent sotto blocco policy T02, riga tenant FOR UPDATE e account attore FOR SHARE, nella transazione owner già circoscritta di withPlatform. Nessuna nuova cascata o eccezione alle revoche ordinarie. Il registro piattaforma separa l’origine tecnica di tenant.restore in colonna nullable, senza FK perché gli archivi possono provenire da altrove. Migra il dettaglio JSON nominato, lo espone nella vista finché presente e cancella solo il riferimento di origine quando si elimina quel numero tecnico, preservando l’evento di destinazione e i dati tenant già ripristinati altrove. Il writer sincronizza col tenant origine senza attesa dopo i lock users (KEY SHARE NOWAIT, conflitto annulla e consente un nuovo tentativo); un tombstone già presente impedisce di far riapparire il riferimento — il formato v1 non identifica l’installazione sorgente e l’associazione va trattata senza ricerca testuale — costo se errato: un numero tecnico esterno coincidente può perdere il riferimento nella piattaforma, e un restore simultaneo può dover essere ripetuto. Prove di associazione, assenza residui e concorrenza obbligatorie.
+
+Task 12: dopo interruzione per limite d’uso, il 4 novembre uso tornato disponibile, ripreso lo stesso esecutore. Implementazione b5ad61c; reviewer /root/mt5b_t12_reviewer_61 GPT-6.1/high avviato con review-a490647..b5ad61c.diff. Report/log verificati: trial e 0072 solo prova, unit1731, mirati59/59 +8/8 gara, browser1/1, lint/tipi/schema/boundary verdi. Completa795 verdi/2 rossi/16 saltati in tre file legacy RBAC, affidare a T13. Server3001 fermato; codice non ancora approvato.
+
+T12 review GPT-6.1/high Needs fixes: T12-R1 alto, prova di concorrenza deve attraversare il ripristino reale con lock users e scritture da annullare. Fix round1/5 affidato allo stesso esecutore, BASEb5ad61c. T12-R2 filtro/ordine attore UUID e T12-R3 collisione numerica di origine esterna non ancora locale in finestra concorrente differiti al triage finale. Rossi legacy già presenti in T11 confermati dal reviewer; T13. Nessun nuovo privilegio o migrazione richiesti per il fix del test.
+
+Task 12: fix round1/5 (1 addressed,0 open — T12-R1; commitsb5ad61c..420b002). Gara reale restore/cancellazione, rollback totale, successivo restore e origine piattaforma nulla, 19/19 mirati e statici verdi. Riesame GPT-6.1/high task-12-r1-review.md approvato. T12-R2/R3 al triage finale.
+
+Task 12: complete (commitsa490647..420b002, review clean)
+
+Prova0072, E2E concluso e server fermo. T13 riceve fixture legacy, XLOCK e verifica di destinazione TLS. Nessun remoto/sviluppo.

@@ -1,12 +1,12 @@
 # Multi-tenancy 5b — stato e ripresa del 3 novembre 2026
 
-Aggiornamento del 4 novembre 2026. T01–T11 sono conclusi e rivisti. Prova locale 0071, sviluppo 0063. Restano T12–T13.
+Aggiornamento del 4 novembre 2026. T01–T12 sono conclusi e rivisti. Prova locale 0072, sviluppo 0063. Resta T13.
 
 Area da riusare: /Users/mario.stefanutti/.codex/worktrees/multi-tenancy-piece-5b/construct, ramo feature/multi-tenancy-piece-5b. Nessun nuovo worktree necessario; checkout originale, stash e file del proprietario restano fuori dall’esecuzione.
 
 ## Punto attuale
 
-T10 approvato. Base 81297a7, implementazione 365f53a e quattro correzioni fino a 86a19de. Il riesame finale GPT-6.1 con ragionamento alto ha approvato il passaggio fra host in TLS diretto. Ultime prove mirate 13/13, lint e tipi superati. I rapporti task-10-report.md e task-10-r4-review.md sono nell’area del piano. T11 ripristino approvato nei commit 011bf20 e 00fb381, parser 5/5 e 11 integrazioni finali. Restano i fallimenti delle fixture RBAC elencati nel registro per T13. Proseguire con T12, cancellazione di un tenant archiviato. Catena certificati, pooler e cancellazione TLS sul percorso di destinazione sono verifiche esplicite di T13.
+T10 approvato. Base 81297a7, implementazione 365f53a e quattro correzioni fino a 86a19de. Il riesame finale GPT-6.1 con ragionamento alto ha approvato il passaggio fra host in TLS diretto. Ultime prove mirate 13/13, lint e tipi superati. I rapporti task-10-report.md e task-10-r4-review.md sono nell’area del piano. T11 ripristino approvato nei commit 011bf20 e 00fb381, parser 5/5 e 11 integrazioni finali. Restano i fallimenti delle fixture RBAC elencati nel registro per T13. T12 approvato nei commit b5ad61c e 420b002, browser1/1, mirati19/19 nel giro finale. Proseguire con T13, prova upgrade dalla0063, MT5B-XLOCK-1, fixture RBAC e suite complete. Catena certificati, pooler e cancellazione TLS sul percorso di destinazione sono verifiche esplicite di T13.
 
 ## Registro storico T07 — concluso, da non riavviare
 
