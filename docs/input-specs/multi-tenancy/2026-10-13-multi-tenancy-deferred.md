@@ -10,7 +10,16 @@ pezzo, con il pezzo in cui va fatto e il riferimento a requisiti e studio:
 - [studio](2026-10-13-multi-tenancy-study.md): MT-DEC-*, MT-DB-*, MT-APP-*, MT-AUTH-*,
   MT-PLAT-*, MT-TEST-*, MT-OPS-*.
 
-## Sommario
+## Stato al 5 novembre 2026
+
+Il nucleo dei pezzi 1, 2 e 4 e i pezzi 5a e 5b sono conclusi. Il 5b è unito con la PR #90 e
+attivato sullo sviluppo localhost fino alla migrazione 0074, con verifiche del confine e
+del percorso Supavisor concluse. Seguono il pezzo 3 e poi il pezzo 6. Le voci ancora aperte
+mantengono le estensioni e le rifiniture rinviate, inclusi gli stati invited/pending, le
+lingue per tenant e la libreria di temi. La
+[roadmap](multi-tenancy-roadmap.md) riporta lo stato corrente per voce.
+
+## Ambito originario del 13 ottobre 2026
 
 Il pezzo 1 rende il database e lo strato dati multi-tenant con **un solo tenant**: nessuna
 funzione nuova per chi usa l'app. Restano da fare cinque pezzi, nell'ordine in cui dipendono uno

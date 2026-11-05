@@ -14,7 +14,7 @@
 
 T01–T06 realizzano catalogo, menu, autorizzazione, gestione e limiti. T07 realizza la modalità singola. T08 collega i controlli alle schermate. T09–T12 completano consenso ed esportazione, ripristino ed eliminazione; dipendono dai dati e dai vincoli dei primi task. T13 chiude verifiche, guida e rilascio. Un solo piano mantiene coerenti le interfacce condivise; ogni task termina con un risultato verificabile e un commit locale.
 
-Stato al 2026-11-02: T01–T09 realizzati e approvati con revisione indipendente; prossimoT10, T10–T13 aperti. Lo sviluppo resta alla 0063 e non è stato attivato il 5b. Le sole attività davvero completate e verificate sono spuntate sotto; i criteri complessivi della specifica rimangono aperti fino alle prove finali.
+Stato al 2026-11-05. T01–T13 e i criteri MT5B-OK-1…8 sono conclusi e rivisti. PR #90 unita con commit 55bb758, codice verificato a6099be, CI Quality n.51 superata con 174 E2E. Sviluppo aggiornato alla 0074 e attivato con autorizzazione del proprietario su localhost:3000, confine 33/33 e prova sintetica Supavisor superati. Il processo riceve il profilo TLS verificato e CONSTRUCT_PLATFORM_POLICY_WRITES=1; queste opzioni vanno ripetute a ogni avvio come descritto nel runbook. La chiusura riguarda lo sviluppo locale. L’ordine successivo della roadmap è pezzo 3, poi pezzo 6.
 
 ## Vincoli globali
 
