@@ -121,10 +121,10 @@ e log operativi seguono le rispettive politiche di accesso e scadenza.
 
 ## Rilasciare da 0063
 
-- [ ] ID=TDL-1, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Preparare migrazioni e finestra del menu, Fix description=Verificare snapshot e identità. Configurare la stessa origine pubblica nel job delle migrazioni e nei comandi che copiano o ripristinano menu con link assoluti. Preparare il pacchetto CLI con migrazioni, sonde, schema JSON dell'archivio, menu-target-backfill.mjs e menu-target-url.generated.mjs. Coordinare il blocco dei writer e il ricambio dei renderer del menu prima di riaprire traffico.
-- [ ] ID=TDL-2, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Applicare 0064–0074 e sostituire tutte le istanze, Fix description=Applicare con la CLI canonica. Distribuire le istanze nuove con CONSTRUCT_PLATFORM_POLICY_WRITES=0. Verificare che tutte le istanze usino i controlli aggiornati e che il confine tenga con le due connessioni limitate.
-- [ ] ID=TDL-3, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Provare l'annullamento sul percorso di destinazione, Fix description=Usare un ambiente di prova autorizzato che riproduca il pooler in modalità transazione. Provocare l'annullamento di una query e della transazione di export e verificare una richiesta successiva con tenant e timeout corretti. Verificare TLS e catena dei certificati di CancelRequest sullo stesso percorso.
-- [ ] ID=TDL-4, Severity=High, Complexity=Medium, Priority=P1, Estimate=minutes, Title=Abilitare le scritture di policy, Fix description=Dopo le verifiche impostare CONSTRUCT_PLATFORM_POLICY_WRITES=1. Dopo l'introduzione di concessioni restrittive correggere in avanti o tenere chiusi gli accessi fino alla correzione.
+- [ ] ID=TDL-1, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Preparare pacchetto e finestra per ogni successivo ambiente, Fix description=Checklist da eseguire per ogni successivo ambiente di distribuzione: verificare snapshot e identità, configurare la stessa origine pubblica nel job delle migrazioni e nei comandi che copiano o ripristinano menu con link assoluti, preparare il pacchetto CLI con migrazioni, sonde, schema JSON dell'archivio, menu-target-backfill.mjs e menu-target-url.generated.mjs. Coordinare il blocco dei writer e il ricambio dei renderer prima di riaprire traffico. L’attivazione locale da sorgenti è conclusa in TDL-2…4, con origine http://localhost:3000 e rinuncia al backup autorizzata dal proprietario; questa voce resta aperta per i successivi ambienti di distribuzione.
+- [✅] ID=TDL-2, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Applicare 0064–0074 e sostituire tutte le istanze, Fix description=Sul solo sviluppo localhost il 5 novembre 2026 sono concluse le migrazioni 0064–0074 tramite CLI canonica e la verifica del confine 33/33. L’app nuova è attiva su localhost:3000 con PGSSL=verify-full e CA pubblica tramite NODE_EXTRA_CA_CERTS, dopo le verifiche precedenti all’attivazione. Runtime e piattaforma verificati in READ ONLY con lo stesso profilo. Readiness e /login HTTP 200 confermati. Per gli altri ambienti resta la sequenza nuove istanze con CONSTRUCT_PLATFORM_POLICY_WRITES=0, conferma del ricambio e successiva attivazione.
+- [✅] ID=TDL-3, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Provare l'annullamento sul percorso di destinazione, Fix description=Verifica operativa autorizzata superata il 5 novembre 2026 sullo stesso endpoint Supavisor in modalità transazione, con l’adattatore reale dello scope di export e query sintetiche READ ONLY. Annullamento della propria query attiva tramite CancelRequest, chiusura della transazione e richiesta successiva con contesto sintetico B e timeout corretti verificati. TLS con catena e nome server/SNI verificati su avvio e CancelRequest usando sslmode=verify-full solo in memoria e CA pubblica tramite NODE_EXTRA_CA_CERTS. Il processo di sviluppo attivo usa ora PGSSL=verify-full e la stessa CA; il file .env.local da solo continua a non configurare TLS. L’esecutore annullato viene ritirato e la verifica riguarda il contesto della richiesta successiva. Nessuna scrittura di righe né export reale o audit.
+- [✅] ID=TDL-4, Severity=High, Complexity=Medium, Priority=P1, Estimate=minutes, Title=Abilitare le scritture di policy, Fix description=Dopo il sì esplicito del proprietario e le verifiche è stato avviato lo sviluppo localhost con CONSTRUCT_PLATFORM_POLICY_WRITES=1 il 5 novembre 2026. Il flag vale nell’ambiente del processo e va ripetuto a ogni avvio. Nessuna policy o riga di tenant modificata durante l’attivazione. Dopo l'introduzione di concessioni restrittive correggere in avanti o tenere chiusi gli accessi fino alla correzione.
 
 Dalla 0065 `canonical_link` determina la destinazione autorizzata. Il backfill conserva la
 gerarchia e il valore originale per l'editor. Una vecchia immagine può ancora leggere il valore
@@ -138,5 +138,21 @@ Le cancellazioni e gli aggiornamenti a chiave invariata restano disponibili. La 
 e le pagine di amministrazione del tenant mostrano il limite che ha bloccato una creazione.
 
 La prova PostgreSQL locale verifica annullamento e isolamento sul collegamento diretto.
-Le prove TLS sintetiche coprono SNI, fallback e chiusura. La verifica sul percorso reale
-Supavisor in modalità transazione rimane un passo operativo prima dell'attivazione.
+Le prove TLS sintetiche coprono SNI, fallback e chiusura. La verifica operativa Supavisor
+è conclusa nel profilo sicuro indicato in TDL-3. Il processo di sviluppo attivo usa ora
+lo stesso profilo di verifica TLS; le attestazioni di attivazione si riferiscono a localhost.
+
+### Avvio locale di sviluppo verificato
+
+Le credenziali di sviluppo già esistenti vanno caricate nel solo ambiente del processo web dal file originale .env.local, senza importare le variabili dell’operatore o della prova. Dalla directory sources/microservices/web-construct, con tale ambiente già disponibile, l’avvio verificato richiede queste opzioni.
+
+```bash
+PGSSL=verify-full \
+NODE_EXTRA_CA_CERTS=/Users/mario.stefanutti/Downloads/prod-ca-2021.crt \
+CONSTRUCT_PLATFORM_POLICY_WRITES=1 \
+AUTH_TEST_CREDENTIALS=false \
+NEXT_PUBLIC_AUTH_TEST_MODE=false \
+npm run dev
+```
+
+Il certificato indicato è la CA pubblica fornita dal proprietario. Il file originale .env.local da solo non configura TLS e non è stato modificato. Il profilo sicuro e il flag di attivazione appartengono all’ambiente del processo attuale e devono essere ripetuti a ogni nuovo avvio.

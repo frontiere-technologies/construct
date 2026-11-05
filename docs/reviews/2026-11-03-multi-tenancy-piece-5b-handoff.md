@@ -1,10 +1,20 @@
 # Multi-tenancy 5b — stato e ripresa del 3 novembre 2026
 
-Aggiornamento del 4 novembre 2026. T01–T12 e la parte locale di T13 sono completati e rivisti. Ultimo codice verificato 9cb49ed, prova locale 0074, sviluppo 0063. Restano T13.6 operativo e la verifica sul collegamento Supavisor di destinazione.
+Aggiornamento del 5 novembre 2026 dopo l’attivazione autorizzata. PR #90 unita da Mario con commit 55bb758, ultimo codice verificato a6099be. CI Quality n.51 conclusa con successo, inclusi 174 E2E. Sviluppo aggiornato fino alla 0074 e attivo su http://localhost:3000 con il profilo TLS verificato. Il rilascio attestato riguarda lo sviluppo locale.
 
 Area da riusare: /Users/mario.stefanutti/.codex/worktrees/multi-tenancy-piece-5b/construct, ramo feature/multi-tenancy-piece-5b. Nessun nuovo worktree necessario; checkout originale, stash e file del proprietario restano fuori dall’esecuzione.
 
 ## Punto attuale
+
+Invio, richiesta di unione e unione della PR #90 sono conclusi. Il commit 3e91c34 conserva la ricollocazione dei documenti in docs/reviews effettuata dal proprietario. Sullo sviluppo sono state applicate con la CLI canonica le migrazioni 0064–0074, con origine http://localhost:3000 e rinuncia al backup autorizzata dal proprietario. Confine verificato 33/33, compresa l’identità di piattaforma. Dopo il sì esplicito del proprietario, l’app è stata avviata nel worktree esistente su http://localhost:3000, con readiness e /login HTTP 200 verificati.
+
+La prova operativa autorizzata ha usato l’adattatore reale dello scope di export sullo stesso endpoint Supavisor in modalità transazione. Solo in memoria è stato impostato sslmode=verify-full, con la CA pubblica fornita tramite NODE_EXTRA_CA_CERTS. Verificati annullamento della propria query attiva mediante CancelRequest, chiusura della transazione e richiesta successiva con contesto sintetico B e timeout distinti, senza residui osservati. Avvio e CancelRequest hanno superato verifica TLS della catena e del nome server/SNI. Le query erano sintetiche e READ ONLY, senza scritture di righe, export reale o audit. L’esecutore annullato viene ritirato e la verifica riguarda il contesto della richiesta successiva.
+
+Il processo attivo riceve PGSSL=verify-full, NODE_EXTRA_CA_CERTS=/Users/mario.stefanutti/Downloads/prod-ca-2021.crt e CONSTRUCT_PLATFORM_POLICY_WRITES=1. Con lo stesso profilo runtime e piattaforma hanno concluso transazioni READ ONLY, incluso il cambio di ruolo locale della piattaforma. L’accesso di prova è disabilitato e il processo non riceve le variabili dell’operatore o della prova. Nessuna riga o tenant è stato modificato durante queste verifiche.
+
+Le credenziali di sviluppo esistenti sono state caricate nel solo ambiente del processo. Il file originale .env.local, preso da solo, continua a non configurare TLS; i file privati non sono stati modificati. Le opzioni TLS e il flag di attivazione non sono persistiti e vanno forniti a ogni nuovo avvio, come descritto nel runbook. TDL-2, TDL-3, TDL-4, MT5B-OK-3, MT5B-OK-8 e T13 sono conclusi per lo sviluppo locale. TDL-1 conserva aperte le verifiche del pacchetto e della finestra di rilascio negli ambienti in cui saranno eseguite. Le sezioni successive conservano il registro storico.
+
+### Stato precedente al 5 novembre 2026
 
 Il ramo locale feature/multi-tenancy-piece-5b è pronto per la richiesta di autorizzazione all’invio. I rapporti final-branch-review.md, final-fix-review.md e final-revocation-review.md sono nell’area del piano. I due rilievi importanti sono chiusi. Le correzioni sono 5e97d4c e 9cb49ed. Upgrade 0063→0074 verificato, 1.732 unitari e 242 integrazioni mirate dopo l’ultima correzione, 9 prove browser dei flussi interessati. La completa precedente conta 816 integrazioni. Il browser completo ha avuto 167/168, poi 3/3 dopo correzione dell’attesa sulla pagina incorporata. Server di prova spento. Vedi il registro per prove e decisioni, e la guida docs/runbooks/tenant-data-lifecycle.md per la sequenza operativa. Le sezioni successive documentano passaggi storici.
 
@@ -21,7 +31,7 @@ Verifiche:1659 unità in164file, single10/10 e auth-roles21/21, host13/13 e azio
 
 ## Documenti e decisioni
 
-Piano: docs/superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md. Specifica: docs/superpowers/specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md. Registro completo e costi delle decisioni1–19: docs/superpowers/sdd/2026-10-30-multi-tenancy-piece-5b-platform-ledger.md. Le decisioni e la rettifica del Ruling15 sono vincolanti; non ricostruirle dalla sola memoria.
+Piano: docs/superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md. Specifica: docs/superpowers/specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md. Registro completo e costi delle decisioni1–19: docs/reviews/2026-10-30-multi-tenancy-piece-5b-platform-ledger.md. Le decisioni e la rettifica del Ruling15 sono vincolanti; non ricostruirle dalla sola memoria.
 
 Ruling17: single non crea membership né REGISTERED automaticamente, neppure per un membro esistente. Ruling18: refreshTenant è ricalcolo essenziale senza scelta o lastTenantId, quindi «Riprova» resta disponibile solo verso default/host canonico con diritti già presenti. Ruling19: ready single rivalida tutto nello snapshot accorpato, senza nuovo lookup o scansione per richiesta. Multi conserva il proprio percorso. Le prove coprono tokenB/assistenza e richiesta successiva senza tenant.
 

@@ -10,7 +10,16 @@ pezzo, con il pezzo in cui va fatto e il riferimento a requisiti e studio:
 - [studio](2026-10-13-multi-tenancy-study.md): MT-DEC-*, MT-DB-*, MT-APP-*, MT-AUTH-*,
   MT-PLAT-*, MT-TEST-*, MT-OPS-*.
 
-## Sommario
+## Stato al 5 novembre 2026
+
+Il nucleo dei pezzi 1, 2 e 4 e i pezzi 5a e 5b sono conclusi. Il 5b è unito con la PR #90 e
+attivato sullo sviluppo localhost fino alla migrazione 0074, con verifiche del confine e
+del percorso Supavisor concluse. Seguono il pezzo 3 e poi il pezzo 6. Le voci ancora aperte
+mantengono le estensioni e le rifiniture rinviate, inclusi gli stati invited/pending, le
+lingue per tenant e la libreria di temi. La
+[roadmap](multi-tenancy-roadmap.md) riporta lo stato corrente per voce.
+
+## Ambito originario del 13 ottobre 2026
 
 Il pezzo 1 rende il database e lo strato dati multi-tenant con **un solo tenant**: nessuna
 funzione nuova per chi usa l'app. Restano da fare cinque pezzi, nell'ordine in cui dipendono uno
@@ -74,7 +83,7 @@ Sono nella specifica del pezzo 1 come MTF-DEC-1…12.
 - [✅] ID=DEF-5.5, Severity=Medium, Complexity=Medium, Priority=P2, Estimate=days, Title=Accesso di assistenza registrato, Fix description=Motivo, scadenza, fascia visibile, audit con attore reale e per conto di (MT-11, MT-PLAT-3). Fatto nel pezzo 5a.
 - [✅] ID=DEF-5.6, Severity=High, Complexity=Medium, Priority=P1, Estimate=days, Title=Tabella di audit, Fix description=`audit_event` scritta nella stessa transazione della modifica; sostituisce l'audit solo-log di `lib/i18n/audit.ts` e prende il posto di `role_history`, eliminata nel pezzo 1 (PERM-12, MT-PLAT-4). Fatto nel pezzo 5a.
 - [✅] ID=DEF-5.7, Severity=Medium, Complexity=Low, Priority=P1, Estimate=hours, Title=Interruttore delle funzioni di tenant, Fix description=Modalità singola sul tenant predefinito e sull’indirizzo canonico, con console e selettore chiusi. Verificato il ritorno alla modalità multipla.
-- [ ] ID=DEF-5.8, Severity=Low, Complexity=Medium, Priority=P2, Estimate=days, Title=Limiti per tenant, Fix description=Quote e timeout verificati sul database locale. Resta la verifica sul collegamento Supavisor di destinazione.
+- [✅] ID=DEF-5.8, Severity=Low, Complexity=Medium, Priority=P2, Estimate=days, Title=Limiti per tenant, Fix description=Quote e timeout verificati su PostgreSQL diretto; annullamento, cleanup e richiesta successiva con contesto/timeout distinti verificati sullo stesso endpoint Supavisor con TLS autenticato. Sviluppo localhost attivato con autorizzazione del proprietario, PGSSL=verify-full, CA pubblica tramite NODE_EXTRA_CA_CERTS e CONSTRUCT_PLATFORM_POLICY_WRITES=1 nell’ambiente del processo. Il profilo deve essere ripetuto a ogni avvio; il file originale .env.local da solo non configura TLS.
 - [✅] ID=DEF-5.9, Severity=Medium, Complexity=Medium, Priority=P2, Estimate=days, Title=Esportazione ed eliminazione di un tenant, Fix description=Esportazione con consenso e limiti, ripristino isolato e cancellazione esplicita con sola traccia tecnica. Verificati in locale.
 
 ## Pezzo 6: domini e brand per host

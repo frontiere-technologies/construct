@@ -1,19 +1,25 @@
 # Multi-tenancy, pezzo 5b: concessioni, limiti e chiusura dei tenant
 
-Data: 2026-10-29. Aggiornato: 2026-10-30. **Specifica rivista e approvata dal proprietario il 2026-10-30.**
+Data: 2026-10-29. Stato aggiornato: 2026-11-05. **Specifica rivista e approvata dal proprietario il 2026-10-30.**
 
 ## Sommario
 
-Il pezzo 5a è unito a `development` e attivato sul database di sviluppo fino alla migrazione
-0063. Il 5b completa la gestione della piattaforma: quali funzioni ogni tenant può usare,
-limiti configurabili, modalità per applicazioni con una sola organizzazione, esportazione,
-prova di ripristino e cancellazione definitiva di un tenant.
+Il pezzo 5b è implementato e unito a `development` con la PR #90, commit 55bb758, codice
+verificato a6099be. I criteri MT5B-OK-1…8 sono conclusi, CI Quality n.51 superata con 174 E2E.
+Lo sviluppo è alla migrazione 0074 e attivato con autorizzazione del proprietario su
+localhost:3000, con confine 33/33 e percorso Supavisor verificati. Il profilo TLS e il flag
+di attivazione appartengono all’ambiente del processo e vanno ripetuti a ogni avvio secondo
+il runbook. La chiusura operativa riguarda lo sviluppo locale.
+
+Il 5b completa la gestione della piattaforma con funzioni concesse per tenant, limiti
+configurabili, modalità per una sola organizzazione, esportazione, ripristino e
+cancellazione definitiva di un tenant.
 
 Il proprietario ha confermato concessioni per aree con eccezioni sulle singole funzioni,
 sospensione reversibile delle assegnazioni con cancellazione distinta, menu personalizzabili
 entro le concessioni, esportazione avviata dal tenant e dalla piattaforma solo con consenso,
 e conservazione del solo evento minimo dopo la cancellazione definitiva. Le regole più
-dettagliate qui sotto sono proposte progettuali da approvare insieme al documento.
+dettagliate qui sotto sono state approvate insieme al documento il 2026-10-30.
 
 Il risultato atteso è che una concessione abbia lo stesso significato nella console, nel menu,
 nei controlli del server e nei vincoli sulle assegnazioni nel database. La disattivazione non
@@ -52,7 +58,10 @@ soltanto con il consenso del tenant. Scelta confermata il 2026-10-30.
 soltanto l'evento di cancellazione con data, amministratore e identificativo tecnico del tenant.
 Scelta confermata il 2026-10-30. Non si conservano vecchi eventi o dati del tenant nel registro.
 
-### Registro delle decisioni e della progettazione
+### Registro storico delle decisioni e della progettazione del 30 ottobre 2026
+
+Le note di attuazione di questo registro descrivono quella data. Lo stato corrente
+dell’implementazione è riportato nei criteri verificati della sezione 11.
 
 - [✅] ID=MT5B-DEC-3, Severity=High, Complexity=Medium, Priority=P0, Estimate=minutes, Title=Libertà sul menu del tenant, Fix description=Decisione confermata: voci proprie organizzabili entro le aree concesse. Decisione completata, implementazione ancora da fare.
 - [✅] ID=MT5B-DEC-4, Severity=High, Complexity=Medium, Priority=P0, Estimate=minutes, Title=Accesso all'esportazione, Fix description=Decisione confermata il 2026-10-30: amministratore del tenant e piattaforma solo con consenso. La modalità concreta del consenso è proposta nel §7, non una decisione già approvata.
@@ -63,8 +72,9 @@ Scelta confermata il 2026-10-30. Non si conservano vecchi eventi o dati del tena
 ## 2. Ambito, vincoli e confini
 
 Il 5b comprende DEF-5.4 (concessioni rispettate), DEF-5.7 (modalità singola), DEF-5.8 (limiti)
-e DEF-5.9 (esportazione, ripristino, eliminazione). DEF-5.2 e MT-DEC-04 sono decisioni chiuse,
-con implementazione ancora aperta. La cancellazione risolve DEF-A del passaggio di consegne 5a.
+e DEF-5.9 (esportazione, ripristino, eliminazione). DEF-5.2 e MT-DEC-04 sono decisioni chiuse
+e implementate secondo i criteri verificati della sezione 11. La cancellazione risolve
+DEF-A del passaggio di consegne 5a.
 
 Restano la RLS forzata, le chiavi esterne composte, il contesto di tenant limitato alla
 transazione, le funzioni `security invoker`, l'identità separata della piattaforma e il
@@ -433,12 +443,12 @@ Approvare la specifica non autorizza questi comandi, invio del ramo, richiesta d
 
 - [✅] ID=MT5B-OK-1, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Concessioni rispettate ovunque, Fix description=Provare precedenza, dipendenze, vecchi/nuovi tenant, amministratore e assistenza; richieste dirette, pagine amministrative, URL equivalenti e menu propri non aggirano il limite. Nuove assegnazioni vietate anche via SQL e funzioni esistenti; lettura accorpata e tetti dei viaggi al database conservati.
 - [✅] ID=MT5B-OK-2, Severity=High, Complexity=Medium, Priority=P0, Estimate=hours, Title=Sospensione e ripristino verificati, Fix description=Conservare assegnazioni, impedirne uso/incremento, consentire revoca e recuperare solo quelle rimaste. Provare comando distinto di cancellazione, alias e modifiche concorrenti senza perdita di altri dati.
-- [ ] ID=MT5B-OK-3, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Limiti rispettati anche con operazioni simultanee, Fix description=Provare conteggi, quota nulla/zero, riduzione sotto l'uso, ultimo posto concorrente, invito/registrazione/copia e creazione da modello. Timeout e annullamento senza residui sulla connessione riusata da un altro tenant nelle modalità del pool supportate. Implementazione e prove PostgreSQL dirette superate fino alla 0074. Resta la verifica sul collegamento Supavisor di destinazione.
+- [✅] ID=MT5B-OK-3, Severity=High, Complexity=High, Priority=P1, Estimate=days, Title=Limiti rispettati anche con operazioni simultanee, Fix description=Provare conteggi, quota nulla/zero, riduzione sotto l'uso, ultimo posto concorrente, invito/registrazione/copia e creazione da modello. Timeout e annullamento senza residui sulla connessione riusata da un altro tenant nelle modalità del pool supportate. Implementazione e prove PostgreSQL dirette superate fino alla 0074. Verifica operativa Supavisor superata il 5 novembre 2026 con sslmode=verify-full in memoria e CA pubblica tramite NODE_EXTRA_CA_CERTS, inclusa richiesta successiva con contesto sintetico B e timeout distinti. L’esecutore annullato viene ritirato e la richiesta successiva usa correttamente il proprio contesto e timeout. Il processo di sviluppo localhost attivo usa ora PGSSL=verify-full e la stessa CA, con runtime e piattaforma verificati in READ ONLY. Il profilo va ripetuto a ogni avvio; il file originale .env.local da solo non configura TLS.
 - [✅] ID=MT5B-OK-4, Severity=Critical, Complexity=High, Priority=P1, Estimate=days, Title=Esportazione ripristino e cancellazione isolati, Fix description=Con A e B esportare A, ripristinare A2 con rimappaggio, eliminare A. B e identità globali immutati; segreti assenti; versioni/corrispondenze/quote incompatibili falliscono senza residui; solo evento minimo dopo cancellazione, inclusi vecchi dettagli del registro. Fallimenti del registro e scritture concorrenti provati.
 - [✅] ID=MT5B-OK-5, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Modalità con una sola organizzazione, Fix description=Provare interfaccia/ingressi diretti, indirizzi, vecchi JWT/assistenza, account senza appartenenza e ritorno alla modalità multipla. RLS e privilegi identici, nessuna appartenenza automatica.
 - [✅] ID=MT5B-OK-6, Severity=Critical, Complexity=High, Priority=P0, Estimate=days, Title=Consenso e copertura completi, Fix description=Provare consenso presente/assente/scaduto/revocato durante preparazione e modello; solo amministratore o assistenza autorizzata esportano. Inventario di porte, tabelle, funzioni, campi del file ed eventi: un elemento nuovo non coperto fa fallire il controllo. Limiti del file, cache e assenza di risposta parziale provati.
 - [✅] ID=MT5B-OK-7, Severity=High, Complexity=Medium, Priority=P1, Estimate=days, Title=Interfaccia e migrazioni verificate, Fix description=Provare console, errori, accessibilità, traduzioni e conflitti; database nuovo e dalla 0063, copie dal modello, contratto di schema e confine. Lint, tipi, unità, integrazione, build e browser secondo il progetto; integrazione/browser in sequenza sul database di test.
-- [ ] ID=MT5B-OK-8, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Guida operativa e attivazione separata, Fix description=Verificare comandi sulla prova, documentare compatibilità e recupero; ottenere separatamente OK per invio/richiesta/unione e ogni intervento sullo sviluppo. Spuntare voci originarie solo per lavoro realizzato e verificato. Guida e comandi verificati in locale. Autorizzazioni e attivazione restano aperte.
+- [✅] ID=MT5B-OK-8, Severity=High, Complexity=Medium, Priority=P1, Estimate=hours, Title=Guida operativa e attivazione separata, Fix description=Verificare comandi sulla prova, documentare compatibilità e recupero; ottenere separatamente OK per invio/richiesta/unione e ogni intervento sullo sviluppo. Spuntare voci originarie solo per lavoro realizzato e verificato. Guida e comandi verificati in locale, PR #90 unita e migrazioni di sviluppo 0064–0074 applicate con autorizzazione del proprietario. Attivazione dello sviluppo localhost autorizzata separatamente ed eseguita con profilo TLS verificato e CONSTRUCT_PLATFORM_POLICY_WRITES=1 nell’ambiente del processo. Riavvio documentato nel runbook, voci MT-5.9 e DEF-5.8 aggiornate sulla stessa evidenza. La chiusura operativa riguarda lo sviluppo locale.
 
 ## 12. Scelte lasciate a chi scrive il piano
 

@@ -31,7 +31,7 @@ Piano: [2026-10-30-multi-tenancy-piece-5b-platform.md](../superpowers/plans/2026
 
 Specifica approvata: [2026-10-29-multi-tenancy-piece-5b-platform-design.md](../superpowers/specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md).
 
-Registro completo con decisioni e costi: [2026-10-30-multi-tenancy-piece-5b-platform-ledger.md](../superpowers/sdd/2026-10-30-multi-tenancy-piece-5b-platform-ledger.md). Le decisioni Ruling 1–13 sono parte del contesto vincolante; i dettagli di T03 non vanno ricostruiti dalla sola memoria.
+Registro completo con decisioni e costi: [2026-10-30-multi-tenancy-piece-5b-platform-ledger.md](2026-10-30-multi-tenancy-piece-5b-platform-ledger.md). Le decisioni Ruling 1–13 sono parte del contesto vincolante; i dettagli di T03 non vanno ricostruiti dalla sola memoria.
 
 Rapporto T04 conservato anche in Git per la ripresa: [2026-11-02-multi-tenancy-piece-5b-task-4-report.md](2026-11-02-multi-tenancy-piece-5b-task-4-report.md). L'etichetta DONE è dell'esecutore e riguarda implementazione/verifiche, non l'approvazione del revisore.
 

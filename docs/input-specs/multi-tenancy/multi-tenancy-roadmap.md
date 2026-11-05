@@ -1,24 +1,25 @@
 # Multi-tenancy: stato dell'implementazione
 
-Aggiornato: 2026-10-30. Tiene insieme in un'unica tabella quello che è fatto e quello che resta.
+Aggiornato: 2026-11-05. Tiene insieme in un'unica tabella quello che è fatto e quello che resta.
 Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-multi-tenancy-deferred.md)
 (ID `DEF-*`) e nelle specifiche dei singoli pezzi.
 
 ## Sommario
 
-- **Fatti:** pezzo 1 (fondamenta dell'isolamento) con il lavoro sulle prestazioni, pezzo 2 (tenant
-  e appartenenze), pezzo 4 (tenant corrente) e pezzo 5a (console, amministratore di piattaforma,
-  assistenza e registro), unito con la [richiesta #89](https://github.com/frontiere-technologies/construct/pull/89).
-  Database di sviluppo alla migrazione 0063, identità e primo amministratore di piattaforma
-  configurati, 32 controlli dei privilegi superati e console autenticata verificata in locale.
-- **Da fare dopo:** pezzo 5b (funzioni concesse, limiti, esportazione ed eliminazione), pezzo 3
-  (identità e accesso), poi pezzo 6 (domini e brand). Resta l'ordine consigliato 5b → 3 → 6;
-  si inverte 5b e 3 se servono a breve persone vere di organizzazioni separate.
-- **In corso:** [specifica del 5b](../../superpowers/specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md) e
-  [piano operativo](../../superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md) approvati.
-  Metodo scelto: agenti con revisione per ogni attività. T01 (catalogo), T02 (configurazione
-  protetta, copia iniziale e blocchi per tenant) e T03 (menu e destinazioni canoniche) realizzati
-  e rivisti. T01–T12 e la parte locale di T13 sono completati e rivisti. L’aggiornamento dalla 0063 alla 0074 è verificato sulla prova. Restano invio, richiesta di unione, unione, verifica sul collegamento Supavisor di destinazione e attivazione autorizzata.
+Sono conclusi il nucleo dei pezzi 1, 2 e 4, il pezzo 5a e il pezzo 5b. La
+[richiesta #90](https://github.com/frontiere-technologies/construct/pull/90) è stata unita con
+commit 55bb758, codice verificato a6099be. T01–T13 del
+[piano 5b](../../superpowers/plans/2026-10-30-multi-tenancy-piece-5b-platform.md) e i criteri della
+[specifica](../../superpowers/specs/2026-10-29-multi-tenancy-piece-5b-platform-design.md) sono conclusi.
+CI Quality n.51 superata, inclusi 174 E2E. Sviluppo alla migrazione 0074, confine 33/33 e
+annullamento dello scope reale di export su Supavisor verificati. Sviluppo attivato con
+autorizzazione del proprietario su localhost:3000 e TLS verificato nel profilo del processo.
+Le opzioni TLS e il flag delle policy vanno forniti a ogni avvio secondo il
+[runbook](../../runbooks/tenant-data-lifecycle.md#avvio-locale-di-sviluppo-verificato).
+
+Il prossimo pezzo è il 3 (identità e accesso), seguito dal 6 (domini e brand). Le rifiniture
+e le estensioni facoltative ancora aperte restano individuate nelle singole voci della tabella.
+La chiusura operativa attestata riguarda lo sviluppo locale.
 
 ## Come si legge
 
@@ -65,7 +66,7 @@ Le voci dettagliate restano nel [documento delle cose rimandate](2026-10-13-mult
 | [✅] | MT-5.6 | 5a | Cataloghi comuni alla piattaforma | Lingue e traduzioni modificabili dall'amministratore di piattaforma, non più dal solo predefinito. | P1 | hours | final review pezzo 4 | |
 | [✅] | MT-5.7 | 5b | Funzioni concesse per tenant | Aree e capacità rispettate nell’app e nel database, con sospensione e pulizia distinta. | P1 | days | DEF-5.2, DEF-5.4, MT-DEC-04 | Codice e verifiche locali conclusi, fino alla 0074. |
 | [✅] | MT-5.8 | 5b | Interruttore delle funzioni di tenant | Modalità singola sul tenant predefinito e sul suo indirizzo canonico. | P2 | hours | DEF-5.7 | Verificato anche il ritorno a più tenant in processi distinti. |
-| [~] | MT-5.9 | 5b | Limiti per tenant | Tempo massimo delle query e quote su appartenenze, ruoli e menu. | P2 | days | DEF-5.8 | Verificato su PostgreSQL diretto. Resta il collegamento Supavisor di destinazione. |
+| [✅] | MT-5.9 | 5b | Limiti per tenant | Tempo massimo delle query e quote su appartenenze, ruoli e menu. | P2 | days | DEF-5.8 | Quote e timeout verificati su PostgreSQL diretto; annullamento e richiesta successiva con contesto/timeout distinti verificati su Supavisor. Sviluppo localhost attivato con TLS verificato; profilo e flag restano nell’ambiente del processo e vanno ripetuti al riavvio. |
 | [✅] | MT-5.10 | 5b | Esportazione ed eliminazione di un tenant | Esportazione con consenso, ripristino isolato e cancellazione con traccia minima. | P2 | days | DEF-5.9 | Implementato e verificato sulla prova locale. |
 | [ ] | MT-6.1 | 6 | Sottodomini e domini dedicati | Domini veri con certificati automatici su Kubernetes. | P1 | days | DEF-6.1, WL-03 | |
 | [ ] | MT-6.2 | 6 | Accesso unico su più domini | Dominio di accesso centrale; Google utilizzabile anche sugli indirizzi dedicati. | P1 | days | DEF-6.2 | Oggi Google solo sull'indirizzo principale |
